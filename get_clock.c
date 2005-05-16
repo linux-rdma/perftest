@@ -32,41 +32,35 @@
  * $Id$
  */
 
-#ifndef GET_CLOCK_H
-#define GET_CLOCK_H
+#include <unistd.h>
+#include <stdio.h>
 
-#if defined (__x86_64__) || defined(__i386__)
-/* Note: only x86 CPUs which have rdtsc instruction are supported. */
-typedef unsigned long long cycles_t;
-static inline cycles_t get_cycles()
+double get_cpu_mhz()
 {
-	unsigned low, high;
-	unsigned long long val;
-	asm volatile ("rdtsc" : "=a" (low), "=d" (high));
-	val = high;
-	val = (val << 32) | low;
-	return val;
+	FILE* f;
+	char buf[256];
+	double mhz = 0.0;
+
+	f = fopen("/proc/cpuinfo","r");
+	if (!f)
+		return 0.0;
+	while(fgets(buf, sizeof(buf), f)) {
+		double m;
+		int rc;
+		rc = sscanf(buf, "cpu MHz : %lf", &m);
+		if (rc != 1)
+			continue;
+		if (mhz == 0.0) {
+			mhz = m;
+			continue;
+		}
+		if (mhz != m) {
+			fprintf(stderr,"Conflicting CPU frequency values "
+					" detected: %lf != %lf\n",
+					mhz, m);
+			return 0.0;
+		}
+	}
+	fclose(f);
+	return mhz;
 }
-#elif defined(__PPC__)
-/* Note: only PPC CPUs which have mftb instruction are supported. */
-typedef unsigned long long cycles_t;
-static inline cycles_t get_cycles()
-{
-	cycles_t ret;
-
-	asm volatile ("mftb %0" : "=r" (ret) : );
-	return ret;
-}
-#elif defined(__ia64__) || defined(__PPC64__)
-/* Itanium2 and up has ar.itc (Itanium1 has errata) */
-/* PPC64 has mftb */
-#include <asm/timex.h>
-#else
-#warning get_cycles not implemented for this architecture: attempt asm/timex.h
-#include <asm/timex.h>
-#endif
-
-
-extern double get_cpu_mhz(void);
-
-#endif
