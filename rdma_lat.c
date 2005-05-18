@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
+ * Copyright (c) 2005 Hewlett Packard, Inc (Grant Grundler)
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -57,22 +58,14 @@
 
 #include "get_clock.h"
 
-static int double_compar(const void * aptr, const void * bptr)
-{
-	const double *a = aptr;
-	const double *b = bptr;
 
-	if (*a < *b) return -1;
-	if (*a > *b) return 1;
-	else return 0;
-}
-
-
-enum {
-	PINGPONG_RDMA_WRID = 3,
-};
+#define PINGPONG_RDMA_WRID	3
 
 static int page_size;
+static int report_unsorted;
+static int report_histogram;
+static int report_cycles;   /* report delta's in cycles, not microsec's */
+
 
 struct pingpong_context {
 	struct ibv_context *context;
@@ -462,6 +455,107 @@ static void usage(const char *argv0)
 	printf("  -U, --report-unsorted  (implies -A) print out unsorted results (default sorted)\n");
 }
 
+static inline cycles_t get_median(int iters, cycles_t delta[])
+{
+	/*
+	 * When there is an
+	 *	odd number of samples, the median is the middle number.
+	 * 	even number of samples, the median is the mean of the
+	 *		two middle numbers.
+	 *
+	 * Reminder: iters is the number of exchanges, not number of samples.
+	 */
+	if ((iters  - 1) & 1)
+		return delta[iters / 2];
+	else
+		return (delta[iters / 2] + delta[iters / 2 - 1]) / 2;
+}
+
+static int cycles_cmp(const void * aptr, const void * bptr)
+{
+	const cycles_t *a = aptr;
+	const cycles_t *b = bptr;
+	if (*a < *b) return -1;
+	if (*a > *b) return 1;
+	return 0;
+}
+
+#define dump_delta(h, f, d, iters, delta) \
+{					\
+	unsigned int i;			\
+	printf("#, usec\n");		\
+	for(i = 0; i < (iters)-1; ++i)	\
+		printf(f, i+1, delta[i] / (d)); \
+	printf("\n\n");			\
+}
+
+static void print_hz(unsigned int iters, cycles_t *tstamp)
+{
+	double mhz = 2 * get_cpu_mhz();
+	cycles_t median;
+	cycles_t *delta = malloc(iters * sizeof *delta);
+	unsigned int i;
+
+ 	if (!delta) {
+		perror("malloc");
+		exit (0);
+	}
+
+	for (i = 0; i < iters; ++i)
+		delta[i] = tstamp[i + 1] - tstamp[i];
+
+	if (report_unsorted)
+		dump_delta("#, usec\n", "%d, %f\n", mhz, iters, delta);
+
+	qsort(delta, iters - 1, sizeof *delta, cycles_cmp);
+
+	if (report_histogram)
+		dump_delta("#, usec\n", "%d, %f\n", mhz, iters, delta);
+
+	median = get_median(iters, delta);
+
+	printf("Latency min/median/max: %f/%f/%f\n",
+		 delta[0]/mhz, median/mhz, delta[iters-2]/mhz);
+
+	free(delta);
+}
+
+
+static void print_cycles(unsigned int iters, cycles_t *tstamp)
+{
+	cycles_t median;
+	cycles_t *delta = malloc(iters * sizeof *delta);
+	unsigned int i;
+
+ 	if (!delta) {
+		perror("malloc");
+		exit (0);
+	}
+
+	for (i = 0; i < iters ; ++i)
+		delta[i] = tstamp[i + 1] - tstamp[i];
+
+	if (report_unsorted)
+		dump_delta("#, cycles\n", "%d, %lu\n", 2, iters, delta);
+
+	qsort(delta, (iters - 1), sizeof *delta, cycles_cmp);
+
+	/* Definition of histogram:
+	 *   http://www.itl.nist.gov/div898/handbook/eda/section3/histogra.htm
+	 */
+	if (report_histogram)
+		dump_delta("#, cycles\n", "%d, %lu\n", 2, iters, delta);
+
+	median = get_median(iters, delta);
+
+	printf("Latency min/median/max: %lu/%lu/%lu cycles\n",
+		(unsigned long) delta[0]/2,
+		(unsigned long) median/2,
+		(unsigned long) delta[iters-2]/2);
+
+	free(delta);
+}
+
 int main(int argc, char *argv[])
 {
 	struct dlist 	  	*dev_list;
@@ -477,9 +571,6 @@ int main(int argc, char *argv[])
 	int                      rx_depth = 1;
 	int                      tx_depth = 50;
 	int                      iters = 1000;
-	int                      report_all = 0;
-	int                      report_unsorted = 0;
-	int                      report_cpu_cycles = 0;
 	int                      scnt, rcnt, ccnt;
 	int			 client_first_post;
 	int			 sockfd;
@@ -489,12 +580,6 @@ int main(int argc, char *argv[])
 	volatile char		*post_buf;
 
 	cycles_t	*tstamp;
-	double median;
-	double *delta;
-	int i;
-
-	double mhz;
-	const char* units;
 
 	/* Parameter parsing. */
 	while (1) {
@@ -508,12 +593,12 @@ int main(int argc, char *argv[])
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
-			{ .name = "report-all",     .has_arg = 0, .val = 'A' },
+			{ .name = "report-histogram", .has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:CAU", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:CHU", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -555,17 +640,16 @@ int main(int argc, char *argv[])
 
 			break;
 
-		case 'A':
-			report_all = 1;
+		case 'C':
+			report_cycles = 1;
 			break;
 
-		case 'C':
-			report_cpu_cycles = 1;
+		case 'H':
+			report_histogram = 1;
 			break;
 
 		case 'U':
 			report_unsorted = 1;
-			report_all = 1;
 			break;
 
 		default:
@@ -585,14 +669,6 @@ int main(int argc, char *argv[])
 	/* Done with parameter parsing. Perform setup. */
 
 	srand48(getpid() * time(NULL));
-
-	if (report_cpu_cycles) {
-		mhz = 1;
-		units = "usec";
-	} else {
-		mhz = get_cpu_mhz();
-		units = "clocks";
-	}
 
 	page_size = sysconf(_SC_PAGESIZE);
 
@@ -640,15 +716,13 @@ int main(int argc, char *argv[])
 
 	if (servername) {
 		sockfd = pp_client_connect(servername, port);
-	} else {
-		sockfd = pp_server_connect(port);
-	}
-	if (sockfd < 0)
-		return 1;
-
-	if (servername) {
+		if (sockfd < 0)
+			return 1;
 		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
 	} else {
+		sockfd = pp_server_connect(port);
+		if (sockfd < 0)
+			return 1;
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
 	}
 
@@ -751,54 +825,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* Done with the test. Report results. */
+        if (report_cycles)
+                print_cycles(iters, tstamp);
+        else
+                print_hz(iters, tstamp);
 
-	delta = malloc(iters * sizeof *delta);
- 	if (!delta) {
-		perror("malloc");
-		return 1;
-	}
-
-	for (i = 0; i < iters - 1; ++i) {
-		delta[i]=(tstamp[i + 1] - tstamp[i]) / mhz;
-	}
-
-	if (report_unsorted) {
-		printf("#, %s\n", units);
-		for(i = 0; i < iters - 1; ++i) {
-			printf("%d, %f\n", i, delta[i] / 2);
-		}
-
-		printf("\n\n");
-	}
-
-	qsort(delta, iters - 1, sizeof *delta, double_compar);
-
-	if (report_all && ! report_unsorted) {
-		printf("#, %s\n", units);
-		for(i = 0; i < iters - 1; ++i) {
-			printf("%d, %f\n", i, delta[i] / 2);
-		}
-
-		printf("\n\n");
-	}
-
-	/* When there is an odd number of numbers, the median is simply
-	 * the middle number.
-	 * When there is an even number of numbers, the median is the mean
-	 * of the two middle numbers.
-	 *
-	 * Reminder: iters is the number of exchanges, not number of samples.
-	 */
-
-	if ((iters - 1) % 2)
-		median = delta[iters / 2];
-	else
-		median = (delta[iters / 2] + delta[iters / 2 + 1]) / 2;
-
-	printf("Latency            minimum: %f %s\n", delta[0] / 2, units);
-	printf("Latency statistical median: %f %s\n", median / 2, units);
-	printf("Latency            maximum: %f %s\n", delta[iters - 2] / 2, units);
-
+	free(tstamp);
 	return 0;
 }
