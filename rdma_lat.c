@@ -62,9 +62,12 @@
 #define PINGPONG_RDMA_WRID	3
 
 static int page_size;
-static int report_unsorted;
-static int report_histogram;
-static int report_cycles;   /* report delta's in cycles, not microsec's */
+
+struct report_options {
+	int unsorted;
+	int histogram;
+	int cycles;   /* report delta's in cycles, not microsec's */
+};
 
 
 struct pingpong_context {
@@ -455,23 +458,23 @@ static void usage(const char *argv0)
 	printf("  -U, --report-unsorted  (implies -A) print out unsorted results (default sorted)\n");
 }
 
+/*
+ * When there is an
+ *	odd number of samples, the median is the middle number.
+ * 	even number of samples, the median is the mean of the
+ *		two middle numbers.
+ *
+ * Reminder: iters is the number of exchanges, not number of samples.
+ */
 static inline cycles_t get_median(int iters, cycles_t delta[])
 {
-	/*
-	 * When there is an
-	 *	odd number of samples, the median is the middle number.
-	 * 	even number of samples, the median is the mean of the
-	 *		two middle numbers.
-	 *
-	 * Reminder: iters is the number of exchanges, not number of samples.
-	 */
-	if ((iters  - 1) & 1)
+	if ((iters  - 1) % 2)
 		return delta[iters / 2];
 	else
 		return (delta[iters / 2] + delta[iters / 2 - 1]) / 2;
 }
 
-static int cycles_cmp(const void * aptr, const void * bptr)
+static int cycles_compare(const void * aptr, const void * bptr)
 {
 	const cycles_t *a = aptr;
 	const cycles_t *b = bptr;
@@ -480,81 +483,55 @@ static int cycles_cmp(const void * aptr, const void * bptr)
 	return 0;
 }
 
-#define dump_delta(h, f, d, iters, delta) \
-{					\
-	unsigned int i;			\
-	printf("#, usec\n");		\
-	for(i = 0; i < (iters)-1; ++i)	\
-		printf(f, i+1, delta[i] / (d)); \
-	printf("\n\n");			\
-}
-
-static void print_hz(unsigned int iters, cycles_t *tstamp)
+static void print_report(struct report_options * options,
+			 unsigned int iters, cycles_t *tstamp)
 {
-	double mhz = 2 * get_cpu_mhz();
+	double cycles_to_units;
 	cycles_t median;
-	cycles_t *delta = malloc(iters * sizeof *delta);
 	unsigned int i;
+	const char* units;
+	cycles_t *delta = malloc(iters * sizeof *delta);
 
  	if (!delta) {
 		perror("malloc");
-		exit (0);
+		return;
 	}
 
 	for (i = 0; i < iters; ++i)
 		delta[i] = tstamp[i + 1] - tstamp[i];
 
-	if (report_unsorted)
-		dump_delta("#, usec\n", "%d, %f\n", mhz, iters, delta);
 
-	qsort(delta, iters - 1, sizeof *delta, cycles_cmp);
-
-	if (report_histogram)
-		dump_delta("#, usec\n", "%d, %f\n", mhz, iters, delta);
-
-	median = get_median(iters, delta);
-
-	printf("Latency min/median/max: %f/%f/%f\n",
-		 delta[0]/mhz, median/mhz, delta[iters-2]/mhz);
-
-	free(delta);
-}
-
-
-static void print_cycles(unsigned int iters, cycles_t *tstamp)
-{
-	cycles_t median;
-	cycles_t *delta = malloc(iters * sizeof *delta);
-	unsigned int i;
-
- 	if (!delta) {
-		perror("malloc");
-		exit (0);
+	if (options->cycles) {
+		cycles_to_units = 1;
+		units = "cycles";
+	} else {
+		cycles_to_units = get_cpu_mhz();
+		units = "usec";
 	}
 
-	for (i = 0; i < iters ; ++i)
-		delta[i] = tstamp[i + 1] - tstamp[i];
+	if (options->unsorted) {
+		printf("#, %s\n", units);
+		for(i = 0; i < iters - 1; ++i)
+			printf("%d, %f", i+1, delta[i] / cycles_to_units / 2);
+	}
 
-	if (report_unsorted)
-		dump_delta("#, cycles\n", "%d, %lu\n", 2, iters, delta);
+	qsort(delta, iters - 1, sizeof *delta, cycles_compare);
 
-	qsort(delta, (iters - 1), sizeof *delta, cycles_cmp);
-
-	/* Definition of histogram:
-	 *   http://www.itl.nist.gov/div898/handbook/eda/section3/histogra.htm
-	 */
-	if (report_histogram)
-		dump_delta("#, cycles\n", "%d, %lu\n", 2, iters, delta);
+	if (options->histogram) {
+		printf("#, %s\n", units);
+		for(i = 0; i < iters - 1; ++i)
+			printf("%d, %f", i + 1, delta[i] / cycles_to_units / 2);
+	}
 
 	median = get_median(iters, delta);
 
-	printf("Latency min/median/max: %lu/%lu/%lu cycles\n",
-		(unsigned long) delta[0]/2,
-		(unsigned long) median/2,
-		(unsigned long) delta[iters-2]/2);
+	printf("Latency typical: %f %s\n", median / cycles_to_units / 2, units);
+	printf("Latency best   : %f %s\n", delta[0] / cycles_to_units / 2, units);
+	printf("Latency worst  : %f %s\n", delta[iters - 2] / cycles_to_units / 2, units);
 
 	free(delta);
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -578,6 +555,7 @@ int main(int argc, char *argv[])
 	struct ibv_send_wr 	*wr;
 	volatile char		*poll_buf;
 	volatile char		*post_buf;
+	struct report_options    report;
 
 	cycles_t	*tstamp;
 
@@ -641,15 +619,15 @@ int main(int argc, char *argv[])
 			break;
 
 		case 'C':
-			report_cycles = 1;
+			report.cycles = 1;
 			break;
 
 		case 'H':
-			report_histogram = 1;
+			report.histogram = 1;
 			break;
 
 		case 'U':
-			report_unsorted = 1;
+			report.unsorted = 1;
 			break;
 
 		default:
@@ -825,10 +803,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-        if (report_cycles)
-                print_cycles(iters, tstamp);
-        else
-                print_hz(iters, tstamp);
+	print_report(&report, iters, tstamp);
 
 	free(tstamp);
 	return 0;
