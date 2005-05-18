@@ -512,7 +512,7 @@ static void print_report(struct report_options * options,
 	if (options->unsorted) {
 		printf("#, %s\n", units);
 		for(i = 0; i < iters - 1; ++i)
-			printf("%d, %f\n", i+1, delta[i] / cycles_to_units / 2);
+			printf("%d, %g\n", i+1, delta[i] / cycles_to_units / 2);
 	}
 
 	qsort(delta, iters - 1, sizeof *delta, cycles_compare);
@@ -520,14 +520,14 @@ static void print_report(struct report_options * options,
 	if (options->histogram) {
 		printf("#, %s\n", units);
 		for(i = 0; i < iters - 1; ++i)
-			printf("%d, %f\n", i + 1, delta[i] / cycles_to_units / 2);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
 	}
 
 	median = get_median(iters, delta);
 
-	printf("Latency typical: %f %s\n", median / cycles_to_units / 2, units);
-	printf("Latency best   : %f %s\n", delta[0] / cycles_to_units / 2, units);
-	printf("Latency worst  : %f %s\n", delta[iters - 2] / cycles_to_units / 2, units);
+	printf("Latency typical: %g %s\n", median / cycles_to_units / 2, units);
+	printf("Latency best   : %g %s\n", delta[0] / cycles_to_units / 2, units);
+	printf("Latency worst  : %g %s\n", delta[iters - 2] / cycles_to_units / 2, units);
 
 	free(delta);
 }
