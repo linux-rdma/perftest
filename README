@@ -1,0 +1,84 @@
+This directory includes gen2 uverbs microbenchmarks.
+
+The tests are intend as:
+	1) simple, efficient usage examples.
+		This code is GPL. Copy it literally only if you are
+		releasing GPL products. Otherwise use it as a guide only.
+
+	2) a useful benchmark
+		e.g. for HW or SW tuning and/or functional testing.
+		Please post results/observations to openib-general email list.
+ 		See www.openib.org "Contact Us" link for details.
+
+
+Testing methodology
+-------------------
+
+- uses CPU cycle counter to get time stamps without context switch.
+  Some arches do NOT implement get_cycle(). e.g. Intel 80486 or older PPC.
+
+- measures round-trip time but reports half of that as one-way latency.
+  ie. May not be sufficiently accurate for asymetrical configurations.
+
+- Min/Median/Max result is always reported.
+  The median (vs average) is less sensitive to extreme scores.
+  Typically the "Max" value is the first value measured.
+
+- larger samples only marginally help. The default (1000) is pretty good.
+  Note that an array of cycles_t (typically unsigned long) is allocated
+  once to collect samples and again to store the difference between them.
+  Really big sample sizes (e.g. 1 million) might see other problems
+  with the program.
+
+- "-H" option will dump the histogram for additional statistical analysis.
+  See xgraph, ygraph, r-base (http://www.r-project.org/), pspp, or other 
+  statistical math programs.
+
+Architectures tested:	i686, x86_64, ia64
+
+
+
+Test Descriptions
+-----------------
+
+rdma_lat.c - latency test with RDMA write transactions
+
+
+Build Tests
+-----------
+
+"make" to build all tests
+
+	Debian: build-dep on linux-kernel-headers (for asm/timex.h file)
+		build-dep on libibverbs-dev
+		depends on libibverbs1
+
+
+Run Tests
+---------
+
+Prerequisites: 
+	kernel 2.6
+	ib_uverbs (kernel module) matches libibverbs
+		("match" means binary compatible, but ideally same SVN rev)
+	Debian: dpkg -i libibverbs1_0.1.0-1_ia64.deb
+
+Server:		./<test name> <options>
+Client:		./<test name> <options> <server IP address>
+
+	o IMPORTANT: The SAME OPTIONS must be passed to both server and client.
+	o "--help" will list the current <options>.
+	o <server address> is IPv4 or IPv6 address assigned to the IPoIB port.
+
+First Config IPoIB on both client and server with something like:
+	modprobe ib_mthca msi_x=1	# assumes platform supports MSI-X
+	modprobe ib_ipoib
+	ifconfig ib0 10.0.1.30 netmask 255.255.255.0
+	modprobe ib_uverbs
+
+Then (e.g.) "rdma_lat -UC | less" on the server side.
+
+Run modprobe/ifconfig again on the client side (with a different IB).
+Lastly "rmda_lat -UC 10.0.1.31" on the client.
+
+rmda_lat will exit on both server and client after printing results.
