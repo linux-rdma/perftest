@@ -94,31 +94,15 @@ struct pingpong_dest {
 	unsigned long long vaddr;
 };
 
-/*
- * pp_get_local_lid() uses a pretty bogus method for finding the LID
- * of a local port.  Please don't copy this into your app (or if you
- * do, please rip it out soon).
- */
-static uint16_t pp_get_local_lid(struct ibv_device *dev, int port)
+
+static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
 {
-	char path[256];
-	char val[16];
-	char *name;
+	struct ibv_port_attr attr;
 
-	if (sysfs_get_mnt_path(path, sizeof path)) {
-		fprintf(stderr, "Couldn't find sysfs mount.\n");
+	if (ibv_query_port(ctx->context, port, &attr))
 		return 0;
-	}
 
-	asprintf(&name, "%s/class/infiniband/%s/ports/%d/lid", path,
-		 ibv_get_device_name(dev), port);
-
-	if (sysfs_read_attribute_value(name, val, sizeof val)) {
-		fprintf(stderr, "Couldn't read LID at %s\n", name);
-		return 0;
-	}
-
-	return strtol(val, NULL, 0);
+	return attr.lid;
 }
 
 static int pp_client_connect(const char *servername, int port)
@@ -676,7 +660,7 @@ int main(int argc, char *argv[])
 	/* Create connection between client and server.
 	 * We do it by exchanging data over a TCP socket connection. */
 
-	my_dest.lid = pp_get_local_lid(ib_dev, ib_port);
+	my_dest.lid = pp_get_local_lid(ctx, ib_port);
 	my_dest.qpn = ctx->qp->qp_num;
 	my_dest.psn = lrand48() & 0xffffff;
 	if (!my_dest.lid) {
@@ -736,10 +720,7 @@ int main(int argc, char *argv[])
 	scnt = 0;
 	rcnt = 0;
 	ccnt = 0;
-	if (servername)
-		client_first_post = 1;
-	else
-		client_first_post = 0;
+	client_first_post = servername ? 1 : 0;
 
 	poll_buf = ctx->poll_buf;
 	post_buf = ctx->post_buf;
@@ -793,7 +774,7 @@ int main(int argc, char *argv[])
 			}
 			if (wc.status != IBV_WC_SUCCESS) {
 				fprintf(stderr, "Completion wth error at %s:\n",
-					servername?"client":"server");
+					servername ? "client" : "server");
 				fprintf(stderr, "Failed status %d: wr_id %d\n",
 					wc.status, (int) wc.wr_id);
 				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
