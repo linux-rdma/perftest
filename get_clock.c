@@ -35,7 +35,7 @@
 #include <unistd.h>
 #include <stdio.h>
 
-double get_cpu_mhz()
+double get_cpu_mhz(void)
 {
 	FILE* f;
 	char buf[256];
@@ -55,7 +55,7 @@ double get_cpu_mhz()
 			continue;
 		}
 		if (mhz != m) {
-			fprintf(stderr,"Conflicting CPU frequency values "
+			fprintf(stderr,"Conflicting CPU frequency values"
 					" detected: %lf != %lf\n",
 					mhz, m);
 			return 0.0;

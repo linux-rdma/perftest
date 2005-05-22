@@ -58,7 +58,6 @@
 
 #include "get_clock.h"
 
-
 #define PINGPONG_RDMA_WRID	3
 
 static int page_size;
@@ -434,7 +433,7 @@ static void usage(const char *argv0)
 	printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
+	printf("  -s, --size=<size>      size of message to exchange (default 1)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -C, --report-cycles    report times in cpu cycle units (default microseconds)\n");
@@ -519,8 +518,8 @@ static void print_report(struct report_options * options,
 
 int main(int argc, char *argv[])
 {
-	struct dlist 	  	*dev_list;
-	struct ibv_device 	*ib_dev;
+	struct dlist		*dev_list;
+	struct ibv_device	*ib_dev;
 	struct pingpong_context *ctx;
 	struct pingpong_dest     my_dest;
 	struct pingpong_dest    *rem_dest;
@@ -536,7 +535,7 @@ int main(int argc, char *argv[])
 	int			 client_first_post;
 	int			 sockfd;
 	struct ibv_qp		*qp;
-	struct ibv_send_wr 	*wr;
+	struct ibv_send_wr	*wr;
 	volatile char		*poll_buf;
 	volatile char		*post_buf;
 	struct report_options    report = {};
@@ -555,7 +554,7 @@ int main(int argc, char *argv[])
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
-			{ .name = "report-histogram", .has_arg = 0, .val = 'H' },
+			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ 0 }
 		};
@@ -587,10 +586,12 @@ int main(int argc, char *argv[])
 
 		case 's':
 			size = strtol(optarg, NULL, 0);
+			if (size < 1) { usage(argv[0]); return 1; }
 			break;
 
 		case 't':
 			tx_depth = strtol(optarg, NULL, 0);
+			if (tx_depth < 1) { usage(argv[0]); return 1; }
 			break;
 
 		case 'n':
@@ -674,7 +675,6 @@ int main(int argc, char *argv[])
 			"RKey %#08x VAddr %#016Lx\n",
 			my_dest.lid, my_dest.qpn, my_dest.psn,
 			my_dest.rkey, my_dest.vaddr);
-	
 
 	if (servername) {
 		sockfd = pp_client_connect(servername, port);
