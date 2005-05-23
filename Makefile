@@ -1,4 +1,4 @@
-TESTS = rdma_lat
+TESTS = rdma_lat rdma_bw
 
 all: ${TESTS}
 
@@ -11,5 +11,4 @@ ${TESTS}: ${EXTRA_FILES}
 clean:
 	rm -f ${TESTS}
 .DELETE_ON_ERROR:
-.INTERMEDIATE: ${EXTRA_FILES}
 .PHONY: all clean
