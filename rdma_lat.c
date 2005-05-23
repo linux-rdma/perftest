@@ -79,7 +79,6 @@ struct pingpong_context {
 	volatile char      *post_buf;
 	volatile char      *poll_buf;
 	int                 size;
-	int                 rx_depth;
 	int                 tx_depth;
 	struct ibv_sge list;
 	struct ibv_send_wr wr;
@@ -277,7 +276,7 @@ out:
 }
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
-					    int tx_depth, int rx_depth, int port)
+					    int tx_depth, int port)
 {
 	struct pingpong_context *ctx;
 
@@ -286,7 +285,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 
 	ctx->size     = size;
-	ctx->rx_depth = rx_depth;
 	ctx->tx_depth = tx_depth;
 
 	ctx->buf = memalign(page_size, size * 2);
@@ -320,7 +318,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, rx_depth + tx_depth, NULL);
+	ctx->cq = ibv_create_cq(ctx->context, tx_depth, NULL);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -332,10 +330,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			.recv_cq = ctx->cq,
 			.cap     = {
 				.max_send_wr  = tx_depth,
-				.max_recv_wr  = rx_depth,
+				/* Work around:  driver doesnt support
+				 * recv_wr = 0 */
+				.max_recv_wr  = 1,
 				.max_send_sge = 1,
 				.max_recv_sge = 1,
-				.max_inline_data = size
+				.max_inline_data = 0
 			},
 			.qp_type = IBV_QPT_RC
 		};
@@ -369,7 +369,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
 	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	ctx->wr.next       = NULL;
 
 	return ctx;
@@ -527,7 +527,6 @@ int main(int argc, char *argv[])
 	int                      port = 18515;
 	int                      ib_port = 1;
 	int                      size = 1;
-	int                      rx_depth = 1;
 	int                      tx_depth = 50;
 	int                      iters = 1000;
 	int                      scnt, rcnt, ccnt;
@@ -653,7 +652,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	ctx = pp_init_ctx(ib_dev, size, tx_depth, rx_depth, ib_port);
+	ctx = pp_init_ctx(ib_dev, size, tx_depth, ib_port);
 	if (!ctx)
 		return 1;
 
