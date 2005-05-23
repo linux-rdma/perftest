@@ -447,14 +447,13 @@ static void usage(const char *argv0)
  * 	even number of samples, the median is the mean of the
  *		two middle numbers.
  *
- * Reminder: iters is the number of exchanges, not number of samples.
  */
-static inline cycles_t get_median(int iters, cycles_t delta[])
+static inline cycles_t get_median(int n, cycles_t delta[])
 {
-	if ((iters  - 1) % 2)
-		return delta[iters / 2];
+	if (n % 2)
+		return (delta[n / 2] + delta[n / 2 + 1]) / 2;
 	else
-		return (delta[iters / 2] + delta[iters / 2 - 1]) / 2;
+		return delta[n / 2];
 }
 
 static int cycles_compare(const void * aptr, const void * bptr)
@@ -480,7 +479,7 @@ static void print_report(struct report_options * options,
 		return;
 	}
 
-	for (i = 0; i < iters; ++i)
+	for (i = 0; i < iters - 1; ++i)
 		delta[i] = tstamp[i + 1] - tstamp[i];
 
 
@@ -506,7 +505,7 @@ static void print_report(struct report_options * options,
 			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
 	}
 
-	median = get_median(iters, delta);
+	median = get_median(iters - 1, delta);
 
 	printf("Latency typical: %g %s\n", median / cycles_to_units / 2, units);
 	printf("Latency best   : %g %s\n", delta[0] / cycles_to_units / 2, units);
