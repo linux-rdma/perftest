@@ -451,7 +451,7 @@ static void usage(const char *argv0)
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
 	if (n % 2)
-		return (delta[n / 2] + delta[n / 2 + 1]) / 2;
+		return (delta[n / 2] + delta[n / 2 - 1]) / 2;
 	else
 		return delta[n / 2];
 }
