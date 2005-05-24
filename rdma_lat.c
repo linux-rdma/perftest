@@ -494,7 +494,7 @@ static void print_report(struct report_options * options,
 	if (options->unsorted) {
 		printf("#, %s\n", units);
 		for(i = 0; i < iters - 1; ++i)
-			printf("%d, %g\n", i+1, delta[i] / cycles_to_units / 2);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
 	}
 
 	qsort(delta, iters - 1, sizeof *delta, cycles_compare);
