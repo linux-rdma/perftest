@@ -437,8 +437,8 @@ static void usage(const char *argv0)
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -C, --report-cycles    report times in cpu cycle units (default microseconds)\n");
-	printf("  -A, --report-all       print out all results (default print summary only)\n");
-	printf("  -U, --report-unsorted  (implies -A) print out unsorted results (default sorted)\n");
+	printf("  -H, --report-histogram print out all results (default print summary only)\n");
+	printf("  -U, --report-unsorted  (implies -H) print out unsorted results (default sorted)\n");
 }
 
 /*
