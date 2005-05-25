@@ -335,7 +335,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 				.max_recv_wr  = 1,
 				.max_send_sge = 1,
 				.max_recv_sge = 1,
-				.max_inline_data = 0
+				.max_inline_data = size
 			},
 			.qp_type = IBV_QPT_RC
 		};
@@ -369,7 +369,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
 	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	ctx->wr.send_flags = IBV_SEND_SIGNALED;
+	ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 	ctx->wr.next       = NULL;
 
 	return ctx;
