@@ -348,12 +348,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 	}
 
 	{
-		struct ibv_qp_attr attr;
-
-		attr.qp_state        = IBV_QPS_INIT;
-		attr.pkey_index      = 0;
-		attr.port_num        = port;
-		attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
+		struct ibv_qp_attr attr = {
+			.qp_state        = IBV_QPS_INIT,
+			.pkey_index      = 0,
+			.port_num        = port,
+			.qp_access_flags = IBV_ACCESS_REMOTE_WRITE
+		};
 
 		if (ibv_modify_qp(ctx->qp, &attr,
 				  IBV_QP_STATE              |
@@ -378,19 +378,20 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 			  struct pingpong_dest *dest)
 {
-	struct ibv_qp_attr attr;
+	struct ibv_qp_attr attr = {
+		.qp_state 		= IBV_QPS_RTR,
+		.path_mtu 		= IBV_MTU_256,
+		.dest_qp_num 	        = dest->qpn,
+		.rq_psn 		= dest->psn,
+		.max_dest_rd_atomic     = 1,
+		.min_rnr_timer 	        = 12,
+		.ah_attr.is_global      = 0,
+		.ah_attr.dlid           = dest->lid,
+		.ah_attr.sl             = 0,
+		.ah_attr.src_path_bits  = 0,
+		.ah_attr.port_num       = port,
+	};
 
-	attr.qp_state 		= IBV_QPS_RTR;
-	attr.path_mtu 		= IBV_MTU_256;
-	attr.dest_qp_num 	= dest->qpn;
-	attr.rq_psn 		= dest->psn;
-	attr.max_dest_rd_atomic = 1;
-	attr.min_rnr_timer 	= 12;
-	attr.ah_attr.is_global  = 0;
-	attr.ah_attr.dlid       = dest->lid;
-	attr.ah_attr.sl         = 0;
-	attr.ah_attr.src_path_bits = 0;
-	attr.ah_attr.port_num   = port;
 	if (ibv_modify_qp(ctx->qp, &attr,
 			  IBV_QP_STATE              |
 			  IBV_QP_AV                 |
