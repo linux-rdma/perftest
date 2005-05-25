@@ -476,7 +476,7 @@ static void print_report(struct report_options * options,
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * 0x100000 * size;
 
-	printf("Bandwidth peak (#%d to #%d): %g byte/%s\n", opt_posted, opt_completed, tsize * cycles_to_units / opt_delta, units);
+	printf("Bandwidth peak (#%d to #%d): %g MByte/%s\n", opt_posted, opt_completed, tsize * cycles_to_units / opt_delta, units);
 	printf("Bandwidth average: %g MByte/%s\n", tsize * iters * cycles_to_units / (tcompleted[iters - 1] - tposted[0]), units);
 }
 
