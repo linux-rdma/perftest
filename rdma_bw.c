@@ -444,7 +444,7 @@ static void print_report(struct report_options * options,
 			 cycles_t *tposted, cycles_t *tcompleted)
 {
 	double cycles_to_units;
-	double tsize;
+	double tsize; /* Transferred size, in megabytes */
 	int i, j;
 	const char* units;
 	int opt_posted = 0, opt_completed = 0;
@@ -469,12 +469,12 @@ static void print_report(struct report_options * options,
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
-		cycles_to_units = get_cpu_mhz() / 1000000;
+		cycles_to_units = get_cpu_mhz() * 1000000;
 		units = "sec";
 	}
 
 	tsize = duplex ? 2 : 1;
-	tsize = tsize * 0x100000 * size;
+	tsize = tsize * size / 0x100000;
 
 	printf("Bandwidth peak (#%d to #%d): %g MByte/%s\n", opt_posted, opt_completed, tsize * cycles_to_units / opt_delta, units);
 	printf("Bandwidth average: %g MByte/%s\n", tsize * iters * cycles_to_units / (tcompleted[iters - 1] - tposted[0]), units);
@@ -759,7 +759,7 @@ int main(int argc, char *argv[])
 					scnt, ccnt);
 				return 1;
 			}
-			ccnt += ne;
+			ccnt += 1;
 		}
 	}
 
