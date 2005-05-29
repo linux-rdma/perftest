@@ -74,13 +74,8 @@ struct pingpong_context {
 	void               *buf;
 	int                 size;
 	int                 tx_depth;
-	struct {
-		volatile char      *post_buf;
-		volatile char      *poll_buf;
-		struct ibv_sge list;
-		struct ibv_send_wr wr;
-	}                  *bufs; 
-
+	struct ibv_sge      list;
+	struct ibv_send_wr  wr;
 };
 
 struct pingpong_dest {
@@ -286,20 +281,13 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
 
-	/* TODO: check return code */
-	ctx->bufs = malloc(tx_depth * sizeof *(ctx->bufs));
-	if (!ctx->bufs) {
-		fprintf(stderr, "Couldn't allocate bufs array.\n");
-		return NULL;
-	}
-
-	ctx->buf = memalign(page_size, tx_depth * size * 2);
+	ctx->buf = memalign(page_size, size * 2);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
 
-	memset(ctx->buf, 0, tx_depth * size * 2);
+	memset(ctx->buf, 0, size * 2);
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -314,7 +302,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 	}
 
-	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, tx_depth * size * 2,
+	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2,
 			     IBV_ACCESS_REMOTE_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
@@ -499,12 +487,10 @@ int main(int argc, char *argv[])
 	int			 sockfd;
 	int                      duplex = 0;
 	struct ibv_qp		*qp;
-	struct ibv_send_wr	*wr;
 	struct report_options    report = {};
 
 	cycles_t	*tposted;
 	cycles_t	*tcompleted;
-	int i;
 
 	/* Parameter parsing. */
 	while (1) {
@@ -683,22 +669,17 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	for (i = 0; i < tx_depth; ++i) {
-		wr = &(ctx->bufs[i].wr);
-		ctx->bufs[i].post_buf = (char*)ctx->buf + 2 * ctx->size * i + (ctx->size - 1);
-		ctx->bufs[i].poll_buf = (char*)ctx->buf + 2 * ctx->size * i + (2 * ctx->size - 1);
-		ctx->bufs[i].list.addr = (uintptr_t) ctx->buf + 2 * ctx->size * i;
-		ctx->bufs[i].list.length = ctx->size;
-		ctx->bufs[i].list.lkey = ctx->mr->lkey;
-		wr->wr.rdma.remote_addr = rem_dest->vaddr + 2 * i * ctx->size;
-		wr->wr.rdma.rkey = rem_dest->rkey;
-		wr->wr_id      = wr->wr.rdma.remote_addr;
-		wr->sg_list    = &ctx->bufs[i].list;
-		wr->num_sge    = 1;
-		wr->opcode     = IBV_WR_RDMA_WRITE;
-		wr->send_flags = IBV_SEND_SIGNALED;
-		wr->next       = NULL;
-	}
+	ctx->list.addr = (uintptr_t) ctx->buf;
+	ctx->list.length = ctx->size;
+	ctx->list.lkey = ctx->mr->lkey;
+	ctx->wr.wr.rdma.remote_addr = rem_dest->vaddr;
+	ctx->wr.wr.rdma.rkey = rem_dest->rkey;
+	ctx->wr.wr_id      = PINGPONG_RDMA_WRID;
+	ctx->wr.sg_list    = &ctx->list;
+	ctx->wr.num_sge    = 1;
+	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
+	ctx->wr.send_flags = IBV_SEND_SIGNALED;
+	ctx->wr.next       = NULL;
 
 	scnt = 0;
 	ccnt = 0;
@@ -725,11 +706,9 @@ int main(int argc, char *argv[])
 
 		while (scnt < iters && scnt - ccnt < tx_depth) {
 			struct ibv_send_wr *bad_wr;
-			int b = scnt % tx_depth;
-
 			tposted[scnt] = get_cycles();
 
-			if (ibv_post_send(qp, &ctx->bufs[b].wr, &bad_wr)) {
+			if (ibv_post_send(qp, &ctx->wr, &bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",
 					scnt);
 				return 1;
