@@ -531,7 +531,6 @@ int main(int argc, char *argv[])
 	int                      tx_depth = 50;
 	int                      iters = 1000;
 	int                      scnt, rcnt, ccnt;
-	int			 client_first_post;
 	int			 sockfd;
 	struct ibv_qp		*qp;
 	struct ibv_send_wr	*wr;
@@ -719,8 +718,6 @@ int main(int argc, char *argv[])
 	scnt = 0;
 	rcnt = 0;
 	ccnt = 0;
-	client_first_post = servername ? 1 : 0;
-
 	poll_buf = ctx->poll_buf;
 	post_buf = ctx->post_buf;
 	qp = ctx->qp;
@@ -737,18 +734,18 @@ int main(int argc, char *argv[])
 	while (scnt < iters || ccnt < iters || rcnt < iters) {
 
 		/* Wait till buffer changes. */
-		if (rcnt < iters && ! client_first_post) {
+		if (rcnt < iters && !(scnt < 1 && servername)) {
 			++rcnt;
 			while (*poll_buf != (char)rcnt) {
 			}
 			/* Here the data is already in the physical memory.
 			   If we wanted to actually use it, we may need
 			   a read memory barrier here. */
-		} else
-			client_first_post = 0;
+		}
 
 		if (scnt < iters) {
 			struct ibv_send_wr *bad_wr;
+			tstamp[scnt] = get_cycles();
 
 			*post_buf = (char)++scnt;
 			if (ibv_post_send(qp, wr, &bad_wr)) {
@@ -756,7 +753,6 @@ int main(int argc, char *argv[])
 					scnt);
 				return 1;
 			}
-			tstamp[scnt - 1] = get_cycles();
 		}
 
 		if (ccnt < iters) {
