@@ -61,10 +61,6 @@
 
 static int page_size;
 
-struct report_options {
-	int cycles;   /* report delta's in cycles, not microsec's */
-};
-
 struct pingpong_context {
 	struct ibv_context *context;
 	struct ibv_pd      *pd;
@@ -418,23 +414,18 @@ static void usage(const char *argv0)
 	printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>      size of message to exchange (default 1)\n");
+	printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
-	printf("  -C, --report-cycles    report times in cpu cycle units (default seconds)\n");
-	printf("  -H, --report-histogram print out all results (default print summary only)\n");
-	printf("  -U, --report-unsorted  (implies -H) print out unsorted results (default sorted)\n");
 }
 
-static void print_report(struct report_options * options,
-			 unsigned int iters, double size, int duplex,
+static void print_report(unsigned int iters, int size, int duplex,
 			 cycles_t *tposted, cycles_t *tcompleted)
 {
 	double cycles_to_units;
-	double tsize; /* Transferred size, in megabytes */
+	unsigned long tsize;	/* Transferred size, in megabytes */
 	int i, j;
-	const char* units;
 	int opt_posted = 0, opt_completed = 0;
 	cycles_t opt_delta;
 	cycles_t t;
@@ -453,19 +444,21 @@ static void print_report(struct report_options * options,
 			}
 		}
 
-	if (options->cycles) {
-		cycles_to_units = 1;
-		units = "cycles";
-	} else {
-		cycles_to_units = get_cpu_mhz() * 1000000;
-		units = "sec";
-	}
+	cycles_to_units = get_cpu_mhz() * 1000000;
 
 	tsize = duplex ? 2 : 1;
-	tsize = tsize * size / 0x100000;
+	tsize = tsize * size / 1024;
 
-	printf("Bandwidth peak (#%d to #%d): %g MByte/%s\n", opt_posted, opt_completed, tsize * cycles_to_units / opt_delta, units);
-	printf("Bandwidth average: %g MByte/%s\n", tsize * iters * cycles_to_units / (tcompleted[iters - 1] - tposted[0]), units);
+	printf("Bandwidth peak (#%d to #%d): %g MB/sec\n",
+			 opt_posted, opt_completed,
+			 tsize * cycles_to_units / opt_delta / 1024);
+	printf("Bandwidth average: %g MB/sec\n",
+			 tsize * iters * cycles_to_units / (tcompleted[iters - 1] - tposted[0]) / 1024);
+
+	printf("Service Demand peak (#%d to #%d): %ld cycles/KB\n",
+			 opt_posted, opt_completed, opt_delta/tsize);
+	printf("Service Demand Avg  : %ld cycles/KB\n",
+			 (tcompleted[iters - 1] - tposted[0])/(tsize * iters));
 }
 
 
@@ -480,14 +473,13 @@ int main(int argc, char *argv[])
 	char                    *servername = NULL;
 	int                      port = 18515;
 	int                      ib_port = 1;
-	int                      size = 1;
+	int                      size = 4096;
 	int                      tx_depth = 100;
 	int                      iters = 1000;
 	int                      scnt, ccnt;
 	int			 sockfd;
 	int                      duplex = 0;
 	struct ibv_qp		*qp;
-	struct report_options    report = {};
 
 	cycles_t	*tposted;
 	cycles_t	*tcompleted;
@@ -504,11 +496,10 @@ int main(int argc, char *argv[])
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
-			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:bC", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:b", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -563,10 +554,6 @@ int main(int argc, char *argv[])
 
 		case 'b':
 			duplex = 1;
-			break;
-
-		case 'C':
-			report.cycles = 1;
 			break;
 
 		default:
@@ -751,7 +738,7 @@ int main(int argc, char *argv[])
 	write(sockfd, "done", sizeof "done");
 	close(sockfd);
 
-	print_report(&report, iters, size, duplex, tposted, tcompleted);
+	print_report(iters, size, duplex, tposted, tcompleted);
 
 	free(tposted);
 	free(tcompleted);
