@@ -48,7 +48,7 @@ double get_cpu_mhz(void)
 		double m;
 		int rc;
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
-		if (rc != 1) {	/* blech...PPC does it different */
+		if (rc != 1) {	/* PPC has a different format */
 			rc = sscanf(buf, "clock : %lf", &m);
 			if (rc != 1)
 				continue;
