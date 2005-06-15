@@ -48,8 +48,11 @@ double get_cpu_mhz(void)
 		double m;
 		int rc;
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
-		if (rc != 1)
-			continue;
+		if (rc != 1) {	/* blech...PPC does it different */
+			rc = sscanf(buf, "clock : %lf", &m);
+			if (rc != 1)
+				continue;
+		}
 		if (mhz == 0.0) {
 			mhz = m;
 			continue;
