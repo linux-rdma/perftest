@@ -103,6 +103,71 @@ static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
 	return attr.lid;
 }
 
+static struct ibv_device *pp_find_dev(const char *ib_devname)
+{
+	struct dlist	*dev_list;
+	struct ibv_device *ib_dev = NULL;
+
+	dev_list = ibv_get_devices();
+
+	dlist_start(dev_list);
+	if (!ib_devname) {
+		ib_dev = dlist_next(dev_list);
+		if (!ib_dev)
+			fprintf(stderr, "No IB devices found\n");
+	} else {
+		dlist_for_each_data(dev_list, ib_dev, struct ibv_device)
+			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
+				break;
+		if (!ib_dev)
+			fprintf(stderr, "IB device %s not found\n", ib_devname);
+	}
+	return ib_dev;
+}
+
+#define KEY_MSG_SIZE (sizeof "0000:000000:000000:00000000:0000000000000000")
+#define KEY_PRINT_FMT "%04x:%06x:%06x:%08x:%016Lx"
+
+static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest)
+{
+	char msg[KEY_MSG_SIZE];
+
+	sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
+			my_dest->psn, my_dest->rkey, my_dest->vaddr);
+
+	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
+		perror("client write");
+		fprintf(stderr, "Couldn't send local address\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
+		       	struct pingpong_dest *rem_dest)
+{
+	int parsed;
+	char msg[KEY_MSG_SIZE];
+
+	if (read(sockfd, msg, sizeof msg) != sizeof msg) {
+		perror("pp_read_keys");
+		fprintf(stderr, "Couldn't read remote address\n");
+		return -1;
+	}
+
+	parsed = sscanf(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
+			&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+
+	if (parsed != 5) {
+		fprintf(stderr, "Couldn't parse line <%.*s>\n",
+				(int)sizeof msg, msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int pp_client_connect(const char *servername, int port)
 {
 	struct addrinfo *res, *t;
@@ -141,46 +206,16 @@ static int pp_client_connect(const char *servername, int port)
 	return sockfd;
 }
 
-struct pingpong_dest * pp_client_exch_dest(int sockfd,
-					   const struct pingpong_dest *my_dest)
+static int pp_client_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
+			       struct pingpong_dest *rem_dest)
 {
-	struct pingpong_dest *rem_dest = NULL;
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000"];
-	int parsed;
+	if (pp_write_keys(sockfd, my_dest))
+		return -1;
 
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", my_dest->lid, my_dest->qpn,
-			my_dest->psn,my_dest->rkey,my_dest->vaddr);
-	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
-		perror("client write");
-		fprintf(stderr, "Couldn't send local address\n");
-		goto out;
-	}
-
-	if (read(sockfd, msg, sizeof msg) != sizeof msg) {
-		perror("client read");
-		fprintf(stderr, "Couldn't read remote address\n");
-		goto out;
-	}
-
-	rem_dest = malloc(sizeof *rem_dest);
-	if (!rem_dest)
-		goto out;
-
-	parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn,&rem_dest->rkey,&rem_dest->vaddr);
-
-	if (parsed != 5) {
-		fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg,
-				msg);
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
-	}
-out:
-	return rem_dest;
+	return pp_read_keys(sockfd, my_dest, rem_dest);
 }
 
-int pp_server_connect(int port)
+static int pp_server_connect(int port)
 {
 	struct addrinfo *res, *t;
 	struct addrinfo hints = {
@@ -234,45 +269,14 @@ int pp_server_connect(int port)
 	return connfd;
 }
 
-static struct pingpong_dest *pp_server_exch_dest(int connfd, const struct pingpong_dest *my_dest)
+static int pp_server_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
+			       const struct pingpong_dest* rem_dest)
 {
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000"];
-	struct pingpong_dest *rem_dest = NULL;
-	int parsed;
-	int n;
 
-	n = read(connfd, msg, sizeof msg);
-	if (n != sizeof msg) {
-		perror("server read");
-		fprintf(stderr, "%d/%d: Couldn't read remote address\n", n, (int) sizeof msg);
-		goto out;
-	}
+	if (pp_read_keys(sockfd, my_dest, rem_dest))
+		return -1;
 
-	rem_dest = malloc(sizeof *rem_dest);
-	if (!rem_dest)
-		goto out;
-
-	parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
-	if (parsed != 5) {
-		fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg,
-				msg);
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
-	}
-
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", my_dest->lid, my_dest->qpn,
-			my_dest->psn, my_dest->rkey, my_dest->vaddr);
-	if (write(connfd, msg, sizeof msg) != sizeof msg) {
-		perror("server write");
-		fprintf(stderr, "Couldn't send local address\n");
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
-	}
-out:
-	return rem_dest;
+	return pp_write_keys(sockfd, my_dest);
 }
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
@@ -424,6 +428,65 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	return 0;
 }
 
+static int pp_open_port(struct pingpong_context *ctx, const char * servername, int ib_port, int port,
+		       	struct pingpong_dest *rem_dest)
+{
+	char addr_fmt[] = "%8s address: LID %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n";
+	struct pingpong_dest	my_dest;
+	int			sockfd;
+	int			rc;
+
+
+	/* Create connection between client and server.
+	 * We do it by exchanging data over a TCP socket connection. */
+
+	my_dest.lid = pp_get_local_lid(ctx, ib_port);
+	my_dest.qpn = ctx->qp->qp_num;
+	my_dest.psn = lrand48() & 0xffffff;
+	if (!my_dest.lid) {
+		fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
+		return -1;
+	}
+	my_dest.rkey = ctx->mr->rkey;
+	my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
+
+	printf(addr_fmt, "local", my_dest.lid, my_dest.qpn, my_dest.psn,
+			my_dest.rkey, my_dest.vaddr);
+	
+	sockfd = servername ? pp_client_connect(servername, port) : pp_server_connect(port);
+
+	if (sockfd < 0) {
+		printf("pp_connect_sock(%s,%d) failed (%d)!\n",
+					servername, port, sockfd);
+		return sockfd;
+	}
+
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest) :
+		pp_server_exch_dest(sockfd, &my_dest);
+	if (rc)
+		return rc;
+
+	printf(addr_fmt, "remote", rem_dest->lid, rem_dest->qpn, rem_dest->psn,
+			rem_dest->rkey, rem_dest->vaddr);
+
+	if ((rc = pp_connect_ctx(ctx, ib_port, my_dest.psn, rem_dest)))
+		return rc;
+
+	/* An additional handshake is required *after* moving qp to RTR.
+	 * Arbitrarily reuse exch_dest for this purpose.
+	 */
+
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest) :
+		pp_server_exch_dest(sockfd, &my_dest);
+
+	if (rc)
+		return rc;
+
+	write(sockfd, "done", sizeof "done");
+	close(sockfd);
+	return 0;
+}
+
 static void usage(const char *argv0)
 {
 	printf("Usage:\n");
@@ -515,30 +578,29 @@ static void print_report(struct report_options * options,
 	free(delta);
 }
 
-
 int main(int argc, char *argv[])
 {
-	struct dlist		*dev_list;
-	struct ibv_device	*ib_dev;
-	struct pingpong_context *ctx;
-	struct pingpong_dest     my_dest;
-	struct pingpong_dest    *rem_dest;
-	char                    *ib_devname = NULL;
-	char                    *servername = NULL;
+	const char              *ib_devname = NULL;
+	const char              *servername = NULL;
 	int                      port = 18515;
 	int                      ib_port = 1;
 	int                      size = 1;
-	int                      tx_depth = 50;
 	int                      iters = 1000;
-	int                      scnt, rcnt, ccnt;
-	int			 sockfd;
-	struct ibv_qp		*qp;
-	struct ibv_send_wr	*wr;
-	volatile char		*poll_buf;
-	volatile char		*post_buf;
+	int                      tx_depth = 50;
 	struct report_options    report = {};
 
-	cycles_t	*tstamp;
+	struct pingpong_context *ctx;
+	struct pingpong_dest     rem_dest;
+	struct ibv_device       *ib_dev;
+
+	struct ibv_qp           *qp;
+	struct ibv_send_wr      *wr;
+	volatile char           *poll_buf;
+	volatile char           *post_buf;
+
+	int                      scnt, rcnt, ccnt;
+
+	cycles_t                *tstamp;
 
 	/* Parameter parsing. */
 	while (1) {
@@ -578,25 +640,25 @@ int main(int argc, char *argv[])
 			ib_port = strtol(optarg, NULL, 0);
 			if (ib_port < 0) {
 				usage(argv[0]);
-				return 1;
+				return 2;
 			}
 			break;
 
 		case 's':
 			size = strtol(optarg, NULL, 0);
-			if (size < 1) { usage(argv[0]); return 1; }
+			if (size < 1) { usage(argv[0]); return 3; }
 			break;
 
 		case 't':
 			tx_depth = strtol(optarg, NULL, 0);
-			if (tx_depth < 1) { usage(argv[0]); return 1; }
+			if (tx_depth < 1) { usage(argv[0]); return 4; }
 			break;
 
 		case 'n':
 			iters = strtol(optarg, NULL, 0);
 			if (iters < 2) {
 				usage(argv[0]);
-				return 1;
+				return 5;
 			}
 
 			break;
@@ -615,7 +677,7 @@ int main(int argc, char *argv[])
 
 		default:
 			usage(argv[0]);
-			return 1;
+			return 5;
 		}
 	}
 
@@ -623,90 +685,26 @@ int main(int argc, char *argv[])
 		servername = strdupa(argv[optind]);
 	else if (optind < argc) {
 		usage(argv[0]);
-		return 1;
+		return 6;
 	}
 
-
-	/* Done with parameter parsing. Perform setup. */
+	/*
+	 *  Done with parameter parsing. Perform setup.
+	 */
 
 	srand48(getpid() * time(NULL));
-
 	page_size = sysconf(_SC_PAGESIZE);
 
-	dev_list = ibv_get_devices();
-
-	dlist_start(dev_list);
-	if (!ib_devname) {
-		ib_dev = dlist_next(dev_list);
-		if (!ib_dev) {
-			fprintf(stderr, "No IB devices found\n");
-			return 1;
-		}
-	} else {
-		dlist_for_each_data(dev_list, ib_dev, struct ibv_device)
-			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
-				break;
-		if (!ib_dev) {
-			fprintf(stderr, "IB device %s not found\n", ib_devname);
-			return 1;
-		}
-	}
+	ib_dev = pp_find_dev(ib_devname);
+	if (!ib_dev)
+		return 7;
 
 	ctx = pp_init_ctx(ib_dev, size, tx_depth, ib_port);
 	if (!ctx)
-		return 1;
+		return 8;
 
-	/* Create connection between client and server.
-	 * We do it by exchanging data over a TCP socket connection. */
-
-	my_dest.lid = pp_get_local_lid(ctx, ib_port);
-	my_dest.qpn = ctx->qp->qp_num;
-	my_dest.psn = lrand48() & 0xffffff;
-	if (!my_dest.lid) {
-		fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
-		return 1;
-	}
-	my_dest.rkey = ctx->mr->rkey;
-	my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
-
-	printf("  local address:  LID %#04x, QPN %#06x, PSN %#06x "
-			"RKey %#08x VAddr %#016Lx\n",
-			my_dest.lid, my_dest.qpn, my_dest.psn,
-			my_dest.rkey, my_dest.vaddr);
-
-	if (servername) {
-		sockfd = pp_client_connect(servername, port);
-		if (sockfd < 0)
-			return 1;
-		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
-	} else {
-		sockfd = pp_server_connect(port);
-		if (sockfd < 0)
-			return 1;
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-	}
-
-	if (!rem_dest)
-		return 1;
-
-	printf("  remote address: LID %#04x, QPN %#06x, PSN %#06x, "
-			"RKey %#08x VAddr %#016Lx\n",
-			rem_dest->lid, rem_dest->qpn, rem_dest->psn,
-			rem_dest->rkey, rem_dest->vaddr);
-
-	if (pp_connect_ctx(ctx, ib_port, my_dest.psn, rem_dest))
-		return 1;
-
-	/* An additional handshake is required *after* moving qp to RTR.
-           Arbitrarily reuse exch_dest for this purpose. */
-	if (servername) {
-		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
-	} else {
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-	}
-
-	write(sockfd, "done", sizeof "done");
-	close(sockfd);
+	if (pp_open_port(ctx, servername, ib_port, port, &rem_dest))
+		return 9;
 
 	wr = &ctx->wr;
 	ctx->list.addr = (uintptr_t) ctx->buf;
@@ -723,10 +721,9 @@ int main(int argc, char *argv[])
 	qp = ctx->qp;
 
 	tstamp = malloc(iters * sizeof *tstamp);
-
 	if (!tstamp) {
 		perror("malloc");
-		return 1;
+		return 10;
 	}
 
 	/* Done with setup. Start the test. */
@@ -736,8 +733,8 @@ int main(int argc, char *argv[])
 		/* Wait till buffer changes. */
 		if (rcnt < iters && !(scnt < 1 && servername)) {
 			++rcnt;
-			while (*poll_buf != (char)rcnt) {
-			}
+			while (*poll_buf != (char)rcnt)
+				;
 			/* Here the data is already in the physical memory.
 			   If we wanted to actually use it, we may need
 			   a read memory barrier here. */
@@ -751,7 +748,7 @@ int main(int argc, char *argv[])
 			if (ibv_post_send(qp, wr, &bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",
 					scnt);
-				return 1;
+				return 11;
 			}
 		}
 
@@ -765,7 +762,7 @@ int main(int argc, char *argv[])
 
 			if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
+				return 12;
 			}
 			if (wc.status != IBV_WC_SUCCESS) {
 				fprintf(stderr, "Completion wth error at %s:\n",
@@ -774,13 +771,11 @@ int main(int argc, char *argv[])
 					wc.status, (int) wc.wr_id);
 				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
 					scnt, rcnt, ccnt);
-				return 1;
+				return 13;
 			}
 		}
 	}
 
 	print_report(&report, iters, tstamp);
-
-	free(tstamp);
 	return 0;
 }
