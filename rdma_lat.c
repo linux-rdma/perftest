@@ -270,7 +270,7 @@ static int pp_server_connect(int port)
 }
 
 static int pp_server_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
-			       const struct pingpong_dest* rem_dest)
+			       struct pingpong_dest* rem_dest)
 {
 
 	if (pp_read_keys(sockfd, my_dest, rem_dest))
@@ -428,8 +428,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	return 0;
 }
 
-static int pp_open_port(struct pingpong_context *ctx, const char * servername, int ib_port, int port,
-		       	struct pingpong_dest *rem_dest)
+static int pp_open_port(struct pingpong_context *ctx, const char * servername,
+		       	int ib_port, int port, struct pingpong_dest *rem_dest)
 {
 	char addr_fmt[] = "%8s address: LID %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n";
 	struct pingpong_dest	my_dest;
@@ -453,7 +453,8 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername, i
 	printf(addr_fmt, "local", my_dest.lid, my_dest.qpn, my_dest.psn,
 			my_dest.rkey, my_dest.vaddr);
 	
-	sockfd = servername ? pp_client_connect(servername, port) : pp_server_connect(port);
+	sockfd = servername ? pp_client_connect(servername, port) :
+		pp_server_connect(port);
 
 	if (sockfd < 0) {
 		printf("pp_connect_sock(%s,%d) failed (%d)!\n",
@@ -461,8 +462,8 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername, i
 		return sockfd;
 	}
 
-	rc = servername ? pp_client_exch_dest(sockfd, &my_dest) :
-		pp_server_exch_dest(sockfd, &my_dest);
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest) :
+		pp_server_exch_dest(sockfd, &my_dest, rem_dest);
 	if (rc)
 		return rc;
 
@@ -476,8 +477,8 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername, i
 	 * Arbitrarily reuse exch_dest for this purpose.
 	 */
 
-	rc = servername ? pp_client_exch_dest(sockfd, &my_dest) :
-		pp_server_exch_dest(sockfd, &my_dest);
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest) :
+		pp_server_exch_dest(sockfd, &my_dest, rem_dest);
 
 	if (rc)
 		return rc;
@@ -710,8 +711,8 @@ int main(int argc, char *argv[])
 	ctx->list.addr = (uintptr_t) ctx->buf;
 	ctx->list.length = ctx->size;
 	ctx->list.lkey = ctx->mr->lkey;
-	wr->wr.rdma.remote_addr = rem_dest->vaddr;
-	wr->wr.rdma.rkey = rem_dest->rkey;
+	wr->wr.rdma.remote_addr = rem_dest.vaddr;
+	wr->wr.rdma.rkey = rem_dest.rkey;
 
 	scnt = 0;
 	rcnt = 0;
