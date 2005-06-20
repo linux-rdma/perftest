@@ -1,0 +1,19 @@
+#!/bin/sh
+# trivial script to launch a server/client test with ssh
+# must be launched from client
+# example: runme 10.0.0.1 /home/perftest/rdma_lat -s 10
+
+if [ $# -lt 1 ] ; then
+        echo "Usage: runme <server> <test> <test options>"
+        exit 3
+fi
+
+server=$1
+shift
+ssh $server $* &
+#give server time to start
+sleep 2
+$* $server
+status=$?
+wait
+exit $status
