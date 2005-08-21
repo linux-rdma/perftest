@@ -416,7 +416,7 @@ static void usage(const char *argv0)
 	printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
+	printf("  -s, --size=<size>      size of message to exchange (default 65536)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
@@ -475,7 +475,7 @@ int main(int argc, char *argv[])
 	char                    *servername = NULL;
 	int                      port = 18515;
 	int                      ib_port = 1;
-	long long                size = 4096;
+	long long                size = 65536;
 	int                      tx_depth = 100;
 	int                      iters = 1000;
 	int                      scnt, ccnt;
