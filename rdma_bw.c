@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -68,7 +69,7 @@ struct pingpong_context {
 	struct ibv_cq      *cq;
 	struct ibv_qp      *qp;
 	void               *buf;
-	int                 size;
+	unsigned            size;
 	int                 tx_depth;
 	struct ibv_sge      list;
 	struct ibv_send_wr  wr;
@@ -265,7 +266,8 @@ out:
 	return rem_dest;
 }
 
-static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
+static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
+					    unsigned size,
 					    int tx_depth, int port)
 {
 	struct pingpong_context *ctx;
@@ -420,7 +422,7 @@ static void usage(const char *argv0)
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 }
 
-static void print_report(unsigned int iters, int size, int duplex,
+static void print_report(unsigned int iters, unsigned size, int duplex,
 			 cycles_t *tposted, cycles_t *tcompleted)
 {
 	double cycles_to_units;
@@ -473,7 +475,7 @@ int main(int argc, char *argv[])
 	char                    *servername = NULL;
 	int                      port = 18515;
 	int                      ib_port = 1;
-	int                      size = 4096;
+	long long                size = 4096;
 	int                      tx_depth = 100;
 	int                      iters = 1000;
 	int                      scnt, ccnt;
@@ -525,8 +527,11 @@ int main(int argc, char *argv[])
 			break;
 
 		case 's':
-			size = strtol(optarg, NULL, 0);
-			if (size < 1) { usage(argv[0]); return 1; }
+			size = strtoll(optarg, NULL, 0);
+			if (size < 1 || size > UINT_MAX / 2) {
+			       	usage(argv[0]);
+				return 1;
+			}
 			break;
 
 		case 't':
