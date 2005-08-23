@@ -449,18 +449,21 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 	cycles_to_units = get_cpu_mhz() * 1000000;
 
 	tsize = duplex ? 2 : 1;
-	tsize = tsize * size / 1024;
+	tsize = tsize * size;
 
 	printf("Bandwidth peak (#%d to #%d): %g MB/sec\n",
 			 opt_posted, opt_completed,
-			 tsize * cycles_to_units / opt_delta / 1024);
+			 tsize * cycles_to_units / opt_delta / 0x100000);
 	printf("Bandwidth average: %g MB/sec\n",
-			 tsize * iters * cycles_to_units / (tcompleted[iters - 1] - tposted[0]) / 1024);
+			 tsize * iters * cycles_to_units /
+			 (tcompleted[iters - 1] - tposted[0]) / 0x100000);
 
 	printf("Service Demand peak (#%d to #%d): %ld cycles/KB\n",
-			 opt_posted, opt_completed, opt_delta/tsize);
+			 opt_posted, opt_completed,
+			 (unsigned long)opt_delta * 1024 / tsize);
 	printf("Service Demand Avg  : %ld cycles/KB\n",
-			 (tcompleted[iters - 1] - tposted[0])/(tsize * iters));
+			 (unsigned long)(tcompleted[iters - 1] - tposted[0]) *
+			 1024 / (tsize * iters));
 }
 
 
