@@ -307,7 +307,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, tx_depth, NULL);
+	ctx->cq = ibv_create_cq(ctx->context, tx_depth, NULL, NULL, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
