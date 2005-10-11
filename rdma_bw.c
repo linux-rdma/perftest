@@ -300,8 +300,11 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+        /* We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says:
+         * The Consumer is not allowed to assign Remote Write or Remote Atomic to
+         * a Memory Region that has not been assigned Local Write. */
 	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2,
-			     IBV_ACCESS_REMOTE_WRITE);
+			     IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return NULL;
