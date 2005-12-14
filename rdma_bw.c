@@ -472,7 +472,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 
 int main(int argc, char *argv[])
 {
-	struct dlist		*dev_list;
+	struct ibv_device	**dev_list;
 	struct ibv_device	*ib_dev;
 	struct pingpong_context *ctx;
 	struct pingpong_dest     my_dest;
@@ -587,17 +587,16 @@ int main(int argc, char *argv[])
 
 	page_size = sysconf(_SC_PAGESIZE);
 
-	dev_list = ibv_get_devices();
+	dev_list = ibv_get_device_list(NULL);
 
-	dlist_start(dev_list);
 	if (!ib_devname) {
-		ib_dev = dlist_next(dev_list);
+		ib_dev = dev_list[0];
 		if (!ib_dev) {
 			fprintf(stderr, "No IB devices found\n");
 			return 1;
 		}
 	} else {
-		dlist_for_each_data(dev_list, ib_dev, struct ibv_device)
+		for (ib_dev = *dev_list; ib_dev; ++dev_list)
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
 				break;
 		if (!ib_dev) {

@@ -105,18 +105,17 @@ static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
 
 static struct ibv_device *pp_find_dev(const char *ib_devname)
 {
-	struct dlist	*dev_list;
+	struct ibv_device **dev_list;
 	struct ibv_device *ib_dev = NULL;
 
-	dev_list = ibv_get_devices();
+	dev_list = ibv_get_device_list(NULL);
 
-	dlist_start(dev_list);
 	if (!ib_devname) {
-		ib_dev = dlist_next(dev_list);
+		ib_dev = dev_list[0];
 		if (!ib_dev)
 			fprintf(stderr, "No IB devices found\n");
 	} else {
-		dlist_for_each_data(dev_list, ib_dev, struct ibv_device)
+		for (ib_dev = *dev_list; ib_dev; ++dev_list)
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
 				break;
 		if (!ib_dev)
