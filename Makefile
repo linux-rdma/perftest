@@ -1,4 +1,4 @@
-TESTS = rdma_lat rdma_bw
+TESTS = rdma_lat rdma_bw send_lat send_bw write_lat write_bw read_lat read_bw
 
 all: ${TESTS}
 

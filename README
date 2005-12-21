@@ -43,6 +43,19 @@ Test Descriptions
 -----------------
 
 rdma_lat.c - latency test with RDMA write transactions
+rdma_bw.c - streaming BW test with RDMA write transactions
+
+
+The following tests are mainly useful for HW/SW benchmarking.
+They are not intended as actual usage examples.
+-----------------
+
+send_lat.c - latency test with send transactions
+send_bw.c - BW test with send transactions
+write_lat.c - latency test with RDMA write transactions
+write_bw.c - BW test with RDMA write transactions
+read_lat.c - latency test with RDMA read transactions
+read_bw.c - BW test with RDMA read transactions
 
 
 Build Tests
