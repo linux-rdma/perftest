@@ -653,7 +653,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 		while (scnt < user_param->iters ) {
 			struct ibv_send_wr *bad_wr;
 			*post_buf = (char)++scnt;
-			tstamp[scnt] = get_cycles();
+			tstamp[scnt - 1] = get_cycles();
 			if (ibv_post_send(qp, wr, &bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",
 					scnt);
