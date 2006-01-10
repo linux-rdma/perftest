@@ -47,8 +47,9 @@ static inline cycles_t get_cycles()
 	val = (val << 32) | low;
 	return val;
 }
-#elif defined(__PPC__)
+#elif defined(__PPC__) || || defined(__PPC64__)
 /* Note: only PPC CPUs which have mftb instruction are supported. */
+/* PPC64 has mftb */
 typedef unsigned long long cycles_t;
 static inline cycles_t get_cycles()
 {
@@ -57,10 +58,17 @@ static inline cycles_t get_cycles()
 	asm volatile ("mftb %0" : "=r" (ret) : );
 	return ret;
 }
-#elif defined(__ia64__) || defined(__PPC64__)
+#elif defined(__ia64__)
 /* Itanium2 and up has ar.itc (Itanium1 has errata) */
-/* PPC64 has mftb */
-#include <asm/timex.h>
+typedef unsigned long cycles_t;
+static inline cycles_t get_cycles()
+{
+	cycles_t ret;
+
+	asm volatile ("mov %0=ar.itc" : "=r" (ret) ::);
+	return ret;
+}
+
 #else
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
 #include <asm/timex.h>
