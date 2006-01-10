@@ -687,7 +687,7 @@ int main(int argc, char *argv[])
 	int                      port = 18515;
 	int                      ib_port = 1;
 	int                      size = 2;
-	int                      tmp_size = 0;
+	int                      tmp_size;
 	int                      i = 0;
 	struct report_options    report = {};
 
@@ -827,12 +827,12 @@ int main(int argc, char *argv[])
 	printf("------------------------------------------------------------------\n");
 	printf("                    Read Req Latency Test\n");
 	/* anyway make sure the connection is RC */
+	tmp_size = size;
 	if (user_param.all == ALL) {
 		/*since we run all sizes */
 		size = 8388608; /*2^23 */
 	} else if (size < 128) {
 		/* can cut up to 70 nsec probably related to cache line size */        
-		tmp_size = size;
 		size = 128;
 	}
 	user_param.connection_type = 0;
