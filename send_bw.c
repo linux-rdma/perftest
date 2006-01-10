@@ -546,7 +546,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 			ctx->recv_list.length = ctx->size;
 		}
 		ctx->recv_list.lkey = ctx->mr->lkey;
-		for (i = 0; i < user_parm->tx_depth; ++i) {
+		for (i = 0; i < user_parm->tx_depth ; ++i) {
 			if (ibv_post_recv(ctx->qp, &ctx->rwr, &bad_wr_recv)) {
 				fprintf(stderr, "Couldn't post recv: counter=%d\n", i);
 				return 14;
@@ -743,7 +743,11 @@ int run_iter_uni(struct pingpong_context *ctx, struct user_parameters *user_para
 			struct ibv_wc wc;
 			/*Server is polling on recieve first */
 			++rcnt;
-			            
+			if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
+				fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
+					rcnt);
+				return 15;
+			}            
 			do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
 			} while (ne == 0);
@@ -760,11 +764,6 @@ int run_iter_uni(struct pingpong_context *ctx, struct user_parameters *user_para
 				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
 					scnt, rcnt, ccnt);
 				return 13;
-			}
-			if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
-				fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
-					rcnt);
-				return 15;
 			}
 		}
 	} else {
@@ -966,7 +965,7 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	} else {
-		for (ib_dev = *dev_list; ib_dev; ++dev_list)
+		for (; (ib_dev = *dev_list); ++dev_list)
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
 				break;
 		if (!ib_dev) {

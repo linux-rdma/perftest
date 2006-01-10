@@ -124,7 +124,7 @@ static struct ibv_device *pp_find_dev(const char *ib_devname) {
 		if (!ib_dev)
 			fprintf(stderr, "No IB devices found\n");
 	} else {
-		for (ib_dev = *dev_list; ib_dev; ++dev_list)
+		for (; (ib_dev = *dev_list); ++dev_list)
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
 				break;
 		if (!ib_dev)
