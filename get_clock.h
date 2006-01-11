@@ -65,7 +65,7 @@ static inline cycles_t get_cycles()
 {
 	cycles_t ret;
 
-	asm volatile ("mov %0=ar.itc" : "=r" (ret) ::);
+	asm volatile ("mov %0=ar.itc" : "=r" (ret));
 	return ret;
 }
 
