@@ -6,7 +6,9 @@ all: ${TESTS} ${UTILS}
 CFLAGS += -Wall -g -D_GNU_SOURCE 
 EXTRA_FILES = get_clock.c
 EXTRA_HEADERS = get_clock.h
+#The following seems to help GNU make on some platforms
 LOADLIBES += 
+LDFLAGS +=
 
 ${TESTS}: LOADLIBES += -libverbs
 
