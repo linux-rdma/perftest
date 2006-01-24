@@ -7,6 +7,13 @@ int main()
 	double mhz;
 	mhz = get_cpu_mhz();
 	cycles_t c1, c2;
+
+	if (!mhz) {
+		printf("Unable to calibrate cycles. Exiting.\n");
+		return 2;
+	}
+
+	printf("Type CTRL-C to cancel.\n");
 	for(;;)
 	{
 		c1 = get_cycles();
