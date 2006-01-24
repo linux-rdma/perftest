@@ -94,7 +94,7 @@ static double sample_get_cpu_mhz(void)
 			tv2.tv_usec - tv1.tv_usec;
 		y[i] = get_cycles() - start;
 		if (DEBUG_DATA)
-			fprintf(stderr, "x=%ld y=%Ld\n", x[i], y[i]);
+			fprintf(stderr, "x=%ld y=%Ld\n", x[i], (long long)y[i]);
 	}
 
 	for (i = 0; i < MEASUREMENTS; ++i) {
@@ -174,8 +174,8 @@ double get_cpu_mhz(void)
 
 	delta = proc > sample ? proc - sample : sample - proc;
 	if (delta / proc > 0.01) {
-			fprintf(stderr, "Warning: measured CPU frequency value"
-					"%g differs from nominal %g\n",
+			fprintf(stderr, "Warning: measured timestamp frequency "
+					"%g differs from nominal %g MHz\n",
 					sample, proc);
 			return sample;
 	}
