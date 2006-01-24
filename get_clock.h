@@ -50,7 +50,7 @@ static inline cycles_t get_cycles()
 #elif defined(__PPC__) || defined(__PPC64__)
 /* Note: only PPC CPUs which have mftb instruction are supported. */
 /* PPC64 has mftb */
-typedef unsigned long long cycles_t;
+typedef unsigned long cycles_t;
 static inline cycles_t get_cycles()
 {
 	cycles_t ret;
@@ -73,7 +73,6 @@ static inline cycles_t get_cycles()
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
 #include <asm/timex.h>
 #endif
-
 
 extern double get_cpu_mhz(void);
 
