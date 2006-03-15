@@ -30,6 +30,8 @@
  * SOFTWARE.
  *
  * $Id$
+ *
+ * Author: Michael S. Tsirkin <mst@mellanox.co.il>
  */
 
 #ifndef GET_CLOCK_H

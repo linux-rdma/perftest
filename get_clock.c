@@ -30,6 +30,8 @@
  * SOFTWARE.
  *
  * $Id$
+ *
+ * Author: Michael S. Tsirkin <mst@mellanox.co.il>
  */
 
 /* #define DEBUG 1 */
