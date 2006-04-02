@@ -931,7 +931,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	printf("------------------------------------------------------------------\n");
-	printf("                    Send BW Test\n");
+    if (user_param.duplex == 1) {
+        printf("                    Send Bidirectional BW Test\n");
+    } else {
+        printf("                    Send BW Test\n");
+    }
 	printf("Inline data is used up to 400 bytes message\n");
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
