@@ -668,7 +668,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	printf("------------------------------------------------------------------\n");
-	printf("                    RDMA Read BW Test\n");
+    if (duplex == 1) {
+        printf("                    RDMA_Read Bidirectional BW Test\n");
+    } else {
+        printf("                    RDMA_Read BW Test\n");
+    }
 	printf("Connection type : RC\n");
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL) {
