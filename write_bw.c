@@ -582,7 +582,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	/* Done with setup. Start the test. 
        warm up posting of total 100 wq's per qp 
        1 for each qp till all qps have 100*/
-	for (warmindex =0 ;warmindex <= user_param->maxpostsofqpiniteration ;warmindex ++ ) {
+	for (warmindex =0 ;warmindex < user_param->maxpostsofqpiniteration ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->numofqps ; index++) {
       	    ctx->wr.wr.rdma.remote_addr = rem_dest[index]->vaddr;
             ctx->wr.wr.rdma.rkey = rem_dest[index]->rkey;
@@ -590,7 +590,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
             ctx->wr.wr_id      = index ;
             tposted[totscnt] = get_cycles();
             if (ibv_post_send(qp, &ctx->wr, &bad_wr)) {
-                fprintf(stderr, "Couldn't post send: qp index = %d qp scnt=%d total scnt %d\n",
+                fprintf(stderr, "Couldn't post warmup send: qp index = %d qp scnt=%d total scnt %d\n",
                         index,ctx->scnt[index],totscnt);
                 return 1;
             }
