@@ -872,7 +872,7 @@ int main(int argc, char *argv[])
 		return 10;
 	}
 	printf("------------------------------------------------------------------\n");
-	printf("                    RDMA Write Latency Test\n");
+	printf("                    RDMA_Write Latency Test\n");
 	printf("Inline data is used up to 400 bytes message\n");
 	if (user_param.connection_type==0) {
 		printf("Connection type : RC\n");
