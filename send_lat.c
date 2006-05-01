@@ -61,7 +61,7 @@
 #define RC 0
 #define UC 1
 #define UD 3
-#define VERSION 1.0
+#define VERSION 1.1
 #define SIGNAL 1
 #define MAX_INLINE 400
 static int page_size;
@@ -74,6 +74,7 @@ struct user_parameters {
 	int all; /* run all msg size */
 	int iters;
 	int tx_depth;
+    int use_event;
 };
 
 struct report_options {
@@ -89,6 +90,7 @@ struct pingpong_context {
 	struct ibv_send_wr wr;
 	struct ibv_recv_wr rwr;
 	struct ibv_context *context;
+    struct ibv_comp_channel *channel;
 	struct ibv_pd      *pd;
 	struct ibv_mr      *mr;
 	struct ibv_cq      *scq;
@@ -344,7 +346,14 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			user_parm->mtu = 2048;
 		}
 	}
-
+    if (user_parm->use_event) {
+		ctx->channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->channel) {
+			fprintf(stderr, "Couldn't create completion channel\n");
+			return NULL;
+		}
+	} else
+		ctx->channel = NULL;
 	ctx->pd = ibv_alloc_pd(ctx->context);
 	if (!ctx->pd) {
 		fprintf(stderr, "Couldn't allocate PD\n");
@@ -366,12 +375,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		}
 	}
 
-	ctx->scq = ibv_create_cq(ctx->context, tx_depth, NULL, NULL, 0);
+	ctx->scq = ibv_create_cq(ctx->context, tx_depth, NULL, ctx->channel, 0);
 	if (!ctx->scq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
 	}
-	ctx->rcq = ibv_create_cq(ctx->context, tx_depth, NULL, NULL, 0);
+	ctx->rcq = ibv_create_cq(ctx->context, tx_depth, NULL, ctx->channel, 0);
 	if (!ctx->rcq) {
 		fprintf(stderr, "Couldn't create Recieve CQ\n");
 		return NULL;
@@ -657,6 +666,7 @@ static void usage(const char *argv0)
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
+    printf("  -e, --events                 sleep on CQ events (default poll)\n");
 }
 
 /*
@@ -803,9 +813,28 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 					rcnt);
 				return 15;
 			}
+            if (user_param->use_event) {
+                struct ibv_cq *ev_cq;
+                void          *ev_ctx;
+
+                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                    fprintf(stderr, "Failed to get receive cq_event\n");
+                    return 1;
+                }
+
+                if (ev_cq != ctx->rcq) {
+                    fprintf(stderr, "CQ event for unknown RCQ %p\n", ev_cq);
+                    return 1;
+                }
+
+                if (ibv_req_notify_cq(ctx->rcq, 0)) {
+                    fprintf(stderr, "Couldn't request RCQ notification\n");
+                    return 1;
+                }
+            }
 			do {
 				ne = ibv_poll_cq(ctx->rcq, 1, &wc);
-			} while (ne == 0);
+			} while (!user_param->use_event && ne < 1);
 
 			if (ne < 0) {
 				fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
@@ -846,14 +875,32 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 		if (poll == 1) {
 			struct ibv_wc wc;
 			int ne;
+            if (user_param->use_event) {
+                struct ibv_cq *ev_cq;
+                void          *ev_ctx;
 
+                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                    fprintf(stderr, "Failed to get send cq_event\n");
+                    return 1;
+                }
+
+                if (ev_cq != ctx->scq) {
+                    fprintf(stderr, "CQ event for unknown SCQ %p\n", ev_cq);
+                    return 1;
+                }
+
+                if (ibv_req_notify_cq(ctx->scq, 0)) {
+                    fprintf(stderr, "Couldn't request SCQ notification\n");
+                    return 1;
+                }
+            }
 			/* poll on scq */
 			do {
 				ne = ibv_poll_cq(ctx->scq, 1, &wc);
-			} while (ne == 0);
+			} while (!user_param->use_event && ne < 1);
 
 			if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
+				fprintf(stderr, "poll SCQ failed %d\n", ne);
 				return 12;
 			}
 			if (wc.status != IBV_WC_SUCCESS) {
@@ -899,6 +946,7 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
+    user_param.use_event = 0;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -918,10 +966,11 @@ int main(int argc, char *argv[])
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
+            { .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:laCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:laeCHUV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -940,7 +989,9 @@ int main(int argc, char *argv[])
 				user_param.connection_type=UD;
 			/* default is 0 for any other option RC*/
 			break;
-
+        case 'e':
+			++user_param.use_event;
+			break;
 		case 'm':
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
@@ -1051,9 +1102,21 @@ int main(int argc, char *argv[])
 
 	if (pp_open_port(ctx, user_param.servername, ib_port, port, &rem_dest,&user_param))
 		return 9;
+    if (user_param.use_event) {
+        printf("Test with events.\n");
+        if (ibv_req_notify_cq(ctx->rcq, 0)) {
+			fprintf(stderr, "Couldn't request RCQ notification\n");
+			return 1;
+		} 
+        if (ibv_req_notify_cq(ctx->scq, 0)) {
+			fprintf(stderr, "Couldn't request SCQ notification\n");
+			return 1;
+		}
 
+    }
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n");
+    
 	if (user_param.all == 1) {
 		if (user_param.connection_type==UD) {
 			size_max_pow = 12;
