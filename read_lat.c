@@ -57,7 +57,7 @@
 #include "get_clock.h"
 
 #define PINGPONG_READ_WRID	1
-#define VERSION 1.0
+#define VERSION 1.1
 #define ALL 1
 static int page_size;
 cycles_t                *tstamp;
@@ -71,6 +71,7 @@ struct user_parameters {
 	int tx_depth;
 	int sockfd;
 	int max_out_read;
+    int use_event;
 };
 struct report_options {
 	int unsorted;
@@ -81,6 +82,7 @@ struct report_options {
 
 struct pingpong_context {
 	struct ibv_context *context;
+    struct ibv_comp_channel *channel;
 	struct ibv_pd      *pd;
 	struct ibv_mr      *mr;
 	struct ibv_cq      *cq;
@@ -327,6 +329,14 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			user_parm->mtu = 2048;
 		}
 	}
+    if (user_parm->use_event) {
+		ctx->channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->channel) {
+			fprintf(stderr, "Couldn't create completion channel\n");
+			return NULL;
+		}
+	} else
+		ctx->channel = NULL;
 	ctx->pd = ibv_alloc_pd(ctx->context);
 	if (!ctx->pd) {
 		fprintf(stderr, "Couldn't allocate PD\n");
@@ -340,7 +350,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, tx_depth, NULL, NULL, 0);
+	ctx->cq = ibv_create_cq(ctx->context, tx_depth, NULL, ctx->channel, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -546,6 +556,7 @@ static void usage(const char *argv0)
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
+    printf("  -e, --events                 sleep on CQ events (default poll)\n");
 }
 
 /*
@@ -659,10 +670,28 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 					scnt);
 				return 11;
 			}
+            if (user_param->use_event) {
+                struct ibv_cq *ev_cq;
+                void          *ev_ctx;
 
+                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                    fprintf(stderr, "Failed to get cq_event\n");
+                    return 1;
+                }
+
+                if (ev_cq != ctx->cq) {
+                    fprintf(stderr, "CQ event for unknown RCQ %p\n", ev_cq);
+                    return 1;
+                }
+
+                if (ibv_req_notify_cq(ctx->cq, 0)) {
+                    fprintf(stderr, "Couldn't request CQ notification\n");
+                    return 1;
+                }
+            }
 			do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
-			} while (!ne);
+			} while (!user_param->use_event && ne < 1);
 
 			if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
@@ -702,7 +731,8 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
-	user_param.max_out_read = 4; /* the device capability on gen2 */
+    user_param.use_event = 0;
+    user_param.max_out_read = 4; /* the device capability on gen2 */
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -721,10 +751,11 @@ int main(int argc, char *argv[])
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
+            { .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:aCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:aeHUV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -740,6 +771,9 @@ int main(int argc, char *argv[])
 			if (strcmp("UC",optarg)==0)
 				user_param.connection_type=1;
 			/* default is 0 for any other option RC*/
+			break;
+        case 'e':
+			++user_param.use_event;
 			break;
 
 		case 'm':
@@ -823,7 +857,6 @@ int main(int argc, char *argv[])
 		perror("malloc");
 		return 10;
 	}
-
 	printf("------------------------------------------------------------------\n");
 	printf("                    Read Req Latency Test\n");
 	/* anyway make sure the connection is RC */
@@ -855,6 +888,13 @@ int main(int argc, char *argv[])
 	if (tmp_size < 128) {
 		size = tmp_size ;
 	}
+    if (user_param.use_event) {
+        printf("Test with events.\n");
+        if (ibv_req_notify_cq(ctx->cq, 0)) {
+			fprintf(stderr, "Couldn't request RCQ notification\n");
+			return 1;
+		} 
+    }
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n");
 	if (user_param.all == ALL) {
