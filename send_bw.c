@@ -61,7 +61,7 @@
 #define RC 0
 #define UC 1
 #define UD 3
-#define VERSION 1.0
+#define VERSION 1.1
 #define SIGNAL 1
 #define MAX_INLINE 400
 #define ALL 1
@@ -75,6 +75,7 @@ struct user_parameters {
 	int iters;
 	int tx_depth;
 	int duplex;
+    int use_event;
 };
 static int page_size;
 cycles_t	*tposted;
@@ -82,6 +83,7 @@ cycles_t	*tcompleted;
 int post_recv;
 struct pingpong_context {
 	struct ibv_context *context;
+    struct ibv_comp_channel *channel;
 	struct ibv_pd      *pd;
 	struct ibv_mr      *mr;
 	struct ibv_cq      *cq;
@@ -334,7 +336,14 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			user_parm->mtu = 2048;
 		}
 	}
-
+    if (user_parm->use_event) {
+		ctx->channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->channel) {
+			fprintf(stderr, "Couldn't create completion channel\n");
+			return NULL;
+		}
+	} else
+		ctx->channel = NULL;                  
 	ctx->pd = ibv_alloc_pd(ctx->context);
 	if (!ctx->pd) {
 		fprintf(stderr, "Couldn't allocate PD\n");
@@ -360,7 +369,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		}
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, tx_depth*2, NULL, NULL, 0);
+	ctx->cq = ibv_create_cq(ctx->context, tx_depth*2, NULL, ctx->channel, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -575,6 +584,7 @@ static void usage(const char *argv0)
 	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
+    printf("  -e, --events              sleep on CQ events (default poll)\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
@@ -665,46 +675,67 @@ int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param
 		{
 			struct ibv_wc wc;
 			int ne;
-			do {
+            if (user_param->use_event) {
+                struct ibv_cq *ev_cq;
+                void          *ev_ctx;
+                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                    fprintf(stderr, "Failed to get cq_event\n");
+                    return 1;
+                }                
+                if (ev_cq != ctx->cq) {
+                    fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
+                    return 1;
+                }
+                if (ibv_req_notify_cq(ctx->cq, 0)) {
+                    fprintf(stderr, "Couldn't request CQ notification\n");
+                    return 1;
+                }
+            }
+            do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
-			} while (ne == 0);
+                if (ne) {
+                    tcompleted[ccnt] = get_cycles();
+                    if (wc.status != IBV_WC_SUCCESS) {
+                        fprintf(stderr, "Completion wth error at %s:\n",
+                                user_param->servername ? "client" : "server");
+                        fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
+                                wc.status, (int) wc.wr_id, wc.vendor_err);
+                        fprintf(stderr, "scnt=%d, ccnt=%d\n",
+                                scnt, ccnt);
+                        return 1;
+                    }
+                    switch ((int) wc.wr_id) {
+                    case PINGPONG_SEND_WRID:
+                        tcompleted[ccnt] = get_cycles();
+                        ccnt += 1;
+                        break;
+                    case PINGPONG_RECV_WRID:
+                        if (--post_recv <= user_param->tx_depth - 2) {
+                            while (rcnt < user_param->iters && (user_param->tx_depth - post_recv) > 0 ) {
+                                post_recv++;
+                                if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
+                                    fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
+                                            rcnt);
+                                    return 15;
+                                }
+                            }
+                        }
+                        rcnt +=1;
+                        break;
+                    default:
+                        fprintf(stderr, "Completion for unknown wr_id %d\n",
+                                (int) wc.wr_id);
+                        break;
+                    }
+                }
+            } while (ne > 0 );
+			
 			if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
 			}
-
-			if (wc.status != IBV_WC_SUCCESS) {
-				fprintf(stderr, "Completion wth error at %s:\n",
-					user_param->servername ? "client" : "server");
-				fprintf(stderr, "Failed status %d: wr_id %d\n",
-					wc.status, (int) wc.wr_id);
-				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d post_recv=%d\n",
-					scnt, rcnt, ccnt, post_recv);
-				return 1;
-			}
-			switch ((int) wc.wr_id) {
-			case PINGPONG_SEND_WRID:
-				tcompleted[ccnt] = get_cycles();
-				ccnt += 1;
-				break;
-			case PINGPONG_RECV_WRID:
-				if (--post_recv <= user_param->tx_depth - 2) {
-					while (rcnt < user_param->iters && (user_param->tx_depth - post_recv) > 0 ) {
-						post_recv++;
-						if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
-								rcnt);
-							return 15;
-						}
-					}
-				}
-				rcnt +=1;
-				break;
-			default:
-				fprintf(stderr, "Completion for unknown wr_id %d\n",
-					(int) wc.wr_id);
-				break;
-			}
+			
+			
 		}
 	}
 
@@ -742,30 +773,50 @@ int run_iter_uni(struct pingpong_context *ctx, struct user_parameters *user_para
 			int ne;
 			struct ibv_wc wc;
 			/*Server is polling on recieve first */
-			++rcnt;
-			            
-			do {
+			if (user_param->use_event) {
+                struct ibv_cq *ev_cq;
+                void          *ev_ctx;
+                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                    fprintf(stderr, "Failed to get cq_event\n");
+                    return 1;
+                }                
+                if (ev_cq != ctx->cq) {
+                    fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
+                    return 1;
+                }
+                if (ibv_req_notify_cq(ctx->cq, 0)) {
+                    fprintf(stderr, "Couldn't request CQ notification\n");
+                    return 1;
+                }
+            }
+            do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
-			} while (ne == 0);
+                if (ne) {
+                    tcompleted[ccnt] = get_cycles();
+                    if (wc.status != IBV_WC_SUCCESS) {
+                        fprintf(stderr, "Completion wth error at %s:\n",
+                                user_param->servername ? "client" : "server");
+                        fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
+                                wc.status, (int) wc.wr_id, wc.vendor_err);
+                        fprintf(stderr, "scnt=%d, ccnt=%d\n",
+                                scnt, ccnt);
+                        return 1;
+                    }
+                    ++rcnt;
+                    if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
+                        fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
+                                rcnt);
+                        return 15;
+                    }
+                    
+                }
+            } while (ne > 0 );
 
 			if (ne < 0) {
 				fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
 				return 12;
 			}
-			if (wc.status != IBV_WC_SUCCESS) {
-				fprintf(stderr, "Recieve Completion wth error at %s:\n",
-					user_param->servername ? "client" : "server");
-				fprintf(stderr, "Failed status %d: wr_id %d\n",
-					wc.status, (int) wc.wr_id);
-				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
-					scnt, rcnt, ccnt);
-				return 13;
-			}
-			if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
-				fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
-					rcnt);
-				return 15;
-			}
+			
 		}
 	} else {
 		/* client is posting and not receiving. */
@@ -783,26 +834,43 @@ int run_iter_uni(struct pingpong_context *ctx, struct user_parameters *user_para
 			if (ccnt < user_param->iters) {
 				struct ibv_wc wc;
 				int ne;
-				do {
-					ne = ibv_poll_cq(ctx->cq, 1, &wc);
-				} while (ne == 0);
-
-				tcompleted[ccnt] = get_cycles();
-
+                if (user_param->use_event) {
+                    struct ibv_cq *ev_cq;
+                    void          *ev_ctx;
+                    if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+                        fprintf(stderr, "Failed to get cq_event\n");
+                        return 1;
+                    }                
+                    if (ev_cq != ctx->cq) {
+                        fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
+                        return 1;
+                    }
+                    if (ibv_req_notify_cq(ctx->cq, 0)) {
+                        fprintf(stderr, "Couldn't request CQ notification\n");
+                        return 1;
+                    }
+                } 
+                do {
+                    ne = ibv_poll_cq(ctx->cq, 1, &wc);
+                    if (ne) {
+                        tcompleted[ccnt] = get_cycles();
+                        if (wc.status != IBV_WC_SUCCESS) {
+                            fprintf(stderr, "Completion wth error at %s:\n",
+                                    user_param->servername ? "client" : "server");
+                            fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
+                                    wc.status, (int) wc.wr_id, wc.vendor_err);
+                            fprintf(stderr, "scnt=%d, ccnt=%d\n",
+                                    scnt, ccnt);
+                            return 1;
+                        }
+                        ccnt = ccnt + ne;
+                    }
+                } while (ne > 0 );
+				
 				if (ne < 0) {
 					fprintf(stderr, "poll CQ failed %d\n", ne);
 					return 1;
 				}
-				if (wc.status != IBV_WC_SUCCESS) {
-					fprintf(stderr, "Completion wth error at %s:\n",
-						user_param->servername ? "client" : "server");
-					fprintf(stderr, "Failed status %d: wr_id %d\n",
-						wc.status, (int) wc.wr_id);
-					fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
-						scnt, rcnt, ccnt);
-					return 1;
-				}
-				ccnt += 1;
 			}
 		}
 	}
@@ -830,6 +898,7 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 300;
 	user_param.servername = NULL;
+    user_param.use_event = 0;
 	user_param.duplex = 0;
 	/* Parameter parsing. */
 	while (1) {
@@ -847,10 +916,11 @@ int main(int argc, char *argv[])
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
+            { .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:baV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:ebaV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -862,7 +932,9 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 			break;
-
+        case 'e':
+			++user_param.use_event;
+			break;
 		case 'd':
 			ib_devname = strdupa(optarg);
 			break;
@@ -1026,6 +1098,13 @@ int main(int argc, char *argv[])
 	} else {
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
 	}
+    if (user_param.use_event) {
+        printf("Test with events.\n");
+        if (ibv_req_notify_cq(ctx->cq, 0)) {
+            fprintf(stderr, "Couldn't request CQ notification\n");
+            return 1;
+        } 
+    }
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
 
