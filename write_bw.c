@@ -783,7 +783,7 @@ int main(int argc, char *argv[])
 	}
 	
 	printf("Inline data is used up to 400 bytes message\n");
-	printf("%d qp's running\n",user_param.numofqps);
+	printf("Number of qp's running %d\n",user_param.numofqps);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
 	} else {
