@@ -694,7 +694,6 @@ int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param
             do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
                 if (ne) {
-                    tcompleted[ccnt] = get_cycles();
                     if (wc.status != IBV_WC_SUCCESS) {
                         fprintf(stderr, "Completion wth error at %s:\n",
                                 user_param->servername ? "client" : "server");
@@ -1115,7 +1114,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	tcompleted = malloc(user_param.iters * sizeof *tcompleted);
+    tcompleted = malloc(user_param.iters * sizeof *tcompleted);
 
 	if (!tcompleted) {
 		perror("malloc");
@@ -1190,7 +1189,7 @@ int main(int argc, char *argv[])
 	write(sockfd, "done", sizeof "done");
 	close(sockfd);
 
-	free(tposted);
+    free(tposted);
 	free(tcompleted);
 
 	printf("------------------------------------------------------------------\n");
