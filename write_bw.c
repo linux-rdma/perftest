@@ -509,7 +509,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>         size of message to exchange (default 65536)\n");
 	printf("  -a, --all                 Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>      size of tx queue (default 100)\n");
-	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
+	printf("  -n, --iters=<iters>       number of exchanges (at least 100, default 1000)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
 }
