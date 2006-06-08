@@ -1,4 +1,4 @@
-This directory includes gen2 uverbs microbenchmarks.
+This directory includes gen2 uverbs micro-benchmarks.
 
 The tests are intended as:
 	1) simple, efficient usage examples.
@@ -19,7 +19,7 @@ Testing methodology
   or older PPC.
 
 - measures round-trip time but reports half of that as one-way latency.
-  ie. May not be sufficiently accurate for asymetrical configurations.
+  ie. May not be sufficiently accurate for asymmetrical configurations.
 
 - Min/Median/Max result is reported.
   The median (vs average) is less sensitive to extreme scores.
@@ -57,6 +57,7 @@ write_bw.c - BW test with RDMA write transactions
 read_lat.c - latency test with RDMA read transactions
 read_bw.c - BW test with RDMA read transactions
 
+Test's executable name starts with the general prefix ib_ (e.g. ib_write_lat).
 
 Build Tests
 -----------
@@ -85,6 +86,20 @@ Client:		./<test name> <options> <server IP address>
 	o <server address> is IPv4 or IPv6 address.
 	  You can use the IPoIB address if you have IPoIB configured. 
 
+Common Options to all tests:
+  -p, --port=<port>            listen on/connect to port <port> (default 18515)
+  -m, --mtu=<mtu>              mtu size (default 1024)
+  -d, --ib-dev=<dev>           use IB device <dev> (default first device found)
+  -i, --ib-port=<port>         use port <port> of IB device (default 1)
+  -s, --size=<size>            size of message to exchange (default 1)
+  -a, --all                    Run sizes from 2 till 2^23
+  -t, --tx-depth=<dep>         size of tx queue (default 50)
+  -n, --iters=<iters>          number of exchanges (at least 100, default 1000)
+  -C, --report-cycles          report times in cpu cycle units (default microseconds)
+  -H, --report-histogram       print out all results (default print summary only)
+  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)
+  -V, --version                display version number
+
 You need to be running a Subnet Manager on the switch or one of the nodes
 in your fabric. To use the opensm tool for this purpose, run
 	modprobe ib_umad
@@ -94,8 +109,8 @@ on one of the nodes
 First load ib_uverbs on both client and server with something like:
 	modprobe ib_uverbs
 
-Then (e.g.) "rdma_lat -C" on the server side.
-Lastly "rmda_lat -C 10.0.1.31" on the client.
+Then (e.g.) "ib_rdma_lat -C" on the server side.
+Lastly "ib_rdma_lat -C 10.0.1.31" on the client.
 
-rmda_lat will exit on both server and client after printing results.
+ib_rdma_lat will exit on both server and client after printing results.
 
