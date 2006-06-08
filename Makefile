@@ -13,7 +13,7 @@ LDFLAGS +=
 ${TESTS}: LOADLIBES += -libverbs
 
 ${TESTS} ${UTILS}: %: %.c ${EXTRA_FILES} ${EXTRA_HEADERS}
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< ${EXTRA_FILES} $(LOADLIBES) $(LDLIBS) -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< ${EXTRA_FILES} $(LOADLIBES) $(LDLIBS) -o ib_$@
 clean:
 	rm -f ${TESTS} ${UTILS}
 .DELETE_ON_ERROR:
