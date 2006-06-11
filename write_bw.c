@@ -509,7 +509,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>         size of message to exchange (default 65536)\n");
 	printf("  -a, --all                 Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>      size of tx queue (default 100)\n");
-	printf("  -n, --iters=<iters>       number of exchanges (at least 100, default 1000)\n");
+	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
 }
@@ -581,7 +581,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	
 	/* Done with setup. Start the test. 
        warm up posting of total 100 wq's per qp 
-       1 for each qp till all qps have 100*/
+       1 for each qp till all qps have 100  */
 	for (warmindex =0 ;warmindex < user_param->maxpostsofqpiniteration ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->numofqps ; index++) {
       	    ctx->wr.wr.rdma.remote_addr = rem_dest[index]->vaddr;
@@ -597,7 +597,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
             ctx->scnt[index]= ctx->scnt[index]+1;
             ++totscnt;
       }
-	}
+	}    
 	/* main loop for posting */
 	while (totscnt < (user_param->iters * user_param->numofqps)  || totccnt < (user_param->iters * user_param->numofqps) ) {
 	  /* main loop to run over all the qps and post each time n messages */
@@ -792,9 +792,12 @@ int main(int argc, char *argv[])
 	if (user_param.maxpostsofqpiniteration > user_param.tx_depth ) {
 	  printf("Can not post more than tx_depth , adjusting number of post to tx_depth\n");
 	  user_param.maxpostsofqpiniteration = user_param.tx_depth;
-	} else {
-	  printf("Each Qp will post up to %d messages each time\n",user_param.maxpostsofqpiniteration);
 	}
+    if (user_param.maxpostsofqpiniteration > user_param.iters ) {
+	  printf("Can not post more than iterations per qp , adjusting max number of post to num of iteration\n");
+	  user_param.maxpostsofqpiniteration = user_param.iters;
+	} 
+    printf("Each Qp will post up to %d messages each time\n",user_param.maxpostsofqpiniteration);
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL) {
 		/*since we run all sizes */
@@ -838,7 +841,15 @@ int main(int argc, char *argv[])
 	}
 	
 	my_dest = malloc(user_param.numofqps * sizeof *my_dest);
+    if (!my_dest) {
+		perror("malloc my_dest");
+		return 1;
+	}
 	rem_dest = malloc(sizeof (struct pingpong_dest*) * user_param.numofqps );
+    if (!rem_dest ) {
+		perror("malloc rem_dest");
+		return 1;
+	}
 	
 	for (i =0 ;i<user_param.numofqps;i ++) {
 	  /* Create connection between client and server.
