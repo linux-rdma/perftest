@@ -1035,7 +1035,7 @@ int main(int argc, char *argv[])
 							 pid, __func__);
 			return 1;
 		}
-		if (rdma_create_id(data.cm_channel, &data.cm_id, NULL)) {
+		if (rdma_create_id(data.cm_channel, &data.cm_id, NULL, RDMA_PS_TCP)) {
 			fprintf(stderr, "%d:%s: rdma_create_id failed\n",
 							 pid, __func__);
 			return 1;
