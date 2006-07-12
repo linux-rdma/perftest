@@ -10,7 +10,7 @@ EXTRA_HEADERS = get_clock.h
 LOADLIBES += 
 LDFLAGS +=
 
-${TESTS}: LOADLIBES += -libverbs
+${TESTS}: LOADLIBES += -libverbs -lrdmacm
 
 ${TESTS} ${UTILS}: %: %.c ${EXTRA_FILES} ${EXTRA_HEADERS}
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< ${EXTRA_FILES} $(LOADLIBES) $(LDLIBS) -o ib_$@
