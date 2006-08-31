@@ -568,7 +568,7 @@ static void usage(const char *argv0)
  */
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
-	if (n % 2)
+	if ((n - 1) % 2)
 		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
 	else
 		return delta[n / 2];
@@ -591,7 +591,7 @@ static void print_report(struct report_options * options,
 	cycles_t median;
 	unsigned int i;
 	const char* units;
-	cycles_t *delta = malloc(iters * sizeof *delta);
+	cycles_t *delta = malloc((iters - 1) * sizeof *delta);
 
 	if (!delta) {
 		perror("malloc");
@@ -627,7 +627,7 @@ static void print_report(struct report_options * options,
 	median = get_median(iters - 1, delta);
 	printf("%7d        %d        %7.2f        %7.2f          %7.2f\n",
 	       size,iters,delta[0] / cycles_to_units ,
-	       delta[iters - 3] / cycles_to_units ,median / cycles_to_units );
+	       delta[iters - 2] / cycles_to_units ,median / cycles_to_units );
 
 	free(delta);
 }
