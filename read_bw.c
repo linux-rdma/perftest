@@ -311,11 +311,10 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			fprintf(stderr, "Failed to query device props");
 			return NULL;
 		}
-		if (device_attr.vendor_part_id == 23108) {
+		if (device_attr.vendor_part_id == 23108)
 			user_parm->mtu = 1024;
-		} else {
+		else
 			user_parm->mtu = 2048;
-		}
 	}
 	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
@@ -525,7 +524,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 
 	/* Done with setup. Start the test. */
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
-        while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
+		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
 			struct ibv_send_wr *bad_wr;
 			tposted[scnt] = get_cycles();
 			if (ibv_post_send(qp, &ctx->wr, &bad_wr)) {
@@ -538,39 +537,39 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 		if (ccnt < user_param->iters) {
 			struct ibv_wc wc;
 			int ne;
-            if (user_param->use_event) {
-                struct ibv_cq *ev_cq;
-                void          *ev_ctx;
-                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
-                    fprintf(stderr, "Failed to get cq_event\n");
-                    return 1;
-                }                
-                if (ev_cq != ctx->cq) {
-                    fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
-                    return 1;
-                }
-                if (ibv_req_notify_cq(ctx->cq, 0)) {
-                    fprintf(stderr, "Couldn't request CQ notification\n");
-                    return 1;
-                }
-            }
+			if (user_param->use_event) {
+				struct ibv_cq *ev_cq;
+				void          *ev_ctx;
+				if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+					fprintf(stderr, "Failed to get cq_event\n");
+					return 1;
+				}                
+				if (ev_cq != ctx->cq) {
+					fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
+					return 1;
+				}
+				if (ibv_req_notify_cq(ctx->cq, 0)) {
+					fprintf(stderr, "Couldn't request CQ notification\n");
+					return 1;
+				}
+			}
 			do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
-                if (ne) {
-                    tcompleted[ccnt] = get_cycles();
-                    if (wc.status != IBV_WC_SUCCESS) {
-                        fprintf(stderr, "Completion wth error at %s:\n",
-                                user_param->servername ? "client" : "server");
-                        fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
-                                wc.status, (int) wc.wr_id, wc.vendor_err);
-                        fprintf(stderr, "scnt=%d, ccnt=%d\n",
-                                scnt, ccnt);
-                        return 1;
-                    }
-                    ccnt = ccnt + ne;
-                }
-            } while (ne > 0 );
-			
+				if (ne) {
+					tcompleted[ccnt] = get_cycles();
+					if (wc.status != IBV_WC_SUCCESS) {
+						fprintf(stderr, "Completion wth error at %s:\n",
+							user_param->servername ? "client" : "server");
+						fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
+							wc.status, (int) wc.wr_id, wc.vendor_err);
+						fprintf(stderr, "scnt=%d, ccnt=%d\n",
+							scnt, ccnt);
+						return 1;
+					}
+					ccnt = ccnt + ne;
+				}
+			} while (ne > 0 );
+
 			if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
@@ -578,7 +577,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -641,7 +640,7 @@ int main(int argc, char *argv[])
 		case 'd':
 			ib_devname = strdupa(optarg);
 			break;
-        case 'e':
+		case 'e':
 			++user_param.use_event;
 			break;
 		case 'm':
@@ -711,10 +710,10 @@ int main(int argc, char *argv[])
 
 	printf("Connection type : RC\n");
 	/* Done with parameter parsing. Perform setup. */
-	if (user_param.all == ALL) {
+	if (user_param.all == ALL)
 		/*since we run all sizes */
 		size = 8388608; /*2^23 */
-	}
+
 	srand48(getpid() * time(NULL));
 
 	page_size = sysconf(_SC_PAGESIZE);
@@ -793,7 +792,7 @@ int main(int argc, char *argv[])
 		return 1;
 
      
-    /* For half duplex tests, server just waits for client to exit */
+	/* For half duplex tests, server just waits for client to exit */
 
 	if (!user_param.servername && !duplex) {
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
