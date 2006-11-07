@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
+ * Copyright (c) 2006 Mellanox Technologies Ltd.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,14 +68,14 @@ struct user_parameters {
 	int iters;
 	int tx_depth;
 	int max_out_read;
-    int use_event;
+	int use_event;
 };
 static int page_size;
 cycles_t	*tposted;
 cycles_t	*tcompleted;
 struct pingpong_context {
 	struct ibv_context *context;
-    struct ibv_comp_channel *channel;
+	struct ibv_comp_channel *channel;
 	struct ibv_pd      *pd;
 	struct ibv_mr      *mr;
 	struct ibv_cq      *cq;
@@ -280,7 +280,8 @@ out:
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 					    unsigned size,
-					    int tx_depth, int port, struct user_parameters *user_parm)
+					    int tx_depth, int port,
+					    struct user_parameters *user_parm)
 {
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
@@ -316,7 +317,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			user_parm->mtu = 2048;
 		}
 	}
-    if (user_parm->use_event) {
+	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
 		if (!ctx->channel) {
 			fprintf(stderr, "Couldn't create completion channel\n");
@@ -464,7 +465,7 @@ static void usage(const char *argv0)
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version          display version number\n");
-    printf("  -e, --events           sleep on CQ events (default poll)\n");
+	printf("  -e, --events           sleep on CQ events (default poll)\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
@@ -602,7 +603,7 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 100;
 	user_param.servername = NULL;
-    user_param.use_event = 0;
+	user_param.use_event = 0;
 	user_param.max_out_read = 4; /* the device capability on gen2 */
 	/* Parameter parsing. */
 	while (1) {
@@ -620,11 +621,11 @@ int main(int argc, char *argv[])
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
-            { .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:bae", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:abVe", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -703,11 +704,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	printf("------------------------------------------------------------------\n");
-    if (duplex == 1) {
-        printf("                    RDMA_Read Bidirectional BW Test\n");
-    } else {
-        printf("                    RDMA_Read BW Test\n");
-    }
+	if (duplex == 1)
+		printf("                    RDMA_Read Bidirectional BW Test\n");
+	else
+		printf("                    RDMA_Read BW Test\n");
+
 	printf("Connection type : RC\n");
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL) {
@@ -783,11 +784,10 @@ int main(int argc, char *argv[])
 
 	/* An additional handshake is required *after* moving qp to RTR.
 	   Arbitrarily reuse exch_dest for this purpose. */
-	if (user_param.servername) {
+	if (user_param.servername)
 		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
-	} else {
+	else
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-	}
 
 	if (!rem_dest)
 		return 1;
@@ -800,15 +800,13 @@ int main(int argc, char *argv[])
 		write(sockfd, "done", sizeof "done");
 		close(sockfd);
 		return 0;
-	} else {
-        if (user_param.use_event) {
-            printf("Test with events.\n");
-            if (ibv_req_notify_cq(ctx->cq, 0)) {
-                fprintf(stderr, "Couldn't request CQ notification\n");
-                return 1;
-            } 
-        }
-    }
+	} else if (user_param.use_event) {
+		printf("Test with events.\n");
+		if (ibv_req_notify_cq(ctx->cq, 0)) {
+			fprintf(stderr, "Couldn't request CQ notification\n");
+			return 1;
+		} 
+	}
     
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
@@ -840,11 +838,10 @@ int main(int argc, char *argv[])
 		print_report(user_param.iters, size, duplex, tposted, tcompleted);
 	}
 
-	if (user_param.servername) {
+	if (user_param.servername)
 		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
-	} else {
+	else
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-	}
 
 	write(sockfd, "done", sizeof "done");
 	close(sockfd);
