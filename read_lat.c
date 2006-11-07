@@ -60,8 +60,8 @@
 #define VERSION 1.1
 #define ALL 1
 static int page_size;
-cycles_t                *tstamp;
-struct pingpong_dest  my_dest;
+cycles_t *tstamp;
+struct pingpong_dest my_dest;
 struct user_parameters {
 	const char              *servername;
 	int connection_type;
@@ -71,7 +71,7 @@ struct user_parameters {
 	int tx_depth;
 	int sockfd;
 	int max_out_read;
-    int use_event;
+	int use_event;
 };
 struct report_options {
 	int unsorted;
@@ -79,19 +79,18 @@ struct report_options {
 	int cycles;   /* report delta's in cycles, not microsec's */
 };
 
-
 struct pingpong_context {
 	struct ibv_context *context;
-    struct ibv_comp_channel *channel;
-	struct ibv_pd      *pd;
-	struct ibv_mr      *mr;
-	struct ibv_cq      *cq;
-	struct ibv_qp      *qp;
-	void               *buf;
-	volatile char      *post_buf;
-	volatile char      *poll_buf;
-	int                 size;
-	int                 tx_depth;
+	struct ibv_comp_channel *channel;
+	struct ibv_pd *pd;
+	struct ibv_mr *mr;
+	struct ibv_cq *cq;
+	struct ibv_qp *qp;
+	void *buf;
+	volatile char *post_buf;
+	volatile char *poll_buf;
+	int size;
+	int tx_depth;
 	struct ibv_sge list;
 	struct ibv_send_wr wr;
 };
@@ -291,7 +290,9 @@ static int pp_server_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
 }
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
-					    int tx_depth, int port,struct user_parameters *user_parm) {
+					    int tx_depth, int port,
+					    struct user_parameters *user_parm)
+{
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 	ctx = malloc(sizeof *ctx);
@@ -329,7 +330,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			user_parm->mtu = 2048;
 		}
 	}
-    if (user_parm->use_event) {
+	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
 		if (!ctx->channel) {
 			fprintf(stderr, "Couldn't create completion channel\n");
@@ -428,8 +429,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		break;
 	}
 	printf("Mtu : %d\n", user_parm->mtu);
-	attr.dest_qp_num              = dest->qpn;
-	attr.rq_psn           = dest->psn;
+	attr.dest_qp_num            = dest->qpn;
+	attr.rq_psn                 = dest->psn;
 	attr.max_dest_rd_atomic     = user_parm->max_out_read;
 	attr.min_rnr_timer          = 12;
 	attr.ah_attr.is_global      = 0;
@@ -451,8 +452,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.timeout            = 14;
 	attr.retry_cnt          = 7;
 	attr.rnr_retry          = 7;
-	attr.qp_state             = IBV_QPS_RTS;
-	attr.sq_psn       = my_psn;
+	attr.qp_state           = IBV_QPS_RTS;
+	attr.sq_psn             = my_psn;
 
 	if (user_parm->connection_type==0) {
 		attr.max_rd_atomic  = user_parm->max_out_read;
@@ -479,7 +480,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 }
 
 static int pp_open_port(struct pingpong_context *ctx, const char * servername,
-			int ib_port, int port, struct pingpong_dest *rem_dest,struct user_parameters *user_parm)
+			int ib_port, int port, struct pingpong_dest *rem_dest,
+			struct user_parameters *user_parm)
 {
 	char addr_fmt[] = "%8s address: LID %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n";
 	int                   sockfd;
@@ -556,7 +558,7 @@ static void usage(const char *argv0)
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
-    printf("  -e, --events                 sleep on CQ events (default poll)\n");
+	printf("  -e, --events                 sleep on CQ events (default poll)\n");
 }
 
 /*
@@ -569,7 +571,7 @@ static void usage(const char *argv0)
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
 	if ((n - 1) % 2)
-		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
+		return (delta[n / 2] + delta[n / 2 - 1]) / 2;
 	else
 		return delta[n / 2];
 }
@@ -631,6 +633,7 @@ static void print_report(struct report_options * options,
 
 	free(delta);
 }
+
 int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	     struct pingpong_dest *rem_dest, int size)
 {
@@ -642,6 +645,13 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	int                      scnt, ccnt;
 	int                      iters;
 	int                      tx_depth;
+
+	struct                   ibv_wc wc;
+	int                      ne;
+
+	if (!user_param->servername)
+		return 0;
+
 	iters = user_param->iters;
 	tx_depth = user_param->tx_depth;
 	wr = &ctx->wr;
@@ -658,57 +668,53 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 
 	/* Done with setup. Start the test. */
 
-	struct ibv_wc wc;
-	int ne;
-	if(user_param->servername) {
-		while (scnt < user_param->iters ) {
-			struct ibv_send_wr *bad_wr;
-			*post_buf = (char)++scnt;
-			tstamp[scnt - 1] = get_cycles();
-			if (ibv_post_send(qp, wr, &bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",
-					scnt);
-				return 11;
+	while (scnt < user_param->iters ) {
+		struct ibv_send_wr *bad_wr;
+		*post_buf = (char)++scnt;
+		tstamp[scnt - 1] = get_cycles();
+		if (ibv_post_send(qp, wr, &bad_wr)) {
+			fprintf(stderr, "Couldn't post send: scnt=%d\n",
+				scnt);
+			return 11;
+		}
+		if (user_param->use_event) {
+			struct ibv_cq *ev_cq;
+			void          *ev_ctx;
+
+			if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+				fprintf(stderr, "Failed to get cq_event\n");
+				return 1;
 			}
-            if (user_param->use_event) {
-                struct ibv_cq *ev_cq;
-                void          *ev_ctx;
 
-                if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
-                    fprintf(stderr, "Failed to get cq_event\n");
-                    return 1;
-                }
-
-                if (ev_cq != ctx->cq) {
-                    fprintf(stderr, "CQ event for unknown RCQ %p\n", ev_cq);
-                    return 1;
-                }
-
-                if (ibv_req_notify_cq(ctx->cq, 0)) {
-                    fprintf(stderr, "Couldn't request CQ notification\n");
-                    return 1;
-                }
-            }
-			do {
-				ne = ibv_poll_cq(ctx->cq, 1, &wc);
-			} while (!user_param->use_event && ne < 1);
-
-			if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 12;
+			if (ev_cq != ctx->cq) {
+				fprintf(stderr, "CQ event for unknown RCQ %p\n", ev_cq);
+				return 1;
 			}
-			if (wc.status != IBV_WC_SUCCESS) {
-				fprintf(stderr, "Completion wth error at %s:\n",
-					user_param->servername ? "client" : "server");
-				fprintf(stderr, "Failed status %d: wr_id %d\n",
-					wc.status, (int) wc.wr_id);
-				fprintf(stderr, "scnt=%d, ccnt=%d\n",
-					scnt, ccnt);
-				return 13;
+
+			if (ibv_req_notify_cq(ctx->cq, 0)) {
+				fprintf(stderr, "Couldn't request CQ notification\n");
+				return 1;
 			}
 		}
-	} 
-	return(0);
+		do {
+			ne = ibv_poll_cq(ctx->cq, 1, &wc);
+		} while (!user_param->use_event && ne < 1);
+
+		if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", ne);
+			return 12;
+		}
+		if (wc.status != IBV_WC_SUCCESS) {
+			fprintf(stderr, "Completion wth error at %s:\n",
+				user_param->servername ? "client" : "server");
+			fprintf(stderr, "Failed status %d: wr_id %d\n",
+				wc.status, (int) wc.wr_id);
+			fprintf(stderr, "scnt=%d, ccnt=%d\n",
+				scnt, ccnt);
+			return 13;
+		}
+	}
+	return 0;
 }
 int main(int argc, char *argv[])
 {
@@ -731,8 +737,8 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
-    user_param.use_event = 0;
-    user_param.max_out_read = 4; /* the device capability on gen2 */
+	user_param.use_event = 0;
+	user_param.max_out_read = 4; /* the device capability on gen2 */
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -751,7 +757,7 @@ int main(int argc, char *argv[])
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
-            { .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
@@ -772,7 +778,7 @@ int main(int argc, char *argv[])
 				user_param.connection_type=1;
 			/* default is 0 for any other option RC*/
 			break;
-        case 'e':
+		case 'e':
 			++user_param.use_event;
 			break;
 
@@ -888,13 +894,13 @@ int main(int argc, char *argv[])
 	if (tmp_size < 128) {
 		size = tmp_size ;
 	}
-    if (user_param.use_event) {
-        printf("Test with events.\n");
-        if (ibv_req_notify_cq(ctx->cq, 0)) {
+	if (user_param.use_event) {
+		printf("Test with events.\n");
+		if (ibv_req_notify_cq(ctx->cq, 0)) {
 			fprintf(stderr, "Couldn't request RCQ notification\n");
 			return 1;
 		} 
-    }
+	}
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n");
 	if (user_param.all == ALL) {
