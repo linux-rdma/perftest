@@ -1156,12 +1156,14 @@ int main(int argc, char *argv[])
 				rem_dest = pp_server_exch_dest(sockfd, &my_dest);
 		}
 	} else {
-		if (user_param.duplex)
+		if (user_param.duplex) {
 			if (run_iter_bi(ctx, &user_param, rem_dest, size))
 				return 18;
-		else
+		}
+		else {
 			if(run_iter_uni(ctx, &user_param, rem_dest, size))
 				return 18;
+		}
 
 		if (user_param.servername)
 			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted);
