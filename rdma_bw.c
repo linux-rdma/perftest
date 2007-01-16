@@ -134,7 +134,9 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 	struct pingpong_context *ctx = NULL;
 	struct rdma_conn_param conn_param;
 
-	asprintf(&service, "%d", data->port);
+	if (asprintf(&service, "%d", data->port) < 0)
+		goto err4;
+
 	n = getaddrinfo(data->servername, service, &hints, &res);
 
 	if (n < 0) {
@@ -325,7 +327,9 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 	struct rdma_cm_id *child_cm_id;
 	struct rdma_conn_param conn_param;
 
-	asprintf(&service, "%d", data->port);
+	if (asprintf(&service, "%d", data->port))
+		goto err5;
+
 	if ( (n = getaddrinfo(NULL, service, &hints, &res)) < 0 ) {
 		fprintf(stderr, "%d:%s: %s for port %d\n", pid, __func__, 
 					gai_strerror(n), data->port);

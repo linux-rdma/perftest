@@ -198,7 +198,9 @@ static int pp_client_connect(const char *servername, int port)
 	int n;
 	int sockfd = -1;
 
-	asprintf(&service, "%d", port);
+	if (asprintf(&service, "%d", port) < 0)
+		return -1;
+
 	n = getaddrinfo(servername, service, &hints, &res);
 
 	if (n < 0) {
@@ -246,7 +248,9 @@ static int pp_server_connect(int port)
 	int sockfd = -1, connfd;
 	int n;
 
-	asprintf(&service, "%d", port);
+	if (asprintf(&service, "%d", port) < 0)
+		return -1;
+
 	n = getaddrinfo(NULL, service, &hints, &res);
 
 	if (n < 0) {
