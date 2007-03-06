@@ -327,7 +327,7 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 	struct rdma_cm_id *child_cm_id;
 	struct rdma_conn_param conn_param;
 
-	if (asprintf(&service, "%d", data->port))
+	if (asprintf(&service, "%d", data->port) < 0)
 		goto err5;
 
 	if ( (n = getaddrinfo(NULL, service, &hints, &res)) < 0 ) {
