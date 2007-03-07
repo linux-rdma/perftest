@@ -3,7 +3,7 @@ UTILS = clock_test
 
 all: ${TESTS} ${UTILS}
 
-CFLAGS += -Wall -g -D_GNU_SOURCE 
+CFLAGS += -Wall -g -D_GNU_SOURCE -O2
 EXTRA_FILES = get_clock.c
 EXTRA_HEADERS = get_clock.h
 #The following seems to help GNU make on some platforms
