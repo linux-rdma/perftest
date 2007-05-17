@@ -74,6 +74,7 @@ struct user_parameters {
 	int signal_comp;
 	int iters;
 	int tx_depth;
+	int rx_depth;
 	int duplex;
 	int use_event;
 };
@@ -91,6 +92,7 @@ struct pingpong_context {
 	void               *buf;
 	unsigned            size;
 	int                 tx_depth;
+	int                 rx_depth;
 	struct ibv_sge      list;
 	struct ibv_sge recv_list;
 	struct ibv_send_wr  wr;
@@ -294,7 +296,7 @@ out:
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 					    unsigned size,
-					    int tx_depth, int port,
+					    int tx_depth, int rx_depth, int port,
 					    struct user_parameters *user_parm)
 {
 	struct pingpong_context *ctx;
@@ -306,6 +308,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
+	ctx->rx_depth = rx_depth + tx_depth;
 	/* in case of UD need space for the GRH */
 	if (user_parm->connection_type==UD) {
 		ctx->buf = memalign(page_size, ( size + 40 ) * 2);
@@ -374,7 +377,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		}
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, tx_depth*2, NULL, ctx->channel, 0);
+	ctx->cq = ibv_create_cq(ctx->context, ctx->rx_depth, NULL, ctx->channel, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -387,7 +390,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		attr.cap.max_send_wr  = tx_depth;
 		/* Work around:  driver doesnt support
 		 * recv_wr = 0 */
-		attr.cap.max_recv_wr  = tx_depth;
+		attr.cap.max_recv_wr  = ctx->rx_depth;
 		attr.cap.max_send_sge = 1;
 		attr.cap.max_recv_sge = 1;
 		attr.cap.max_inline_data = MAX_INLINE;
@@ -558,13 +561,13 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 			ctx->recv_list.length = ctx->size;
 		}
 		ctx->recv_list.lkey = ctx->mr->lkey;
-		for (i = 0; i < user_parm->tx_depth; ++i)
+		for (i = 0; i < ctx->rx_depth; ++i)
 			if (ibv_post_recv(ctx->qp, &ctx->rwr, &bad_wr_recv)) {
 				fprintf(stderr, "Couldn't post recv: counter=%d\n", i);
 				return 14;
 			}
 	}
-	post_recv = user_parm->tx_depth;
+	post_recv = ctx->rx_depth;
 	return 0;
 }
 
@@ -583,6 +586,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>         size of message to exchange (default 65536)\n");
 	printf("  -a, --all                 Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>      size of tx queue (default 300)\n");
+	printf("  -r, --rx-depth=<dep>      make rx queue bigger than tx (default 600)\n");
 	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
@@ -711,9 +715,9 @@ int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param
 				ccnt += 1;
 				break;
 			case PINGPONG_RECV_WRID:
-				if (--post_recv <= user_param->tx_depth - 2) {
+				if (--post_recv <= ctx->rx_depth - 2) {
 					while (rcnt < user_param->iters &&
-					       (user_param->tx_depth - post_recv) > 0 ) {
+					       (ctx->rx_depth - post_recv) > 0 ) {
 						++post_recv;
 						if (ibv_post_recv(qp, &ctx->rwr, &bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",
@@ -911,6 +915,7 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
@@ -918,7 +923,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:ebaV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:r:ebaV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -974,6 +979,10 @@ int main(int argc, char *argv[])
 			user_param.tx_depth = strtol(optarg, NULL, 0);
 			if (user_param.tx_depth < 1) { usage(argv[0]); return 1; }
 			break;
+		case 'r':
+                        user_param.rx_depth = strtol(optarg, NULL, 0);
+                        if (user_param.rx_depth < 0) { usage(argv[0]); return 1; }
+                        break;
 
 		case 'n':
 			user_param.iters = strtol(optarg, NULL, 0);
@@ -1000,13 +1009,14 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 		return 1;
 	}
+
 	printf("------------------------------------------------------------------\n");
 	if (user_param.duplex == 1)
 		printf("                    Send Bidirectional BW Test\n");
 	else
 		printf("                    Send BW Test\n");
 
-	printf("Inline data is used up to 400 bytes message\n");
+	printf("Inline data is used up to %d bytes message\n", MAX_INLINE);
 	if (user_param.connection_type == RC)
 		printf("Connection type : RC\n");
 	else if (user_param.connection_type == UC)
@@ -1045,7 +1055,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	ctx = pp_init_ctx(ib_dev, size, user_param.tx_depth, ib_port, &user_param);
+	ctx = pp_init_ctx(ib_dev, size, user_param.tx_depth, user_param.rx_depth,
+			  ib_port, &user_param);
 	if (!ctx)
 		return 1;
 
