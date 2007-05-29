@@ -980,8 +980,9 @@ int main(int argc, char *argv[])
 			if (user_param.tx_depth < 1) { usage(argv[0]); return 1; }
 			break;
 		case 'r':
+			errno = 0;
                         user_param.rx_depth = strtol(optarg, NULL, 0);
-                        if (user_param.rx_depth < 0) { usage(argv[0]); return 1; }
+                        if (errno) { usage(argv[0]); return 1; }
                         break;
 
 		case 'n':
