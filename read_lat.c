@@ -755,6 +755,7 @@ int main(int argc, char *argv[])
 			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
+			{ .name = "outs",           .has_arg = 1, .val = 'o' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
@@ -765,7 +766,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:aeHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:o:n:t:aeHUV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -868,7 +869,8 @@ int main(int argc, char *argv[])
 		return 10;
 	}
 	printf("------------------------------------------------------------------\n");
-	printf("                    Read Req Latency Test\n");
+	printf("                    RDMA_Read Latency Test\n");
+	printf("Connection type : RC\n");
 	/* anyway make sure the connection is RC */
 	tmp_size = size;
 	if (user_param.all == ALL) {
