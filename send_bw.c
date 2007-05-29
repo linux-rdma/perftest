@@ -51,6 +51,7 @@
 #include <arpa/inet.h>
 #include <byteswap.h>
 #include <time.h>
+#include <errno.h>
 
 #include <infiniband/verbs.h>
 
