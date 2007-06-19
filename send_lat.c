@@ -1080,7 +1080,7 @@ int main(int argc, char *argv[])
 	/* Print header data */
 	printf("------------------------------------------------------------------\n");
 	printf("                    Send Latency Test\n");
-	printf("Inline data is used up to 400 bytes message\n");
+	printf("Inline data is used up to %d bytes message\n", MAX_INLINE);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
 	} else if (user_param.connection_type==UC) { 
