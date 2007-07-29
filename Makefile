@@ -15,7 +15,6 @@ ${TESTS}: LOADLIBES += -libverbs -lrdmacm
 ${TESTS} ${UTILS}: %: %.c ${EXTRA_FILES} ${EXTRA_HEADERS}
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< ${EXTRA_FILES} $(LOADLIBES) $(LDLIBS) -o ib_$@
 clean:
-	$(foreach fname,${TESTS}, rm -f ib_${fname})
-	rm -f ${UTILS}	
+	$(foreach fname,${TESTS} ${UTILS}, rm -f ib_${fname})
 .DELETE_ON_ERROR:
 .PHONY: all clean
