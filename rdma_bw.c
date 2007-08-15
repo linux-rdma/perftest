@@ -213,19 +213,18 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
  					pid, __func__, event->event);
 			goto err1;
 		}
-		if (!event->private_data || 
-			(event->private_data_len < sizeof(*data->rem_dest))) {
+		if (!event->param.conn.private_data || 
+		    (event->param.conn.private_data_len < sizeof(*data->rem_dest))) {
 			fprintf(stderr, "%d:%s: bad private data ptr %p len %d\n",  
-				pid, __func__, event->private_data, 
-				event->private_data_len);
+				pid, __func__, event->param.conn.private_data, 
+				event->param.conn.private_data_len);
 			goto err1;
 		}
 		data->rem_dest = malloc(sizeof *data->rem_dest);
 		if (!data->rem_dest)
 			goto err1;
 		
-		memcpy(data->rem_dest, event->private_data, 
-					sizeof(*data->rem_dest));
+		memcpy(data->rem_dest, event->param.conn.private_data, sizeof(*data->rem_dest));
 		rdma_ack_cm_event(event);
 
 	} else {
@@ -359,10 +358,10 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 			goto err2;
 		}
 	
-		if (!event->private_data ||
-			 (event->private_data_len < sizeof(*data->rem_dest))) {
+		if (!event->param.conn.private_data ||
+		    (event->param.conn.private_data_len < sizeof(*data->rem_dest))) {
 			fprintf(stderr, "%d:%s: bad private data len %d\n", pid,
-				 		__func__, event->private_data_len);
+				__func__, event->param.conn.private_data_len);
 			goto err2;
 		}
 		
@@ -370,7 +369,7 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 		if (!data->rem_dest)
 			goto err2;
 
-		memcpy(data->rem_dest, event->private_data, sizeof(*data->rem_dest));
+		memcpy(data->rem_dest, event->param.conn.private_data, sizeof(*data->rem_dest));
 
 		child_cm_id = (struct rdma_cm_id *)event->id;
 		ctx = pp_init_ctx(child_cm_id, data);
