@@ -69,6 +69,7 @@ struct user_parameters {
 	int all; /* run all msg size */
 	int iters;
 	int tx_depth;
+	int inline_size;
 };
 struct report_options {
 	int unsorted;
@@ -360,7 +361,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		attr.cap.max_recv_wr  = 1;
 		attr.cap.max_send_sge = 1;
 		attr.cap.max_recv_sge = 1;
-		attr.cap.max_inline_data = MAX_INLINE;
+		attr.cap.max_inline_data = user_parm->inline_size;
 
 		if (user_parm->connection_type==1) {
 			attr.qp_type = IBV_QPT_UC;
@@ -568,6 +569,7 @@ static void usage(const char *argv0)
 	printf("  -a, --all                    Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>         size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
 	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
@@ -657,9 +659,11 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	int                      scnt, ccnt, rcnt;
 	int                      iters;
 	int                      tx_depth;
+	int                      inline_size;
 
 	iters = user_param->iters;
 	tx_depth = user_param->tx_depth;
+	inline_size = user_param->inline_size;
 
 	wr = &ctx->wr;
 	ctx->list.addr = (uintptr_t) ctx->buf ;
@@ -668,7 +672,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	wr->wr.rdma.remote_addr = rem_dest->vaddr;
 	wr->wr.rdma.rkey = rem_dest->rkey;
 
-	if (size > MAX_INLINE) {/* complaince to perf_main */
+	if (size > inline_size) {/* complaince to perf_main */
 		ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -757,6 +761,7 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
+	user_param.inline_size = MAX_INLINE;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -770,6 +775,7 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
@@ -778,7 +784,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:aCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:aCHUV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -832,6 +838,13 @@ int main(int argc, char *argv[])
 			}
 			break;
 
+		case 'I':
+			user_param.inline_size = strtol(optarg, NULL, 0);
+			if (user_param.inline_size > MAX_INLINE) {
+				usage(argv[0]); return 7;
+			}
+			break;
+
 		case 'n':
 			user_param.iters = strtol(optarg, NULL, 0);
 			if (user_param.iters < 2) {
@@ -877,7 +890,7 @@ int main(int argc, char *argv[])
 	}
 	printf("------------------------------------------------------------------\n");
 	printf("                    RDMA_Write Latency Test\n");
-	printf("Inline data is used up to %d bytes message\n", MAX_INLINE);
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	if (user_param.connection_type==0) {
 		printf("Connection type : RC\n");
 	} else {

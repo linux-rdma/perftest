@@ -74,7 +74,8 @@ struct user_parameters {
 	int all; /* run all msg size */
 	int iters;
 	int tx_depth;
-    int use_event;
+	int use_event;
+	int inline_size;
 };
 
 struct report_options {
@@ -400,7 +401,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		attr.cap.max_recv_wr  = tx_depth;
 		attr.cap.max_send_sge = 1;
 		attr.cap.max_recv_sge = 1;
-		attr.cap.max_inline_data = MAX_INLINE;
+		attr.cap.max_inline_data = user_parm->inline_size;
 		switch (user_parm->connection_type) {
 		case RC :
 			attr.qp_type = IBV_QPT_RC;
@@ -666,6 +667,7 @@ static void usage(const char *argv0)
 	printf("  -l, --signal                 signal completion on each msg\n");
 	printf("  -a, --all                    Run sizes from 2 till 2^23\n");
 	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
 	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
@@ -676,7 +678,7 @@ static void usage(const char *argv0)
 /*
  * When there is an
  *	odd number of samples, the median is the middle number.
- * 	even number of samples, the median is the mean of the
+ *	even number of samples, the median is the mean of the
  *		two middle numbers.
  *
  */
@@ -800,7 +802,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	poll_buf = ctx->poll_buf;
 	post_buf = ctx->post_buf;
 	qp = ctx->qp;
-	if (size > MAX_INLINE || size == 0) {/* complaince to perf_main  don't signal*/
+	if (size > user_param->inline_size || size == 0) {/* complaince to perf_main  don't signal*/
 		ctx->wr.send_flags = 0;
 	} else {
 		ctx->wr.send_flags = IBV_SEND_INLINE;
@@ -859,7 +861,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 			    || (scnt == (iters - 1)) ) {
 				ccnt = 0;
 				poll=1;
-				if (size > MAX_INLINE || size == 0) {/* complaince to perf_main */
+				if (size > user_param->inline_size || size == 0) {/* complaince to perf_main */
 					ctx->wr.send_flags = IBV_SEND_SIGNALED;
 				} else {
 					ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -917,7 +919,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 				return 13;
 			}
 			poll = 0;
-			if (size > MAX_INLINE || size == 0) {/* complaince to perf_main don't signal*/
+			if (size > user_param->inline_size || size == 0) {/* complaince to perf_main don't signal*/
 				ctx->wr.send_flags = 0;
 			} else {
 				ctx->wr.send_flags = IBV_SEND_INLINE;
@@ -950,7 +952,9 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
-    user_param.use_event = 0;
+	user_param.use_event = 0;
+	user_param.inline_size = MAX_INLINE;
+	user_param.signal_comp = 0;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -964,17 +968,18 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "signal",         .has_arg = 0, .val = 'l' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
-            { .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:laeCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:laeCHUV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1035,6 +1040,14 @@ int main(int argc, char *argv[])
 			}
 			break;
 
+		case 'I':
+			user_param.inline_size = strtol(optarg, NULL, 0);
+			if (user_param.inline_size > MAX_INLINE) {
+				usage(argv[0]);
+				return 19;
+			}
+			break;
+
 		case 'n':
 			user_param.iters = strtol(optarg, NULL, 0);
 			if (user_param.iters < 2) {
@@ -1080,7 +1093,7 @@ int main(int argc, char *argv[])
 	/* Print header data */
 	printf("------------------------------------------------------------------\n");
 	printf("                    Send Latency Test\n");
-	printf("Inline data is used up to %d bytes message\n", MAX_INLINE);
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
 	} else if (user_param.connection_type==UC) { 

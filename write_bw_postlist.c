@@ -72,6 +72,7 @@ struct user_parameters {
 	int tx_depth;
     int numofqps;
     int maxpostsofqpiniteration;
+    int inline_size;
 };
 struct extended_qp {
   struct ibv_qp           *qp;
@@ -378,7 +379,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		initattr.cap.max_recv_wr  = 1;
 		initattr.cap.max_send_sge = 1;
 		initattr.cap.max_recv_sge = 1;
-		initattr.cap.max_inline_data = MAX_INLINE;
+		initattr.cap.max_inline_data = user_parm->inline_size;
 
 		if (user_parm->connection_type == 1) {
 			initattr.qp_type = IBV_QPT_UC;
@@ -514,6 +515,7 @@ static void usage(const char *argv0)
 	printf("  -a, --all                 Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>      size of tx queue (default 100)\n");
 	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 5000)\n");
+	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
 }
@@ -574,7 +576,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
 	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	if (size > MAX_INLINE) {/* complaince to perf_main */
+	if (size > user_param->inline_size) {/* complaince to perf_main */
 		ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -679,6 +681,7 @@ int main(int argc, char *argv[])
 	user_param.servername = NULL;
 	user_param.numofqps = 1;
 	user_param.maxpostsofqpiniteration = 100;
+	user_param.inline_size = MAX_INLINE;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -694,13 +697,14 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:q:g:c:s:n:t:baV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:q:g:c:s:n:t:I:baV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -758,6 +762,15 @@ int main(int argc, char *argv[])
 			if (user_param.tx_depth < 1) { usage(argv[0]); return 1; }
 			break;
 
+		case 'I':
+			user_param.inline_size = strtol(optarg, NULL, 0);
+			if (user_param.inline_size > MAX_INLINE) {
+				usage(argv[0]);
+				return 7;
+			}
+
+			break;
+
 		case 'n':
 			user_param.iters = strtol(optarg, NULL, 0);
 			if (user_param.iters < 2) {
@@ -791,7 +804,7 @@ int main(int argc, char *argv[])
 	  printf("                    RDMA_Write Post List BW Test\n");
 	}
 	
-	printf("Inline data is used up to 400 bytes message\n");
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	printf("Number of qp's running %d\n",user_param.numofqps);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");

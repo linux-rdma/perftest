@@ -78,6 +78,7 @@ struct user_parameters {
 	int rx_depth;
 	int duplex;
 	int use_event;
+	int inline_size;
 };
 static int page_size;
 cycles_t	*tposted;
@@ -394,7 +395,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		attr.cap.max_recv_wr  = ctx->rx_depth;
 		attr.cap.max_send_sge = 1;
 		attr.cap.max_recv_sge = 1;
-		attr.cap.max_inline_data = MAX_INLINE;
+		attr.cap.max_inline_data = user_parm->inline_size;
 		switch (user_parm->connection_type) {
 		case RC :
 			attr.qp_type = IBV_QPT_RC;
@@ -589,6 +590,7 @@ static void usage(const char *argv0)
 	printf("  -t, --tx-depth=<dep>      size of tx queue (default 300)\n");
 	printf("  -r, --rx-depth=<dep>      make rx queue bigger than tx (default 600)\n");
 	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
 	printf("  -e, --events              sleep on CQ events (default poll)\n");
@@ -655,7 +657,7 @@ int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param
 		ctx->recv_list.length = ctx->size + 40;
 	else
 		ctx->recv_list.length = ctx->size;
-	if (size > MAX_INLINE) /*complaince to perf_main */
+	if (size > user_param->inline_size) /*complaince to perf_main */
 		ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	else
 		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -761,7 +763,7 @@ int run_iter_uni(struct pingpong_context *ctx, struct user_parameters *user_para
 	else
 		ctx->recv_list.length = ctx->size;
 
-	if (size > MAX_INLINE) { /*complaince to perf_main */
+	if (size > user_param->inline_size) { /*complaince to perf_main */
 		ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -903,6 +905,7 @@ int main(int argc, char *argv[])
 	user_param.servername = NULL;
 	user_param.use_event = 0;
 	user_param.duplex = 0;
+    user_param.inline_size = MAX_INLINE;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -916,6 +919,7 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
@@ -924,7 +928,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:r:ebaV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaV", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -980,6 +984,14 @@ int main(int argc, char *argv[])
 			user_param.tx_depth = strtol(optarg, NULL, 0);
 			if (user_param.tx_depth < 1) { usage(argv[0]); return 1; }
 			break;
+
+		case 'I':
+			user_param.inline_size = strtol(optarg, NULL, 0);
+			if (user_param.inline_size > MAX_INLINE) {
+				usage(argv[0]);
+				return 7;
+			}
+
 		case 'r':
 			errno = 0;
                         user_param.rx_depth = strtol(optarg, NULL, 0);
@@ -1018,7 +1030,7 @@ int main(int argc, char *argv[])
 	else
 		printf("                    Send BW Test\n");
 
-	printf("Inline data is used up to %d bytes message\n", MAX_INLINE);
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	if (user_param.connection_type == RC)
 		printf("Connection type : RC\n");
 	else if (user_param.connection_type == UC)

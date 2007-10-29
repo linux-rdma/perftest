@@ -72,6 +72,7 @@ struct user_parameters {
 	int sockfd;
 	int max_out_read;
 	int use_event;
+
 };
 struct report_options {
 	int unsorted;
