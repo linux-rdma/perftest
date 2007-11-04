@@ -548,7 +548,11 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername,
 	if (rc)
 		return rc;
 
-	write(sockfd, "done", sizeof "done");
+	if (write(sockfd, "done", sizeof "done") != sizeof "done"){
+		perror("write");
+		fprintf(stderr, "Couldn't write to socket\n");
+		return 1;
+	}
 	close(sockfd);
 	return 0;
 }
