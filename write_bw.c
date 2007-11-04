@@ -916,7 +916,11 @@ int main(int argc, char *argv[])
 	/* the 0th place is arbitrary to signal finish ... */
 	if (!user_param.servername && !duplex) {
 		rem_dest[0] = pp_server_exch_dest(sockfd, &my_dest[0]);
-		write(sockfd, "done", sizeof "done");
+		if (write(sockfd, "done", sizeof "done") != sizeof "done"){
+			perror("server write");
+			fprintf(stderr, "Couldn't write to socket\n");
+			return 1;
+		}
 		close(sockfd);
 		return 0;
 	}
@@ -954,7 +958,11 @@ int main(int argc, char *argv[])
 		rem_dest[0] = pp_server_exch_dest(sockfd, &my_dest[0]);
 	}
 
-	write(sockfd, "done", sizeof "done");
+	if (write(sockfd, "done", sizeof "done") != sizeof "done"){
+		perror("write");
+		fprintf(stderr, "Couldn't write to socket\n");
+		return 1;
+	}
 	close(sockfd);
 
 	free(tposted);
