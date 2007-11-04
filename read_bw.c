@@ -800,7 +800,11 @@ int main(int argc, char *argv[])
 
 	if (!user_param.servername && !duplex) {
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-		write(sockfd, "done", sizeof "done");
+		if (write(sockfd, "done", sizeof "done") != sizeof "done"){////
+			perror("server write");
+			fprintf(stderr, "Couldn't write to socket\n");
+			return 1;
+		}
 		close(sockfd);
 		return 0;
 	} else if (user_param.use_event) {
@@ -846,7 +850,11 @@ int main(int argc, char *argv[])
 	else
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
 
-	write(sockfd, "done", sizeof "done");
+	if (write(sockfd, "done", sizeof "done") != sizeof "done"){
+		perror("server write");
+		fprintf(stderr, "Couldn't write to socket\n");
+		return 1;
+	}
 	close(sockfd);
 
 	free(tposted);
