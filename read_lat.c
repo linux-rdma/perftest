@@ -931,12 +931,20 @@ int main(int argc, char *argv[])
 	if(user_param.servername) {
 		/*Signal client is finished */ 
 		pp_client_exch_dest(user_param.sockfd, &my_dest, &rem_dest);
-		write(user_param.sockfd, "done", sizeof "done");
+		if (write(user_param.sockfd, "done", sizeof "done") != sizeof "done"){
+			perror("client write");
+			fprintf(stderr, "Couldn't write to socket\n");
+			return 1;
+		}
 		close(user_param.sockfd);
 	} else {
 		/*Server is finished wait for client */
 		pp_server_exch_dest(user_param.sockfd, &my_dest, &rem_dest);
-		write(user_param.sockfd, "done", sizeof "done");
+		if (write(user_param.sockfd, "done", sizeof "done") != sizeof "done"){
+			perror("server write");
+			fprintf(stderr, "Couldn't write to socket\n");
+			return 1;
+		}
 		close(user_param.sockfd);
 	}
 	printf("------------------------------------------------------------------\n");
