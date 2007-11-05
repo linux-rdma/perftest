@@ -99,6 +99,7 @@ Common Options to all tests:
   -H, --report-histogram       print out all results (default print summary only)
   -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)
   -V, --version                display version number
+  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)
 
 You need to be running a Subnet Manager on the switch or one of the nodes
 in your fabric. To use the opensm tool for this purpose, run
