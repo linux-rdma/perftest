@@ -64,6 +64,8 @@
 #define VERSION 1.1
 #define SIGNAL 1
 #define MAX_INLINE 400
+#define MCG_LID 0xc000
+#define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 static int page_size;
 cycles_t                *tstamp;
 struct user_parameters {
@@ -76,6 +78,7 @@ struct user_parameters {
 	int tx_depth;
 	int use_event;
 	int inline_size;
+	int use_mcg;
 };
 
 struct report_options {
@@ -422,6 +425,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			fprintf(stderr, "Couldn't create QP\n");
 			return NULL;
 		}
+
+		if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
+			union ibv_gid gid;
+			uint8_t mcg_gid[16] = MCG_GID;
+
+			/* use the local QP number as part of the mcg */
+			mcg_gid[11] = (user_parm->servername) ? 0 : 1;
+			*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
+			memcpy(gid.raw, mcg_gid, 16);
+
+			if (ibv_attach_mcast(ctx->qp, &gid, MCG_LID)) {
+				fprintf(stderr, "Couldn't attach QP to mcg\n");
+				return NULL;
+			}
+		}
 	}
 
 	{
@@ -503,6 +521,21 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.ah_attr.sl             = 0;
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = port;
+	if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
+		uint8_t mcg_gid[16] = MCG_GID;
+
+		/* send the message to the mcg of the other side */
+		mcg_gid[11] = (user_parm->servername) ? 1 : 0;
+		*(uint32_t *)(&mcg_gid[12]) = dest->qpn;
+
+		attr.ah_attr.dlid       = MCG_LID;
+		attr.ah_attr.is_global  = 1;
+		attr.ah_attr.grh.sgid_index = 0;
+		memcpy(attr.ah_attr.grh.dgid.raw, mcg_gid, 16);
+	} else {
+		attr.ah_attr.dlid       = dest->lid;
+		attr.ah_attr.is_global  = 0;
+	}
 
 	if (user_parm->connection_type==RC) {
 		if (ibv_modify_qp(ctx->qp, &attr,
@@ -663,7 +696,7 @@ static void usage(const char *argv0)
 	printf("\n");
 	printf("Options:\n");
 	printf("  -p, --port=<port>            listen on/connect to port <port> (default 18515)\n");
-	printf("  -c, --connection=<RC/UC>     connection type RC/UC (default RC)\n");
+	printf("  -c, --connection=<RC/UC/UD>  connection type RC/UC/UD (default RC)\n");
 	printf("  -m, --mtu=<mtu>              mtu size (default 2048)\n");
 	printf("  -d, --ib-dev=<dev>           use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>         use port <port> of IB device (default 1)\n");
@@ -677,7 +710,8 @@ static void usage(const char *argv0)
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
-    printf("  -e, --events                 sleep on CQ events (default poll)\n");
+	printf("  -e, --events                 sleep on CQ events (default poll)\n");
+	printf("  -g, --mcg                    send messages to multicast group(only available in UD QP\n");
 }
 
 /*
@@ -788,6 +822,11 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 		ctx->wr.wr.ud.ah          = ctx->ah;
 		ctx->wr.wr.ud.remote_qpn  = rem_dest->qpn;
 		ctx->wr.wr.ud.remote_qkey = 0x11111111;
+		if (user_param->use_mcg) {
+			ctx->wr.wr.ud.remote_qpn = 0xffffff;
+		} else {
+			ctx->wr.wr.ud.remote_qpn = rem_dest->qpn;
+		}
 	}
 	/// receive //
 	rwr = ctx->rwr;
@@ -958,6 +997,7 @@ int main(int argc, char *argv[])
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
 	user_param.use_event = 0;
+	user_param.use_mcg = 0;
 	user_param.inline_size = MAX_INLINE;
 	user_param.signal_comp = 0;
 	/* Parameter parsing. */
@@ -981,10 +1021,10 @@ int main(int argc, char *argv[])
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
 			{ 0 }
 		};
-
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:laeCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:laeCHUVg", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1005,6 +1045,9 @@ int main(int argc, char *argv[])
 			break;
         case 'e':
 			++user_param.use_event;
+			break;
+		case 'g':
+			++user_param.use_mcg;
 			break;
 		case 'm':
 			user_param.mtu = strtol(optarg, NULL, 0);
@@ -1105,6 +1148,7 @@ int main(int argc, char *argv[])
 		printf("Connection type : UC\n");
 	} else {
 		printf("Connection type : UD\n");
+		printf("Multicast %s\n", (user_param.use_mcg) ? "Enabled": "Disabled");
 	}
 	if (user_param.all == 1) {
 		/*since we run all sizes lets allocate big enough buffer */

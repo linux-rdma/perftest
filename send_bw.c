@@ -66,6 +66,8 @@
 #define SIGNAL 1
 #define MAX_INLINE 400
 #define ALL 1
+#define MCG_LID 0xc000
+#define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 
 struct user_parameters {
 	const char              *servername;
@@ -78,6 +80,7 @@ struct user_parameters {
 	int rx_depth;
 	int duplex;
 	int use_event;
+	int use_mcg;
 	int inline_size;
 };
 static int page_size;
@@ -417,6 +420,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			fprintf(stderr, "Couldn't create QP\n");
 			return NULL;
 		}
+
+		if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
+			union ibv_gid gid;
+			uint8_t mcg_gid[16] = MCG_GID;
+
+			/* use the local QP number as part of the mcg */
+			mcg_gid[11] = (user_parm->servername) ? 0 : 1;
+			*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
+			memcpy(gid.raw, mcg_gid, 16);
+
+			if (ibv_attach_mcast(ctx->qp, &gid, MCG_LID)) {
+				fprintf(stderr, "Couldn't attach QP to mcg\n");
+				return NULL;
+			}
+		}
 	}
 
 	{
@@ -484,6 +502,19 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.ah_attr.sl         = 0;
 	attr.ah_attr.src_path_bits = 0;
 	attr.ah_attr.port_num   = port;
+	if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
+		uint8_t mcg_gid[16] = MCG_GID;
+		/* send the message to the mcg of the other side */
+		mcg_gid[11] = (user_parm->servername) ? 1 : 0;
+		*(uint32_t *)(&mcg_gid[12]) = dest->qpn;
+		attr.ah_attr.dlid       = MCG_LID;
+		attr.ah_attr.is_global  = 1;
+		attr.ah_attr.grh.sgid_index = 0;
+		memcpy(attr.ah_attr.grh.dgid.raw, mcg_gid, 16);
+	} else {
+		attr.ah_attr.dlid       = dest->lid;
+		attr.ah_attr.is_global  = 0;
+	}
 	if (user_parm->connection_type == RC) {
 		if (ibv_modify_qp(ctx->qp, &attr,
 				  IBV_QP_STATE              |
@@ -580,20 +611,21 @@ static void usage(const char *argv0)
 	printf("  %s <host>     connect to server at <host>\n", argv0);
 	printf("\n");
 	printf("Options:\n");
-	printf("  -p, --port=<port>         listen on/connect to port <port> (default 18515)\n");
-	printf("  -d, --ib-dev=<dev>        use IB device <dev> (default first device found)\n");
-	printf("  -i, --ib-port=<port>      use port <port> of IB device (default 1)\n");
-	printf("  -c, --connection=<RC/UC>  connection type RC/UC/UD (default RC)\n");
-	printf("  -m, --mtu=<mtu>           mtu size (default 1024)\n");
-	printf("  -s, --size=<size>         size of message to exchange (default 65536)\n");
-	printf("  -a, --all                 Run sizes from 2 till 2^23\n");
-	printf("  -t, --tx-depth=<dep>      size of tx queue (default 300)\n");
-	printf("  -r, --rx-depth=<dep>      make rx queue bigger than tx (default 600)\n");
-	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 1000)\n");
-	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
-	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
-	printf("  -V, --version             display version number\n");
-	printf("  -e, --events              sleep on CQ events (default poll)\n");
+	printf("  -p, --port=<port>           listen on/connect to port <port> (default 18515)\n");
+	printf("  -d, --ib-dev=<dev>          use IB device <dev> (default first device found)\n");
+	printf("  -i, --ib-port=<port>        use port <port> of IB device (default 1)\n");
+	printf("  -c, --connection=<RC/UC/UD> connection type RC/UC/UD (default RC)\n");
+	printf("  -m, --mtu=<mtu>             mtu size (default 1024)\n");
+	printf("  -s, --size=<size>           size of message to exchange (default 65536)\n");
+	printf("  -a, --all                   Run sizes from 2 till 2^23\n");
+	printf("  -t, --tx-depth=<dep>        size of tx queue (default 300)\n");
+	printf("  -g, --mcg                   send messages to multicast group(only available in UD QP\n");
+	printf("  -r, --rx-depth=<dep>        make rx queue bigger than tx (default 600)\n");
+	printf("  -n, --iters=<iters>         number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>    max size of message to be sent in inline mode (default 400)\n");
+	printf("  -b, --bidirectional         measure bidirectional bandwidth (default unidirectional)\n");
+	printf("  -V, --version               display version number\n");
+	printf("  -e, --events                sleep on CQ events (default poll)\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
@@ -925,10 +957,11 @@ int main(int argc, char *argv[])
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaVg", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -943,6 +976,9 @@ int main(int argc, char *argv[])
 		case 'e':
 			++user_param.use_event;
 			break;
+		case 'g':
+			++user_param.use_mcg;
+			break;
 		case 'd':
 			ib_devname = strdupa(optarg);
 			break;
@@ -952,7 +988,6 @@ int main(int argc, char *argv[])
 			if (strcmp("UD",optarg)==0)
 				user_param.connection_type=UD;
 			break;
-
 		case 'm':
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
@@ -1035,8 +1070,10 @@ int main(int argc, char *argv[])
 		printf("Connection type : RC\n");
 	else if (user_param.connection_type == UC)
 		printf("Connection type : UC\n");
-	else
+	else{
 		printf("Connection type : UD\n");
+		printf("Multicast %s\n", (user_param.use_mcg) ? "Enabled": "Disabled");
+	}
 
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL)
@@ -1146,9 +1183,13 @@ int main(int argc, char *argv[])
 		ctx->wr.wr.ud.ah          = ctx->ah;
 		ctx->wr.wr.ud.remote_qpn  = rem_dest->qpn;
 		ctx->wr.wr.ud.remote_qkey = 0x11111111;
+		if (user_param.use_mcg) {
+			ctx->wr.wr.ud.remote_qpn = 0xffffff;
+		} else {
+			ctx->wr.wr.ud.remote_qpn = rem_dest->qpn;
+		}
 	} else
 		ctx->list.addr = (uintptr_t) ctx->buf;
-
 	ctx->list.lkey = ctx->mr->lkey;
 	ctx->wr.wr_id      = PINGPONG_SEND_WRID;
 	ctx->wr.sg_list    = &ctx->list;
