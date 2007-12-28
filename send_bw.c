@@ -619,7 +619,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>           size of message to exchange (default 65536)\n");
 	printf("  -a, --all                   Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>        size of tx queue (default 300)\n");
-	printf("  -g, --mcg                   send messages to multicast group(only available in UD QP\n");
+	printf("  -g, --mcg                   send messages to multicast group(only available in UD connection\n");
 	printf("  -r, --rx-depth=<dep>        make rx queue bigger than tx (default 600)\n");
 	printf("  -n, --iters=<iters>         number of exchanges (at least 2, default 1000)\n");
 	printf("  -I, --inline_size=<size>    max size of message to be sent in inline mode (default 400)\n");
@@ -1060,8 +1060,12 @@ int main(int argc, char *argv[])
 	}
 
 	printf("------------------------------------------------------------------\n");
-	if (user_param.duplex == 1)
+	if (user_param.duplex == 1 && (!user_param.use_mcg || !(user_param.connection_type == UD)))
 		printf("                    Send Bidirectional BW Test\n");
+	else if (user_param.duplex == 1 && user_param.use_mcg && (user_param.connection_type == UD))
+		printf("                    Send Bidirectional BW Multicast Test\n");
+	else if (!user_param.duplex == 1 && user_param.use_mcg && (user_param.connection_type == UD))
+		printf("                    Send BW Multicast Test\n");
 	else
 		printf("                    Send BW Test\n");
 
@@ -1072,7 +1076,6 @@ int main(int argc, char *argv[])
 		printf("Connection type : UC\n");
 	else{
 		printf("Connection type : UD\n");
-		printf("Multicast %s\n", (user_param.use_mcg) ? "Enabled": "Disabled");
 	}
 
 	/* Done with parameter parsing. Perform setup. */

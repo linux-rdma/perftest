@@ -711,7 +711,7 @@ static void usage(const char *argv0)
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
 	printf("  -e, --events                 sleep on CQ events (default poll)\n");
-	printf("  -g, --mcg                    send messages to multicast group(only available in UD QP\n");
+	printf("  -g, --mcg                    send messages to multicast group(only available in UD connection\n");
 }
 
 /*
@@ -1140,7 +1140,10 @@ int main(int argc, char *argv[])
 	}
 	/* Print header data */
 	printf("------------------------------------------------------------------\n");
-	printf("                    Send Latency Test\n");
+	if (user_param.use_mcg && (user_param.connection_type == UD))
+		printf("                    Send Latency Multicast Test\n");
+	else
+		printf("                    Send Latency Test\n");
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
@@ -1148,7 +1151,6 @@ int main(int argc, char *argv[])
 		printf("Connection type : UC\n");
 	} else {
 		printf("Connection type : UD\n");
-		printf("Multicast %s\n", (user_param.use_mcg) ? "Enabled": "Disabled");
 	}
 	if (user_param.all == 1) {
 		/*since we run all sizes lets allocate big enough buffer */
