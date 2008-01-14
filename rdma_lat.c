@@ -58,6 +58,7 @@
 #include "get_clock.h"
 
 #define PINGPONG_RDMA_WRID	3
+#define MAX_INLINE 400
 
 static int page_size;
 static pid_t pid;
@@ -602,7 +603,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 			.max_recv_wr  = 1,
 			.max_send_sge = 1,
 			.max_recv_sge = 1,
-			.max_inline_data = 0
+			.max_inline_data = MAX_INLINE
 		},
 		.qp_type = IBV_QPT_RC
 	};
@@ -640,7 +641,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 		}
 	}
 
- 	return ctx;	
+    return ctx;	
 }
 
 static int pp_connect_ctx(struct pingpong_context *ctx, struct pp_data *data)			  
@@ -1191,7 +1192,11 @@ int main(int argc, char *argv[])
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
 	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	if (ctx->size > MAX_INLINE || ctx->size == 0) {
+		ctx->wr.send_flags = IBV_SEND_SIGNALED;
+	} else {
+		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	}
 	ctx->wr.next       = NULL;
 
 	scnt = 0;
