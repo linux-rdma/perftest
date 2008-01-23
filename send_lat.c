@@ -64,7 +64,7 @@
 #define VERSION 1.1
 #define SIGNAL 1
 #define MAX_INLINE 400
-#define MCG_LID 0xc000
+#define MCG_LID 0xc001
 #define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 static int page_size;
 cycles_t                *tstamp;
