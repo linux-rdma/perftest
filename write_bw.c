@@ -666,6 +666,7 @@ int main(int argc, char *argv[])
 	struct pingpong_dest     *my_dest;
 	struct pingpong_dest    **rem_dest;
 	struct user_parameters  user_param;
+	struct ibv_device_attr device_attribute;
 	char                    *ib_devname = NULL;
 	int                      port = 18515;
 	int                      ib_port = 1;
@@ -674,6 +675,8 @@ int main(int argc, char *argv[])
 	int                      duplex = 0;
 	int                      i = 0;
 	int                      noPeak = 0;/*noPeak == 0: regular peak-bw calculation done*/
+	int                      inline_given_in_cmd = 0;
+	struct ibv_context       *context;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
@@ -767,6 +770,7 @@ int main(int argc, char *argv[])
 
 		case 'I':
 			user_param.inline_size = strtol(optarg, NULL, 0);
+			inline_given_in_cmd =1;
 			if (user_param.inline_size > MAX_INLINE) {
 				usage(argv[0]);
 				return 7;
@@ -810,7 +814,6 @@ int main(int argc, char *argv[])
 	  printf("                    RDMA_Write BW Test\n");
 	}
 	
-	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 	printf("Number of qp's running %d\n",user_param.numofqps);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
@@ -852,6 +855,16 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+
+	context = ibv_open_device(ib_dev);
+	if (ibv_query_device(context, &device_attribute)) {
+		fprintf(stderr, "Failed to query device props");
+		return 1;
+	}
+	if ((device_attribute.vendor_part_id == 25418) && (!inline_given_in_cmd)) {
+		user_param.inline_size = 1;
+	}
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 
 	ctx = pp_init_ctx(ib_dev, size, user_param.tx_depth, ib_port, &user_param);
 	if (!ctx)
