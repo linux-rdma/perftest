@@ -60,6 +60,7 @@
 #define PINGPONG_RDMA_WRID	3
 #define MAX_INLINE 400
 
+static int inline_size = MAX_INLINE;
 static int page_size;
 static pid_t pid;
 
@@ -603,7 +604,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 			.max_recv_wr  = 1,
 			.max_send_sge = 1,
 			.max_recv_sge = 1,
-			.max_inline_data = MAX_INLINE
+			.max_inline_data = inline_size,
 		},
 		.qp_type = IBV_QPT_RC
 	};
@@ -737,7 +738,12 @@ static int pp_open_port(struct pingpong_context *ctx, struct pp_data *data )
 			return -1;
 	}
 
-	write(data->sockfd, "done", sizeof "done");
+       if (write(data->sockfd, "done", sizeof "done") != sizeof "done"){
+               perror("write");
+               fprintf(stderr, "Couldn't write to socket\n");
+               return 1;
+       }
+
 	close(data->sockfd);
 	
 	return 0;
@@ -915,6 +921,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>      size of message to exchange (default 1)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
 	printf("  -C, --report-cycles    report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted  (implies -H) print out unsorted results (default sorted)\n");
@@ -1036,6 +1043,7 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "inline_size",     .has_arg = 1, .val = 'I' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
@@ -1043,7 +1051,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:CHUc", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:I:CHUc", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1084,7 +1092,10 @@ int main(int argc, char *argv[])
 					usage(argv[0]);
 					return 5;
 				}
+				break;
 
+			case 'I':
+				inline_size = strtol(optarg, NULL, 0);
 				break;
 
 			case 'C':
@@ -1192,7 +1203,7 @@ int main(int argc, char *argv[])
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
 	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	if (ctx->size > MAX_INLINE || ctx->size == 0) {
+	if (ctx->size > inline_size || ctx->size == 0) {
 		ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
