@@ -1118,7 +1118,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	if ((device_attribute.vendor_part_id == 25418) && (!inline_given_in_cmd)) {
-		user_param.inline_size = 1;
+		if (user_param.connection_type == UD) {
+			user_param.inline_size = 60;
+		} else {
+			user_param.inline_size = 1;
+		}
 	}
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 
