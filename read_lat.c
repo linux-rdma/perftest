@@ -433,7 +433,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.path_mtu               = IBV_MTU_2048;
 		break;
 	case 4096 :
-		attr.path_mtu               = IBV_MTU_4096;////4kmtu
+		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
 	printf("Mtu : %d\n", user_parm->mtu);
@@ -554,7 +554,7 @@ static void usage(const char *argv0)
 	printf("Options:\n");
 	printf("  -p, --port=<port>            listen on/connect to port <port> (default 18515)\n");
 	printf("  -c, --connection=<RC/UC>     connection type RC/UC (default RC)\n");
-	printf("  -m, --mtu=<mtu>              mtu size (256 - 4096. default for hermon is 2048)\n");////4kmtu
+	printf("  -m, --mtu=<mtu>              mtu size (256 - 4096. default for hermon is 2048)\n");
 	printf("  -d, --ib-dev=<dev>           use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>         use port <port> of IB device (default 1)\n");
 	printf("  -s, --size=<size>            size of message to exchange (default 1)\n");
