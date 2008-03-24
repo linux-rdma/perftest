@@ -489,6 +489,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	case 2048 :
 		attr.path_mtu               = IBV_MTU_2048;
 		break;
+	case 4096 :
+		attr.path_mtu               = IBV_MTU_4096;
+		break;
 	}
 	printf("Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num 	= dest->qpn;
@@ -615,7 +618,7 @@ static void usage(const char *argv0)
 	printf("  -d, --ib-dev=<dev>          use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>        use port <port> of IB device (default 1)\n");
 	printf("  -c, --connection=<RC/UC/UD> connection type RC/UC/UD (default RC)\n");
-	printf("  -m, --mtu=<mtu>             mtu size (default 1024)\n");
+	printf("  -m, --mtu=<mtu>             mtu size (256 - 4096. default for hermon is 2048)\n");
 	printf("  -s, --size=<size>           size of message to exchange (default 65536)\n");
 	printf("  -a, --all                   Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>        size of tx queue (default 300)\n");
@@ -1118,11 +1121,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	if ((device_attribute.vendor_part_id == 25418) && (!inline_given_in_cmd)) {
-		if (user_param.connection_type == UD) {
-			user_param.inline_size = 60;
-		} else {
-			user_param.inline_size = 1;
-		}
+		user_param.inline_size = 1;
 	}
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 
