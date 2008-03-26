@@ -629,10 +629,11 @@ static void usage(const char *argv0)
 	printf("  -b, --bidirectional         measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version               display version number\n");
 	printf("  -e, --events                sleep on CQ events (default poll)\n");
+	printf("  -N, --no peak-bw          cancel peak-bw calculation (default with peak-bw)\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
-			 cycles_t *tposted, cycles_t *tcompleted)
+			 cycles_t *tposted, cycles_t *tcompleted, int noPeak)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -644,23 +645,25 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 
 	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
 
-	/* Find the peak bandwidth */
-	for (i = 0; i < iters; ++i)
-		for (j = i; j < iters; ++j) {
-			t = (tcompleted[j] - tposted[i]) / (j - i + 1);
-			if (t < opt_delta) {
-				opt_delta  = t;
-				opt_posted = i;
-				opt_completed = j;
+	if (!noPeak) {
+		/* Find the peak bandwidth, unless asked not to in command line */
+		for (i = 0; i < iters; ++i)
+			for (j = i; j < iters; ++j) {
+				t = (tcompleted[j] - tposted[i]) / (j - i + 1);
+				if (t < opt_delta) {
+					opt_delta  = t;
+					opt_posted = i;
+					opt_completed = j;
+				}
 			}
-		}
+	}
 
 	cycles_to_units = get_cpu_mhz() * 1000000;
 
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
 	printf("%7d        %d            %7.2f               %7.2f\n",
-	       size,iters,tsize * cycles_to_units / opt_delta / 0x100000,
+	       size,iters,!(noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize * iters * cycles_to_units /(tcompleted[iters - 1] - tposted[0]) / 0x100000);
 }
 int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param,
@@ -933,6 +936,7 @@ int main(int argc, char *argv[])
 	int			            sockfd;
 	int                      i = 0;
 	int                      size_max_pow = 24;
+	int                      noPeak = 0;/*noPeak == 0: regular peak-bw calculation done*/
 	int                      inline_given_in_cmd = 0;
 	struct ibv_context       *context;
 	/* init default values to user's parameters */
@@ -964,10 +968,11 @@ int main(int argc, char *argv[])
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
+			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaVg", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaVgN", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1051,6 +1056,10 @@ int main(int argc, char *argv[])
 
 		case 'b':
 			user_param.duplex = 1;
+			break;
+
+		case 'N':
+			noPeak = 1;
 			break;
 
 		default:
@@ -1238,7 +1247,7 @@ int main(int argc, char *argv[])
 					return 17;
 			}
 			if (user_param.servername) {
-				print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted);
+				print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak);
 				/* sync again for the sake of UC/UC */
 				rem_dest = pp_client_exch_dest(sockfd, &my_dest);
 			} else
@@ -1255,7 +1264,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (user_param.servername)
-			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted);
+			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak);
 	}
 
 	/* close sockets */
