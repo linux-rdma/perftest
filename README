@@ -1,7 +1,7 @@
 	     Open Fabrics Enterprise Distribution (OFED)
                 Performance Tests README for OFED 1.3
 		  
-			  February 2008
+			  March 2008
 
 
 
@@ -57,19 +57,21 @@ Architectures tested:	i686, x86_64, ia64
 3. Test Descriptions
 ===============================================================================
 
-rdma_lat.c 	latency test with RDMA write transactions
-rdma_bw.c 	streaming bandwidth test with RDMA write transactions
 
 
 The following tests are mainly useful for hardware/software benchmarking.
-They are not intended as actual usage examples.
 
-send_lat.c 	latency test with send transactions
-send_bw.c 	bandwidth test with send transactions
 write_lat.c 	latency test with RDMA write transactions
 write_bw.c 	bandwidth test with RDMA write transactions
+send_lat.c 	latency test with send transactions
+send_bw.c 	bandwidth test with send transactions
 read_lat.c 	latency test with RDMA read transactions
 read_bw.c 	bandwidth test with RDMA read transactions
+
+
+Legacy tests: (To be removed in the next release)
+rdma_lat.c 	latency test with RDMA write transactions
+rdma_bw.c 	streaming bandwidth test with RDMA write transactions
 
 The executable name of each test starts with the general prefix "ib_";
 for example, ib_write_lat.
@@ -88,13 +90,32 @@ Server:		./<test name> <options>
 Client:		./<test name> <options> <server IP address>
 
 		o  <server address> is IPv4 or IPv6 address. You can use the IPoIB
+diags_release_notes.txt     
+mpi-selector_release_notes.txt    
+rdma_cm_release_notes.txt
+MSTFLINT_README.txt               
+open_mpi_release_notes.txt    RDS_README.txt
+ib-bonding.txt              
+mthca_release_notes.txt          
+opensm_release_notes.txt      
+rds_release_notes.txt
+ibutils_release_notes.txt*  
+mvapich_release_notes.txt         
+PERF_TEST_README.txt          
+sdp_release_notes.txt
+ipoib_release_notes.txt     
+srp_release_notes.txt
+QoS_in_OFED.txt               
+SRPT_README.txt
+mlx4_release_notes.txt      
+QoS_management_in_OpenSM.
                    address if IPoIB is configured.
 		o  --help lists the available <options>
 
   *** IMPORTANT NOTE: The SAME OPTIONS must be passed to both server and client.
 
 
-Common Options to tests:
+Common Options to all tests:
   -p, --port=<port>            listen on/connect to port <port> (default: 18515)
   -m, --mtu=<mtu>              mtu size (default: 1024)
   -d, --ib-dev=<dev>           use IB device <dev> (default: first device found)
@@ -102,8 +123,6 @@ Common Options to tests:
   -s, --size=<size>            size of message to exchange (default: 1)
   -a, --all                    run sizes from 2 till 2^23
   -t, --tx-depth=<dep>         size of tx queue (default: 50)
-  -g, --mcg                    send messages to multicast group 0xc001
-					(only available in send-UD)
   -n, --iters=<iters>          number of exchanges (at least 100, default: 1000)
   -C, --report-cycles          report times in cpu cycle units
 					(default: microseconds)
@@ -112,17 +131,14 @@ Common Options to tests:
   -U, --report-unsorted        (implies -H) print out unsorted results
 					(default: sorted)
   -V, --version                display version number
-  -I, --inline_size=<size>     max size of message to be sent in inline mode
-					(default 400)
-  -N, --no peak-bw             cancel peak-bw calculation
-					(default: peak-bw. only available in write_bw)
 
   *** IMPORTANT NOTE: You need to be running a Subnet Manager on the switch or
 		      on one of the nodes in your fabric.
 
 Example:
-Run "ib_rdma_lat -C" on the server side.
-Then run "ib_rdma_lat -C <server IP address>" on the client.
+Run "ib_write_lat -a" on the server side.
+Then run "ib_write_lat -a <server IP address>" on the client side.
 
-ib_rdma_lat will exit on both server and client after printing results.
+ib_write_lat will exit on both server and client after printing results.
+
 
