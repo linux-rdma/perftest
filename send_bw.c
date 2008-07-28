@@ -1129,7 +1129,11 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Failed to query device props");
 		return 1;
 	}
-	if ((device_attribute.vendor_part_id == 25418) && (!inline_given_in_cmd)) {
+	if ((device_attribute.vendor_part_id == 25408 ||
+		device_attribute.vendor_part_id == 25418 ||
+		device_attribute.vendor_part_id == 26408 ||
+		device_attribute.vendor_part_id == 26418 ||
+		device_attribute.vendor_part_id == 26428) && (!inline_given_in_cmd)) {
 		user_param.inline_size = 1;
 	}
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
