@@ -629,11 +629,12 @@ static void usage(const char *argv0)
 	printf("  -b, --bidirectional         measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version               display version number\n");
 	printf("  -e, --events                sleep on CQ events (default poll)\n");
-	printf("  -N, --no peak-bw          cancel peak-bw calculation (default with peak-bw)\n");
+	printf("  -N, --no peak-bw            cancel peak-bw calculation (default with peak-bw)\n");
+	printf("  -F, --CPU-freq              do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
-			 cycles_t *tposted, cycles_t *tcompleted, int noPeak)
+			 cycles_t *tposted, cycles_t *tcompleted, int noPeak, int no_cpu_freq_fail)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -658,7 +659,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 			}
 	}
 
-	cycles_to_units = get_cpu_mhz() * 1000000;
+	cycles_to_units = get_cpu_mhz(no_cpu_freq_fail) * 1000000;
 
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
@@ -939,6 +940,7 @@ int main(int argc, char *argv[])
 	int                      noPeak = 0;/*noPeak == 0: regular peak-bw calculation done*/
 	int                      inline_given_in_cmd = 0;
 	struct ibv_context       *context;
+	int                      no_cpu_freq_fail = 0;
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
 	user_param.mtu = 0;
@@ -969,10 +971,11 @@ int main(int argc, char *argv[])
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
 			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
+			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaVgN", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:ebaVgNF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1060,6 +1063,10 @@ int main(int argc, char *argv[])
 
 		case 'N':
 			noPeak = 1;
+			break;
+
+		case 'F':
+			no_cpu_freq_fail = 1;
 			break;
 
 		default:
@@ -1251,7 +1258,7 @@ int main(int argc, char *argv[])
 					return 17;
 			}
 			if (user_param.servername) {
-				print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak);
+				print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 				/* sync again for the sake of UC/UC */
 				rem_dest = pp_client_exch_dest(sockfd, &my_dest);
 			} else
@@ -1268,7 +1275,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (user_param.servername)
-			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak);
+			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 	}
 
 	/* close sockets */

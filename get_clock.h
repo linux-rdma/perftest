@@ -76,6 +76,6 @@ static inline cycles_t get_cycles()
 #include <asm/timex.h>
 #endif
 
-extern double get_cpu_mhz(void);
+extern double get_cpu_mhz(int);
 
 #endif

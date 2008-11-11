@@ -886,7 +886,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 			}
 		}
 
-	cycles_to_units = get_cpu_mhz() * 1000000;
+	cycles_to_units = get_cpu_mhz(0) * 1000000;
 
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;

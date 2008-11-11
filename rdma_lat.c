@@ -974,7 +974,7 @@ static void print_report(struct report_options * options,
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
-		cycles_to_units = get_cpu_mhz();
+		cycles_to_units = get_cpu_mhz(0);
 		units = "usec";
 	}
 

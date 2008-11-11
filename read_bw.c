@@ -472,10 +472,11 @@ static void usage(const char *argv0)
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version          display version number\n");
 	printf("  -e, --events           sleep on CQ events (default poll)\n");
+	printf("  -F, --CPU-freq         do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
-			 cycles_t *tposted, cycles_t *tcompleted)
+			 cycles_t *tposted, cycles_t *tcompleted, int no_cpu_freq_fail)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -498,7 +499,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 			}
 		}
 
-	cycles_to_units = get_cpu_mhz() * 1000000;
+	cycles_to_units = get_cpu_mhz(no_cpu_freq_fail) * 1000000;
 
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
@@ -602,6 +603,7 @@ int main(int argc, char *argv[])
 	int			 sockfd;
 	int                      duplex = 0;
 	int                      i = 0;
+	int                      no_cpu_freq_fail = 0;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
@@ -628,10 +630,11 @@ int main(int argc, char *argv[])
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:abVe", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:abVeF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -695,6 +698,10 @@ int main(int argc, char *argv[])
 
 		case 'b':
 			duplex = 1;
+			break;
+
+		case 'F':
+			no_cpu_freq_fail = 1;
 			break;
 
 		default:
@@ -803,7 +810,7 @@ int main(int argc, char *argv[])
 
 	if (!user_param.servername && !duplex) {
 		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
-		if (write(sockfd, "done", sizeof "done") != sizeof "done"){////
+		if (write(sockfd, "done", sizeof "done") != sizeof "done"){
 			perror("server write");
 			fprintf(stderr, "Couldn't write to socket\n");
 			return 1;
@@ -840,12 +847,12 @@ int main(int argc, char *argv[])
 			size = 1 << i;
 			if(run_iter(ctx, &user_param, rem_dest, size))
 				return 17;
-			print_report(user_param.iters, size, duplex, tposted, tcompleted);
+			print_report(user_param.iters, size, duplex, tposted, tcompleted, no_cpu_freq_fail);
 		}
 	} else {
 		if(run_iter(ctx, &user_param, rem_dest, size))
 			return 18;
-		print_report(user_param.iters, size, duplex, tposted, tcompleted);
+		print_report(user_param.iters, size, duplex, tposted, tcompleted, no_cpu_freq_fail);
 	}
 
 	if (user_param.servername)

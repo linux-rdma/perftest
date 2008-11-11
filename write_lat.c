@@ -581,6 +581,7 @@ static void usage(const char *argv0)
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
 	printf("  -V, --version                display version number\n");
+	printf("  -F, --CPU-freq               do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
 /*
@@ -609,7 +610,7 @@ static int cycles_compare(const void * aptr, const void * bptr)
 }
 
 static void print_report(struct report_options * options,
-			 unsigned int iters, cycles_t *tstamp, int size)
+			 unsigned int iters, cycles_t *tstamp, int size, int no_cpu_freq_fail)
 {
 	double cycles_to_units;
 	cycles_t median;
@@ -630,7 +631,7 @@ static void print_report(struct report_options * options,
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
-		cycles_to_units = get_cpu_mhz();
+		cycles_to_units = get_cpu_mhz(no_cpu_freq_fail);
 		units = "usec";
 	}
 
@@ -760,7 +761,8 @@ int main(int argc, char *argv[])
 	struct pingpong_dest     rem_dest;
 	struct ibv_device       *ib_dev;
 
-	struct user_parameters  user_param;
+	struct user_parameters   user_param;
+	int                      no_cpu_freq_fail = 0;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
@@ -788,10 +790,11 @@ int main(int argc, char *argv[])
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
+			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:aCHUV", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:aCHUVF", long_options, NULL);///cpufreq
 		if (c == -1)
 			break;
 
@@ -873,6 +876,10 @@ int main(int argc, char *argv[])
 			report.unsorted = 1;
 			break;
 
+		case 'F':
+			no_cpu_freq_fail = 1;
+			break;
+
 		default:
 			usage(argv[0]);
 			return 5;
@@ -928,12 +935,12 @@ int main(int argc, char *argv[])
 			size = 1 << i;
 			if(run_iter(ctx, &user_param, &rem_dest, size))
 				return 17;
-			print_report(&report, user_param.iters, tstamp, size);
+			print_report(&report, user_param.iters, tstamp, size, no_cpu_freq_fail);
 		}
 	} else {
 		if(run_iter(ctx, &user_param, &rem_dest, size))
 			return 18;
-		print_report(&report, user_param.iters, tstamp, size);
+		print_report(&report, user_param.iters, tstamp, size, no_cpu_freq_fail);
 	}
 
 	printf("------------------------------------------------------------------\n");
