@@ -421,7 +421,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			return NULL;
 		}
 
-		if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
+		if ((user_parm->connection_type==UD) && (user_parm->use_mcg) && !user_parm->servername) {
 			union ibv_gid gid;
 			uint8_t mcg_gid[16] = MCG_GID;
 
