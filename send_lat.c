@@ -425,21 +425,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			fprintf(stderr, "Couldn't create QP\n");
 			return NULL;
 		}
-
-		if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
-			union ibv_gid gid;
-			uint8_t mcg_gid[16] = MCG_GID;
-
-			/* use the local QP number as part of the mcg */
-			mcg_gid[11] = (user_parm->servername) ? 0 : 1;
-			*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
-			memcpy(gid.raw, mcg_gid, 16);
-
-			if (ibv_attach_mcast(ctx->qp, &gid, MCG_LID)) {
-				fprintf(stderr, "Couldn't attach QP to mcg\n");
-				return NULL;
-			}
-		}
 	}
 
 	{
@@ -462,6 +447,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 					  IBV_QP_QKEY)) {
 				fprintf(stderr, "Failed to modify UD QP to INIT\n");
 				return NULL;
+			}
+
+			if (user_parm->use_mcg) {
+				union ibv_gid gid;
+				uint8_t mcg_gid[16] = MCG_GID;
+
+				/* use the local QP number as part of the mcg */
+				mcg_gid[11] = (user_parm->servername) ? 0 : 1;
+				*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
+				memcpy(gid.raw, mcg_gid, 16);
+
+				if (ibv_attach_mcast(ctx->qp, &gid, MCG_LID)) {
+					fprintf(stderr, "Couldn't attach QP to mcg\n");
+					return NULL;
+				}
 			}
 		} else if (ibv_modify_qp(ctx->qp, &attr,
 					 IBV_QP_STATE              |
