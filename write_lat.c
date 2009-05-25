@@ -70,6 +70,7 @@ struct user_parameters {
 	int iters;
 	int tx_depth;
 	int inline_size;
+	int qp_timeout;
 };
 struct report_options {
 	int unsorted;
@@ -454,7 +455,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 			fprintf(stderr, "Failed to modify RC QP to RTR\n");
 			return 1;
 		}
-		attr.timeout            = 14;
+		attr.timeout            = user_parm->qp_timeout;
 		attr.retry_cnt          = 7;
 		attr.rnr_retry          = 7;
 	} else {
@@ -577,6 +578,7 @@ static void usage(const char *argv0)
 	printf("  -t, --tx-depth=<dep>         size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
 	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
+	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
@@ -771,6 +773,7 @@ int main(int argc, char *argv[])
 	user_param.tx_depth = 50;
 	user_param.servername = NULL;
 	user_param.inline_size = MAX_INLINE;
+	user_param.qp_timeout = 14;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -785,6 +788,7 @@ int main(int argc, char *argv[])
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
+			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
@@ -794,7 +798,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:aCHUVF", long_options, NULL);///cpufreq
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:aCHUVF", long_options, NULL);///cpufreq
 		if (c == -1)
 			break;
 
@@ -878,6 +882,10 @@ int main(int argc, char *argv[])
 
 		case 'F':
 			no_cpu_freq_fail = 1;
+			break;
+
+		case 'u':
+			user_param.qp_timeout = strtol(optarg, NULL, 0);
 			break;
 
 		default:
