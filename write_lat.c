@@ -2,6 +2,7 @@
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
  * Copyright (c) 2005 Hewlett Packard, Inc (Grant Grundler)
+ * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -60,6 +61,7 @@
 #define VERSION 1.0
 #define ALL 1
 #define MAX_INLINE 400
+static int sl = 0;
 static int page_size;
 cycles_t                *tstamp;
 struct user_parameters {
@@ -439,7 +441,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 
 	attr.ah_attr.is_global      = 0;
 	attr.ah_attr.dlid           = dest->lid;
-	attr.ah_attr.sl             = 0;
+	attr.ah_attr.sl             = sl;
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = port;
 
@@ -579,6 +581,7 @@ static void usage(const char *argv0)
 	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
 	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
 	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
+	printf("  -S, --sl=<sl>                SL (default 0)\n");
 	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
@@ -789,6 +792,7 @@ int main(int argc, char *argv[])
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
@@ -798,7 +802,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:aCHUVF", long_options, NULL);///cpufreq
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:aCHUVF", long_options, NULL);///cpufreq
 		if (c == -1)
 			break;
 
@@ -887,10 +891,14 @@ int main(int argc, char *argv[])
 		case 'u':
 			user_param.qp_timeout = strtol(optarg, NULL, 0);
 			break;
+		case 'S':
+			sl = strtol(optarg, NULL, 0);
+			if (sl > 15) { usage(argv[0]); return 6; }
+			break;
 
 		default:
 			usage(argv[0]);
-			return 5;
+			return 7;
 		}
 	}
 

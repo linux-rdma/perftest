@@ -2,6 +2,7 @@
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
  * Copyright (c) 2005 Hewlett Packard, Inc (Grant Grundler)
+ * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -59,6 +60,7 @@
 #define PINGPONG_READ_WRID	1
 #define VERSION 1.1
 #define ALL 1
+static int sl = 0;
 static int page_size;
 cycles_t *tstamp;
 struct pingpong_dest my_dest;
@@ -444,7 +446,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.min_rnr_timer          = 12;
 	attr.ah_attr.is_global      = 0;
 	attr.ah_attr.dlid           = dest->lid;
-	attr.ah_attr.sl             = 0;
+	attr.ah_attr.sl             = sl;
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = port;
 	if (ibv_modify_qp(ctx->qp, &attr,
@@ -767,6 +769,7 @@ int main(int argc, char *argv[])
 			{ .name = "outs",           .has_arg = 1, .val = 'o' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
@@ -777,7 +780,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:o:n:t:u:aeHUVF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:o:n:t:u:S:aeHUVF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -866,9 +869,14 @@ int main(int argc, char *argv[])
 			user_param.qp_timeout = strtol(optarg, NULL, 0);
 			break;
 
+		case 'S':
+			sl = strtol(optarg, NULL, 0);
+			if (sl > 15) { usage(argv[0]); return 5; }
+			break;
+
 		default:
 			usage(argv[0]);
-			return 5;
+			return 6;
 		}
 	}
 

@@ -2,6 +2,7 @@
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
  * Copyright (c) 2005 Hewlett Packard, Inc (Grant Grundler)
+ * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,6 +62,7 @@
 #define MAX_INLINE 400
 
 static int inline_size = MAX_INLINE;
+static int sl = 0;
 static int page_size;
 static pid_t pid;
 
@@ -656,7 +658,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, struct pp_data *data)
 		.min_rnr_timer 	= 12,
 		.ah_attr.is_global  = 0,
 		.ah_attr.dlid       = data->rem_dest->lid,
-		.ah_attr.sl         = 0,
+		.ah_attr.sl         = sl,
 		.ah_attr.src_path_bits = 0,
 		.ah_attr.port_num   = data->ib_port
 	};
@@ -921,6 +923,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>      size of message to exchange (default 1)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 50)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
+	printf("  -S, --sl=<sl>          SL (default 0)\n");
 	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
 	printf("  -C, --report-cycles    report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram print out all results (default print summary only)\n");
@@ -1043,6 +1046,7 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "inline_size",     .has_arg = 1, .val = 'I' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
@@ -1051,7 +1055,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:I:CHUc", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:S:I:CHUc", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1094,6 +1098,11 @@ int main(int argc, char *argv[])
 				}
 				break;
 
+			case 'S':
+				sl = strtol(optarg, NULL, 0);
+				if (sl > 15) { usage(argv[0]); return 6; }
+				break;
+
 			case 'I':
 				inline_size = strtol(optarg, NULL, 0);
 				break;
@@ -1116,7 +1125,7 @@ int main(int argc, char *argv[])
 
 			default:
 				usage(argv[0]);
-				return 5;
+				return 7;
 		}
 	}
 

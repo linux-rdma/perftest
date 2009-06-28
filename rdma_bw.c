@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
+ * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -59,6 +60,7 @@
 
 #define PINGPONG_RDMA_WRID	3
 
+static int sl = 0;
 static int page_size;
 static pid_t pid;
 
@@ -651,7 +653,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, struct pp_data data)
 	attr.min_rnr_timer 	= 12;
 	attr.ah_attr.is_global  = 0;
 	attr.ah_attr.dlid       = data.rem_dest->lid;
-	attr.ah_attr.sl         = 0;
+	attr.ah_attr.sl         = sl;
 	attr.ah_attr.src_path_bits = 0;
 	attr.ah_attr.port_num   = data.ib_port;
 	if (ibv_modify_qp(ctx->qp, &attr,
@@ -858,6 +860,7 @@ static void usage(const char *argv0)
 	printf("  -s, --size=<size>      size of message to exchange (default 65536)\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
+	printf("  -S, --sl=<sl>          SL (default 0)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -c, --cma		 use RDMA CM\n");
 }
@@ -943,12 +946,13 @@ int main(int argc, char *argv[])
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "cma", 	    .has_arg = 0, .val = 'c' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:bc", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:S:bc", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -995,6 +999,11 @@ int main(int argc, char *argv[])
 
 			break;
 
+		case 'S':
+			sl = strtol(optarg, NULL, 0);
+			if (sl > 15) { usage(argv[0]); return 1; }
+			break;
+
 		case 'b':
 			duplex = 1;
 			break;
@@ -1021,9 +1030,9 @@ int main(int argc, char *argv[])
 	 */
 	pid = getpid();
 
-	printf("%d: | port=%d | ib_port=%d | size=%d | tx_depth=%d | iters=%d | duplex=%d | cma=%d |\n",
+	printf("%d: | port=%d | ib_port=%d | size=%d | tx_depth=%d | sl=%d | iters=%d | duplex=%d | cma=%d |\n",
 		 pid, data.port, data.ib_port, data.size, data.tx_depth,
-		 iters, duplex, data.use_cma);
+		 sl, iters, duplex, data.use_cma);
 		
 	/* Done with parameter parsing. Perform setup. */
 

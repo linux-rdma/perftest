@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
  * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
+ * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,6 +80,7 @@ struct extended_qp {
   struct ibv_qp           *qp;
   int                      scnt, ccnt ;
 };
+static int sl = 0;
 static int page_size;
 
 cycles_t	*tposted;
@@ -444,7 +446,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	}
 	attr.ah_attr.is_global  = 0;
 	attr.ah_attr.dlid       = dest->lid;
-	attr.ah_attr.sl         = 0;
+	attr.ah_attr.sl         = sl;
 	attr.ah_attr.src_path_bits = 0;
 	attr.ah_attr.port_num   = port;
 	if (user_parm->connection_type == RC) {
@@ -521,6 +523,7 @@ static void usage(const char *argv0)
 	printf("  -n, --iters=<iters>       number of exchanges (at least 2, default 5000)\n");
 	printf("  -I, --inline_size=<size>  max size of message to be sent in inline mode (default 400)\n");
 	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
+	printf("  -S, --sl=<sl>             SL (default 0)\n");
 	printf("  -b, --bidirectional       measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version             display version number\n");
 	printf("  -F, --CPU-freq            do not fail even if cpufreq_ondemand module is loaded\n");
@@ -710,6 +713,7 @@ int main(int argc, char *argv[])
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
@@ -717,7 +721,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:q:g:c:s:n:t:I:u:baVF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:q:g:c:s:n:t:I:u:S:baVF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -804,6 +808,11 @@ int main(int argc, char *argv[])
 
 		case 'u':
 			user_param.qp_timeout = strtol(optarg, NULL, 0);
+			break;
+
+		case 'S':
+			sl = strtol(optarg, NULL, 0);
+			if (sl > 15) { usage(argv[0]); return 1; }
 			break;
 
 		default:
