@@ -71,6 +71,7 @@ struct user_parameters {
 	int max_out_read;
 	int use_event;
 	int qp_timeout;
+	int gid_index; /* if value not negative, we use gid AND gid_index=value */
 };
 static int sl = 0;
 static int page_size;
@@ -88,6 +89,7 @@ struct pingpong_context {
 	int                 tx_depth;
 	struct ibv_sge      list;
 	struct ibv_send_wr  wr;
+	union ibv_gid       dgid;
 };
 
 struct pingpong_dest {
@@ -96,6 +98,7 @@ struct pingpong_dest {
 	int psn;
 	unsigned rkey;
 	unsigned long long vaddr;
+	union ibv_gid       dgid;
 };
 
 
@@ -150,14 +153,20 @@ static int pp_client_connect(const char *servername, int port)
 }
 
 struct pingpong_dest * pp_client_exch_dest(int sockfd,
-					   const struct pingpong_dest *my_dest)
+					   const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
 {
 	struct pingpong_dest *rem_dest = NULL;
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000"];
+	char msg[sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"];
 	int parsed;
 
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", my_dest->lid, my_dest->qpn,
-		my_dest->psn,my_dest->rkey,my_dest->vaddr);
+	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+		my_dest->lid, my_dest->qpn, my_dest->psn,my_dest->rkey,my_dest->vaddr,
+		my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2],
+		my_dest->dgid.raw[3], my_dest->dgid.raw[4], my_dest->dgid.raw[5],
+		my_dest->dgid.raw[6], my_dest->dgid.raw[7], my_dest->dgid.raw[8],
+		my_dest->dgid.raw[9], my_dest->dgid.raw[10], my_dest->dgid.raw[11],
+		my_dest->dgid.raw[12], my_dest->dgid.raw[13], my_dest->dgid.raw[14],
+		my_dest->dgid.raw[15]);
 	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
 		perror("client write");
 		fprintf(stderr, "Couldn't send local address\n");
@@ -174,15 +183,59 @@ struct pingpong_dest * pp_client_exch_dest(int sockfd,
 	if (!rem_dest)
 		goto out;
 
-	parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn,&rem_dest->rkey,&rem_dest->vaddr);
+	if (user_parm->gid_index < 0) {
+		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
+				&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+		if (parsed != 5) {
+			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
+			free(rem_dest);
+			rem_dest = NULL;
+			goto out;
+		}
+	}else{
+		char *pstr = msg, *term;
+		char tmp[20];
+		int i;
 
-	if (parsed != 5) {
-		fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg,
-			msg);
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->qpn = (int)strtol(tmp, NULL, 16); // QPN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->psn = (int)strtol(tmp, NULL, 16); // PSN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
+
+		for (i = 0; i < 15; ++i) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr);
+			tmp[term - pstr] = 0;
+			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
+		}
+		pstr += term - pstr + 1;
+		strcpy(tmp, pstr);
+		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 	}
 out:
 	return rem_dest;
@@ -244,9 +297,9 @@ int pp_server_connect(int port)
 	return connfd;
 }
 
-static struct pingpong_dest *pp_server_exch_dest(int connfd, const struct pingpong_dest *my_dest)
+static struct pingpong_dest *pp_server_exch_dest(int connfd, const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
 {
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000"];
+	char msg[sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"];
 	struct pingpong_dest *rem_dest = NULL;
 	int parsed;
 	int n;
@@ -262,18 +315,69 @@ static struct pingpong_dest *pp_server_exch_dest(int connfd, const struct pingpo
 	if (!rem_dest)
 		goto out;
 
-	parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
-	if (parsed != 5) {
-		fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg,
-			msg);
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
+	if (user_parm->gid_index < 0) {
+		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
+				&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+		if (parsed != 5) {
+			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
+			free(rem_dest);
+			rem_dest = NULL;
+			goto out;
+		}
+	}else{
+		char *pstr = msg, *term;
+		char tmp[20];
+		int i;
+
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->qpn = (int)strtol(tmp, NULL, 16); // QPN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->psn = (int)strtol(tmp, NULL, 16); // PSN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
+
+		for (i = 0; i < 15; ++i) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr);
+			tmp[term - pstr] = 0;
+			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
+			}
+		pstr += term - pstr + 1;
+		strcpy(tmp, pstr);
+		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 	}
 
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", my_dest->lid, my_dest->qpn,
-		my_dest->psn, my_dest->rkey, my_dest->vaddr);
+	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+		my_dest->lid, my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
+		my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2],
+		my_dest->dgid.raw[3], my_dest->dgid.raw[4], my_dest->dgid.raw[5],
+		my_dest->dgid.raw[6], my_dest->dgid.raw[7], my_dest->dgid.raw[8],
+		my_dest->dgid.raw[9], my_dest->dgid.raw[10], my_dest->dgid.raw[11],
+		my_dest->dgid.raw[12], my_dest->dgid.raw[13], my_dest->dgid.raw[14],
+		my_dest->dgid.raw[15]);
 	if (write(connfd, msg, sizeof msg) != sizeof msg) {
 		perror("server write");
 		fprintf(stderr, "Couldn't send local address\n");
@@ -318,7 +422,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			fprintf(stderr, "Failed to query device props");
 			return NULL;
 		}
-		if (device_attr.vendor_part_id == 23108)
+		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1)
 			user_parm->mtu = 1024;
 		else
 			user_parm->mtu = 2048;
@@ -421,9 +525,16 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.rq_psn 		= dest->psn;
 	attr.max_dest_rd_atomic     = user_parm->max_out_read;
 	attr.min_rnr_timer          = 12;
-	attr.ah_attr.is_global  = 0;
-	attr.ah_attr.dlid       = dest->lid;
-	attr.ah_attr.sl         = sl;
+	if (user_parm->gid_index<0) {
+		attr.ah_attr.is_global  = 0;
+		attr.ah_attr.dlid       = dest->lid;
+		attr.ah_attr.sl         = sl;
+	} else {
+		attr.ah_attr.is_global  = 1;
+		attr.ah_attr.grh.dgid   = dest->dgid;
+		attr.ah_attr.grh.hop_limit = 1;
+		attr.ah_attr.sl         = 0;
+	}
 	attr.ah_attr.src_path_bits = 0;
 	attr.ah_attr.port_num   = port;
 	if (ibv_modify_qp(ctx->qp, &attr,
@@ -474,6 +585,7 @@ static void usage(const char *argv0)
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -S, --sl=<sl>          SL (default 0)\n");
+	printf("  -x, --gid-index=<index>   test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -V, --version          display version number\n");
 	printf("  -e, --events           sleep on CQ events (default poll)\n");
@@ -609,6 +721,7 @@ int main(int argc, char *argv[])
 	int                      duplex = 0;
 	int                      i = 0;
 	int                      no_cpu_freq_fail = 0;
+	union ibv_gid            gid;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
@@ -619,6 +732,7 @@ int main(int argc, char *argv[])
 	user_param.use_event = 0;
 	user_param.max_out_read = 4; /* the device capability on gen2 */
 	user_param.qp_timeout = 14;
+	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -634,6 +748,7 @@ int main(int argc, char *argv[])
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
 			{ .name = "sl",             .has_arg = 1, .val = 'S' },
+			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
@@ -642,7 +757,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:u:S:abVeF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:u:S:x:abVeF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -721,6 +836,14 @@ int main(int argc, char *argv[])
 			if (sl > 15) { usage(argv[0]); return 1; }
 			break;
 
+		case 'x':
+			user_param.gid_index = strtol(optarg, NULL, 0);
+			if (user_param.gid_index > 63) {
+				usage(argv[0]);
+				return 1;
+			}
+			break;
+
 		default:
 			usage(argv[0]);
 			return 1;
@@ -740,6 +863,10 @@ int main(int argc, char *argv[])
 		printf("                    RDMA_Read BW Test\n");
 
 	printf("Connection type : RC\n");
+	if (user_param.gid_index > -1) {
+		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
+	}
+
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL)
 		/*since we run all sizes */
@@ -771,16 +898,28 @@ int main(int argc, char *argv[])
 	if (!ctx)
 		return 1;
 
+	if (user_param.gid_index != -1) {
+		int err=0;
+		err = ibv_query_gid (ctx->context, ib_port, user_param.gid_index, &gid);
+		if (err) {
+			return -1;
+		}
+		ctx->dgid=gid;
+		}
+
 	/* Create connection between client and server.
 	 * We do it by exchanging data over a TCP socket connection. */
 
 	my_dest.lid = pp_get_local_lid(ctx, ib_port);
 	my_dest.qpn = ctx->qp->qp_num;
 	my_dest.psn = lrand48() & 0xffffff;
-	if (!my_dest.lid) {
-		fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
-		return 1;
+	if (user_param.gid_index < 0) {/*We do not fail test upon lid in RDMA0E/Eth conf*/
+			if (!my_dest.lid) {
+				fprintf(stderr, "Local lid 0x0 detected. Is an SM running? If you are running on an RMDAoE interface you must use GIDs\n");
+			return 1;
+		}
 	}
+	my_dest.dgid = gid;
 	my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
 
@@ -788,17 +927,26 @@ int main(int argc, char *argv[])
 	       "RKey %#08x VAddr %#016Lx\n",
 	       my_dest.lid, my_dest.qpn, my_dest.psn,
 	       my_dest.rkey, my_dest.vaddr);
+	if (user_param.gid_index > -1) {
+		printf("                  GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+		my_dest.dgid.raw[0],my_dest.dgid.raw[1],
+		my_dest.dgid.raw[2], my_dest.dgid.raw[3], my_dest.dgid.raw[4],
+		my_dest.dgid.raw[5], my_dest.dgid.raw[6], my_dest.dgid.raw[7],
+		my_dest.dgid.raw[8], my_dest.dgid.raw[9], my_dest.dgid.raw[10],
+		my_dest.dgid.raw[11], my_dest.dgid.raw[12], my_dest.dgid.raw[13],
+		my_dest.dgid.raw[14], my_dest.dgid.raw[15]);
+	}
 
 	if (user_param.servername) {
 		sockfd = pp_client_connect(user_param.servername, port);
 		if (sockfd < 0)
 			return 1;
-		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_client_exch_dest(sockfd, &my_dest, &user_param);
 	} else {
 		sockfd = pp_server_connect(port);
 		if (sockfd < 0)
 			return 1;
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_server_exch_dest(sockfd, &my_dest, &user_param);
 	}
 
 	if (!rem_dest)
@@ -808,6 +956,15 @@ int main(int argc, char *argv[])
 	       "RKey %#08x VAddr %#016Lx\n",
 	       rem_dest->lid, rem_dest->qpn, rem_dest->psn,
 	       rem_dest->rkey, rem_dest->vaddr);
+	if (user_param.gid_index > -1) {
+		printf("                  GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+		rem_dest->dgid.raw[0],rem_dest->dgid.raw[1],
+		rem_dest->dgid.raw[2], rem_dest->dgid.raw[3], rem_dest->dgid.raw[4],
+		rem_dest->dgid.raw[5], rem_dest->dgid.raw[6], rem_dest->dgid.raw[7],
+		rem_dest->dgid.raw[8], rem_dest->dgid.raw[9], rem_dest->dgid.raw[10],
+		rem_dest->dgid.raw[11], rem_dest->dgid.raw[12], rem_dest->dgid.raw[13],
+		rem_dest->dgid.raw[14], rem_dest->dgid.raw[15]);
+	}
 
 	if (pp_connect_ctx(ctx, ib_port, my_dest.psn, rem_dest, &user_param))
 		return 1;
@@ -815,9 +972,9 @@ int main(int argc, char *argv[])
 	/* An additional handshake is required *after* moving qp to RTR.
 	   Arbitrarily reuse exch_dest for this purpose. */
 	if (user_param.servername)
-		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_client_exch_dest(sockfd, &my_dest, &user_param);
 	else
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_server_exch_dest(sockfd, &my_dest, &user_param);
 
 	if (!rem_dest)
 		return 1;
@@ -826,7 +983,7 @@ int main(int argc, char *argv[])
 	/* For half duplex tests, server just waits for client to exit */
 
 	if (!user_param.servername && !duplex) {
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_server_exch_dest(sockfd, &my_dest, &user_param);
 		if (write(sockfd, "done", sizeof "done") != sizeof "done"){
 			perror("server write");
 			fprintf(stderr, "Couldn't write to socket\n");
@@ -873,9 +1030,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (user_param.servername)
-		rem_dest = pp_client_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_client_exch_dest(sockfd, &my_dest, &user_param);
 	else
-		rem_dest = pp_server_exch_dest(sockfd, &my_dest);
+		rem_dest = pp_server_exch_dest(sockfd, &my_dest, &user_param);
 
 	if (write(sockfd, "done", sizeof "done") != sizeof "done"){
 		perror("server write");

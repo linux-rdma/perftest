@@ -82,6 +82,7 @@ struct user_parameters {
 	int inline_size;
 	int use_mcg;
 	int qp_timeout;
+	int gid_index; /* if value not negative, we use gid AND gid_index=value */
 };
 
 struct report_options {
@@ -109,6 +110,7 @@ struct pingpong_context {
 	volatile char      *poll_buf;
 	int                 size;
 	int                 tx_depth;
+	union ibv_gid       dgid;
 };
 
 struct pingpong_dest {
@@ -117,6 +119,7 @@ struct pingpong_dest {
 	int qpn;
 	int psn;
 	unsigned int rkey;
+	union ibv_gid       dgid;
 };
 
 
@@ -152,13 +155,33 @@ static struct ibv_device *pp_find_dev(const char *ib_devname) {
 
 #define KEY_MSG_SIZE (sizeof "0000:000000:000000:00000000:0000000000000000")
 #define KEY_PRINT_FMT "%04x:%06x:%06x:%08x:%016Lx"
+#define KEY_MSG_SIZE_GID (sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00")
+#define KEY_PRINT_FMT_GID "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
 
-static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest)
+static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
 {
-	char msg[KEY_MSG_SIZE];
+	if (user_parm->gid_index < 0) {
+		char msg[KEY_MSG_SIZE];
 
-	sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
-		my_dest->psn, my_dest->rkey, my_dest->vaddr);
+		sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
+			my_dest->psn, my_dest->rkey, my_dest->vaddr);
+
+		if (write(sockfd, msg, sizeof msg) != sizeof msg) {
+			perror("client write");
+			fprintf(stderr, "Couldn't send local address\n");
+			return -1;
+		}
+
+		return 0;
+	} else {
+	char msg[KEY_MSG_SIZE_GID];
+
+		sprintf(msg, KEY_PRINT_FMT_GID, my_dest->lid, my_dest->qpn,
+			my_dest->psn, my_dest->rkey, my_dest->vaddr,
+			my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2], my_dest->dgid.raw[3],
+			my_dest->dgid.raw[4], my_dest->dgid.raw[5], my_dest->dgid.raw[6], my_dest->dgid.raw[7],
+			my_dest->dgid.raw[8], my_dest->dgid.raw[9], my_dest->dgid.raw[10], my_dest->dgid.raw[11],
+			my_dest->dgid.raw[12], my_dest->dgid.raw[13], my_dest->dgid.raw[14], my_dest->dgid.raw[15]);
 
 	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
 		perror("client write");
@@ -167,30 +190,84 @@ static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest)
 	}
 
 	return 0;
+	}
 }
 
 static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
-			struct pingpong_dest *rem_dest)
+			struct pingpong_dest *rem_dest, struct user_parameters *user_parm)
 {
-	int parsed;
-	char msg[KEY_MSG_SIZE];
+	if (user_parm->gid_index < 0) {
+		int parsed;
+		char msg[KEY_MSG_SIZE];
 
-	if (read(sockfd, msg, sizeof msg) != sizeof msg) {
-		perror("pp_read_keys");
-		fprintf(stderr, "Couldn't read remote address\n");
-		return -1;
+		if (read(sockfd, msg, sizeof msg) != sizeof msg) {
+			perror("pp_read_keys");
+			fprintf(stderr, "Couldn't read remote address\n");
+			return -1;
+		}
+
+		parsed = sscanf(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
+				&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+
+		if (parsed != 5) {
+			fprintf(stderr, "Couldn't parse line <%.*s>\n",
+				(int)sizeof msg, msg);
+			return -1;
+		}
+
+		return 0;
+	} else {
+		char msg[KEY_MSG_SIZE_GID];
+		if (read(sockfd, msg, sizeof msg) != sizeof msg) {
+			perror("pp_read_keys");
+			fprintf(stderr, "Couldn't read remote address\n");
+			return -1;
+		}
+		char *pstr = msg, *term;
+		char tmp[20];
+		int i;
+
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->qpn = (int)strtol(tmp, NULL, 16); // QPN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->psn = (int)strtol(tmp, NULL, 16); // PSN
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
+
+		for (i = 0; i < 15; ++i) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr);
+			tmp[term - pstr] = 0;
+			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
+			}
+		pstr += term - pstr + 1;
+		strcpy(tmp, pstr);
+		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
+		return 0;
 	}
-
-	parsed = sscanf(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
-
-	if (parsed != 5) {
-		fprintf(stderr, "Couldn't parse line <%.*s>\n",
-			(int)sizeof msg, msg);
-		return -1;
-	}
-
-	return 0;
 }
 
 static int pp_client_connect(const char *servername, int port)
@@ -235,12 +312,12 @@ static int pp_client_connect(const char *servername, int port)
 }
 
 static int pp_client_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
-			       struct pingpong_dest *rem_dest)
+			       struct pingpong_dest *rem_dest, struct user_parameters *user_parm)
 {
-	if (pp_write_keys(sockfd, my_dest))
+	if (pp_write_keys(sockfd, my_dest, user_parm))
 		return -1;
 
-	return pp_read_keys(sockfd, my_dest, rem_dest);
+	return pp_read_keys(sockfd, my_dest, rem_dest, user_parm);
 }
 
 static int pp_server_connect(int port)
@@ -300,13 +377,13 @@ static int pp_server_connect(int port)
 }
 
 static int pp_server_exch_dest(int sockfd, const struct pingpong_dest *my_dest,
-			       struct pingpong_dest* rem_dest)
+			       struct pingpong_dest* rem_dest, struct user_parameters *user_parm)
 {
 
-	if (pp_read_keys(sockfd, my_dest, rem_dest))
+	if (pp_read_keys(sockfd, my_dest, rem_dest, user_parm))
 		return -1;
 
-	return pp_write_keys(sockfd, my_dest);
+	return pp_write_keys(sockfd, my_dest, user_parm);
 }
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
@@ -351,7 +428,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			fprintf(stderr, "Failed to query device props");
 			return NULL;
 		}
-		if (device_attr.vendor_part_id == 23108) {
+		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1) {
 			user_parm->mtu = 1024;
 		} else {
 			user_parm->mtu = 2048;
@@ -522,9 +599,16 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.min_rnr_timer          = 12;
 	}
 
-	attr.ah_attr.is_global      = 0;
-	attr.ah_attr.dlid           = dest->lid;
-	attr.ah_attr.sl             = sl;
+	if (user_parm->gid_index < 0) {
+		attr.ah_attr.is_global      = 0;
+		attr.ah_attr.dlid           = dest->lid;
+		attr.ah_attr.sl             = sl;
+	} else {
+		attr.ah_attr.is_global      = 1;
+		attr.ah_attr.grh.dgid       = dest->dgid;
+		attr.ah_attr.grh.hop_limit  = 1;
+		attr.ah_attr.sl             = 0;
+	}
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = port;
 	if ((user_parm->connection_type==UD) && (user_parm->use_mcg)) {
@@ -538,9 +622,6 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.ah_attr.is_global  = 1;
 		attr.ah_attr.grh.sgid_index = 0;
 		memcpy(attr.ah_attr.grh.dgid.raw, mcg_gid, 16);
-	} else {
-		attr.ah_attr.dlid       = dest->lid;
-		attr.ah_attr.is_global  = 0;
 	}
 
 	if (user_parm->connection_type==RC) {
@@ -637,6 +718,7 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername,
 	struct pingpong_dest  my_dest;
 	int                   sockfd;
 	int                   rc;
+	union ibv_gid         gid;
 
 
 	/* Create connection between client and server.
@@ -645,14 +727,34 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername,
 	my_dest.lid = pp_get_local_lid(ctx, ib_port);
 	my_dest.qpn = ctx->qp->qp_num;
 	my_dest.psn = lrand48() & 0xffffff;
-	if (!my_dest.lid) {
-		fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
-		return -1;
+	if (user_parm->gid_index < 0) {/*We do not fail test upon lid in RDMA0E/Eth conf*/
+		if (!my_dest.lid) {
+			fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
+			return -1;
+		}
 	}
+	if (user_parm->gid_index != -1) {
+		int err=0;
+		err = ibv_query_gid (ctx->context, ib_port, user_parm->gid_index, &gid);
+		if (err) {
+			return -1;
+		}
+		ctx->dgid=gid;
+	}
+	my_dest.dgid = gid;
 	my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
 
 	printf(addr_fmt, "local", my_dest.lid, my_dest.qpn, my_dest.psn);
+	if (user_parm->gid_index > -1) {
+		printf("                  GID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+		my_dest.dgid.raw[0],my_dest.dgid.raw[1],
+		my_dest.dgid.raw[2], my_dest.dgid.raw[3], my_dest.dgid.raw[4],
+		my_dest.dgid.raw[5], my_dest.dgid.raw[6], my_dest.dgid.raw[7],
+		my_dest.dgid.raw[8], my_dest.dgid.raw[9], my_dest.dgid.raw[10],
+		my_dest.dgid.raw[11], my_dest.dgid.raw[12], my_dest.dgid.raw[13],
+		my_dest.dgid.raw[14], my_dest.dgid.raw[15]);
+	}
 
 	sockfd = servername ? pp_client_connect(servername, port) :
 		pp_server_connect(port);
@@ -663,13 +765,22 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername,
 		return sockfd;
 	}
 
-	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest) :
-		pp_server_exch_dest(sockfd, &my_dest, rem_dest);
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest, user_parm) :
+		pp_server_exch_dest(sockfd, &my_dest, rem_dest, user_parm);
 	if (rc)
 		return rc;
 
 	printf(addr_fmt, "remote", rem_dest->lid, rem_dest->qpn, rem_dest->psn,
 	       rem_dest->rkey, rem_dest->vaddr);
+	if (user_parm->gid_index > -1) {
+		printf("                  GID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+		rem_dest->dgid.raw[0],rem_dest->dgid.raw[1],
+		rem_dest->dgid.raw[2], rem_dest->dgid.raw[3], rem_dest->dgid.raw[4],
+		rem_dest->dgid.raw[5], rem_dest->dgid.raw[6], rem_dest->dgid.raw[7],
+		rem_dest->dgid.raw[8], rem_dest->dgid.raw[9], rem_dest->dgid.raw[10],
+		rem_dest->dgid.raw[11], rem_dest->dgid.raw[12], rem_dest->dgid.raw[13],
+		rem_dest->dgid.raw[14], rem_dest->dgid.raw[15]);
+	}
 
 	if ((rc = pp_connect_ctx(ctx, ib_port, my_dest.psn, rem_dest,user_parm)))
 		return rc;
@@ -678,8 +789,8 @@ static int pp_open_port(struct pingpong_context *ctx, const char * servername,
 	 * Arbitrarily reuse exch_dest for this purpose.
 	 */
 
-	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest) :
-		pp_server_exch_dest(sockfd, &my_dest, rem_dest);
+	rc = servername ? pp_client_exch_dest(sockfd, &my_dest, rem_dest, user_parm) :
+		pp_server_exch_dest(sockfd, &my_dest, rem_dest, user_parm);
 
 	if (rc)
 		return rc;
@@ -714,6 +825,7 @@ static void usage(const char *argv0)
 	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
 	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -S, --sl=<sl>                SL (default 0)\n");
+	printf("  -x, --gid-index=<index>   test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
 	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
 	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
@@ -814,7 +926,11 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 
 	if (user_param->connection_type==UD) {
 		if (size > 2048) {
-			size = 2048;
+			if (user_param->gid_index < 0) {
+				size = 2048;
+			} else {
+				size = 1024;
+			}
 		}
 	}
 
@@ -1011,6 +1127,7 @@ int main(int argc, char *argv[])
 	user_param.inline_size = MAX_INLINE;
 	user_param.signal_comp = 0;
 	user_param.qp_timeout = 14;
+	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -1027,6 +1144,7 @@ int main(int argc, char *argv[])
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
 			{ .name = "sl",             .has_arg = 1, .val = 'S' },
+			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
 			{ .name = "signal",         .has_arg = 0, .val = 'l' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
@@ -1038,7 +1156,7 @@ int main(int argc, char *argv[])
 			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:laeCHUVgF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:laeCHUVgF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1092,6 +1210,14 @@ int main(int argc, char *argv[])
 			size = strtol(optarg, NULL, 0);
 			if (size < 1) {
 				usage(argv[0]); return 3;
+			}
+			break;
+
+		case 'x':
+			user_param.gid_index = strtol(optarg, NULL, 0);
+			if (user_param.gid_index > 63) {
+				usage(argv[0]);
+				return 1;
 			}
 			break;
 
@@ -1179,9 +1305,20 @@ int main(int argc, char *argv[])
 	} else {
 		printf("Connection type : UD\n");
 	}
+	if (user_param.gid_index > -1) {
+		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
+	}
 	if (user_param.all == 1) {
 		/*since we run all sizes lets allocate big enough buffer */
 		size = 8388608; /*2^23 */
+	}
+	if (user_param.connection_type == UD && size > 2048) {
+		printf("Max msg size in UD is 2048 changing to 2048\n");
+		size = 2048;
+	}
+	if (user_param.connection_type == UD && user_param.gid_index > -1 && size > 1024) {
+		printf("Max msg size in UD RDMAoE is 1024. changing to 1024\n");
+		size = 1024;
 	}
 
 	srand48(getpid() * time(NULL));
@@ -1214,7 +1351,11 @@ int main(int argc, char *argv[])
     
 	if (user_param.all == 1) {
 		if (user_param.connection_type==UD) {
-			size_max_pow = 12;
+			if (user_param.gid_index < 0) {
+				size_max_pow = 12;
+			} else {
+				size_max_pow = 11;
+			}
 		}
 		for (i = 1; i < size_max_pow ; ++i) {
 			size = 1 << i;
