@@ -144,12 +144,20 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 	while(fgets(buf, sizeof(buf), f)) {
 		double m;
 		int rc;
+
+#if defined (__ia64__)
+		/* Use the ITC frequency on IA64 */
+		rc = sscanf(buf, "itc MHz : %lf", &m);
+#elif defined (__PPC__) || defined (__PPC64__)
+		/* PPC has a different format as well */
+		rc = sscanf(buf, "clock : %lf", &m);
+#else
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
-		if (rc != 1) {	/* PPC has a different format */
-			rc = sscanf(buf, "clock : %lf", &m);
-			if (rc != 1)
-				continue;
-		}
+#endif
+
+		if (rc != 1)
+			continue;
+
 		if (mhz == 0.0) {
 			mhz = m;
 			continue;
