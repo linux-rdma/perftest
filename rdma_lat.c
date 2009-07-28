@@ -207,6 +207,7 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 	char *service;
 	int n;
 	int sockfd = -1;
+	int n_retries = 10;
 	struct rdma_cm_event *event;
 	struct sockaddr_in sin;
 	struct pingpong_context *ctx = NULL;
@@ -228,6 +229,7 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 		sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(data->port);
+retry_addr:
 		if (rdma_resolve_addr(data->cm_id, NULL,
 					 (struct sockaddr *)&sin, 2000)) {
 			fprintf(stderr, "%d:%s: rdma_resolve_addr failed\n",
@@ -238,6 +240,12 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 		if (rdma_get_cm_event(data->cm_channel, &event)) 
 			goto err2;
 
+		if (event->event == RDMA_CM_EVENT_ADDR_ERROR
+		 && n_retries-- > 0) {
+			rdma_ack_cm_event(event);
+			goto retry_addr;
+		}
+
 		if (event->event != RDMA_CM_EVENT_ADDR_RESOLVED) {
 			fprintf(stderr, "%d:%s: unexpected CM event %d\n", 
 				pid, __func__, event->event);
@@ -245,6 +253,7 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 		}
 		rdma_ack_cm_event(event);
 	
+retry_route:
 		if (rdma_resolve_route(data->cm_id, 2000)) {
 			fprintf(stderr, "%d:%s: rdma_resolve_route failed\n", 
 						pid, __func__);
@@ -253,6 +262,12 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 	
 		if (rdma_get_cm_event(data->cm_channel, &event))
 			goto err2;
+
+		if (event->event == RDMA_CM_EVENT_ROUTE_ERROR
+		 && n_retries-- > 0) {
+			rdma_ack_cm_event(event);
+			goto retry_route;
+		}
 
 		if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
 			fprintf(stderr, "%d:%s: unexpected CM event %d\n", 
