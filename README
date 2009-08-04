@@ -124,6 +124,7 @@ Common Options to all tests:
   -a, --all                    run sizes from 2 till 2^23
   -t, --tx-depth=<dep>         size of tx queue (default: 50)
   -n, --iters=<iters>          number of exchanges (at least 100, default: 1000)
+  -S, --sl=<sl>                SL (default 0)
   -C, --report-cycles          report times in cpu cycle units
 					(default: microseconds)
   -H, --report-histogram       print out all results
