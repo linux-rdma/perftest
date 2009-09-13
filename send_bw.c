@@ -82,7 +82,6 @@ struct user_parameters {
 	int duplex;
 	int use_event;
 	int use_mcg;
-	int num_of_qps;
 	int inline_size;
 	int qp_timeout;
 	int gid_index; /* if value not negative, we use gid AND gid_index=value */
@@ -98,7 +97,7 @@ struct pingpong_context {
 	struct ibv_pd      *pd;
 	struct ibv_mr      *mr;
 	struct ibv_cq      *cq;
-	struct ibv_qp      **qp;
+	struct ibv_qp      *qp;
 	void               *buf;
 	unsigned            size;
 	int                 tx_depth;
@@ -497,8 +496,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	}
 	{
 		struct ibv_qp_init_attr attr;
-		int i;
-
 		memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
 		attr.send_cq = ctx->cq;
 		attr.recv_cq = ctx->cq; 
@@ -523,24 +520,18 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			fprintf(stderr, "Unknown connection type %d \n",user_parm->connection_type);
 			return NULL;
 		}
-		ctx->qp = malloc(sizeof(struct ibv_qp*)*user_parm.num_of_pqs);
-		if (ctx->qp == NULL) {
+		/*attr.sq_sig_all = 0;*/
+
+		ctx->qp = ibv_create_qp(ctx->pd, &attr);
+		if (!ctx->qp)  {
+			fprintf(stderr, "Couldn't create QP\n");
 			return NULL;
 		}
 
-		for (i=0; i < user_parm.num_of_qps; i++ ) {
-			ctx->qp[i] = ibv_create_qp(ctx->pd, &attr);
-			if (!ctx->qp[i])  {
-				fprintf(stderr, "Couldn't create QP\n");
-				return NULL;
-			}
-		}
-		
 	}
 
 	{
 		struct ibv_qp_attr attr;
-		int i;
 
 		attr.qp_state        = IBV_QPS_INIT;
 		attr.pkey_index      = 0;
@@ -551,8 +542,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 
 		if (user_parm->connection_type==UD) {
-			for (i=0; i < user_parm.num_of_qps; i++ ) {
-				if (ibv_modify_qp(ctx->qp[i], &attr,
+			if (ibv_modify_qp(ctx->qp, &attr,
 					  IBV_QP_STATE              |
 					  IBV_QP_PKEY_INDEX         |
 					  IBV_QP_PORT               |
@@ -560,32 +550,22 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 				fprintf(stderr, "Failed to modify UD QP to INIT\n");
 				return NULL;
 			}
-			
-			}
 
 			if ((user_parm->use_mcg) && (!user_parm->servername || user_parm->duplex)) {
-				union ibv_gid *gid;
-				uint8_t mcg_gid[16];
+				union ibv_gid gid;
+				uint8_t mcg_gid[16] = MCG_GID;
 
-				gid = malloc(sizeof(union ibv_gid)*user_parm.num_of_qps);
-				if (ctx->qp == NULL) {
-					return NULL;
-				}
 				/* use the local QP number as part of the mcg */
 				mcg_gid[11] = (user_parm->servername) ? 0 : 1;
-				for (i=0; i < user_parm.num_of_qps; i++) {
-					uint8_t mcg_gid[16] = MCG_GID;
-					*(uint32_t *)(&mcg_gid[12]) = ctx->qp[i]->qp_num;
-					memcpy(gid[i].raw, mcg_gid, 16);
-					if (ibv_attach_mcast(ctx->qp[i], &gid[i], MCG_LID)) {
-						fprintf(stderr, "Couldn't attach QP to mcg\n");
-						return NULL;
-					}
-				}
+				*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
+				memcpy(gid.raw, mcg_gid, 16);
 
-				
+				if (ibv_attach_mcast(ctx->qp, &gid, MCG_LID)) {
+					fprintf(stderr, "Couldn't attach QP to mcg\n");
+					return NULL;
+				}
 			}
-		} else if (ibv_modify_qp(ctx->qp[0], &attr,
+		} else if (ibv_modify_qp(ctx->qp, &attr,
 					 IBV_QP_STATE              |
 					 IBV_QP_PKEY_INDEX         |
 					 IBV_QP_PORT               |
@@ -1095,7 +1075,6 @@ int main(int argc, char *argv[])
 	user_param.servername = NULL;
 	user_param.use_event = 0;
 	user_param.duplex = 0;
-	user_param.num_of_qps = 1;
 	user_param.inline_size = MAX_INLINE;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
@@ -1144,7 +1123,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'g':
 			++user_param.use_mcg;
-			user_param.num_of_pqs=2;
 			break;
 		case 'd':
 			ib_devname = strdupa(optarg);
@@ -1331,10 +1309,8 @@ int main(int argc, char *argv[])
 	 * We do it by exchanging data over a TCP socket connection. */
 
 	my_dest.lid = pp_get_local_lid(ctx, ib_port);
+	my_dest.qpn = ctx->qp->qp_num;
 	my_dest.psn = lrand48() & 0xffffff;
-	if (!user_param.use_mcg) {	
-		my_dest.qpn = ctx->qp->qp_num;
-	}
 	if (user_param.gid_index != -1) {
 		int err=0;
 		err = ibv_query_gid (ctx->context, ib_port, user_param.gid_index, &gid);
@@ -1350,7 +1326,7 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
-	user_param.use_mcg ? my_dest.dgid = MCG_GID : gid;
+	my_dest.dgid = gid;
 	my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + size;
 	printf("  local address:  LID %#04x, QPN %#06x, PSN %#06x\n",
