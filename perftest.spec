@@ -23,8 +23,8 @@ export CFLAGS="$RPM_OPT_FLAGS"
 chmod -x runme
 
 %install
-install -D -m 0755 ib_rdma_lat $RPM_BUILD_ROOT%{_bindir}/ib_rdma_lat
-install -D -m 0755 ib_rdma_bw $RPM_BUILD_ROOT%{_bindir}/ib_rdma_bw
+install -D -m 0755 rdma_lat $RPM_BUILD_ROOT%{_bindir}/rdma_lat
+install -D -m 0755 rdma_bw $RPM_BUILD_ROOT%{_bindir}/rdma_bw
 install -D -m 0755 ib_write_lat $RPM_BUILD_ROOT%{_bindir}/ib_write_lat
 install -D -m 0755 ib_write_bw $RPM_BUILD_ROOT%{_bindir}/ib_write_bw
 install -D -m 0755 ib_send_lat $RPM_BUILD_ROOT%{_bindir}/ib_send_lat
@@ -43,6 +43,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sat Apr 18 2009 - hal.rosenstock@gmail.com
+- Change executable names for rdma_lat and rdma_bw
 * Mon Jul 09 2007 - hvogel@suse.de
 - Use correct version
 * Wed Jul 04 2007 - hvogel@suse.de
