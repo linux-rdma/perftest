@@ -1448,9 +1448,10 @@ int main(int argc, char *argv[])
 				if(run_iter_uni(ctx, &user_param, rem_dest, size))
 					return 17;
 			}
-			if (user_param.servername) {
+			if (user_param.servername || user_param.duplex)
 				print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
-				/* sync again for the sake of UC/UC */
+			if (user_param.servername) {
+				/* sync again for the sake of UC/UD */
 				rem_dest = pp_client_exch_dest(sockfd, &my_dest, &user_param);
 			} else
 				rem_dest = pp_server_exch_dest(sockfd, &my_dest, &user_param);
