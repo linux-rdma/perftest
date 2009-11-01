@@ -526,7 +526,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 {
 	struct pingpong_context *ctx;
 	struct ibv_device *ib_dev;
-	struct rdma_cm_id *cm_id;
+	struct rdma_cm_id *cm_id = NULL;
 
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
