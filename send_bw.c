@@ -1466,7 +1466,7 @@ int main(int argc, char *argv[])
 				return 18;
 		}
 
-		if (user_param.servername)
+		if (user_param.servername || user_param.duplex)
 			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 	}
 
