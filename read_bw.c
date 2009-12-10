@@ -56,8 +56,9 @@
 
 #include "get_clock.h"
 
+#define MAX_OUTSTANDING_READ 16
 #define PINGPONG_READ_WRID	1
-#define VERSION 1.1
+#define VERSION 1.2
 #define ALL 1
 #define RC 0
 
@@ -402,7 +403,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
-
 	ctx->buf = memalign(page_size, size * 2);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
@@ -578,7 +578,7 @@ static void usage(const char *argv0)
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
 	printf("  -m, --mtu=<mtu>        mtu size (256 - 4096. default for hermon is 2048)\n");
-	printf("  -o, --outs=<num>       num of outstanding read/atom(default 4)\n");
+	printf("  -o, --outs=<num>       num of outstanding read/atom(default 16)\n");
 	printf("  -s, --size=<size>      size of message to exchange (default 65536)\n");
 	printf("  -a, --all              Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
@@ -730,7 +730,7 @@ int main(int argc, char *argv[])
 	user_param.tx_depth = 100;
 	user_param.servername = NULL;
 	user_param.use_event = 0;
-	user_param.max_out_read = 4; /* the device capability on gen2 */
+	user_param.max_out_read = MAX_OUTSTANDING_READ; /* the device capability on gen2 */
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
