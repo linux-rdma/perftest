@@ -65,18 +65,19 @@
 #define RC 0
 #define UC 1
 #define UD 3
-#define VERSION 1.1
+#define VERSION 1.2
 #define SIGNAL 1
 #define MAX_INLINE 400
 #define ALL 1
-#define MAX_POLL_ITERATION_TIMEOUT 1000000
+#define MAX_POLL_ITERATION_TIMEOUT 100000000
 #define QPNUM_MCAST 0xffffff
 #define DEF_QKEY 0x11111111
 #define MCG_LID 0xc001
-#define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
+#define MCG_GID {255,1,0,0,0,2,201,133,0,0,1,1,0,0,0,0}
 
 struct user_parameters {
 	const char *servername;
+	const char *user_mgid;
 	int connection_type;
 	int mtu;
 	int all; /* run all msg size */
@@ -87,6 +88,7 @@ struct user_parameters {
 	int duplex;
 	int use_event;
 	int use_mcg;
+	int use_user_mgid;
 	int num_of_clients_mcg;
 	int inline_size;
 	int qp_timeout;
@@ -135,6 +137,38 @@ struct mcg_qp {
 	cycles_t *completion_array;		 
 };
 
+
+/*
+ *
+ */
+static int set_multicast_gid(struct pingpong_context *ctx,struct user_parameters *param) {
+
+	uint8_t mcg_gid[16] = MCG_GID;
+	const char *pstr = param->user_mgid;
+	char *term = NULL;
+	char tmp[20];
+	int i;
+
+	if (param->use_user_mgid) {
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr+1);
+		tmp[term - pstr] = 0;
+		mcg_gid[0] = (unsigned char)strtoll(tmp, NULL, 0);
+		for (i = 1; i < 15; ++i) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr+1);
+			tmp[term - pstr] = 0;
+			mcg_gid[i] = (unsigned char)strtoll(tmp, NULL, 0);
+		}
+		pstr += term - pstr + 1;
+		strcpy(tmp, pstr);
+		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
+	}
+	memcpy(ctx->dgid.raw,mcg_gid,16);
+	return 0;
+}
+
 /*
  *
  */
@@ -179,9 +213,7 @@ qp_create(struct pingpong_context *ctx, struct user_parameters *param) {
 				fprintf(stderr, "Couldn't create QP\n");
 				return 1;
 			}
-			printf(" QP No.%d   -  %#06x \n" ,i ,ctx->qp_mcg[i].qp->qp_num);
 		}
-		putchar('\n');
 	}
 	else {
 		ctx->qp = ibv_create_qp(ctx->pd, &attr);
@@ -232,8 +264,6 @@ static int destroy_ctx_resources(struct pingpong_context *ctx,
 
 	int i;
 	int test_result = 0;
-	union ibv_gid gid;
-	uint8_t mcg_gid[16] = MCG_GID;
 
 	if (ctx->ah) {
 		if (ibv_destroy_ah(ctx->ah)) {
@@ -241,16 +271,10 @@ static int destroy_ctx_resources(struct pingpong_context *ctx,
 			test_result = 1;
 		}
 	}
-
 	if (param->use_mcg && !param->servername) {
-
-		mcg_gid[11] = 0;
-		*(uint32_t *)(&mcg_gid[12]) = ctx->qp_mcg[0].qp->qp_num;
-		memcpy(gid.raw, mcg_gid, 16);
-
 		for(i=0; i < param->num_of_clients_mcg; i++) {
 
-			if (ibv_detach_mcast(ctx->qp_mcg[i].qp, &gid,MCG_LID)) {
+			if (ibv_detach_mcast(ctx->qp_mcg[i].qp, &ctx->dgid,MCG_LID)) {
 				fprintf(stderr, "failed to deatttached QP\n");
 				test_result = 1;
 			}
@@ -268,7 +292,6 @@ static int destroy_ctx_resources(struct pingpong_context *ctx,
 			test_result = 1;
 		}
 	}
-
 	if (ctx->mr) {
 		if (ibv_dereg_mr(ctx->mr)) {
 			fprintf(stderr, "failed to deregister MR\n");
@@ -285,14 +308,18 @@ static int destroy_ctx_resources(struct pingpong_context *ctx,
 			test_result = 1;
 		}
 	}
-
+	if (ctx->channel) {
+		if (ibv_destroy_comp_channel(ctx->channel)) {
+			fprintf(stderr, "failed to destroy channel \n");
+			test_result = 1;
+		}
+	}
 	if (ctx->pd) {
 		if (ibv_dealloc_pd(ctx->pd)) {
 			fprintf(stderr, "failed to deallocate PD\n");
 			test_result = 1;
 		}
 	}
-
 	if (ctx->context) {
 		if (ibv_close_device(ctx->context)) {
 			fprintf(stderr, "failed to close device context\n");
@@ -638,18 +665,18 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 {
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
-	union ibv_gid gid;
-	uint8_t mcg_gid[16] = MCG_GID;
-	int i;
+	int i,cq_rx_depth;
 
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
 		return NULL;
 
 	ctx->ah       = NULL;
+	ctx->channel  = NULL;
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
 	ctx->rx_depth = rx_depth + tx_depth;
+	cq_rx_depth = ctx->rx_depth;
 	/* in case of UD need space for the GRH */
 	if (user_parm->connection_type==UD) {
 		ctx->buf = memalign(page_size, ( size + 40 ) * 2);
@@ -716,8 +743,10 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			return NULL;
 		}
 	}
-
-	ctx->cq = ibv_create_cq(ctx->context, ctx->rx_depth, NULL, ctx->channel, 0);
+	if (user_parm->use_mcg && !user_parm->servername) {
+		cq_rx_depth *= user_parm->num_of_clients_mcg;
+	}
+	ctx->cq = ibv_create_cq(ctx->context,cq_rx_depth, NULL, ctx->channel, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -728,22 +757,22 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	}
 
 	if (user_parm->use_mcg && !user_parm->servername) {
-
-		mcg_gid[11] = 0;
-		*(uint32_t *)(&mcg_gid[12]) = ctx->qp_mcg[0].qp->qp_num;
-		memcpy(gid.raw, mcg_gid, 16);
+		if (set_multicast_gid(ctx,user_parm)) {
+			fprintf(stderr, "Couldn't Set the Multicast M_GID\n");
+			return NULL;
+		}
 
 		for(i=0; i < user_parm->num_of_clients_mcg; i++) {
 			if (modify_qp_to_init(ctx->qp_mcg[i].qp,port,user_parm->connection_type)) {
 				fprintf(stderr, "Failed to modify UD QP to INIT\n");
 				return NULL;
 			}
-			if (ibv_attach_mcast(ctx->qp_mcg[i].qp,&gid,MCG_LID)) {
+			if (ibv_attach_mcast(ctx->qp_mcg[i].qp,&ctx->dgid,MCG_LID)) {
 				fprintf(stderr, "Couldn't attach QP to mcg\n");
 				return NULL;
 			}
 		}
-		
+		printf(" Successfully created and attached %d QPs to a Mcast group\n\n",i);
 	} else {
 		if (modify_qp_to_init(ctx->qp,port,user_parm->connection_type)) {
 				fprintf(stderr, "Failed to modify UD QP to INIT\n");
@@ -808,7 +837,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.ah_attr.dlid       = MCG_LID;
 		attr.ah_attr.is_global  = 1;
 		attr.ah_attr.grh.sgid_index = 0;
-		memcpy(attr.ah_attr.grh.dgid.raw, dest->dgid.raw, 16);
+		memcpy(attr.ah_attr.grh.dgid.raw,dest->dgid.raw, 16);
 	}
 
 	if (user_parm->connection_type == RC) {
@@ -927,27 +956,29 @@ static void usage(const char *argv0)
 	printf("  %s <host>     connect to server at <host>\n", argv0);
 	printf("\n");
 	printf("Options:\n");
-	printf("  -p, --port=<port>           listen on/connect to port <port> (default 18515)\n");
-	printf("  -d, --ib-dev=<dev>          use IB device <dev> (default first device found)\n");
-	printf("  -i, --ib-port=<port>        use port <port> of IB device (default 1)\n");
-	printf("  -c, --connection=<RC/UC/UD> connection type RC/UC/UD (default RC)\n");
-	printf("  -m, --mtu=<mtu>             mtu size (256 - 4096. default for hermon is 2048)\n");
-	printf("  -s, --size=<size>           size of message to exchange (default 65536)\n");
+	printf("  -p, --port=<port>           Listen on/connect to port <port> (default 18515)\n");
+	printf("  -d, --ib-dev=<dev>          Use IB device <dev> (default first device found)\n");
+	printf("  -i, --ib-port=<port>        Use port <port> of IB device (default 1)\n");
+	printf("  -c, --connection=<RC/UC/UD> Connection type RC/UC/UD (default RC)\n");
+	printf("  -m, --mtu=<mtu>             Mtu size (256 - 4096. default for hermon is 2048)\n");
+	printf("  -s, --size=<size>           Size of message to exchange (default 65536)\n");
 	printf("  -a, --all                   Run sizes from 2 till 2^23\n");
-	printf("  -t, --tx-depth=<dep>        size of tx queue (default 300)\n");
-	printf("  -g, --mcg=<num_of_qps>      Send the message to a multi cast group with <num_of_qps> qps> \n");
-	printf("							  attached to it ( Rate kine results will be on recv side.\n");
-	printf("  -r, --rx-depth=<dep>        make rx queue bigger than tx (default 600)\n");
-	printf("  -n, --iters=<iters>         number of exchanges (at least 2, default 1000)\n");
-	printf("  -I, --inline_size=<size>    max size of message to be sent in inline mode (default 400)\n");
-	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
+	printf("  -t, --tx-depth=<dep>        Size of tx queue (default 300)\n");
+	printf("  -g, --mcg=<num_of_qps>      Send messages to multicast group with <num_of_qps> qps attached to it.\n");
+	printf("  -r, --rx-depth=<dep>        Make rx queue bigger than tx (default 600)\n");
+	printf("  -n, --iters=<iters>         Number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>    Max size of message to be sent in inline mode (default 1)\n");
+	printf("  -u, --qp-timeout=<timeout>  QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -S, --sl=<sl>               SL (default 0)\n");
-	printf("  -x, --gid-index=<index>   test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
-	printf("  -b, --bidirectional         measure bidirectional bandwidth (default unidirectional)\n");
-	printf("  -V, --version               display version number\n");
-	printf("  -e, --events                sleep on CQ events (default poll)\n");
-	printf("  -N, --no peak-bw            cancel peak-bw calculation (default with peak-bw)\n");
-	printf("  -F, --CPU-freq              do not fail even if cpufreq_ondemand module is loaded\n");
+	printf("  -x, --gid-index=<index>     Test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
+	printf("  -b, --bidirectional         Measure bidirectional bandwidth (default unidirectional)\n");
+	printf("  -V, --version               Display version number\n");
+	printf("  -e, --events                Sleep on CQ events (default poll)\n");
+	printf("  -N, --no peak-bw            Cancel peak-bw calculation (default with peak-bw)\n");
+	printf("  -F, --CPU-freq              Do not fail even if cpufreq_ondemand module is loaded\n");
+	printf("  -M, --MGID=<multicast_gid>  In case of multicast, uses <multicast_gid> as the group MGID.\n");
+	printf("                              The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
+	printf("                              You should specify it on the server.\n");
 }
 
 /*
@@ -1279,35 +1310,57 @@ int run_iter_uni(struct pingpong_context *ctx,
 	}
 	else {
 		/* client is posting and not receiving. */
-		while (scnt < user_param->tx_depth) {
-			tposted[scnt++] = get_cycles();
-			if (ibv_post_send(ctx->qp, &ctx->wr, &bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
-				return 1;
-			}
-		}
-		while (ccnt < user_param->iters) {
-			ne = ibv_poll_cq(ctx->cq, 1, &wc);
-			if (ne > 0) {
-				if (wc.status != IBV_WC_SUCCESS) {
-					fprintf(stderr, "Completion wth error at %s:\n",user_param->servername ? "client" : "server");
-					fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",wc.status, (int) wc.wr_id, wc.vendor_err);
-					fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);
+		while (scnt < user_param->iters || ccnt < user_param->iters) {
+			while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
+				tposted[scnt] = get_cycles();
+				if (ibv_post_send(ctx->qp, &ctx->wr, &bad_wr)) {
+					fprintf(stderr, "Couldn't post send: scnt=%d\n",
+						scnt);
 					return 1;
-				}	
-				tcompleted[ccnt++] = get_cycles();
-				if (scnt < user_param->iters) {
-					tposted[scnt++] = get_cycles();
-					if (ibv_post_send(ctx->qp, &ctx->wr, &bad_wr)) {
-						fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
+				}
+				++scnt;
+			}
+			if (ccnt < user_param->iters) {
+				struct ibv_wc wc;
+				int ne;
+				if (user_param->use_event) {
+					struct ibv_cq *ev_cq;
+					void          *ev_ctx;
+					if (ibv_get_cq_event(ctx->channel, &ev_cq, &ev_ctx)) {
+						fprintf(stderr, "Failed to get cq_event\n");
+						return 1;
+					}                
+					if (ev_cq != ctx->cq) {
+						fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
 						return 1;
 					}
+					if (ibv_req_notify_cq(ctx->cq, 0)) {
+						fprintf(stderr, "Couldn't request CQ notification\n");
+						return 1;
+					}
+				} 
+				for (;;) {
+					ne = ibv_poll_cq(ctx->cq, 1, &wc);
+					if (ne <= 0)
+						break;
+
+					tcompleted[ccnt] = get_cycles();
+					if (wc.status != IBV_WC_SUCCESS) {
+						fprintf(stderr, "Completion wth error at %s:\n",
+							user_param->servername ? "client" : "server");
+						fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
+							wc.status, (int) wc.wr_id, wc.vendor_err);
+						fprintf(stderr, "scnt=%d, ccnt=%d\n",
+							scnt, ccnt);
+						return 1;
+					}
+					ccnt += ne;
 				}
-				
-			}
-			else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
+
+				if (ne < 0) {
+					fprintf(stderr, "poll CQ failed %d\n", ne);
+					return 1;
+				}
 			}
 		}
 	}
@@ -1335,7 +1388,6 @@ int main(int argc, char *argv[])
 	struct ibv_context       *context;
 	int                      no_cpu_freq_fail = 0;
 	union ibv_gid            gid;
-	uint8_t mcg_gid[16] = MCG_GID;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
@@ -1344,6 +1396,7 @@ int main(int argc, char *argv[])
 	user_param.iters = 1000;
 	user_param.tx_depth = 300;
 	user_param.servername = NULL;
+	user_param.user_mgid = NULL;
 	user_param.use_event = 0;
 	user_param.duplex = 0;
 	user_param.inline_size = MAX_INLINE;
@@ -1368,6 +1421,7 @@ int main(int argc, char *argv[])
 			{ .name = "sl",             .has_arg = 1, .val = 'S' },
 			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
 			{ .name = "mcg",            .has_arg = 1, .val = 'g' },
+			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
@@ -1377,7 +1431,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:u:S:x:g:ebaVNF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:c:s:n:t:I:r:u:S:x:g:M:ebaVNF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1399,6 +1453,10 @@ int main(int argc, char *argv[])
 				usage(argv[0]);
 				return 1;
 			}
+			break;
+		case 'M' :
+			user_param.use_user_mgid = 1;
+			user_param.user_mgid = strdupa(optarg);
 			break;
 		case 'd':
 			ib_devname = strdupa(optarg);
@@ -1508,18 +1566,18 @@ int main(int argc, char *argv[])
 
 	printf("------------------------------------------------------------------\n");
 
-    if (user_param.use_mcg && user_param.connection_type != UD) {
-        printf(" Multi cast Feature only availible with UD connection type\n");
-        return 1;
-    }
+	if (user_param.use_mcg && user_param.duplex) {
+		printf("Bidirectional connection in Multicast mode is not available yet\n");
+		return 1;
+	}
 
-	if (user_param.duplex == 1 && (!user_param.use_mcg))
+    if (user_param.use_mcg) {
+		user_param.connection_type = UD;
+        printf("                    Send BW  -  Multicast Test\n");
+    }
+	else if (user_param.duplex == 1)
 		printf("                    Send Bidirectional BW Test\n");
-	else if (user_param.duplex == 1 && user_param.use_mcg)
-		printf("                    Send Bidirectional BW  -  Multicast Test\n");
-	else if (!user_param.duplex == 1 && user_param.use_mcg )
-		printf("                    Send BW  -  Multicast Test\n");
-	else
+	else 
 		printf("                    Send BW Test\n");
 
 	if (user_param.connection_type == RC)
@@ -1612,24 +1670,17 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+	my_dest.dgid = ctx->dgid;
     my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + size;
 
 	printf(" local address:   LID %#04x,  PSN %#06x " ,my_dest.lid, my_dest.psn);
 
 	if (user_param.use_mcg && !user_param.servername)  {
-
-		mcg_gid[11] = 0;
-		*(uint32_t *)(&mcg_gid[12]) = ctx->qp_mcg[0].qp->qp_num;
-		memcpy(gid.raw, mcg_gid, 16);
 		printf("\n M_gid adress:  M_ "); 	   
-	}
-	else {
-
+	} else {
 		printf(" QPN %#06x\n" ,my_dest.qpn);
 	}
-
-	my_dest.dgid = gid;
 	if (user_param.gid_index > -1 || (user_param.use_mcg && !user_param.servername) ) {
 		printf("GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
 		my_dest.dgid.raw[0],my_dest.dgid.raw[1],
@@ -1692,11 +1743,11 @@ int main(int argc, char *argv[])
 		} 
 	}
     printf("--------------------------------------------------------------------------\n");
-	if (user_param.servername ) {
+	if (user_param.servername || user_param.duplex) {
 		printf(" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
 	}
-	else if (!user_param.servername && user_param.use_mcg) {
-		printf(" #bytes     #iterations   Packets Loss   BW Line Rate [MB/s] = Sum Qps's BW \n");
+	else if (user_param.use_mcg) {
+		printf(" #bytes     #iterations   Packets Loss   Aggregated BW [MB/s] \n");
 	}
 	else { 
 		printf(" Results are in the send side , Have a good day \n");
@@ -1784,7 +1835,7 @@ int main(int argc, char *argv[])
 			print_mcg_report(ctx,&user_param,size,no_cpu_freq_fail);
 		}
 
-		if (user_param.servername)
+		if (user_param.servername || user_param.duplex)
 			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 	}
 		
@@ -1800,7 +1851,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	close(sockfd);
-
 	if (destroy_ctx_resources(ctx,&user_param)) { 
 		fprintf(stderr, "Couldn't destroy all of the resources\n");
 		return 1;
