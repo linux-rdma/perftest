@@ -809,7 +809,7 @@ int main(int argc, char *argv[])
 	user_param.servername = NULL;
 	user_param.numofqps = 1;
 	user_param.maxpostsofqpiniteration = 100;
-	user_param.inline_size = MAX_INLINE;
+	user_param.inline_size = 0;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
@@ -1019,7 +1019,7 @@ int main(int argc, char *argv[])
 		device_attribute.vendor_part_id == 26408 ||
 		device_attribute.vendor_part_id == 26418 ||
 		device_attribute.vendor_part_id == 26428) && (!inline_given_in_cmd)) {
-		user_param.inline_size = 1;
+		user_param.inline_size = 0;
         }
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 

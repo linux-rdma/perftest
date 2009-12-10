@@ -967,7 +967,7 @@ static void usage(const char *argv0)
 	printf("  -g, --mcg=<num_of_qps>      Send messages to multicast group with <num_of_qps> qps attached to it.\n");
 	printf("  -r, --rx-depth=<dep>        Make rx queue bigger than tx (default 600)\n");
 	printf("  -n, --iters=<iters>         Number of exchanges (at least 2, default 1000)\n");
-	printf("  -I, --inline_size=<size>    Max size of message to be sent in inline mode (default 1)\n");
+	printf("  -I, --inline_size=<size>    Max size of message to be sent in inline mode (default 0)\n");
 	printf("  -u, --qp-timeout=<timeout>  QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -S, --sl=<sl>               SL (default 0)\n");
 	printf("  -x, --gid-index=<index>     Test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
@@ -977,8 +977,8 @@ static void usage(const char *argv0)
 	printf("  -N, --no peak-bw            Cancel peak-bw calculation (default with peak-bw)\n");
 	printf("  -F, --CPU-freq              Do not fail even if cpufreq_ondemand module is loaded\n");
 	printf("  -M, --MGID=<multicast_gid>  In case of multicast, uses <multicast_gid> as the group MGID.\n");
-	printf("                              The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
-	printf("                              You should specify it on the server.\n");
+	printf("                              The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255]\n");
+	printf("                              In decimal digits. You should specify it on the server.\n");
 }
 
 /*
@@ -1399,7 +1399,7 @@ int main(int argc, char *argv[])
 	user_param.user_mgid = NULL;
 	user_param.use_event = 0;
 	user_param.duplex = 0;
-	user_param.inline_size = MAX_INLINE;
+	user_param.inline_size = 0;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
@@ -1639,7 +1639,7 @@ int main(int argc, char *argv[])
 		 device_attribute.vendor_part_id == 26418  ||
 		 device_attribute.vendor_part_id == 26428) &&  (!inline_given_in_cmd)) {
 
-            user_param.inline_size = 1;
+            user_param.inline_size = 0;
 	}
 	printf("Inline data is used up to %d bytes message\n\n", user_param.inline_size);
 
@@ -1851,9 +1851,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	close(sockfd);
-	if (destroy_ctx_resources(ctx,&user_param)) { 
-		fprintf(stderr, "Couldn't destroy all of the resources\n");
-		return 1;
+	if (!user_param.use_event) {
+		if (destroy_ctx_resources(ctx,&user_param)) { 
+			fprintf(stderr, "Couldn't destroy all of the resources\n");
+			return 1;
+		}
 	}
 	printf("------------------------------------------------------------------\n");
 	return 0;

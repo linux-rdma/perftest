@@ -990,7 +990,7 @@ static void usage(const char *argv0)
 	printf("  -g, --mcg=<num_of_qps>       Send messages to multicast group with <num_of_qps> qps attached to it.\n");
 	printf("  -M, --MGID=<multicast_gid>   In case of multicast, uses <multicast_gid> as the group MGID.\n");
 	printf("                               The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
-	printf("                               You must specify a different MGID on both sides (to avoid loopback).\n");
+	printf("                               In decimal digits.You must specify a different MGID on both sides (to avoid loopback).\n");
 	printf("  -F, --CPU-freq               Do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
@@ -1584,9 +1584,11 @@ int main(int argc, char *argv[])
 	}
 	printf("------------------------------------------------------------------\n");
 
-	if (destroy_ctx_resources(ctx,&user_param)) {
-		fprintf(stderr,"Couldn't destroy all of send_lat resources\n");
-		return 1;
+	if (!user_param.use_event) {
+		if (destroy_ctx_resources(ctx,&user_param)) { 
+			fprintf(stderr, "Couldn't destroy all of the resources\n");
+			return 1;
+		}
 	}
 	return 0;
 }
