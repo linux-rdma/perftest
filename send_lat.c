@@ -62,7 +62,7 @@
 #define RC 0
 #define UC 1
 #define UD 3
-#define VERSION 1.1
+#define VERSION 1.2
 #define SIGNAL 1
 #define MAX_INLINE 400
 #define MCG_LID 0xc001
@@ -71,7 +71,8 @@ static int sl = 0;
 static int page_size;
 cycles_t                *tstamp;
 struct user_parameters {
-	const char              *servername;
+	const char *servername;
+	const char *user_mgid;
 	int connection_type;
 	int mtu;
 	int signal_comp;
@@ -84,6 +85,7 @@ struct user_parameters {
 	int num_of_qps_in_mcg;
 	int qp_timeout;
 	int gid_index; /* if value not negative, we use gid AND gid_index=value */
+	int use_user_mgid;
 };
 
 struct report_options {
@@ -123,6 +125,116 @@ struct pingpong_dest {
 	union ibv_gid       dgid;
 };
 
+static int set_multicast_gid(struct pingpong_context *ctx,struct user_parameters *param) {
+
+	uint8_t mcg_gid[16] = MCG_GID;
+	const char *pstr = param->user_mgid;
+	char *term = NULL;
+	char tmp[20];
+	int i;
+
+	if (param->use_user_mgid) {
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr+1);
+		tmp[term - pstr] = 0;
+		mcg_gid[0] = (unsigned char)strtoll(tmp, NULL, 0);
+		for (i = 1; i < 15; ++i) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr+1);
+			tmp[term - pstr] = 0;
+			mcg_gid[i] = (unsigned char)strtoll(tmp, NULL, 0);
+		}
+		pstr += term - pstr + 1;
+		strcpy(tmp, pstr);
+		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
+	}
+	// In that case we will use pre defined MGID.
+	else {
+		/* use the local QP number as part of the mcg */
+		mcg_gid[11] = (param->servername) ? 0 : 1;
+		*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
+	}
+	memcpy(ctx->dgid.raw,mcg_gid,16);
+	return 0;
+}
+
+
+/*
+ *
+ */
+static int destroy_ctx_resources(struct pingpong_context *ctx, 
+								 struct user_parameters  *param)  {
+
+	int i;
+	int test_result = 0;
+
+	if (ctx->ah) {
+		if (ibv_destroy_ah(ctx->ah)) {
+			fprintf(stderr, "failed to destroy AH\n");
+			test_result = 1;
+		}
+	}
+
+	if (param->use_mcg) {
+		for (i=0; i < param->num_of_qps_in_mcg; i++) {
+			if (ibv_detach_mcast(ctx->mcg_qp[i],&ctx->dgid,MCG_LID)) {
+				fprintf(stderr, "failed to deatttached QP\n");
+				test_result = 1;
+			}
+			if (ibv_destroy_qp(ctx->mcg_qp[i])) {
+				fprintf(stderr, "failed to destroy QP\n");
+				test_result = 1;
+			}
+		}
+		free(ctx->mcg_qp);
+	}
+	if (ibv_destroy_qp(ctx->qp)) {
+		fprintf(stderr, "failed to destroy QP\n");
+		test_result = 1;
+	}	
+
+	if (ctx->mr) {
+		if (ibv_dereg_mr(ctx->mr)) {
+			fprintf(stderr, "failed to deregister MR\n");
+			test_result = 1;
+		}
+	}
+
+	if (ctx->buf)
+		free(ctx->buf);
+
+	if (ctx->rcq) {
+		if (ibv_destroy_cq(ctx->rcq)) {
+			fprintf(stderr, "failed to destroy Receive CQ\n");
+			test_result = 1;
+		}
+	}
+
+	if (ctx->scq) {
+		if (ibv_destroy_cq(ctx->scq)) {
+			fprintf(stderr, "failed to destroy Send CQ\n");
+			test_result = 1;
+		}
+	}
+
+	if (ctx->pd) {
+		if (ibv_dealloc_pd(ctx->pd)) {
+			fprintf(stderr, "failed to deallocate PD\n");
+			test_result = 1;
+		}
+	}
+
+	if (ctx->context) {
+		if (ibv_close_device(ctx->context)) {
+			fprintf(stderr, "failed to close device context\n");
+			test_result = 1;
+		}
+	}
+	free(tstamp);
+	printf("All resources were Released successfully\n");
+	return test_result;
+}
 
 static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
 {
@@ -161,7 +273,7 @@ static struct ibv_device *pp_find_dev(const char *ib_devname) {
 
 static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
 {
-	if (user_parm->gid_index < 0) {
+	if (!user_parm->use_mcg && user_parm->gid_index < 0) {
 		char msg[KEY_MSG_SIZE];
 
 		sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
@@ -176,7 +288,7 @@ static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest, struct
 		return 0;
 	} else {
 	char msg[KEY_MSG_SIZE_GID];
-
+	
 		sprintf(msg, KEY_PRINT_FMT_GID, my_dest->lid, my_dest->qpn,
 			my_dest->psn, my_dest->rkey, my_dest->vaddr,
 			my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2], my_dest->dgid.raw[3],
@@ -197,7 +309,7 @@ static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest, struct
 static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
 			struct pingpong_dest *rem_dest, struct user_parameters *user_parm)
 {
-	if (user_parm->gid_index < 0) {
+	if (!user_parm->use_mcg && user_parm->gid_index < 0) {
 		int parsed;
 		char msg[KEY_MSG_SIZE];
 
@@ -263,7 +375,7 @@ static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
 			memcpy(tmp, pstr, term - pstr);
 			tmp[term - pstr] = 0;
 			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
-			}
+		}
 		pstr += term - pstr + 1;
 		strcpy(tmp, pstr);
 		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
@@ -400,6 +512,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 	if (!ctx)
 		return NULL;
 
+	ctx->ah 	  = NULL;
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
 	/* in case of UD need space for the GRH */
@@ -520,9 +633,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 					fprintf(stderr, "Couldn't create QP\n");
 					return NULL;
 				}
-				printf("Qp No. %d - Qp Num - %06x\n",i,ctx->mcg_qp[i]->qp_num);
 			}
-			putchar('\n');
 		}
 		ctx->qp = ibv_create_qp(ctx->pd, &attr);
 		if (!ctx->qp) {
@@ -545,16 +656,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 
 		if (user_parm->connection_type==UD) {
 			if (user_parm->use_mcg) {
-				union ibv_gid gid;
-				uint8_t mcg_gid[16] = MCG_GID;
-
-				/* use the local QP number as part of the mcg */
-				mcg_gid[11] = (user_parm->servername) ? 0 : 1;
-				*(uint32_t *)(&mcg_gid[12]) = ctx->qp->qp_num;
-				memcpy(gid.raw, mcg_gid, 16);
-
+				if (set_multicast_gid(ctx,user_parm)) {
+					fprintf(stderr, "Couldn't Read User M_GID\n");
+					return NULL;
+				}
 				for (i=0; i < user_parm->num_of_qps_in_mcg; i++) {
-					if (ibv_attach_mcast(ctx->mcg_qp[i], &gid, MCG_LID)) {
+					if (ibv_attach_mcast(ctx->mcg_qp[i], &ctx->dgid, MCG_LID)) {
 						fprintf(stderr, "Couldn't attach QP to mcg\n");
 						return NULL;
 					}
@@ -567,7 +674,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 						return NULL;
 					}
 				}
-				printf("All Qp's were attached to Multi cast group succesfully\n");			
+				printf("All Qp's were attached to Multi cast group succesfully\n\n");			
 			}
 			if (ibv_modify_qp(ctx->qp, &attr,
 					  IBV_QP_STATE              |
@@ -649,15 +756,10 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = port;
 	if (user_parm->use_mcg) {
-		uint8_t mcg_gid[16] = MCG_GID;
-
-		/* send the message to the mcg of the other side */
-		mcg_gid[11] = (user_parm->servername) ? 1 : 0;
-		*(uint32_t *)(&mcg_gid[12]) = dest->qpn;
 		attr.ah_attr.dlid       = MCG_LID;
 		attr.ah_attr.is_global  = 1;
 		attr.ah_attr.grh.sgid_index = 0;
-		memcpy(attr.ah_attr.grh.dgid.raw, mcg_gid, 16);
+		memcpy(attr.ah_attr.grh.dgid.raw,dest->dgid.raw,16); 
 	}
 
 	if (user_parm->connection_type==RC) {
@@ -795,12 +897,12 @@ static int pp_open_port(struct pingpong_context *ctx, const char *servername,
 		}
 		ctx->dgid=gid;
 	}
-	my_dest.dgid = gid;
+	my_dest.dgid = ctx->dgid;
 	my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
 
 	printf(addr_fmt, "local", my_dest.lid, my_dest.qpn, my_dest.psn);
-	if (user_parm->gid_index > -1) {
+	if (user_parm->use_mcg || user_parm->gid_index > -1 ) {
 		printf("                  GID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
 		my_dest.dgid.raw[0],my_dest.dgid.raw[1],
 		my_dest.dgid.raw[2], my_dest.dgid.raw[3], my_dest.dgid.raw[4],
@@ -826,7 +928,7 @@ static int pp_open_port(struct pingpong_context *ctx, const char *servername,
 
 	printf(addr_fmt, "remote", rem_dest->lid, rem_dest->qpn, rem_dest->psn,
 	       rem_dest->rkey, rem_dest->vaddr);
-	if (user_parm->gid_index > -1) {
+	if (user_parm->use_mcg || user_parm->gid_index > -1) {
 		printf("                  GID: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
 		rem_dest->dgid.raw[0],rem_dest->dgid.raw[1],
 		rem_dest->dgid.raw[2], rem_dest->dgid.raw[3], rem_dest->dgid.raw[4],
@@ -866,27 +968,29 @@ static void usage(const char *argv0)
 	printf("  %s <host>     connect to server at <host>\n", argv0);
 	printf("\n");
 	printf("Options:\n");
-	printf("  -p, --port=<port>            listen on/connect to port <port> (default 18515)\n");
-	printf("  -c, --connection=<RC/UC/UD>  connection type RC/UC/UD (default RC)\n");
-	printf("  -m, --mtu=<mtu>             mtu size (256 - 4096. default for hermon is 2048)\n");
-	printf("  -d, --ib-dev=<dev>           use IB device <dev> (default first device found)\n");
-	printf("  -i, --ib-port=<port>         use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>            size of message to exchange (default 1)\n");
-	printf("  -t, --tx-depth=<dep>         size of tx queue (default 50)\n");
-	printf("  -l, --signal                 signal completion on each msg\n");
+	printf("  -p, --port=<port>            Listen on/connect to port <port> (default 18515)\n");
+	printf("  -c, --connection=<RC/UC/UD>  Connection type RC/UC/UD (default RC)\n");
+	printf("  -m, --mtu=<mtu>              Mtu size (256 - 4096. default for hermon is 2048)\n");
+	printf("  -d, --ib-dev=<dev>           Use IB device <dev> (default first device found)\n");
+	printf("  -i, --ib-port=<port>         Use port <port> of IB device (default 1)\n");
+	printf("  -s, --size=<size>            Size of message to exchange (default 1)\n");
+	printf("  -t, --tx-depth=<dep>         Size of tx queue (default 50)\n");
+	printf("  -l, --signal                 Signal completion on each msg\n");
 	printf("  -a, --all                    Run sizes from 2 till 2^23\n");
-	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
-	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
-	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
+	printf("  -n, --iters=<iters>          Number of exchanges (at least 2, default 1000)\n");
+	printf("  -I, --inline_size=<size>     Max size of message to be sent in inline mode (default 400)\n");
+	printf("  -u, --qp-timeout=<timeout>   QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
 	printf("  -S, --sl=<sl>                SL (default 0)\n");
-	printf("  -x, --gid-index=<index>   test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
-	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
-	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
+	printf("  -x, --gid-index=<index>      Test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
+	printf("  -C, --report-cycles          Report times in cpu cycle units (default microseconds)\n");
+	printf("  -H, --report-histogram       Print out all results (default print summary only)\n");
 	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
-	printf("  -V, --version                display version number\n");
-	printf("  -e, --events                 sleep on CQ events (default poll)\n");
-	printf("  -g, --mcg                    send messages to multicast group(only available in UD connection\n");
-	printf("  -F, --CPU-freq               do not fail even if cpufreq_ondemand module is loaded\n");
+	printf("  -V, --version                Display version number\n");
+	printf("  -e, --events                 Sleep on CQ events (default poll)\n");
+	printf("  -g, --mcg=<num_of_qps>       Send messages to multicast group with <num_of_qps> qps attached to it.\n");
+	printf("  -M, --MGID=<multicast_gid>   In case of multicast, uses <multicast_gid> as the group MGID.\n");
+	printf("                               The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
+	printf("  -F, --CPU-freq               Do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
 /*
@@ -1221,6 +1325,8 @@ int main(int argc, char *argv[])
 	user_param.signal_comp = 0;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
+	user_param.user_mgid = NULL;
+	user_param.use_user_mgid = 0;
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -1241,15 +1347,16 @@ int main(int argc, char *argv[])
 			{ .name = "signal",         .has_arg = 0, .val = 'l' },
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
-			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
+			{ .name = "report-histogram",.has_arg = 0, .val = 'H'},
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ .name = "mcg",            .has_arg = 1, .val = 'g' },
+			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
 			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:g:laeCHUVF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:g:M:laeCHUVF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1278,6 +1385,10 @@ int main(int argc, char *argv[])
 				usage(argv[0]);
 				return 1;
 			}
+			break;
+		case 'M' :
+			user_param.use_user_mgid = 1;
+			user_param.user_mgid = strdupa(optarg);
 			break;
 		case 'm':
 			user_param.mtu = strtol(optarg, NULL, 0);
@@ -1392,17 +1503,10 @@ int main(int argc, char *argv[])
 	/* Print header data */
 	printf("------------------------------------------------------------------\n");
 	if (user_param.use_mcg) { 
-	    if (user_param.connection_type == UD)
-			printf("                    Send Latency Multicast Test\n");
-
-	    else {
-			printf("Multi cast feature only available with UD Connection type\n");
-			usage(argv[0]);
-			return 7;
-	    }
-	}
-	else {
-	    printf("                    Send Latency Test\n");
+		user_param.connection_type = UD;
+		printf("                    Send Latency Multicast Test\n");
+	} else {
+		printf("                    Send Latency Test\n");
 	}
 
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
@@ -1478,6 +1582,10 @@ int main(int argc, char *argv[])
 		print_report(&report, user_param.iters, tstamp, size, no_cpu_freq_fail);
 	}
 	printf("------------------------------------------------------------------\n");
-	free(tstamp);
+
+	if (destroy_ctx_resources(ctx,&user_param)) {
+		fprintf(stderr,"Couldn't destroy all of send_lat resources\n");
+		return 1;
+	}
 	return 0;
 }
