@@ -675,7 +675,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	ctx->channel  = NULL;
 	ctx->size     = size;
 	ctx->tx_depth = tx_depth;
-	ctx->rx_depth = rx_depth + tx_depth;
+	ctx->rx_depth = tx_depth + rx_depth;
 	cq_rx_depth = ctx->rx_depth;
 	/* in case of UD need space for the GRH */
 	if (user_parm->connection_type==UD) {
@@ -772,7 +772,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 				return NULL;
 			}
 		}
-		printf(" Successfully created and attached %d QPs to a Mcast group\n\n",i);
+		printf("Successfully created and attached %d QPs to a Mcast group\n",i);
 	} else {
 		if (modify_qp_to_init(ctx->qp,port,user_parm->connection_type)) {
 				fprintf(stderr, "Failed to modify UD QP to INIT\n");
@@ -811,7 +811,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
-	printf(" Mtu : %d\n", user_parm->mtu);
+	printf("Mtu : %d\n", user_parm->mtu);
     attr.dest_qp_num = (user_parm->use_mcg && user_parm->servername) ? 
                         QPNUM_MCAST : dest->qpn;
 	attr.rq_psn = dest->psn;
@@ -1062,7 +1062,7 @@ static void print_mcg_report(struct pingpong_context *ctx,
 		packets_sum += ctx->qp_mcg[i].package_counter - upper -lower;
 		packets_loss += (param->iters - ctx->qp_mcg[i].package_counter);
 	}
-	printf("%7d     %d           %d                   %7.2f\n",size,param->iters,packets_loss,
+	printf("%7d        %d            %4d               %10.2f\n",size,param->iters,packets_loss,
 		   packets_sum*size*cycles_to_units/(min_last_comp - max_first_comp) / 0x100000);
 }
 
@@ -1517,9 +1517,9 @@ int main(int argc, char *argv[])
 
 		case 'r':
 			errno = 0;
-                        user_param.rx_depth = strtol(optarg, NULL, 0);
-                        if (errno) { usage(argv[0]); return 1; }
-                        break;
+			user_param.rx_depth = strtol(optarg, NULL, 0);
+			if (errno) { usage(argv[0]); return 1; }
+			break;
 
 		case 'n':
 			user_param.iters = strtol(optarg, NULL, 0);
@@ -1641,8 +1641,8 @@ int main(int argc, char *argv[])
 
             user_param.inline_size = 0;
 	}
-	printf("Inline data is used up to %d bytes message\n\n", user_param.inline_size);
-
+	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
+	
 	ctx = pp_init_ctx(ib_dev, size, user_param.tx_depth, user_param.rx_depth,ib_port, &user_param);
 	if (!ctx)
 		return 1;
@@ -1652,8 +1652,7 @@ int main(int argc, char *argv[])
 	
 	my_dest.lid = pp_get_local_lid(ctx, ib_port);
 	my_dest.psn = lrand48() & 0xffffff;
-    my_dest.qpn = (user_param.use_mcg && !user_param.servername) ? 
-                   ctx->qp_mcg[0].qp->qp_num : ctx->qp->qp_num;
+    my_dest.qpn = (user_param.use_mcg && !user_param.servername) ? QPNUM_MCAST : ctx->qp->qp_num;
 
 	if (user_param.gid_index != -1) {
 		int err=0;
@@ -1674,13 +1673,12 @@ int main(int argc, char *argv[])
     my_dest.rkey = ctx->mr->rkey;
 	my_dest.vaddr = (uintptr_t)ctx->buf + size;
 
-	printf(" local address:   LID %#04x,  PSN %#06x " ,my_dest.lid, my_dest.psn);
+	printf("  local address:  LID %#04x, QPN %#06x, PSN %#06x\n" ,my_dest.lid,my_dest.qpn,my_dest.psn);
 
 	if (user_param.use_mcg && !user_param.servername)  {
-		printf("\n M_gid adress:  M_ "); 	   
-	} else {
-		printf(" QPN %#06x\n" ,my_dest.qpn);
-	}
+		printf("  M_"); 	   
+	} 
+	
 	if (user_param.gid_index > -1 || (user_param.use_mcg && !user_param.servername) ) {
 		printf("GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
 		my_dest.dgid.raw[0],my_dest.dgid.raw[1],
@@ -1706,14 +1704,10 @@ int main(int argc, char *argv[])
 	if (!rem_dest)
 		return 1;
 
-	printf(" remote address:  LID %#04x,  PSN %#06x ", rem_dest->lid, rem_dest->psn);
+	printf("  remote address: LID %#04x, QPN %#06x, PSN %#06x\n",rem_dest->lid,rem_dest->qpn,rem_dest->psn);
 	if (user_param.use_mcg && user_param.servername)  {
-		printf("\n M_gid adress:    M_"); 	   
-	} 
-	else {
-		printf(" QPN %#06x\n",rem_dest->qpn);
+		printf("  M_"); 	   
 	}
-
 
 	if (user_param.gid_index > -1 || (user_param.use_mcg && user_param.servername) ) {
 		printf("GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -1742,12 +1736,12 @@ int main(int argc, char *argv[])
 			return 1;
 		} 
 	}
-    printf("--------------------------------------------------------------------------\n");
+    printf("------------------------------------------------------------------\n");
 	if (user_param.servername || user_param.duplex) {
-		printf(" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
+		printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec] \n");
 	}
 	else if (user_param.use_mcg) {
-		printf(" #bytes     #iterations   Packets Loss   Aggregated BW [MB/s] \n");
+		printf(" #bytes #iterations    Packets Loss       BW Aggreg.[MB/sec]\n");
 	}
 	else { 
 		printf(" Results are in the send side , Have a good day \n");
