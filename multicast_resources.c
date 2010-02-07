@@ -267,12 +267,11 @@ static int set_multicast_gid(struct mcast_group *mcast_manager,struct mcast_para
 static int run_iter_client(struct mcast_group *mcast_manager,
 						   struct mcast_parameters *params) {
 
-	int ne,scnt,ccnt,i;
-	struct ibv_wc *wc = NULL;
+	int ne,scnt,ccnt;
+	struct ibv_wc wc;
 	struct ibv_send_wr *bad_wr;
 
 	scnt = ccnt = 0;
-	ALLOCATE(wc,struct ibv_wc,params->tx_depth);
 	while (scnt < params->iterations || ccnt < params->iterations) {
 		while (scnt < params->iterations && (scnt -ccnt) < params->tx_depth) {
 			mcast_manager->posted[scnt++] = get_cycles();
@@ -283,15 +282,13 @@ static int run_iter_client(struct mcast_group *mcast_manager,
 		}
 		if (ccnt < params->iterations) {
 			while (1) {
-				ne = ibv_poll_cq(mcast_manager->mcg_cq,params->tx_depth,wc);
+				ne = ibv_poll_cq(mcast_manager->mcg_cq,1,&wc);
 				if (ne <= 0) break;
-				for (i=0; i < ne; i++ ) {
-					if (wc[i].status != IBV_WC_SUCCESS) {
-						printf("Failed to poll CQ successfully \n");
-						return 1;
-					}
-					mcast_manager->completed[ccnt++] = get_cycles();
+				if (wc.status != IBV_WC_SUCCESS) {
+					printf("Failed to poll CQ successfully \n");
+					return 1;
 				}
+				mcast_manager->completed[ccnt++] = get_cycles();
 			}
 			if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
@@ -299,7 +296,6 @@ static int run_iter_client(struct mcast_group *mcast_manager,
 			}
 		}
 	}
-	free(wc);
 	return 0;
 }
 
@@ -312,7 +308,7 @@ static int run_iter_server(struct mcast_group *mcast_manager,
 	int i,j,ne,num_of_iters;
 	int rcnt = 0;
 	unsigned long scnt = 0;
-	struct ibv_wc *wc = NULL;
+	struct ibv_wc wc;
 	struct ibv_recv_wr *bad_wr;
 	cycles_t t;
 
@@ -320,24 +316,21 @@ static int run_iter_server(struct mcast_group *mcast_manager,
 	for (i=0; i < params->num_qps_on_group; i++) {
 		mcast_manager->recv_mcg[i].package_counter = 0;
 	}
-	ALLOCATE(wc,struct ibv_wc,params->rx_depth);
 	num_of_iters = params->iterations*params->num_qps_on_group;
 	while (rcnt < num_of_iters && scnt < MAX_POLL_ITERATION_TIMEOUT) {
-		ne = ibv_poll_cq(mcast_manager->mcg_cq,params->rx_depth,wc);
+		ne = ibv_poll_cq(mcast_manager->mcg_cq,1,&wc);
 		if (ne > 0) {
-			rcnt += ne;
+			rcnt ++;
 			scnt = 0;
 			t = get_cycles();
-			for (i=0; i < ne; i++) {
-				for (j=0; j < params->num_qps_on_group; j++) {
-					if (wc[i].qp_num == mcast_manager->recv_mcg[j].qp->qp_num) {
-						mcast_manager->recv_mcg[j].completion_array[mcast_manager->recv_mcg[j].package_counter++] = t;
-						if (ibv_post_recv(mcast_manager->recv_mcg[j].qp,params->rwr,&bad_wr)) {
-							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
-							return 1;
-						}
-						break;
+			for (j=0; j < params->num_qps_on_group; j++) {
+				if (wc.qp_num == mcast_manager->recv_mcg[j].qp->qp_num) {
+					mcast_manager->recv_mcg[j].completion_array[mcast_manager->recv_mcg[j].package_counter++] = t;
+					if (ibv_post_recv(mcast_manager->recv_mcg[j].qp,params->rwr,&bad_wr)) {
+						fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
+						return 1;
 					}
+					break;
 				}
 			}
 		} else if (ne == 0) {
@@ -347,7 +340,6 @@ static int run_iter_server(struct mcast_group *mcast_manager,
 			return 1;
 		}
 	}
-	free(wc);
 	return 0;
 }
 

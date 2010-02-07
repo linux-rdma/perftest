@@ -148,7 +148,7 @@ typedef enum {
 	MCAST_IS_ATTACHED = (1 << 1)
 } mcast_state;
 
-// Defined to preserve later possibility to expand the Bool.
+// Using the Bool to avoid program compilation with -C99 flag.
 typedef enum { FALSE , TRUE } Bool;
 
 
