@@ -460,9 +460,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		fprintf(stderr, "Failed to set the number of outstanding reads\n");
 		return NULL;
 	}
-	// Debug Ido
-	printf(" %d \n",user_parm->max_out_read);
-	// End Ido
 	
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */	
 		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1)
