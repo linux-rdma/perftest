@@ -46,21 +46,6 @@
   *	  applications and can generate more methods and serve more benchmarks.
   *   The Module uses only the structire defined here , enabling generic use of it.
   *   
-  * 
-  * Methods :
-  *
-  *   mcast_create_resources
-  *   mcast_init_resources	
-  *   mcast_create_qps
-  *	  mcast_modify_qp_to_rtr
-  *   mcast_post_receive
-  *   mcast_post_send
-  *	  mcast_run_iter_uni_server
-  *   mcast_run_iter_uni_client
-  *   mcast_print_server
-  *	  mcast_print_client
-  *   mcast_destroy_resources
-  *   
   * Defined Types :
   *
   *   mcast_parameters - Contains all the parameters needed for this module.
@@ -214,13 +199,7 @@ struct sa_mad_packet_t {
  ************************************************************************/
 
 
-/* mcast_create_resources.
- *
- *   Creates the multicast entity.
- *
- * params - The parameters the entity needs.
- *
- * return Value : 
+/* 
  *
  */
 struct mcast_group* mcast_create_resources(struct mcast_parameters *params);
@@ -286,9 +265,6 @@ void mcast_print_client(struct mcast_group *mcast_manager,
  */
 int mcast_destroy_resources(struct mcast_group *mcast_manager,
 							struct mcast_parameters *params);
-
-
-
 
 
 #endif /* MULTICAST_RESOURCES_H */
