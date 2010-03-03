@@ -56,20 +56,22 @@
 
 #include "get_clock.h"
 
-#define MAX_OUTSTANDING_READ 16
+#define MAX_OUT_READ_HERMON 16
+#define MAX_OUT_READ 4
 #define PINGPONG_READ_WRID	1
-#define VERSION 1.2
+#define VERSION 1.3
 #define ALL 1
 #define RC 0
 
 struct user_parameters {
-	const char              *servername;
+	const char  *servername;
 	int connection_type;
 	int mtu;
 	int all; /* run all msg size */
 	int iters;
 	int tx_depth;
 	int max_out_read;
+	int use_out_read;
 	int use_event;
 	int qp_timeout;
 	int gid_index; /* if value not negative, we use gid AND gid_index=value */
@@ -102,6 +104,37 @@ struct pingpong_dest {
 	union ibv_gid       dgid;
 };
 
+
+/*
+ *
+ */
+static int set_max_out_read(struct user_parameters *param,struct ibv_device_attr *attr) {
+
+	int is_hermon = 0;
+	int max_out_reads;
+
+	// Checks the devide type for setting the max outstanding reads.
+	if (attr->vendor_part_id == 25408  || attr->vendor_part_id == 25418  ||
+		attr->vendor_part_id == 25448  || attr->vendor_part_id == 26418  || 
+		attr->vendor_part_id == 26428  || attr->vendor_part_id == 26438  ||
+		attr->vendor_part_id == 26448  || attr->vendor_part_id == 26458  ||
+		attr->vendor_part_id == 26468  || attr->vendor_part_id == 26478) {
+			is_hermon = 1;		
+	}
+
+	max_out_reads = (is_hermon == 1) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
+
+	if (param->use_out_read) {
+		if (param->max_out_read <= 0 || param->max_out_read > max_out_reads) {
+			fprintf(stderr,"Max outstanding reads for this device is %d\n",max_out_reads);
+			return 1;
+		}
+	}
+	else {
+		param->max_out_read = max_out_reads;         
+	}
+	return 0;
+}
 
 static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
 {
@@ -417,11 +450,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 			ibv_get_device_name(ib_dev));
 		return NULL;
 	}
-	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
-		if (ibv_query_device(ctx->context, &device_attr)) {
-			fprintf(stderr, "Failed to query device props");
-			return NULL;
-		}
+
+	if (ibv_query_device(ctx->context, &device_attr)) {
+		fprintf(stderr, "Failed to query device props");
+		return NULL;
+	}
+
+	if (set_max_out_read(user_parm,&device_attr)) {
+		fprintf(stderr, "Failed to set the number of outstanding reads\n");
+		return NULL;
+	}
+	// Debug Ido
+	printf(" %d \n",user_parm->max_out_read);
+	// End Ido
+	
+	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */	
 		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1)
 			user_parm->mtu = 1024;
 		else
@@ -578,7 +621,7 @@ static void usage(const char *argv0)
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
 	printf("  -m, --mtu=<mtu>        mtu size (256 - 4096. default for hermon is 2048)\n");
-	printf("  -o, --outs=<num>       num of outstanding read/atom(default 16)\n");
+	printf("  -o, --outs=<num>       num of outstanding read/atom(default for hermon 16 (others 4)\n");
 	printf("  -s, --size=<size>      size of message to exchange (default 65536)\n");
 	printf("  -a, --all              Run sizes from 2 till 2^23\n");
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
@@ -726,11 +769,11 @@ int main(int argc, char *argv[])
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
 	user_param.mtu = 0;
+	user_param.use_out_read = 0;
 	user_param.iters = 1000;
 	user_param.tx_depth = 100;
 	user_param.servername = NULL;
 	user_param.use_event = 0;
-	user_param.max_out_read = MAX_OUTSTANDING_READ; /* the device capability on gen2 */
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
 	/* Parameter parsing. */
@@ -781,6 +824,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'o':
 			user_param.max_out_read = strtol(optarg, NULL, 0);
+			user_param.use_out_read = 1;
 			break;
 		case 'a':
 			user_param.all = ALL;
