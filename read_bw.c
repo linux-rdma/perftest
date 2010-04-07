@@ -50,12 +50,14 @@
 #include "get_clock.h"
 #include "perftest_resources.h"
 
-#define MAX_OUT_READ_HERMON 4
+#define MAX_OUT_READ_HERMON 16
 #define MAX_OUT_READ 4
 #define PINGPONG_READ_WRID	1
 #define VERSION 1.3
 #define ALL 1
 #define RC 0
+
+#define MIN(a,b) (a = (a < b) ? a : b)
 
 struct user_parameters {
 	const char  *servername;
@@ -90,37 +92,6 @@ struct pingpong_context {
 	struct ibv_send_wr  wr;
 	union ibv_gid       dgid;
 };
-
-/*
- *
- */
-static int set_max_out_read(struct user_parameters *param,struct ibv_device_attr *attr) {
-
-	int is_hermon = 0;
-	int max_out_reads;
-
-	// Checks the devide type for setting the max outstanding reads.
-	if (attr->vendor_part_id == 25408  || attr->vendor_part_id == 25418  ||
-		attr->vendor_part_id == 25448  || attr->vendor_part_id == 26418  || 
-		attr->vendor_part_id == 26428  || attr->vendor_part_id == 26438  ||
-		attr->vendor_part_id == 26448  || attr->vendor_part_id == 26458  ||
-		attr->vendor_part_id == 26468  || attr->vendor_part_id == 26478) {
-			is_hermon = 1;		
-	}
-
-	max_out_reads = (is_hermon == 1) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
-
-	if (param->use_out_read) {
-		if (param->max_out_read <= 0 || param->max_out_read > max_out_reads) {
-			fprintf(stderr,"Max outstanding reads for this device is %d\n",max_out_reads);
-			return 1;
-		}
-	}
-	else {
-		param->max_out_read = max_out_reads;         
-	}
-	return 0;
-}
 
 /*
  * 
@@ -183,6 +154,65 @@ static int init_connection(struct pingpong_params *params,
 /*
  *
  */
+static int find_max_out_read(struct user_parameters *param,
+							 struct ibv_device_attr *attr) {
+
+	int is_hermon = 0;
+	int max_out_reads;
+
+	// Checks the devide type for setting the max outstanding reads.
+	if (attr->vendor_part_id == 25408  || attr->vendor_part_id == 25418  ||
+		attr->vendor_part_id == 25448  || attr->vendor_part_id == 26418  || 
+		attr->vendor_part_id == 26428  || attr->vendor_part_id == 26438  ||
+		attr->vendor_part_id == 26448  || attr->vendor_part_id == 26458  ||
+		attr->vendor_part_id == 26468  || attr->vendor_part_id == 26478) {
+			is_hermon = 1;		
+	}
+
+	max_out_reads = (is_hermon == 1) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
+
+	if (param->use_out_read) {
+		if (param->max_out_read <= 0 || param->max_out_read > max_out_reads) {
+			fprintf(stderr,"Max outstanding reads for this device is %d\n",max_out_reads);
+			return 1;
+		}
+	}
+	else {
+		param->max_out_read = max_out_reads;         
+	}
+	return 0;
+}
+
+/*
+ *
+ */
+static int set_max_out_read(struct user_parameters  *param,
+							struct pingpong_context *ctx,
+							struct pingpong_params  *png_prms) {
+
+	struct ibv_device_attr attr;
+	struct pingpong_dest send,recv;
+	
+
+	if (ibv_query_device(ctx->context,&attr)) {
+		return -1;
+	}
+
+	if (find_max_out_read(param,&attr)) {
+		return -1;
+	}
+	memset(&send,0,sizeof(struct pingpong_dest));
+	send.lid = param->max_out_read;
+	if (ctx_hand_shake(png_prms,&send,&recv)) {
+        return -1;   
+    }
+	param->max_out_read = MIN(param->max_out_read,recv.lid);
+	return 0;
+}
+
+/*
+ *
+ */
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 										    unsigned size,
 											struct user_parameters *user_parm)
@@ -212,11 +242,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	if (ibv_query_device(ctx->context, &device_attr)) {
 		fprintf(stderr, "Failed to query device props");
-		return NULL;
-	}
-
-	if (set_max_out_read(user_parm,&device_attr)) {
-		fprintf(stderr, "Failed to set the number of outstanding reads\n");
 		return NULL;
 	}
 	
@@ -716,6 +741,12 @@ int main(int argc, char *argv[])
     }
 	png_params.side = REMOTE;
 	ctx_print_pingpong_data(&rem_dest,&png_params);
+
+	// Sets the max outstanding reads to the min of the link.
+	if (set_max_out_read(&user_param,ctx,&png_params)) {
+		fprintf(stderr, "Failed to set the number of outstanding reads\n");
+		return 1;
+	}
 
 	if (pp_connect_ctx(ctx,my_dest.psn,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
