@@ -6,9 +6,9 @@ UTILS = clock_test
 all: ${RDMACM_TESTS} ${MCAST_TESTS} ${TESTS} ${UTILS}
 
 CFLAGS += -Wall -g -D_GNU_SOURCE -O2
-EXTRA_FILES = get_clock.c
+EXTRA_FILES = get_clock.c perftest_resources.c
 MCAST_FILES = multicast_resources.c
-EXTRA_HEADERS = get_clock.h 
+EXTRA_HEADERS = get_clock.h perftest_resources.h
 MCAST_HEADERS = multicast_resources.h
 #The following seems to help GNU make on some platforms
 LOADLIBES += 
