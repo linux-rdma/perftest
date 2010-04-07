@@ -43,29 +43,23 @@
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <netdb.h>
 #include <malloc.h>
 #include <getopt.h>
-#include <arpa/inet.h>
-#include <byteswap.h>
 #include <time.h>
-
 #include <infiniband/verbs.h>
 
 #include "get_clock.h"
+#include "perftest_resources.h"
 
 #define PINGPONG_RDMA_WRID	3
-#define VERSION 1.0
+#define VERSION 1.1
 #define ALL 1
 #define MAX_INLINE 400
 #define RC 0
 #define UC 1
 
 struct user_parameters {
-	const char              *servername;
+	const char *servername;
 	int connection_type;
 	int mtu;
 	int all; /* run all msg size */
@@ -76,6 +70,8 @@ struct user_parameters {
     int inline_size;
 	int qp_timeout;
 	int gid_index; /* if value not negative, we use gid AND gid_index=value */
+	int port;
+	int ib_port;
 };
 struct extended_qp {
   struct ibv_qp           *qp;
@@ -102,306 +98,76 @@ struct pingpong_context {
 	union ibv_gid       dgid;
 };
 
-struct pingpong_dest {
-	int lid;
-	int qpn;
-	int psn;
-	unsigned rkey;
-	unsigned long long vaddr;
-	union ibv_gid       dgid;
-};
+/*
+ * 
+ */
+static int set_up_connection(struct pingpong_context *ctx,
+							 struct user_parameters *user_parm,
+							 struct pingpong_dest *my_dest) {
 
+	int i;
+	int use_i = user_parm->gid_index;
+	int port  = user_parm->ib_port;
 
-static uint16_t pp_get_local_lid(struct pingpong_context *ctx, int port)
-{
-	struct ibv_port_attr attr;
-
-	if (ibv_query_port(ctx->context, port, &attr))
-		return 0;
-
-	return attr.lid;
-}
-
-static int pp_client_connect(const char *servername, int port)
-{
-	struct addrinfo *res, *t;
-	struct addrinfo hints = {
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-	char *service;
-	int n;
-	int sockfd = -1;
-
-	if (asprintf(&service, "%d", port) < 0)
-		return -1;
-
-	n = getaddrinfo(servername, service, &hints, &res);
-
-	if (n < 0) {
-		fprintf(stderr, "%s for %s:%d\n", gai_strerror(n), servername, port);
-		return n;
-	}
-
-	for (t = res; t; t = t->ai_next) {
-		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
-		if (sockfd >= 0) {
-			if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
-				break;
-			close(sockfd);
-			sockfd = -1;
+	if (use_i != -1) {
+		if (ibv_query_gid(ctx->context,port,use_i,&ctx->dgid)) {
+			return -1;
 		}
 	}
+	
+	for (i=0; i < user_parm->numofqps; i++) {
+		my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+		my_dest[i].qpn   = ctx->qp[i]->qp_num;
+		my_dest[i].psn   = lrand48() & 0xffffff;
+		my_dest[i].rkey  = ctx->mr->rkey;
+		my_dest[i].vaddr = (uintptr_t)ctx->buf + ctx->size;
+		my_dest[i].dgid  = ctx->dgid;
 
-	freeaddrinfo(res);
-
-	if (sockfd < 0) {
-		fprintf(stderr, "Couldn't connect to %s:%d\n", servername, port);
-		return sockfd;
-	}
-	return sockfd;
-}
-
-struct pingpong_dest * pp_client_exch_dest(int sockfd,
-					   const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
-{
-	struct pingpong_dest *rem_dest = NULL;
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"];
-	int parsed;
-
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
-		my_dest->lid, my_dest->qpn, my_dest->psn,my_dest->rkey,my_dest->vaddr,
-		my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2],
-		my_dest->dgid.raw[3], my_dest->dgid.raw[4], my_dest->dgid.raw[5],
-		my_dest->dgid.raw[6], my_dest->dgid.raw[7], my_dest->dgid.raw[8],
-		my_dest->dgid.raw[9], my_dest->dgid.raw[10], my_dest->dgid.raw[11],
-		my_dest->dgid.raw[12], my_dest->dgid.raw[13], my_dest->dgid.raw[14],
-		my_dest->dgid.raw[15]);
-	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
-		perror("client write");
-		fprintf(stderr, "Couldn't send local address\n");
-		goto out;
-	}
-
-	if (read(sockfd, msg, sizeof msg) != sizeof msg) {
-		perror("client read");
-		fprintf(stderr, "Couldn't read remote address\n");
-		goto out;
-	}
-
-	rem_dest = malloc(sizeof *rem_dest);
-	if (!rem_dest)
-		goto out;
-
-	if (user_parm->gid_index < 0) {
-		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-				&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
-		if (parsed != 5) {
-			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
-			free(rem_dest);
-			rem_dest = NULL;
-			goto out;
-		}
-	}else{
-		char *pstr = msg, *term;
-		char tmp[20];
-		int i;
-
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->qpn = (int)strtol(tmp, NULL, 16); // QPN
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->psn = (int)strtol(tmp, NULL, 16); // PSN
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
-
-		for (i = 0; i < 15; ++i) {
-			pstr += term - pstr + 1;
-			term = strpbrk(pstr, ":");
-			memcpy(tmp, pstr, term - pstr);
-			tmp[term - pstr] = 0;
-			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
-		}
-		pstr += term - pstr + 1;
-		strcpy(tmp, pstr);
-		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
-	}
-out:
-	return rem_dest;
-}
-
-int pp_server_connect(int port)
-{
-	struct addrinfo *res, *t;
-	struct addrinfo hints = {
-		.ai_flags    = AI_PASSIVE,
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-	char *service;
-	int sockfd = -1, connfd;
-	int n;
-
-	if (asprintf(&service, "%d", port) < 0)
-		return -1;
-
-	n = getaddrinfo(NULL, service, &hints, &res);
-
-	if (n < 0) {
-		fprintf(stderr, "%s for port %d\n", gai_strerror(n), port);
-		return n;
-	}
-
-	for (t = res; t; t = t->ai_next) {
-		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
-		if (sockfd >= 0) {
-			n = 1;
-
-			setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof n);
-
-			if (!bind(sockfd, t->ai_addr, t->ai_addrlen))
-				break;
-			close(sockfd);
-			sockfd = -1;
-		}
-	}
-
-	freeaddrinfo(res);
-
-	if (sockfd < 0) {
-		fprintf(stderr, "Couldn't listen to port %d\n", port);
-		return sockfd;
-	}
-
-	listen(sockfd, 1);
-	connfd = accept(sockfd, NULL, 0);
-	if (connfd < 0) {
-		perror("server accept");
-		fprintf(stderr, "accept() failed\n");
-		close(sockfd);
-		return connfd;
-	}
-
-	close(sockfd);
-	return connfd;
-}
-
-static struct pingpong_dest *pp_server_exch_dest(int connfd, const struct pingpong_dest *my_dest, struct user_parameters *user_parm)
-{
-	char msg[sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"];
-	struct pingpong_dest *rem_dest = NULL;
-	int parsed;
-	int n;
-
-	n = read(connfd, msg, sizeof msg);
-	if (n != sizeof msg) {
-		perror("server read");
-		fprintf(stderr, "%d/%d: Couldn't read remote address\n", n, (int) sizeof msg);
-		goto out;
-	}
-
-	rem_dest = malloc(sizeof *rem_dest);
-	if (!rem_dest)
-		goto out;
-
-	if (user_parm->gid_index < 0) {
-		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &rem_dest->lid, &rem_dest->qpn,
-				&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
-		if (parsed != 5) {
-			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
-			free(rem_dest);
-			rem_dest = NULL;
-			goto out;
-		}
-	}else{
-		char *pstr = msg, *term;
-		char tmp[20];
-		int i;
-
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->qpn = (int)strtol(tmp, NULL, 16); // QPN
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->psn = (int)strtol(tmp, NULL, 16); // PSN
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
-
-		pstr += term - pstr + 1;
-		term = strpbrk(pstr, ":");
-		memcpy(tmp, pstr, term - pstr);
-		tmp[term - pstr] = 0;
-		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
-
-		for (i = 0; i < 15; ++i) {
-			pstr += term - pstr + 1;
-			term = strpbrk(pstr, ":");
-			memcpy(tmp, pstr, term - pstr);
-			tmp[term - pstr] = 0;
-			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
+		// We do not fail test upon lid in RDMAoE/Eth conf.
+		if (use_i < 0) {
+			if (!my_dest[i].lid) {
+				fprintf(stderr,"Local lid 0x0 detected. Is an SM running? \n");
+				fprintf(stderr,"If you're running RMDAoE you must use GIDs\n");
+				return -1;
 			}
-		pstr += term - pstr + 1;
-		strcpy(tmp, pstr);
-		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
+		}
 	}
-
-	sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
-		my_dest->lid, my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
-		my_dest->dgid.raw[0], my_dest->dgid.raw[1], my_dest->dgid.raw[2],
-		my_dest->dgid.raw[3], my_dest->dgid.raw[4], my_dest->dgid.raw[5],
-		my_dest->dgid.raw[6], my_dest->dgid.raw[7], my_dest->dgid.raw[8],
-		my_dest->dgid.raw[9], my_dest->dgid.raw[10], my_dest->dgid.raw[11],
-		my_dest->dgid.raw[12], my_dest->dgid.raw[13], my_dest->dgid.raw[14],
-		my_dest->dgid.raw[15]);
-	if (write(connfd, msg, sizeof msg) != sizeof msg) {
-		perror("server write");
-		fprintf(stderr, "Couldn't send local address\n");
-		free(rem_dest);
-		rem_dest = NULL;
-		goto out;
-	}
-out:
-	return rem_dest;
+	return 0;
 }
 
-static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
-					    unsigned size,
-					    int tx_depth, int port, struct user_parameters *user_parm)
+/*
+ * 
+ */
+static int init_connection(struct pingpong_params *params,
+						   struct user_parameters *user_parm,
+						   struct pingpong_dest *my_dest) {
+
+	int i;
+
+	params->conn_type = user_parm->connection_type;
+	params->use_index = user_parm->gid_index;
+	params->use_mcg	  = 0;
+	params->type      = user_parm->servername ? CLIENT : SERVER;
+	params->side      = LOCAL;
+
+	for (i=0; i < user_parm->numofqps; i++) {
+		ctx_print_pingpong_data(&my_dest[i],params);
+	}
+
+	if (user_parm->servername) 
+		params->sockfd = ctx_client_connect(user_parm->servername,user_parm->port);
+	else 
+		params->sockfd = ctx_server_connect(user_parm->port);
+
+	if(params->sockfd < 0) {
+		fprintf(stderr,"Unable to open file descriptor for socket connection");
+		return 1;
+	}
+	return 0;
+}
+
+static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned size,
+											struct user_parameters *user_parm)
 {
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
@@ -412,7 +178,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	ctx->qp = malloc(sizeof (struct ibv_qp*) * user_parm->numofqps );
 	ctx->size     = size;
-	ctx->tx_depth = tx_depth;
+	ctx->tx_depth = user_parm->tx_depth;
 	ctx->scnt = malloc(user_parm->numofqps * sizeof (int));
 	if (!ctx->scnt) {
 		perror("malloc");
@@ -468,7 +234,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, tx_depth * user_parm->numofqps , NULL, NULL, 0);
+	ctx->cq = ibv_create_cq(ctx->context,user_parm->tx_depth*user_parm->numofqps,NULL,NULL,0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
@@ -480,7 +246,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		memset(&initattr, 0, sizeof(struct ibv_qp_init_attr));
 		initattr.send_cq = ctx->cq;
 		initattr.recv_cq = ctx->cq;
-		initattr.cap.max_send_wr  = tx_depth;
+		initattr.cap.max_send_wr  = user_parm->tx_depth;
 		/* Work around:  driver doesnt support
 		 * recv_wr = 0 */
 		initattr.cap.max_recv_wr  = 1;
@@ -501,7 +267,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	
 		attr.qp_state        = IBV_QPS_INIT;
 		attr.pkey_index      = 0;
-		attr.port_num        = port;
+		attr.port_num        = user_parm->ib_port;
 		attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
 
 		if (ibv_modify_qp(ctx->qp[counter], &attr,
@@ -517,8 +283,9 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	return ctx;
 }
 
-static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
-			  struct pingpong_dest *dest, struct user_parameters *user_parm, int qpindex)
+static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
+						  struct pingpong_dest *dest, 
+						  struct user_parameters *user_parm, int qpindex)
 {
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof attr);
@@ -541,7 +308,6 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
-	printf("Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num 	= dest->qpn;
 	attr.rq_psn 		= dest->psn;
 	if (user_parm->connection_type==RC) {
@@ -559,7 +325,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
 		attr.ah_attr.sl         = 0;
 	}
 	attr.ah_attr.src_path_bits = 0;
-	attr.ah_attr.port_num   = port;
+	attr.ah_attr.port_num   = user_parm->ib_port;
 	if (user_parm->connection_type == RC) {
 		if (ibv_modify_qp(ctx->qp[qpindex], &attr,
 				  IBV_QP_STATE              |
@@ -674,7 +440,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 	       tsize * iters * user_param->numofqps * cycles_to_units /(tcompleted[(iters* user_param->numofqps) - 1] - tposted[0]) / 0x100000);
 }
 int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
-	     struct pingpong_dest **rem_dest, int size)
+	     struct pingpong_dest *rem_dest, int size)
 {
     struct ibv_qp           *qp;
     int                      totscnt, totccnt ;
@@ -704,8 +470,8 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	}
 	ctx->wr.next       = NULL;
 	/*These should be the i'th place ... */
-	ctx->wr.wr.rdma.remote_addr = rem_dest[0]->vaddr;
-	ctx->wr.wr.rdma.rkey = rem_dest[0]->rkey;
+	ctx->wr.wr.rdma.remote_addr = rem_dest[0].vaddr;
+	ctx->wr.wr.rdma.rkey = rem_dest[0].rkey;
     /* lets make the list with the right id's*/
 	for (qpindex=0 ; qpindex < user_param->numofqps ; qpindex++) {
 	  for (index =0 ; index <  user_param->maxpostsofqpiniteration ; index++) {
@@ -783,27 +549,25 @@ int main(int argc, char *argv[])
 	struct ibv_device      **dev_list;
 	struct ibv_device	*ib_dev;
 	struct pingpong_context *ctx;
-	struct pingpong_dest     *my_dest;
-	struct pingpong_dest    **rem_dest;
+	struct pingpong_dest    *my_dest,*rem_dest;
+	struct pingpong_params  png_params;
 	struct user_parameters  user_param;
 	struct ibv_device_attr device_attribute;
 	char                    *ib_devname = NULL;
-	int                      port = 18515;
-	int                      ib_port = 1;
 	long long                size = 65536;
-	int			 sockfd;
 	int                      duplex = 0;
 	int                      i = 0;
 	int                      inline_given_in_cmd = 0;
 	struct ibv_context       *context;
 	int                      no_cpu_freq_fail = 0;
-	union ibv_gid            gid;
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct user_parameters));
 	user_param.mtu = 0;
 	user_param.iters = 5000;
 	user_param.tx_depth = 100;
+	user_param.port = 18515;
+	user_param.ib_port = 1;
 	user_param.servername = NULL;
 	user_param.numofqps = 1;
 	user_param.maxpostsofqpiniteration = 100;
@@ -842,8 +606,8 @@ int main(int argc, char *argv[])
 
 		switch (c) {
 		case 'p':
-			port = strtol(optarg, NULL, 0);
-			if (port < 0 || port > 65535) {
+			user_param.port = strtol(optarg, NULL, 0);
+			if (user_param.port < 0 || user_param.port > 65535) {
 				usage(argv[0]);
 				return 1;
 			}
@@ -874,8 +638,8 @@ int main(int argc, char *argv[])
 			return 0;
 			break;
 		case 'i':
-			ib_port = strtol(optarg, NULL, 0);
-			if (ib_port < 0) {
+			user_param.ib_port = strtol(optarg, NULL, 0);
+			if (user_param.ib_port < 0) {
 				usage(argv[0]);
 				return 1;
 			}
@@ -1014,107 +778,59 @@ int main(int argc, char *argv[])
         }
 	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
 
-	ctx = pp_init_ctx(ib_dev, size, user_param.tx_depth, ib_port, &user_param);
+	ctx = pp_init_ctx(ib_dev,size,&user_param);
 	if (!ctx)
 		return 1;
 
-	if (user_param.gid_index != -1) {
-		int err=0;
-		err = ibv_query_gid (ctx->context, ib_port, user_param.gid_index, &gid);
-		if (err) {
-			return -1;
+	my_dest  = malloc(sizeof(struct pingpong_dest)*user_param.numofqps);
+	rem_dest = malloc(sizeof(struct pingpong_dest)*user_param.numofqps);
+    if (!my_dest || !rem_dest) {
+		perror("malloc my_dest or rem_dest");
+		return 1;
+	}
+
+	// Set up the Connection.
+	if (set_up_connection(ctx,&user_param,my_dest)) {
+		fprintf(stderr," Unable to set up socket connection\n");
+		return 1;
+	}	
+
+	// Init the connection and print the local data.
+	if (init_connection(&png_params,&user_param,my_dest)) {
+		fprintf(stderr," Unable to init the socket connection\n");
+		return 1;
+	}
+
+	// shaking hands and gather the other side info.
+	png_params.side = REMOTE;
+	for (i=0; i < user_param.numofqps; i++) {
+		if (ctx_hand_shake(&png_params,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1;   
 		}
-		ctx->dgid=gid;
+		ctx_print_pingpong_data(&rem_dest[i],&png_params);
+
+		if (pp_connect_ctx(ctx,my_dest[i].psn,&rem_dest[i],&user_param,i)) {
+			fprintf(stderr," Unable to Connect the HCA's through the link\n");
+			return 1;
 		}
 
-	
-	if (user_param.servername) {
-	  sockfd = pp_client_connect(user_param.servername, port);
-	  if (sockfd < 0)
-	    return 1;
-	} else {
-	  sockfd = pp_server_connect(port);
-	  if (sockfd < 0)
-	    return 1;
-	}
-	
-	my_dest = malloc(user_param.numofqps * sizeof *my_dest);
-	rem_dest = malloc(sizeof (struct pingpong_dest*) * user_param.numofqps );
-	
-	for (i =0 ; i<user_param.numofqps; i++) {
-	  /* Create connection between client and server.
-	   * We do it by exchanging data over a TCP socket connection. */
-	  my_dest[i].lid = pp_get_local_lid(ctx, ib_port);
-	  my_dest[i].psn = lrand48() & 0xffffff;
-	  if (user_param.gid_index < 0) {/*We do not fail test upon lid in RDMA0E/Eth conf*/
-			if (!my_dest[i].lid) {
-				fprintf(stderr, "Local lid 0x0 detected. Is an SM running? If you are running on an RMDAoE interface you must use GIDs\n");
-			return 1;
+		// An additional handshake is required after moving qp to RTR.
+		if (ctx_hand_shake(&png_params,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1; 
 		}
-	  }
-	  my_dest[i].dgid = gid;
-	  my_dest[i].qpn = ctx->qp[i]->qp_num;
-	  /* TBD this should be changed into VA and diffreent key to each qp */
-	  my_dest[i].rkey = ctx->mr->rkey;
-	  my_dest[i].vaddr = (uintptr_t)ctx->buf + ctx->size;
-	  
-	  printf("  local address:  LID %#04x, QPN %#06x, PSN %#06x "
-		 "RKey %#08x VAddr %#016Lx\n",
-		 my_dest[i].lid, my_dest[i].qpn, my_dest[i].psn,
-		 my_dest[i].rkey, my_dest[i].vaddr);
-	  if (user_param.gid_index > -1) {
-		printf("                  GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-		my_dest[i].dgid.raw[0],my_dest[i].dgid.raw[1],
-		my_dest[i].dgid.raw[2], my_dest[i].dgid.raw[3], my_dest[i].dgid.raw[4],
-		my_dest[i].dgid.raw[5], my_dest[i].dgid.raw[6], my_dest[i].dgid.raw[7],
-		my_dest[i].dgid.raw[8], my_dest[i].dgid.raw[9], my_dest[i].dgid.raw[10],
-		my_dest[i].dgid.raw[11], my_dest[i].dgid.raw[12], my_dest[i].dgid.raw[13],
-		my_dest[i].dgid.raw[14], my_dest[i].dgid.raw[15]);
-	  }
-	  if (user_param.servername) {
-	    rem_dest[i] = pp_client_exch_dest(sockfd, &my_dest[i], &user_param);
-	  } else {
-	    rem_dest[i] = pp_server_exch_dest(sockfd, &my_dest[i], &user_param);
-	  }
-	  if (!rem_dest[i])
-	    return 1;
-	  printf("  remote address: LID %#04x, QPN %#06x, PSN %#06x, "
-		 "RKey %#08x VAddr %#016Lx\n",
-		 rem_dest[i]->lid, rem_dest[i]->qpn, rem_dest[i]->psn,
-		 rem_dest[i]->rkey, rem_dest[i]->vaddr);
-	  if (user_param.gid_index > -1) {
-		printf("                  GID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-		rem_dest[i]->dgid.raw[0],rem_dest[i]->dgid.raw[1],
-		rem_dest[i]->dgid.raw[2], rem_dest[i]->dgid.raw[3], rem_dest[i]->dgid.raw[4],
-		rem_dest[i]->dgid.raw[5], rem_dest[i]->dgid.raw[6], rem_dest[i]->dgid.raw[7],
-		rem_dest[i]->dgid.raw[8], rem_dest[i]->dgid.raw[9], rem_dest[i]->dgid.raw[10],
-		rem_dest[i]->dgid.raw[11], rem_dest[i]->dgid.raw[12], rem_dest[i]->dgid.raw[13],
-		rem_dest[i]->dgid.raw[14], rem_dest[i]->dgid.raw[15]);
-	  }
-	  if (pp_connect_ctx(ctx, ib_port, my_dest[i].psn, rem_dest[i], &user_param, i))
-	  return 1;
-	  
-	  /* An additional handshake is required *after* moving qp to RTR.
-	     Arbitrarily reuse exch_dest for this purpose. */
-	  if (user_param.servername) {
-	    rem_dest[i] = pp_client_exch_dest(sockfd, &my_dest[i], &user_param);
-	  } else {
-	    rem_dest[i] = pp_server_exch_dest(sockfd, &my_dest[i], &user_param);
-	  }  
 	}
-       
+	printf("Mtu : %d\n", user_param.mtu);
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
-	/* For half duplex tests, server just waits for client to exit */
-	/* the 0th place is arbitrary to signal finish ... */
+
+	// For half duplex tests, server just waits for client to exit 
 	if (!user_param.servername && !duplex) {
-		rem_dest[0] = pp_server_exch_dest(sockfd, &my_dest[0], &user_param);
-		if (write(sockfd, "done", sizeof "done") != sizeof "done"){
-			perror("server write");
-			fprintf(stderr, "Couldn't write to socket\n");
+		if (ctx_close_connection(&png_params,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
-		close(sockfd);
 		return 0;
 	}
 
@@ -1144,22 +860,17 @@ int main(int argc, char *argv[])
 			return 18;
 		print_report(user_param.iters, size, duplex, tposted, tcompleted, &user_param, no_cpu_freq_fail);
 	}
-	/* the 0th place is arbitrary to signal finish ... */
-	if (user_param.servername) {
-		rem_dest[0] = pp_client_exch_dest(sockfd, &my_dest[0], &user_param);
-	} else {
-		rem_dest[0] = pp_server_exch_dest(sockfd, &my_dest[0], &user_param);
-	}
 
-	if (write(sockfd, "done", sizeof "done") != sizeof "done"){
-		perror("write");
-		fprintf(stderr, "Couldn't write to socket\n");
+	// Closing connection.
+	if (ctx_close_connection(&png_params,&my_dest[0],&rem_dest[0])) {
+		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
-	close(sockfd);
 
 	free(tposted);
 	free(tcompleted);
+	free(my_dest);
+	free(rem_dest);
 
 	printf("------------------------------------------------------------------\n");
 	return 0;

@@ -325,8 +325,7 @@ int ctx_close_connection(struct pingpong_params  *params,
 
 	// Signal client is finished.
     if (ctx_hand_shake(params,my_dest,rem_dest)) {
-        fprintf(stderr,"Failed to exchange date\n");
-        return 1;
+        return -1;
         
     }
 
@@ -334,7 +333,7 @@ int ctx_close_connection(struct pingpong_params  *params,
 	if (write(params->sockfd,"done",sizeof "done") != sizeof "done") {
 		perror(" Client write");
 		fprintf(stderr,"Couldn't write to socket\n");
-		return 1;
+		return -1;
 	}
 	close(params->sockfd);
 	return 0;
