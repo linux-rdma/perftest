@@ -216,9 +216,11 @@ static int set_max_out_read(struct user_parameters  *param,
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 										    unsigned size,
 											struct user_parameters *user_parm)
-{
+{	
+	LinkType type;
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
+
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
 		return NULL;
@@ -244,13 +246,24 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		fprintf(stderr, "Failed to query device props");
 		return NULL;
 	}
-	
+
+	// Determine the link type and configure the HCA accordingly.
+	if ((type = set_link_layer(ctx->context,user_parm->ib_port)) == FAILURE) {
+		fprintf(stderr, "Failed to determine the link type for this port\n");
+		return NULL;
+	}
+	if (type == ETH && user_parm->gid_index == -1) {
+		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
+		user_parm->gid_index = 0;
+	}
+
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */	
 		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1)
 			user_parm->mtu = 1024;
 		else
 			user_parm->mtu = 2048;
 	}
+
 	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
 		if (!ctx->channel) {
@@ -687,7 +700,7 @@ int main(int argc, char *argv[])
 
 	printf("Connection type : RC\n");
 	if (user_param.gid_index > -1) {
-		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
+		printf(" Using GID to support RoCE .Refer port type as Ethernet.default MTU 1024B\n");
 	}
 
 	/* Done with parameter parsing. Perform setup. */

@@ -79,6 +79,9 @@ typedef enum { SERVER , CLIENT } MachineType;
 // The type of the machine ( server or client actually).
 typedef enum { LOCAL , REMOTE } PrintDataSide;
 
+// The link layer of the current port.
+typedef enum { FAILURE = -1 , IB = 1 , ETH = 2 } LinkType;
+
 /************************************************************************ 
  * Perftest resources Structures and data types.
  ************************************************************************/
@@ -107,6 +110,19 @@ struct pingpong_params {
 /************************************************************************ 
  * Perftest resources Methods and interface utilitizes.
  ************************************************************************/
+
+/* set_link_layer.
+ *
+ * Description : Determines the link layer type (IB or ETH).
+ *
+ * Parameters : 
+ *
+ *  context - The context of the HCA device.
+ *  ib_port - The port of the HCA (1 or 2).
+ *
+ * Return Value : IB or ETH in case of success , FAILURE otherwise.
+ */
+LinkType set_link_layer(struct ibv_context *context,int ib_port);
 
 /* ctx_get_local_lid .
  *

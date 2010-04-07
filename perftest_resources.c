@@ -146,6 +146,21 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 /************************************************************************ 
  *
  ************************************************************************/
+LinkType set_link_layer(struct ibv_context *context,int ib_port) {
+
+	struct ibv_port_attr port_attr;
+
+	if (ibv_query_port(context,ib_port,&port_attr)) {
+		fprintf(stderr,"Unable to query port\n");
+		return FAILURE;
+	}
+
+	return (LinkType)port_attr.link_layer;
+}
+
+/************************************************************************ 
+ *
+ ************************************************************************/
 uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 
     struct ibv_port_attr attr;

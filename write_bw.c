@@ -172,6 +172,7 @@ static int init_connection(struct pingpong_params *params,
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned size,
 											struct user_parameters *user_parm)
 {
+	LinkType type;
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 	int counter;
@@ -209,6 +210,17 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 			ibv_get_device_name(ib_dev));
 		return NULL;
 	}
+
+	// Determine the link type and configure the HCA accordingly.
+	if ((type = set_link_layer(ctx->context,user_parm->ib_port)) == FAILURE) {
+		fprintf(stderr, "Failed to determine the link type for this port\n");
+		return NULL;
+	}
+	if (type == ETH && user_parm->gid_index == -1) {
+		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
+		user_parm->gid_index = 0;
+	}
+
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
 		if (ibv_query_device(ctx->context, &device_attr)) {
 			fprintf(stderr, "Failed to query device props");
