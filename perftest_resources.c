@@ -26,7 +26,7 @@ static const char *gidArray[]  = {"GID","MGID"};
 static int ctx_write_keys(const struct pingpong_dest *my_dest,
 						  struct pingpong_params *params) {
     
-    if (params->use_index < 0 && !params->use_mcg) {
+    if (params->use_index == -1 && !params->use_mcg) {
 
 		char msg[KEY_MSG_SIZE];
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid, my_dest->qpn,
@@ -68,7 +68,7 @@ static int ctx_write_keys(const struct pingpong_dest *my_dest,
 static int ctx_read_keys(struct pingpong_dest *rem_dest, 
                          struct pingpong_params *params)  {
     
-	if (params->use_index < 0 && !params->use_mcg) {
+	if (params->use_index == -1 && !params->use_mcg) {
 
         int parsed;
 		char msg[KEY_MSG_SIZE];

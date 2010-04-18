@@ -110,6 +110,8 @@ struct pingpong_context {
 	int                 size;
 	int                 tx_depth;
 	union ibv_gid       dgid;
+	union ibv_gid       dgid_2;
+
 };
 
 /*
@@ -160,10 +162,18 @@ static int set_up_connection(struct pingpong_context *ctx,
 	int port  = user_parm->ib_port;
 
 	if (use_i != -1) {
-		if (ibv_query_gid(ctx->context,port,use_i,&ctx->dgid)) {
-			return -1;
+		if (user_parm->use_mcg) {
+			if (ibv_query_gid(ctx->context,port,use_i,&ctx->dgid_2)) {
+				return -1;
+			}
+		}
+		else { 
+			if(ibv_query_gid(ctx->context,port,use_i,&ctx->dgid)) {
+				return -1;
+			}
 		}
 	}
+
 	my_dest->lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
 	my_dest->qpn   = ctx->qp->qp_num;
 	my_dest->psn   = lrand48() & 0xffffff;
@@ -358,7 +368,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 	}
 	if (type == ETH && user_parm->gid_index == -1) {
-		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
+		printf(" Link type is RoCE. using gid index 0 as GRH\n");
 		user_parm->gid_index = 0;
 	}
 
@@ -380,7 +390,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 			return NULL;
 		}
 	} else
-		ctx->channel = NULL;
+	ctx->channel = NULL;
 	ctx->pd = ibv_alloc_pd(ctx->context);
 	if (!ctx->pd) {
 		fprintf(stderr, "Couldn't allocate PD\n");
@@ -536,8 +546,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state                 = IBV_QPS_RTR;
-	if (user_parm->connection_type != UD) {
-		switch (user_parm->mtu) {
+	switch (user_parm->mtu) {
 		case 256 : 
 			attr.path_mtu               = IBV_MTU_256;
 			break;
@@ -553,10 +562,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		case 4096 :
 			attr.path_mtu               = IBV_MTU_4096;
 			break;
-		}
-		attr.dest_qp_num      = dest->qpn;
-		attr.rq_psn           = dest->psn;
 	}
+	attr.dest_qp_num      = dest->qpn;
+	attr.rq_psn           = dest->psn;
 	printf("Mtu : %d\n", user_parm->mtu);
 	if (user_parm->connection_type==RC) {
 		attr.max_dest_rd_atomic     = 1;
