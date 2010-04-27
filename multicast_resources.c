@@ -422,7 +422,7 @@ int mcast_init_resources(struct mcast_group *mcast_manager,
 	}
 
 	for (i=0; i < params->num_of_groups; i++) {
-
+	
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,&mcast_manager[i],params)) {
 			fprintf(stderr, "Failed to join mcast group no %d\n",i);
 			return 1;
@@ -430,6 +430,7 @@ int mcast_init_resources(struct mcast_group *mcast_manager,
 
 		// Client side.
 		if ( params->is_client) {
+
 			if (ibv_modify_qp(mcast_manager[i].send_qp,attr,flags)) {
 				fprintf(stderr, "Failed to modify UD Mcast QP to INIT\n");
 				return 1;
@@ -437,6 +438,7 @@ int mcast_init_resources(struct mcast_group *mcast_manager,
 		}
 		// Server side.
 		else {
+			
 			for (j=0; j < params->num_qps_on_group; j++) {
 				if (ibv_modify_qp(mcast_manager[i].recv_mcg[j].qp,attr,flags)) {
 					fprintf(stderr, "Failed to modify UD Mcast QP to INIT\n");

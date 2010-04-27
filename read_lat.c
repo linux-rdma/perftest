@@ -214,9 +214,11 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 		fprintf(stderr, "Failed to determine the link type for this port\n");
 		return NULL;
 	}
-	if (type == ETH && user_parm->gid_index == -1) {
+	if (type == ETH) {
+		if (user_parm->gid_index == -1) {
+			user_parm->gid_index = 0;
+		}
 		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
-		user_parm->gid_index = 0;
 	}
 
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
@@ -336,15 +338,16 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	printf("Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num            = dest->qpn;
 	attr.rq_psn                 = dest->psn;
+	attr.ah_attr.dlid           = dest->lid;
 	attr.max_dest_rd_atomic     = user_parm->max_out_read;
 	attr.min_rnr_timer          = 12;
 	if (user_parm->gid_index < 0) {
 		attr.ah_attr.is_global      = 0;
-		attr.ah_attr.dlid           = dest->lid;
 		attr.ah_attr.sl             = sl;
 	} else {
 		attr.ah_attr.is_global      = 1;
 		attr.ah_attr.grh.dgid       = dest->dgid;
+		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
 		attr.ah_attr.grh.hop_limit  = 1;
 		attr.ah_attr.sl             = 0;
 	}
@@ -758,9 +761,7 @@ int main(int argc, char *argv[]) {
 	printf("                    RDMA_Read Latency Test\n");
 	printf(" Connection type : RC\n");
 	/* anyway make sure the connection is RC */
-	if (user_param.gid_index > -1) {
-		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
-	}
+	
 	tmp_size = size;
 	if (user_param.all == ALL) {
 		/*since we run all sizes */

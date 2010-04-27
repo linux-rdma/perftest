@@ -488,11 +488,13 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		fprintf(stderr, "Failed to determine the link type for this port\n");
 		return NULL;
 	}
-	if (type == ETH && user_parm->gid_index == -1) {
+	if (type == ETH) {
+		if (user_parm->gid_index == -1) {
+			user_parm->gid_index = 0;
+		}
 		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
-		user_parm->gid_index = 0;
 	}
-
+	
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
 		if (ibv_query_device(ctx->context, &device_attr)) {
 			fprintf(stderr, "Failed to query device props");
@@ -592,19 +594,20 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		break;
 	}
 	printf("Mtu : %d\n", user_parm->mtu);
-    attr.dest_qp_num = dest->qpn;
-	attr.rq_psn = dest->psn;
+    attr.dest_qp_num   = dest->qpn;
+	attr.rq_psn        = dest->psn;
+	attr.ah_attr.dlid  = dest->lid;
 	if (user_parm->connection_type == RC) {
 		attr.max_dest_rd_atomic     = 1;
 		attr.min_rnr_timer          = 12;
 	}
 	if (user_parm->gid_index < 0) {
 		attr.ah_attr.is_global  = 0;
-		attr.ah_attr.dlid       = dest->lid;
 		attr.ah_attr.sl         = sl;
 	} else {
 		attr.ah_attr.is_global  = 1;
 		attr.ah_attr.grh.dgid   = dest->dgid;
+		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
 		attr.ah_attr.grh.hop_limit = 1;
 		attr.ah_attr.sl         = 0;
 	}
@@ -819,7 +822,7 @@ int run_iter_bi(struct pingpong_context *ctx, struct user_parameters *user_param
 	/*********************************************
 	 * Important note :
 	 * In case of UD/UC this is NOT the way to measure
-	 * BW sicen we are running with loop on the send side
+	 * BW since we are running with loop on the send side
 	 * while we should run on the recieve side or enable retry in SW
 	 * Since the sender may be faster than the reciver than although
 	 * we had posted recieve it is not enough and might end this will
@@ -1317,10 +1320,7 @@ int main(int argc, char *argv[])
 	else{
 		printf("Connection type : UD\n");
 	}
-	if (user_param.gid_index > -1) {
-		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
-	}
-
+	
 	/* Done with parameter parsing. Perform setup. */
 	if (user_param.all == ALL)
 		/*since we run all sizes */
