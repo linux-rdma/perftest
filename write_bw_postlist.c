@@ -55,28 +55,7 @@
 #define VERSION 1.1
 #define ALL 1
 #define MAX_INLINE 400
-#define RC 0
-#define UC 1
 
-struct user_parameters {
-	const char *servername;
-	int connection_type;
-	int mtu;
-	int all; /* run all msg size */
-	int iters;
-	int tx_depth;
-    int numofqps;
-    int maxpostsofqpiniteration;
-    int inline_size;
-	int qp_timeout;
-	int gid_index; /* if value not negative, we use gid AND gid_index=value */
-	int port;
-	int ib_port;
-};
-struct extended_qp {
-  struct ibv_qp           *qp;
-  int                      scnt, ccnt ;
-};
 static int sl = 0;
 static int page_size;
 
@@ -95,14 +74,13 @@ struct pingpong_context {
     struct ibv_send_wr  wr;
     int                 *scnt;
     int                 *ccnt ;
-	union ibv_gid       dgid;
 };
 
 /*
  * 
  */
 static int set_up_connection(struct pingpong_context *ctx,
-							 struct user_parameters *user_parm,
+							 struct perftest_parameters *user_parm,
 							 struct pingpong_dest *my_dest) {
 
 	int i;
@@ -110,7 +88,7 @@ static int set_up_connection(struct pingpong_context *ctx,
 	int port  = user_parm->ib_port;
 
 	if (use_i != -1) {
-		if (ibv_query_gid(ctx->context,port,use_i,&ctx->dgid)) {
+		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->gid)) {
 			return -1;
 		}
 	}
@@ -121,7 +99,6 @@ static int set_up_connection(struct pingpong_context *ctx,
 		my_dest[i].psn   = lrand48() & 0xffffff;
 		my_dest[i].rkey  = ctx->mr->rkey;
 		my_dest[i].vaddr = (uintptr_t)ctx->buf + ctx->size;
-		my_dest[i].dgid  = ctx->dgid;
 
 		// We do not fail test upon lid in RDMAoE/Eth conf.
 		if (use_i < 0) {
@@ -138,26 +115,23 @@ static int set_up_connection(struct pingpong_context *ctx,
 /*
  * 
  */
-static int init_connection(struct pingpong_params *params,
-						   struct user_parameters *user_parm,
-						   struct pingpong_dest *my_dest) {
+static int init_connection(struct perftest_parameters *params,
+ 						   struct pingpong_dest *my_dest,
+						   const char *servername) {
 
 	int i;
 
-	params->conn_type = user_parm->connection_type;
-	params->use_index = user_parm->gid_index;
-	params->use_mcg	  = 0;
-	params->type      = user_parm->servername ? CLIENT : SERVER;
+	params->machine   = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
 
-	for (i=0; i < user_parm->numofqps; i++) {
+	for (i=0; i < params->numofqps; i++) {
 		ctx_print_pingpong_data(&my_dest[i],params);
 	}
 
-	if (user_parm->servername) 
-		params->sockfd = ctx_client_connect(user_parm->servername,user_parm->port);
+	if (servername) 
+		params->sockfd = ctx_client_connect(servername,params->port);
 	else 
-		params->sockfd = ctx_server_connect(user_parm->port);
+		params->sockfd = ctx_server_connect(params->port);
 
 	if(params->sockfd < 0) {
 		fprintf(stderr,"Unable to open file descriptor for socket connection");
@@ -167,9 +141,8 @@ static int init_connection(struct pingpong_params *params,
 }
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned size,
-											struct user_parameters *user_parm)
+											struct perftest_parameters *user_parm)
 {
-	LinkType type;
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 	int counter;
@@ -208,14 +181,10 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		return NULL;
 	}
 
-	// Determine the link type and configure the HCA accordingly.
-	if ((type = set_link_layer(ctx->context,user_parm->ib_port)) == FAILURE) {
-		fprintf(stderr, "Failed to determine the link type for this port\n");
+	// Finds the link type and configure the HCA accordingly.
+	if (ctx_set_link_layer(ctx->context,user_parm)) {
+		fprintf(stderr, "Couldn't set the link layer\n");
 		return NULL;
-	}
-	if (type == ETH && user_parm->gid_index == -1) {
-		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
-		user_parm->gid_index = 0;
 	}
 
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
@@ -297,7 +266,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 
 static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 						  struct pingpong_dest *dest, 
-						  struct user_parameters *user_parm, int qpindex)
+						  struct perftest_parameters *user_parm, int qpindex)
 {
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof attr);
@@ -332,7 +301,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		attr.ah_attr.sl         = sl;
 	} else {
 		attr.ah_attr.is_global  = 1;
-		attr.ah_attr.grh.dgid   = dest->dgid;
+		attr.ah_attr.grh.dgid   = dest->gid;
 		attr.ah_attr.grh.hop_limit = 1;
 		attr.ah_attr.sl         = 0;
 	}
@@ -419,8 +388,8 @@ static void usage(const char *argv0)
 	printf("  -F, --CPU-freq            do not fail even if cpufreq_ondemand module is loaded\n");
 }
 
-static void print_report(unsigned int iters, unsigned size, int duplex,
-			 cycles_t *tposted, cycles_t *tcompleted, struct user_parameters *user_param, int no_cpu_freq_fail)
+static void print_report(unsigned size, int duplex,
+			 cycles_t *tposted, cycles_t *tcompleted, struct perftest_parameters *user_param, int no_cpu_freq_fail)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -433,8 +402,8 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
 
 	/* Find the peak bandwidth */
-	for (i = 0; i < iters * user_param->numofqps; ++i)
-		for (j = i; j < iters * user_param->numofqps; ++j) {
+	for (i = 0; i < user_param->iters * user_param->numofqps; ++i)
+		for (j = i; j < user_param->iters * user_param->numofqps; ++j) {
 			t = (tcompleted[j] - tposted[i]) / (j - i + 1);
 			if (t < opt_delta) {
 				opt_delta  = t;
@@ -448,11 +417,11 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
 	printf("%7d        %d            %7.2f               %7.2f\n",
-	       size,iters,tsize * cycles_to_units / opt_delta / 0x100000,
-	       tsize * iters * user_param->numofqps * cycles_to_units /(tcompleted[(iters* user_param->numofqps) - 1] - tposted[0]) / 0x100000);
+	       size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
+	       tsize * user_param->iters * user_param->numofqps * cycles_to_units /(tcompleted[(user_param->iters* user_param->numofqps) - 1] - tposted[0]) / 0x100000);
 }
-int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
-	     struct pingpong_dest *rem_dest, int size)
+int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
+	     struct pingpong_dest *rem_dest, int size,int maxpostsofqpiniteration)
 {
     struct ibv_qp           *qp;
     int                      totscnt, totccnt ;
@@ -486,13 +455,13 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	ctx->wr.wr.rdma.rkey = rem_dest[0].rkey;
     /* lets make the list with the right id's*/
 	for (qpindex=0 ; qpindex < user_param->numofqps ; qpindex++) {
-	  for (index =0 ; index <  user_param->maxpostsofqpiniteration ; index++) {
-	    wrlist[qpindex*user_param->maxpostsofqpiniteration+index]=ctx->wr;
-	    wrlist[qpindex*user_param->maxpostsofqpiniteration+ index].wr_id      = qpindex ;
-	    if(index < user_param->maxpostsofqpiniteration -1) {
-	      wrlist[qpindex*user_param->maxpostsofqpiniteration+index].next=&wrlist[qpindex*user_param->maxpostsofqpiniteration+index+1];
+	  for (index =0 ; index <  maxpostsofqpiniteration ; index++) {
+	    wrlist[qpindex*maxpostsofqpiniteration+index]=ctx->wr;
+	    wrlist[qpindex*maxpostsofqpiniteration+ index].wr_id      = qpindex ;
+	    if(index < maxpostsofqpiniteration -1) {
+	      wrlist[qpindex*maxpostsofqpiniteration+index].next=&wrlist[qpindex*maxpostsofqpiniteration+index+1];
 	    } else {
-	      wrlist[qpindex*user_param->maxpostsofqpiniteration+index].next=NULL;
+	      wrlist[qpindex*maxpostsofqpiniteration+index].next=NULL;
 	    }
 	  }
 	}
@@ -512,18 +481,18 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	  for (qpindex =0 ; qpindex < user_param->numofqps ; qpindex++) {
 	    qp = ctx->qp[qpindex];
 	    if (user_param->iters > ctx->scnt[qpindex] ) {
-            numpostperqp = user_param->maxpostsofqpiniteration - (ctx->scnt[qpindex] - ctx->ccnt[qpindex]);
+            numpostperqp = maxpostsofqpiniteration - (ctx->scnt[qpindex] - ctx->ccnt[qpindex]);
             if (numpostperqp > 40 || ((user_param->iters - ctx->scnt[qpindex]) <= 40 && numpostperqp > 0) ){
-                wrlist[qpindex*user_param->maxpostsofqpiniteration+numpostperqp-1].next=NULL;
+                wrlist[qpindex*maxpostsofqpiniteration+numpostperqp-1].next=NULL;
                 tposted[totscnt] = get_cycles();
-                if (ibv_post_send(qp, &wrlist[qpindex*user_param->maxpostsofqpiniteration], &bad_wr)) {
+                if (ibv_post_send(qp, &wrlist[qpindex*maxpostsofqpiniteration], &bad_wr)) {
                     fprintf(stderr, "Couldn't post %d send: qp index = %d qp scnt=%d total scnt %d qp scnt=%d total ccnt=%d\n",
                             numpostperqp,qpindex,ctx->scnt[qpindex],totscnt,ctx->ccnt[qpindex],totccnt);
                     return 1;
                 }
                 ctx->scnt[qpindex]= ctx->scnt[qpindex]+numpostperqp;
                 totscnt=totscnt + numpostperqp;
-                wrlist[qpindex*user_param->maxpostsofqpiniteration+numpostperqp-1].next=&wrlist[qpindex*user_param->maxpostsofqpiniteration+numpostperqp];
+                wrlist[qpindex*maxpostsofqpiniteration+numpostperqp-1].next=&wrlist[qpindex*maxpostsofqpiniteration+numpostperqp];
             }
 	    }
 	    /*FINISHED POSTING  */
@@ -539,10 +508,8 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
               return 1;
           }
           if (wc.status != IBV_WC_SUCCESS) {
-              fprintf(stderr, "Completion wth error at %s:\n",
-                      user_param->servername ? "client" : "server");
-              fprintf(stderr, "Failed status %d: wr_id %d\n",
-                      wc.status, (int) wc.wr_id);
+              fprintf(stderr, "Completion wth error at %s:\n",user_param->machine == CLIENT ? "client" : "server");
+              fprintf(stderr, "Failed status %d: wr_id %d\n",wc.status, (int) wc.wr_id);
               fprintf(stderr, "qp index %d ,qp scnt=%d, qp ccnt=%d total scnt %d total ccnt %d\n",
                       (int)wc.wr_id, ctx->scnt[(int)wc.wr_id], ctx->ccnt[(int)wc.wr_id], totscnt, totccnt);
               return 1;
@@ -562,8 +529,7 @@ int main(int argc, char *argv[])
 	struct ibv_device	*ib_dev;
 	struct pingpong_context *ctx;
 	struct pingpong_dest    *my_dest,*rem_dest;
-	struct pingpong_params  png_params;
-	struct user_parameters  user_param;
+	struct perftest_parameters user_param;
 	struct ibv_device_attr device_attribute;
 	char                    *ib_devname = NULL;
 	long long                size = 65536;
@@ -573,16 +539,18 @@ int main(int argc, char *argv[])
 	struct ibv_context       *context;
 	int                      no_cpu_freq_fail = 0;
 
+	int all = 0;	
+	const char *servername = NULL;
+	int maxpostsofqpiniteration = 100;
+
 	/* init default values to user's parameters */
-	memset(&user_param, 0, sizeof(struct user_parameters));
+	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	user_param.mtu = 0;
 	user_param.iters = 5000;
 	user_param.tx_depth = 100;
 	user_param.port = 18515;
 	user_param.ib_port = 1;
-	user_param.servername = NULL;
 	user_param.numofqps = 1;
-	user_param.maxpostsofqpiniteration = 100;
 	user_param.inline_size = MAX_INLINE;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
@@ -640,10 +608,10 @@ int main(int argc, char *argv[])
 			user_param.numofqps = strtol(optarg, NULL, 0);
 			break;
 		case 'g':
-			user_param.maxpostsofqpiniteration = strtol(optarg, NULL, 0);
+			maxpostsofqpiniteration = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
-			user_param.all = ALL;
+			all = ALL;
 			break;
 		case 'V':
 			printf("rdma_bw version : %.2f\n",VERSION);
@@ -721,7 +689,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (optind == argc - 1)
-		user_param.servername = strdupa(argv[optind]);
+		servername = strdupa(argv[optind]);
 	else if (optind < argc) {
 		usage(argv[0]);
 		return 1;
@@ -740,17 +708,17 @@ int main(int argc, char *argv[])
 	} else {
 		printf("Connection type : UC\n");
 	}
-	if (user_param.maxpostsofqpiniteration > user_param.tx_depth ) {
+	if (maxpostsofqpiniteration > user_param.tx_depth ) {
 	  printf("Can not post more than tx_depth , adjusting number of post to tx_depth\n");
-	  user_param.maxpostsofqpiniteration = user_param.tx_depth;
+	  maxpostsofqpiniteration = user_param.tx_depth;
 	} else {
-	  printf("Each Qp will post %d messages each time\n",user_param.maxpostsofqpiniteration);
+	  printf("Each Qp will post %d messages each time\n",maxpostsofqpiniteration);
 	}
 		if (user_param.gid_index > -1) {
 		printf("Using GID to support RDMAoE configuration. Refer to port type as Ethernet, default MTU 1024B\n");
 	}
 	/* Done with parameter parsing. Perform setup. */
-	if (user_param.all == ALL) {
+	if (all == ALL) {
 		/*since we run all sizes */
 		size = 8388608; /*2^23 */
 	}
@@ -808,19 +776,19 @@ int main(int argc, char *argv[])
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&png_params,&user_param,my_dest)) {
+	if (init_connection(&user_param,my_dest,servername)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
 
-	// shaking hands and gather the other side info.
-	png_params.side = REMOTE;
+	// Shaking hands and gather the other side info.
+	user_param.side = REMOTE;
 	for (i=0; i < user_param.numofqps; i++) {
-		if (ctx_hand_shake(&png_params,&my_dest[i],&rem_dest[i])) {
+		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1;   
 		}
-		ctx_print_pingpong_data(&rem_dest[i],&png_params);
+		ctx_print_pingpong_data(&rem_dest[i],&user_param);
 
 		if (pp_connect_ctx(ctx,my_dest[i].psn,&rem_dest[i],&user_param,i)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
@@ -828,7 +796,7 @@ int main(int argc, char *argv[])
 		}
 
 		// An additional handshake is required after moving qp to RTR.
-		if (ctx_hand_shake(&png_params,&my_dest[i],&rem_dest[i])) {
+		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1; 
 		}
@@ -838,8 +806,8 @@ int main(int argc, char *argv[])
 	printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
 
 	// For half duplex tests, server just waits for client to exit 
-	if (!user_param.servername && !duplex) {
-		if (ctx_close_connection(&png_params,&my_dest[0],&rem_dest[0])) {
+	if (!servername && !duplex) {
+		if (ctx_close_connection(&user_param,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
@@ -860,21 +828,22 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (user_param.all == ALL) {
+	if (all == ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			size = 1 << i;
-			if(run_iter(ctx, &user_param, rem_dest, size))
+			if(run_iter(ctx, &user_param, rem_dest, size,maxpostsofqpiniteration))
 				return 17;
-			print_report(user_param.iters, size, duplex, tposted, tcompleted, &user_param, no_cpu_freq_fail);
+			print_report(size, duplex, tposted, tcompleted,&user_param, no_cpu_freq_fail);
 			}
 	} else {
-		if(run_iter(ctx, &user_param, rem_dest, size))
+		if(run_iter(ctx, &user_param, rem_dest, size,maxpostsofqpiniteration))
 			return 18;
-		print_report(user_param.iters, size, duplex, tposted, tcompleted, &user_param, no_cpu_freq_fail);
+		print_report(size, duplex, tposted, tcompleted,&user_param, no_cpu_freq_fail);
 	}
+	
 
 	// Closing connection.
-	if (ctx_close_connection(&png_params,&my_dest[0],&rem_dest[0])) {
+	if (ctx_close_connection(&user_param,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}

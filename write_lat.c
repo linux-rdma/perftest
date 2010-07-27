@@ -53,31 +53,17 @@
 
 #define PINGPONG_RDMA_WRID	3
 #define VERSION 1.1
-#define ALL 1
 #define MAX_INLINE 400
 
 static int sl = 0;
 static int page_size;
 cycles_t                *tstamp;
-struct user_parameters {
-	const char              *servername;
-	int connection_type;
-	int mtu;
-	int all; /* run all msg size */
-	int iters;
-	int tx_depth;
-	int inline_size;
-	int qp_timeout;
-	int gid_index; /* if value not negative, we use gid AND gid_index=value */
-	int ib_port;
-	int port;
-};
+
 struct report_options {
 	int unsorted;
 	int histogram;
 	int cycles;   /* report delta's in cycles, not microsec's */
 };
-
 
 struct pingpong_context {
 	struct ibv_context *context;
@@ -92,21 +78,20 @@ struct pingpong_context {
 	int                 tx_depth;
 	struct ibv_sge list;
 	struct ibv_send_wr wr;
-	union ibv_gid       dgid;
 };
 
 /*
  * 
  */
 static int set_up_connection(struct pingpong_context *ctx,
-							 struct user_parameters *user_parm,
+							 struct perftest_parameters *user_parm,
 							 struct pingpong_dest *my_dest) {
 
 	int use_i = user_parm->gid_index;
 	int port  = user_parm->ib_port;
 
 	if (use_i != -1) {
-		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->dgid)) {
+		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->gid)) {
 			return -1;
 		}
 	}
@@ -130,21 +115,18 @@ static int set_up_connection(struct pingpong_context *ctx,
 /*
  * 
  */
-static int init_connection(struct pingpong_params *params,
-						   struct user_parameters *user_parm,
-						   struct pingpong_dest *my_dest) {
+static int init_connection(struct perftest_parameters *params,
+						   struct pingpong_dest *my_dest,
+						   const char *servername) {
 
-	params->conn_type = user_parm->connection_type;
-	params->use_index = user_parm->gid_index;
-	params->use_mcg	  = 0;
-	params->type      = user_parm->servername ? CLIENT : SERVER;
+	params->machine      = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
 	ctx_print_pingpong_data(my_dest,params);
 
-	if (user_parm->servername) 
-		params->sockfd = ctx_client_connect(user_parm->servername,user_parm->port);
+	if (servername) 
+		params->sockfd = ctx_client_connect(servername,params->port);
 	else 
-		params->sockfd = ctx_server_connect(user_parm->port);
+		params->sockfd = ctx_server_connect(params->port);
 
 	if(params->sockfd < 0) {
 		fprintf(stderr,"Unable to open file descriptor for socket connection");
@@ -178,8 +160,7 @@ static struct ibv_device *pp_find_dev(const char *ib_devname) {
 
 
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
-											struct user_parameters *user_parm) {
-	LinkType type;
+											struct perftest_parameters *user_parm) {
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 
@@ -208,16 +189,10 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 		return NULL;
 	}
 
-	// Determine the link type and configure the HCA accordingly.
-	if ((type = set_link_layer(ctx->context,user_parm->ib_port)) == FAILURE) {
-		fprintf(stderr, "Failed to determine the link type for this port\n");
+	// Finds the link type and configure the HCA accordingly.
+	if (ctx_set_link_layer(ctx->context,user_parm)) {
+		fprintf(stderr, "Couldn't set the link layer\n");
 		return NULL;
-	}
-	if (type == ETH) {
-		if (user_parm->gid_index == -1) {
-			user_parm->gid_index = 0;
-		}
-		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
 	}
 
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
@@ -306,7 +281,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 
 static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 						  struct pingpong_dest *dest,
-						  struct user_parameters *user_parm)
+						  struct perftest_parameters *user_parm)
 {
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
@@ -343,7 +318,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		attr.ah_attr.sl             = sl;
 	} else {
 		attr.ah_attr.is_global      = 1;
-		attr.ah_attr.grh.dgid       = dest->dgid;
+		attr.ah_attr.grh.dgid       = dest->gid;
 		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
 		attr.ah_attr.grh.hop_limit  = 1;
 		attr.ah_attr.sl             = 0;
@@ -504,20 +479,17 @@ static void print_report(struct report_options * options,
 
 	free(delta);
 }
-int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
-	     struct pingpong_dest *rem_dest, int size)
+int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
+	     struct pingpong_dest *rem_dest,int size,int all)
 {
 	struct ibv_qp           *qp;
 	struct ibv_send_wr      *wr;
 	volatile char           *poll_buf; 
 	volatile char           *post_buf;
-
 	int                      scnt, ccnt, rcnt;
-	int                      iters;
 	int                      tx_depth;
 	int                      inline_size;
 
-	iters = user_param->iters;
 	tx_depth = user_param->tx_depth;
 	inline_size = user_param->inline_size;
 
@@ -537,7 +509,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	rcnt = 0;
 	ccnt = 0;
 
-	if(user_param->all == ALL) {
+	if(all == ALL) {
 		post_buf = (char*)ctx->buf + size - 1;
 		poll_buf = (char*)ctx->buf + 8388608 + size - 1;
 	} else {
@@ -547,10 +519,10 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 	qp = ctx->qp;
 
 	/* Done with setup. Start the test. */
-	while (scnt < iters || ccnt < iters || rcnt < iters) {
+	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters) {
 
 		/* Wait till buffer changes. */
-		if (rcnt < user_param->iters && !(scnt < 1 && user_param->servername)) {
+		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == SERVER)) {
 			++rcnt;
 			while (*poll_buf != (char)rcnt)
 				;
@@ -585,7 +557,7 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 			}
 			if (wc.status != IBV_WC_SUCCESS) {
 				fprintf(stderr, "Completion wth error at %s:\n",
-					user_param->servername ? "client" : "server");
+					user_param->machine == CLIENT ? "client" : "server");
 				fprintf(stderr, "Failed status %d: wr_id %d\n",
 					wc.status, (int) wc.wr_id);
 				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
@@ -605,18 +577,20 @@ int main(int argc, char *argv[])
 	struct pingpong_context *ctx;
 	struct pingpong_dest     my_dest,rem_dest;
 	struct ibv_device       *ib_dev;
-	struct pingpong_params   png_params;
-	struct user_parameters   user_param;
+	struct perftest_parameters  user_param;
 	int                      no_cpu_freq_fail = 0;
 
+	int all = 0;
+	const char *servername = NULL;
+
+
 	/* init default values to user's parameters */
-	memset(&user_param, 0, sizeof(struct user_parameters));
+	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	user_param.mtu = 0; /* signal choose default by device */
-	user_param.iters = 1000;
 	user_param.tx_depth = 50;
 	user_param.ib_port = 1;
 	user_param.port = 18515;
-	user_param.servername = NULL;
+	user_param.iters = 1000;
 	user_param.inline_size = MAX_INLINE;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
@@ -668,7 +642,7 @@ int main(int argc, char *argv[])
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
-			user_param.all = ALL;
+			all = ALL;
 			break;
 		case 'V':
 			printf("perftest version : %.2f\n",VERSION);
@@ -755,7 +729,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (optind == argc - 1)
-		user_param.servername = strdupa(argv[optind]);
+		servername = strdupa(argv[optind]);
 	else if (optind < argc) {
 		usage(argv[0]);
 		return 6;
@@ -779,7 +753,7 @@ int main(int argc, char *argv[])
 		printf("Connection type : UC\n");
 	}
 	
-	if (user_param.all == ALL) {
+	if (all == ALL) {
 		/*since we run all sizes */
 		size = 8388608; /*2^23 */
 	}
@@ -801,19 +775,19 @@ int main(int argc, char *argv[])
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&png_params,&user_param,&my_dest)) {
+	if (init_connection(&user_param,&my_dest,servername)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
 	
 	// shaking hands and gather the other side info.
-    if (ctx_hand_shake(&png_params,&my_dest,&rem_dest)) {
+    if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
         
     }
-	png_params.side = REMOTE;
-	ctx_print_pingpong_data(&rem_dest,&png_params);
+	user_param.side = REMOTE;
+	ctx_print_pingpong_data(&rem_dest,&user_param);
 
 	if (pp_connect_ctx(ctx,my_dest.psn,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
@@ -821,7 +795,7 @@ int main(int argc, char *argv[])
 	}
 
 	// An additional handshake is required after moving qp to RTR.
-	if (ctx_hand_shake(&png_params,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
     }
@@ -829,21 +803,21 @@ int main(int argc, char *argv[])
 	printf("------------------------------------------------------------------\n");
 	printf(" #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n");
 
-	if (user_param.all == ALL) {
+	if (all == ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			size = 1 << i;
-			if(run_iter(ctx, &user_param, &rem_dest, size))
+			if(run_iter(ctx,&user_param,&rem_dest,size,all))
 				return 17;
-			print_report(&report, user_param.iters, tstamp, size, no_cpu_freq_fail);
+			print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
 		}
 	} else {
-		if(run_iter(ctx, &user_param, &rem_dest, size))
+		if(run_iter(ctx,&user_param, &rem_dest,size,all))
 			return 18;
-		print_report(&report, user_param.iters, tstamp, size, no_cpu_freq_fail);
+		print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
 	}
 	
 	// Done close sockets
-	close(png_params.sockfd);
+	close(user_param.sockfd);
 
 	printf("------------------------------------------------------------------\n");
 	free(tstamp);

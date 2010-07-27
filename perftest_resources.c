@@ -12,27 +12,29 @@
 #include "perftest_resources.h"
 
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
 
-static const char *sideArray[] = {"local","remote"};
+static const char *sideArray[] = {"local", "remote"};
 
-static const char *gidArray[]  = {"GID","MGID"};
+static const char *gidArray[] =  {"GID", "MGID"};
 
-/************************************************************************ 
+static const char *linkArray[] = {"No link", "IB", "ETH"};
+
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
 static int ctx_write_keys(const struct pingpong_dest *my_dest,
-						  struct pingpong_params *params) {
+						  struct perftest_parameters *params) {
     
-    if (params->use_index == -1 && !params->use_mcg) {
+    if (params->gid_index == -1 && !params->use_mcg) {
 
 		char msg[KEY_MSG_SIZE];
-		sprintf(msg,KEY_PRINT_FMT,my_dest->lid, my_dest->qpn,
-				my_dest->psn, my_dest->rkey, my_dest->vaddr);
+		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
+				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
 
-		if (write(params->sockfd, msg, sizeof msg) != sizeof msg) {
+		if (write(params->sockfd,msg,sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
 			return -1;
@@ -42,16 +44,16 @@ static int ctx_write_keys(const struct pingpong_dest *my_dest,
 
 		char msg[KEY_MSG_SIZE_GID];
     
-		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid, my_dest->qpn,
-				my_dest->psn, my_dest->rkey, my_dest->vaddr,
-				my_dest->dgid.raw[0],my_dest->dgid.raw[1],
-				my_dest->dgid.raw[2],my_dest->dgid.raw[3],
-				my_dest->dgid.raw[4],my_dest->dgid.raw[5],
-				my_dest->dgid.raw[6],my_dest->dgid.raw[7],
-				my_dest->dgid.raw[8],my_dest->dgid.raw[9],
-				my_dest->dgid.raw[10],my_dest->dgid.raw[11],
-				my_dest->dgid.raw[12],my_dest->dgid.raw[13],
-				my_dest->dgid.raw[14],my_dest->dgid.raw[15]);
+		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
+				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
+				my_dest->gid.raw[0],my_dest->gid.raw[1],
+				my_dest->gid.raw[2],my_dest->gid.raw[3],
+				my_dest->gid.raw[4],my_dest->gid.raw[5],
+				my_dest->gid.raw[6],my_dest->gid.raw[7],
+				my_dest->gid.raw[8],my_dest->gid.raw[9],
+				my_dest->gid.raw[10],my_dest->gid.raw[11],
+				my_dest->gid.raw[12],my_dest->gid.raw[13],
+				my_dest->gid.raw[14],my_dest->gid.raw[15]);
 
 		if (write(params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
@@ -62,13 +64,13 @@ static int ctx_write_keys(const struct pingpong_dest *my_dest,
     return 0;
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
 static int ctx_read_keys(struct pingpong_dest *rem_dest, 
-                         struct pingpong_params *params)  {
+                         struct perftest_parameters *params)  {
     
-	if (params->use_index == -1 && !params->use_mcg) {
+	if (params->gid_index == -1 && !params->use_mcg) {
 
         int parsed;
 		char msg[KEY_MSG_SIZE];
@@ -79,10 +81,11 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 			return -1;
 		}
 
-		parsed = sscanf(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
-                        &rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+		parsed = sscanf(msg,KEY_PRINT_FMT,&rem_dest->lid,
+						&rem_dest->out_reads,&rem_dest->qpn,
+						&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
 
-		if (parsed != 5) {
+		if (parsed != 6) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return -1;
 		}
@@ -104,6 +107,12 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
 		rem_dest->lid = (int)strtol(tmp, NULL, 16); // LID
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->out_reads = (int)strtol(tmp, NULL, 16); // OUT_READS
 
 		pstr += term - pstr + 1;
 		term = strpbrk(pstr, ":");
@@ -134,33 +143,124 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 			term = strpbrk(pstr, ":");
 			memcpy(tmp, pstr, term - pstr);
 			tmp[term - pstr] = 0;
-			rem_dest->dgid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
+			rem_dest->gid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
 		}
 		pstr += term - pstr + 1;
 		strcpy(tmp, pstr);
-		rem_dest->dgid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
+		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 	}
 	return 0;
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
-LinkType set_link_layer(struct ibv_context *context,int ib_port) {
+ ******************************************************************************/
+int ctx_set_link_layer(struct ibv_context *context,
+					   struct perftest_parameters *params) {
 
+	LinkType type;
 	struct ibv_port_attr port_attr;
 
-	if (ibv_query_port(context,ib_port,&port_attr)) {
+	if (ibv_query_port(context,params->ib_port,&port_attr)) {
 		fprintf(stderr,"Unable to query port\n");
-		return FAILURE;
+		return -1;
+	}
+	type = (LinkType)port_attr.link_layer; 
+
+	if (type == UNDETECTED) {
+		fprintf(stderr," Unable to determine link layer \n");
+		return -1;
+	}
+	else {
+		printf(" Link type is %s \n",linkArray[type]);
+	}
+	
+	if ((type == ETH || params->use_mcg) && params->gid_index == -1) {
+		params->gid_index = 0;
 	}
 
-	return (LinkType)port_attr.link_layer;
+	if (params->gid_index > -1) {
+		fprintf(stdout," Using gid index %d as source GID\n",params->gid_index);
+	}
+
+	return 0;
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
+struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
+							 struct ibv_cq *send_cq,
+							 struct ibv_cq *recv_cq,
+							 struct perftest_parameters *param) {
+	
+	struct ibv_qp_init_attr attr;
+	struct ibv_qp* qp = NULL;
+	
+	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
+	attr.send_cq = send_cq;
+	attr.recv_cq = recv_cq; 
+	attr.cap.max_send_wr  = param->tx_depth;
+	attr.cap.max_recv_wr  = param->rx_depth;
+	attr.cap.max_send_sge = MAX_SEND_SGE;
+	attr.cap.max_recv_sge = MAX_RECV_SGE;
+	attr.cap.max_inline_data = param->inline_size;
+	// attr.sq_sig_all = 1;
+	
+	switch (param->connection_type) {
+		case RC : attr.qp_type = IBV_QPT_RC; break;
+		case UC : attr.qp_type = IBV_QPT_UC; break;
+		case UD : attr.qp_type = IBV_QPT_UD; break;
+		default:  fprintf(stderr, "Unknown connection type \n");
+				  return NULL;
+	}
+
+	qp = ibv_create_qp(pd,&attr);
+	if (!qp)  {
+		fprintf(stderr, "Couldn't create QP\n");
+		return NULL;
+	}
+	return qp;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param)  {
+
+    struct ibv_qp_attr attr;
+    int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+    
+    memset(&attr, 0, sizeof(struct ibv_qp_attr));
+    attr.qp_state        = IBV_QPS_INIT;
+    attr.pkey_index      = 0;
+    attr.port_num        = param->ib_port;
+    
+    if (param->connection_type == UD) {
+		// assert(param->verb == SEND);
+		attr.qkey = DEF_QKEY;
+		flags |= IBV_QP_QKEY;
+
+	} else {
+		switch(param->verb) {
+			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;
+			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
+			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE	|
+											    IBV_ACCESS_LOCAL_WRITE;
+		}
+		flags |= IBV_QP_ACCESS_FLAGS;
+    }
+    
+	if (ibv_modify_qp(qp,&attr,flags))  {
+		fprintf(stderr, "Failed to modify QP to INIT\n");
+		return 1;
+	}
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 
     struct ibv_port_attr attr;
@@ -171,10 +271,46 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
     return attr.lid;
 }
 
-
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
+int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
+
+	int is_hermon = 0;
+	int max_reads;
+	struct ibv_device_attr attr;
+
+	if (ibv_query_device(context,&attr)) {
+		return -1;
+	}
+	// Checks the devide type for setting the max outstanding reads.
+	if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
+		attr.vendor_part_id == 25448  || attr.vendor_part_id == 26418  || 
+		attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
+		attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
+		attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478) {
+			is_hermon = 1;		
+	}
+
+	max_reads = (is_hermon == 1) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
+
+	if (num_user_reads > max_reads) {
+		fprintf(stderr," Number of outstanding reads is above max = %d\n",max_reads);
+		fprintf(stderr," Changing to that max value\n");
+		num_user_reads = max_reads;
+	}
+	else if (num_user_reads <= 0) {
+		num_user_reads = max_reads;
+	}
+
+	printf(" Number of outstanding reads is %d\n",num_user_reads);
+
+	return num_user_reads;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int ctx_client_connect(const char *servername,int port) {
     
 	struct addrinfo *res, *t;
@@ -215,9 +351,9 @@ int ctx_client_connect(const char *servername,int port) {
 	return sockfd;
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
 int ctx_server_connect(int port)
 {
 	struct addrinfo *res, *t;
@@ -275,15 +411,15 @@ int ctx_server_connect(int port)
 }
 
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
-int ctx_hand_shake(struct pingpong_params  *params,
+ ******************************************************************************/
+int ctx_hand_shake(struct perftest_parameters  *params,
 				   struct pingpong_dest *my_dest,
 				   struct pingpong_dest *rem_dest) {
 
     // Client.
-    if (params->type == CLIENT) {
+    if (params->machine == CLIENT) {
 		if (ctx_write_keys(my_dest,params)) {
 			fprintf(stderr,"Unable to write on the socket\n");
 			return -1;
@@ -307,33 +443,33 @@ int ctx_hand_shake(struct pingpong_params  *params,
     return 0;
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
+ ******************************************************************************/
 void ctx_print_pingpong_data(struct pingpong_dest *element,
-							 struct pingpong_params *params) {
+							 struct perftest_parameters *params) {
  
-    printf(ADDR_FMT,sideArray[params->side],element->lid,element->qpn,
-		   element->psn,element->rkey,element->vaddr);
+    printf(ADDR_FMT,sideArray[params->side],element->lid,element->out_reads,
+		   element->qpn,element->psn,element->rkey,element->vaddr);
 
-	if (params->use_index > -1 || params->use_mcg) {
+	if (params->gid_index > -1 || params->use_mcg) {
 
 		printf(GID_FMT,gidArray[params->use_mcg],
-				element->dgid.raw[0], element->dgid.raw[1],
-				element->dgid.raw[2], element->dgid.raw[3], 
-			    element->dgid.raw[4], element->dgid.raw[5], 
-			    element->dgid.raw[6], element->dgid.raw[7],
-			   	element->dgid.raw[8], element->dgid.raw[9],
-			    element->dgid.raw[10],element->dgid.raw[11],
-			    element->dgid.raw[12],element->dgid.raw[13],
-				element->dgid.raw[14],element->dgid.raw[15]);
+				element->gid.raw[0], element->gid.raw[1],
+				element->gid.raw[2], element->gid.raw[3], 
+			    element->gid.raw[4], element->gid.raw[5], 
+			    element->gid.raw[6], element->gid.raw[7],
+			   	element->gid.raw[8], element->gid.raw[9],
+			    element->gid.raw[10],element->gid.raw[11],
+			    element->gid.raw[12],element->gid.raw[13],
+				element->gid.raw[14],element->gid.raw[15]);
 	}
 }
 
-/************************************************************************ 
+/****************************************************************************** 
  *
- ************************************************************************/
-int ctx_close_connection(struct pingpong_params  *params,
+ ******************************************************************************/
+int ctx_close_connection(struct perftest_parameters  *params,
 				         struct pingpong_dest *my_dest,
 				         struct pingpong_dest *rem_dest) {
 
@@ -353,7 +489,6 @@ int ctx_close_connection(struct pingpong_params  *params,
 	close(params->sockfd);
 	return 0;
 }
-
-/************************************************************************ 
+/****************************************************************************** 
  * End
- ************************************************************************/
+ ******************************************************************************/

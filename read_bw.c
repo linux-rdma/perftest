@@ -50,34 +50,15 @@
 #include "get_clock.h"
 #include "perftest_resources.h"
 
-#define MAX_OUT_READ_HERMON 16
-#define MAX_OUT_READ 4
+
 #define PINGPONG_READ_WRID	1
 #define VERSION 1.3
-#define ALL 1
-#define RC 0
 
-#define MIN(a,b) (a = (a < b) ? a : b)
-
-struct user_parameters {
-	const char  *servername;
-	int connection_type;
-	int mtu;
-	int all; /* run all msg size */
-	int iters;
-	int tx_depth;
-	int max_out_read;
-	int use_out_read;
-	int use_event;
-	int qp_timeout;
-	int gid_index; /* if value not negative, we use gid AND gid_index=value */
-	int ib_port;
-	int port;
-};
 static int sl = 0;
 static int page_size;
 cycles_t	*tposted;
 cycles_t	*tcompleted;
+
 struct pingpong_context {
 	struct ibv_context *context;
 	struct ibv_comp_channel *channel;
@@ -90,35 +71,35 @@ struct pingpong_context {
 	int                 tx_depth;
 	struct ibv_sge      list;
 	struct ibv_send_wr  wr;
-	union ibv_gid       dgid;
 };
 
 /*
  * 
  */
 static int set_up_connection(struct pingpong_context *ctx,
-							 struct user_parameters *user_parm,
+							 struct perftest_parameters *user_parm,
 							 struct pingpong_dest *my_dest) {
 
 	int use_i = user_parm->gid_index;
 	int port  = user_parm->ib_port;
 
 	if (use_i != -1) {
-		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->dgid)) {
+		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->gid)) {
 			return -1;
 		}
 	}
-	my_dest->lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
-	my_dest->qpn   = ctx->qp->qp_num;
-	my_dest->psn   = lrand48() & 0xffffff;
-	my_dest->rkey  = ctx->mr->rkey;
-	my_dest->vaddr = (uintptr_t)ctx->buf + ctx->size;
+	
+	my_dest->lid   	   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+	my_dest->out_reads = ctx_set_out_reads(ctx->context,user_parm->out_reads);
+	my_dest->qpn   	   = ctx->qp->qp_num;
+	my_dest->psn       = lrand48() & 0xffffff;
+	my_dest->rkey      = ctx->mr->rkey;
+	my_dest->vaddr     = (uintptr_t)ctx->buf + ctx->size;
 
-	// We do not fail test upon lid in RDMAoE/Eth conf.
+	// We do not fail test upon lid above RoCE.
 	if (use_i < 0) {
 		if (!my_dest->lid) {
-			fprintf(stderr,"Local lid 0x0 detected. Is an SM running? \n");
-			fprintf(stderr,"If you're running RMDAoE you must use GIDs\n");
+			fprintf(stderr,"Local lid 0x0 detected,without any use of gid. Is SM running?\n");
 			return -1;
 		}
 	}
@@ -128,21 +109,19 @@ static int set_up_connection(struct pingpong_context *ctx,
 /*
  * 
  */
-static int init_connection(struct pingpong_params *params,
-						   struct user_parameters *user_parm,
-						   struct pingpong_dest *my_dest) {
+static int init_connection(struct perftest_parameters *params,
+ 						   struct pingpong_dest *my_dest,
+						   const char *servername) {
 
-	params->conn_type = user_parm->connection_type;
-	params->use_index = user_parm->gid_index;
-	params->use_mcg	  = 0;
-	params->type      = user_parm->servername ? CLIENT : SERVER;
+	params->machine      = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
-	ctx_print_pingpong_data(my_dest,params);
 
-	if (user_parm->servername) 
-		params->sockfd = ctx_client_connect(user_parm->servername,user_parm->port);
+	ctx_print_pingpong_data(my_dest,params);
+	
+	if (params->machine == CLIENT) 
+		params->sockfd = ctx_client_connect(servername,params->port);
 	else 
-		params->sockfd = ctx_server_connect(user_parm->port);
+		params->sockfd = ctx_server_connect(params->port);
 
 	if(params->sockfd < 0) {
 		fprintf(stderr,"Unable to open file descriptor for socket connection");
@@ -151,73 +130,14 @@ static int init_connection(struct pingpong_params *params,
 	return 0;
 }
 
-/*
- *
- */
-static int find_max_out_read(struct user_parameters *param,
-							 struct ibv_device_attr *attr) {
-
-	int is_hermon = 0;
-	int max_out_reads;
-
-	// Checks the devide type for setting the max outstanding reads.
-	if (attr->vendor_part_id == 25408  || attr->vendor_part_id == 25418  ||
-		attr->vendor_part_id == 25448  || attr->vendor_part_id == 26418  || 
-		attr->vendor_part_id == 26428  || attr->vendor_part_id == 26438  ||
-		attr->vendor_part_id == 26448  || attr->vendor_part_id == 26458  ||
-		attr->vendor_part_id == 26468  || attr->vendor_part_id == 26478) {
-			is_hermon = 1;		
-	}
-
-	max_out_reads = (is_hermon == 1) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
-
-	if (param->use_out_read) {
-		if (param->max_out_read <= 0 || param->max_out_read > max_out_reads) {
-			fprintf(stderr,"Max outstanding reads for this device is %d\n",max_out_reads);
-			return 1;
-		}
-	}
-	else {
-		param->max_out_read = max_out_reads;         
-	}
-	return 0;
-}
-
-/*
- *
- */
-static int set_max_out_read(struct user_parameters  *param,
-							struct pingpong_context *ctx,
-							struct pingpong_params  *png_prms) {
-
-	struct ibv_device_attr attr;
-	struct pingpong_dest send,recv;
-	
-
-	if (ibv_query_device(ctx->context,&attr)) {
-		return -1;
-	}
-
-	if (find_max_out_read(param,&attr)) {
-		return -1;
-	}
-	memset(&send,0,sizeof(struct pingpong_dest));
-	send.lid = param->max_out_read;
-	if (ctx_hand_shake(png_prms,&send,&recv)) {
-        return -1;   
-    }
-	param->max_out_read = MIN(param->max_out_read,recv.lid);
-	return 0;
-}
 
 /*
  *
  */
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 										    unsigned size,
-											struct user_parameters *user_parm)
+											struct perftest_parameters *user_parm)
 {	
-	LinkType type;
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 
@@ -227,7 +147,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	ctx->size     = size;
 	ctx->tx_depth = user_parm->tx_depth;
-	ctx->buf = memalign(page_size, size * 2);
+	ctx->buf 	  = memalign(page_size, size * 2);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
@@ -247,17 +167,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
-	// Determine the link type and configure the HCA accordingly.
-	if ((type = set_link_layer(ctx->context,user_parm->ib_port)) == FAILURE) {
-		fprintf(stderr, "Failed to determine the link type for this port\n");
+	// Finds the link type and configure the HCA accordingly.
+	if (ctx_set_link_layer(ctx->context,user_parm)) {
+		fprintf(stderr, "Couldn't set the link layer\n");
 		return NULL;
 	}
-	if (type == ETH) {
-		if (user_parm->gid_index == -1) {
-			user_parm->gid_index = 0;
-		}
-		printf(" Link type is RoCE. using gid index %d as GRH\n",user_parm->gid_index);
-	}
+	
 
 	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */	
 		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index > -1)
@@ -335,8 +250,8 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	return ctx;
 }
-static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
-						  struct pingpong_dest *dest,struct user_parameters *user_parm)
+static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,int my_out_reads,
+						  struct pingpong_dest *dest,struct perftest_parameters *user_parm)
 {
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof attr);
@@ -362,15 +277,15 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	printf("Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num 	= dest->qpn;
 	attr.rq_psn 		= dest->psn;
-	attr.ah_attr.dlid       = dest->lid;
-	attr.max_dest_rd_atomic     = user_parm->max_out_read;
+	attr.ah_attr.dlid       = dest->lid;	
+	attr.max_dest_rd_atomic     = dest->out_reads;
 	attr.min_rnr_timer          = 12;
 	if (user_parm->gid_index<0) {
 		attr.ah_attr.is_global  = 0;
 		attr.ah_attr.sl         = sl;
 	} else {
 		attr.ah_attr.is_global  = 1;
-		attr.ah_attr.grh.dgid   = dest->dgid;
+		attr.ah_attr.grh.dgid   = dest->gid;
 		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
 		attr.ah_attr.grh.hop_limit = 1;
 		attr.ah_attr.sl         = 0;
@@ -393,7 +308,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	attr.rnr_retry          = 7;
 	attr.qp_state 	    = IBV_QPS_RTS;
 	attr.sq_psn 	    = my_psn;
-	attr.max_rd_atomic  = user_parm->max_out_read;
+	attr.max_rd_atomic  = my_out_reads;
 	if (ibv_modify_qp(ctx->qp, &attr,
 			  IBV_QP_STATE              |
 			  IBV_QP_SQ_PSN             |
@@ -433,7 +348,7 @@ static void usage(const char *argv0)
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
-			 cycles_t *tposted, cycles_t *tcompleted, int no_cpu_freq_fail)
+						 int no_cpu_freq_fail)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -464,7 +379,7 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 	       size,iters,tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize * iters * cycles_to_units /(tcompleted[iters - 1] - tposted[0]) / 0x100000);
 }
-int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
+int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
 	     struct pingpong_dest *rem_dest, int size)
 {
 	struct ibv_qp           *qp;
@@ -523,8 +438,8 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 				if (ne) {
 					tcompleted[ccnt] = get_cycles();
 					if (wc.status != IBV_WC_SUCCESS) {
-						fprintf(stderr, "Completion wth error at %s:\n",
-							user_param->servername ? "client" : "server");
+						fprintf(stderr, "Completion with error at %s\n",
+							user_param->machine == CLIENT ? "client" : "server");
 						fprintf(stderr, "Failed status %d: wr_id %d syndrom 0x%x\n",
 							wc.status, (int) wc.wr_id, wc.vendor_err);
 						fprintf(stderr, "scnt=%d, ccnt=%d\n",
@@ -547,30 +462,30 @@ int run_iter(struct pingpong_context *ctx, struct user_parameters *user_param,
 
 int main(int argc, char *argv[])
 {
-	struct ibv_device      **dev_list;
-	struct ibv_device	*ib_dev;
-	struct pingpong_context *ctx;
-	struct pingpong_dest    my_dest,rem_dest;
-	struct pingpong_params  png_params;
-	struct user_parameters  user_param;
-	char                    *ib_devname = NULL;
-	long long                size = 65536;
-	int                      duplex = 0;
-	int                      i = 0;
-	int                      no_cpu_freq_fail = 0;
+	struct ibv_device          **dev_list;
+	struct ibv_device		   *ib_dev;
+	struct pingpong_context    *ctx;
+	struct pingpong_dest       my_dest,rem_dest;
+	struct perftest_parameters user_param;
+	char                       *ib_devname = NULL;
+	long long                  size = 65536;
+	int                        duplex = 0;
+	int                        i = 0;
+	int                        no_cpu_freq_fail = 0;
+
+	int all = 0;
+	const char *servername = NULL;
 
 	/* init default values to user's parameters */
-	memset(&user_param, 0, sizeof(struct user_parameters));
+	memset(&user_param,0,sizeof(struct perftest_parameters));
 	user_param.mtu = 0;
 	user_param.ib_port = 1;
 	user_param.port = 18515;
-	user_param.use_out_read = 0;
-	user_param.iters = 1000;
 	user_param.tx_depth = 100;
-	user_param.servername = NULL;
+	user_param.iters = 1000;
 	user_param.use_event = 0;
 	user_param.qp_timeout = 14;
-	user_param.gid_index = -1; /*gid will not be used*/
+	user_param.gid_index = -1; 
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -618,11 +533,10 @@ int main(int argc, char *argv[])
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
 		case 'o':
-			user_param.max_out_read = strtol(optarg, NULL, 0);
-			user_param.use_out_read = 1;
+			user_param.out_reads = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
-			user_param.all = ALL;
+			all = ALL;
 			break;
 		case 'V':
 			printf("read_bw version : %.2f\n",VERSION);
@@ -689,9 +603,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (optind == argc - 1)
-		user_param.servername = strdupa(argv[optind]);
-	else if (optind < argc) {
+	if (optind == argc - 1) {
+		servername = strdupa(argv[optind]);
+	} else if (optind < argc) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -701,10 +615,10 @@ int main(int argc, char *argv[])
 	else
 		printf("                    RDMA_Read BW Test\n");
 
-	printf("Connection type : RC\n");
+	printf(" Connection type : RC\n");
 
 	/* Done with parameter parsing. Perform setup. */
-	if (user_param.all == ALL)
+	if (all == ALL)
 		/*since we run all sizes */
 		size = 8388608; /*2^23 */
 
@@ -741,41 +655,35 @@ int main(int argc, char *argv[])
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&png_params,&user_param,&my_dest)) {
+	if (init_connection(&user_param,&my_dest,servername)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
 
 	// shaking hands and gather the other side info.
-    if (ctx_hand_shake(&png_params,&my_dest,&rem_dest)) {
+    if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
         
     }
-	png_params.side = REMOTE;
-	ctx_print_pingpong_data(&rem_dest,&png_params);
+	user_param.side = REMOTE;
+	ctx_print_pingpong_data(&rem_dest,&user_param);
 
-	// Sets the max outstanding reads to the min of the link.
-	if (set_max_out_read(&user_param,ctx,&png_params)) {
-		fprintf(stderr, "Failed to set the number of outstanding reads\n");
-		return 1;
-	}
-
-	if (pp_connect_ctx(ctx,my_dest.psn,&rem_dest,&user_param)) {
+	if (pp_connect_ctx(ctx,my_dest.psn,my_dest.out_reads,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
 		return 1;
 	}
 
 	// An additional handshake is required after moving qp to RTR.
-	if (ctx_hand_shake(&png_params,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
         
     }
      
 	// For half duplex tests, server just waits for client to exit 
-	if (!user_param.servername && !duplex) {
-		if (ctx_close_connection(&png_params,&my_dest,&rem_dest)) {
+	if (user_param.machine == SERVER && !duplex) {
+		if (ctx_close_connection(&user_param,&my_dest,&rem_dest)) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
@@ -807,20 +715,20 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (user_param.all == ALL) {
+	if (all == ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			size = 1 << i;
 			if(run_iter(ctx,&user_param,&rem_dest,size))
 				return 17;
-			print_report(user_param.iters, size, duplex, tposted, tcompleted, no_cpu_freq_fail);
+			print_report(user_param.iters,size,duplex,no_cpu_freq_fail);
 		}
 	} else {
 		if(run_iter(ctx,&user_param,&rem_dest,size))
 			return 18;
-		print_report(user_param.iters,size,duplex,tposted,tcompleted,no_cpu_freq_fail);
+		print_report(user_param.iters,size,duplex,no_cpu_freq_fail);
 	}
 
-	if (ctx_close_connection(&png_params,&my_dest,&rem_dest)) {
+	if (ctx_close_connection(&user_param,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}

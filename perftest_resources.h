@@ -55,23 +55,48 @@
 // Files included for work.
 #include <infiniband/verbs.h>
 
-// Message size we pass through sockets , without gid.
-#define KEY_MSG_SIZE (sizeof "0000:000000:000000:00000000:0000000000000000")
+// Connection types availible.
+#define RC  0
+#define UC  1 
+#define UD  2
+// #define XRC 3
 
-// Message size we pass through sockets , with gid (For MGID in Mcast mode as well).
-#define KEY_MSG_SIZE_GID (sizeof "0000:000000:000000:00000000:0000000000000000:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00")
+// Outstanding reads for "read" verb only.
+#define MAX_OUT_READ_HERMON 16
+#define MAX_OUT_READ        4
+#define MAX_SEND_SGE        1
+#define MAX_RECV_SGE        1
+#define UD_ADDITION         40
+#define PINGPONG_SEND_WRID  0
+#define DEF_QKEY            0x11111111
+#define ALL 		        1
+
+#define KEY_MSG_SIZE 	 50     // Message size without gid.
+#define KEY_MSG_SIZE_GID 98 // Message size with gid (MGID as well).
 
 // The Format of the message we pass through sockets , without passing Gid.
-#define KEY_PRINT_FMT "%04x:%06x:%06x:%08x:%016Lx"
+#define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx"
 
 // The Format of the message we pass through sockets (With Gid).
-#define KEY_PRINT_FMT_GID "%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
+#define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
 
 // The print format of the pingpong_dest element.
-#define ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n"
+#define ADDR_FMT " %s address: LID %#04x OUT %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n"
 
 // The print format of a global address or a multicast address.
 #define GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
+
+// Macro for allocating.
+#define ALLOCATE(var,type,size)                                 \
+    { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)    \
+        { fprintf(stderr, "Cannot Allocate\n"); exit(1);}}
+
+// Macro to determine packet size in case of UD.
+#define SIZE(type,size) ((type == UD) ? (size + UD_ADDITION) : (size))
+
+
+// The Verb of the benchmark.
+typedef enum { SEND , WRITE , READ } VerbType;
 
 // The type of the machine ( server or client actually).
 typedef enum { SERVER , CLIENT } MachineType;
@@ -80,49 +105,86 @@ typedef enum { SERVER , CLIENT } MachineType;
 typedef enum { LOCAL , REMOTE } PrintDataSide;
 
 // The link layer of the current port.
-typedef enum { FAILURE = -1 , IB = 1 , ETH = 2 } LinkType;
+typedef enum { UNDETECTED = 0 , IB = 1 , ETH = 2 } LinkType;
 
-/************************************************************************ 
+/******************************************************************************
  * Perftest resources Structures and data types.
- ************************************************************************/
+ ******************************************************************************/
+
+struct perftest_parameters {
+	int connection_type;
+	int mtu;
+	int tx_depth;
+	int rx_depth;
+	int numofqps;
+	int inline_size;
+	int qp_timeout;
+	int gid_index;
+	int port;
+	int ib_port;
+	int use_event;
+    int use_mcg;
+	int sockfd;
+	int signal_comp;
+	int num_of_qps;
+	int iters;
+	int out_reads;
+	int duplex;
+	int sl;
+    MachineType machine;
+    PrintDataSide side;
+	VerbType verb;
+};
 
 struct pingpong_dest {
-
 	int lid;
+	int out_reads;
 	int qpn;
 	int psn;  
 	unsigned rkey;
 	unsigned long long vaddr;
-	union ibv_gid dgid;
+	union ibv_gid gid;
 };
 
-struct pingpong_params {
-
-	int sockfd;
-    int conn_type;
-	int use_index;
-    int use_mcg;
-    MachineType type;
-    PrintDataSide side;
-};
-
-
-/************************************************************************ 
+/****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
- ************************************************************************/
+ ******************************************************************************/
 
-/* set_link_layer.
+/* ctx_set_link_layer.
  *
  * Description : Determines the link layer type (IB or ETH).
  *
  * Parameters : 
  *
  *  context - The context of the HCA device.
- *  ib_port - The port of the HCA (1 or 2).
+ *  params  - The perftest parameters of the device.
  *
- * Return Value : IB or ETH in case of success , FAILURE otherwise.
+ * Return Value : 0 upon success. -1 if it fails.
  */
-LinkType set_link_layer(struct ibv_context *context,int ib_port);
+int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
+
+/* 
+ *
+ *
+ *
+ *
+ *
+ *
+ */
+struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
+							 struct ibv_cq *send_cq,
+							 struct ibv_cq *recv_cq,
+							 struct perftest_parameters *param);
+
+/* 
+ *
+ *
+ *
+ *
+ *
+ *
+ */
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param);
 
 /* ctx_get_local_lid .
  *
@@ -139,6 +201,16 @@ LinkType set_link_layer(struct ibv_context *context,int ib_port);
  * Return Value : The Lid itself. (No error values).
  */
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
+
+/* 
+ *
+ *
+ *
+ *
+ *
+ *
+ */
+int ctx_set_out_reads(struct ibv_context *context,int num_user_reads);
 
 /* ctx_client_connect .
  *
@@ -190,7 +262,7 @@ int ctx_server_connect(int port);
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ctx_hand_shake(struct pingpong_params  *params,
+int ctx_hand_shake(struct perftest_parameters *params,
 				   struct pingpong_dest *my_dest,
 				   struct pingpong_dest *rem_dest);
 
@@ -206,8 +278,8 @@ int ctx_hand_shake(struct pingpong_params  *params,
  *  params  - The parameters of the machine.
  *  element - The element to print.           
  */
-void ctx_print_pingpong_data(struct pingpong_dest *element,
-							 struct pingpong_params *params);
+void ctx_print_pingpong_data(struct pingpong_dest *element, 
+							 struct perftest_parameters *params);
 
 /* ctx_close_connection .
  *
@@ -223,7 +295,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ctx_close_connection(struct pingpong_params  *params,
+int ctx_close_connection(struct perftest_parameters  *params,
 				         struct pingpong_dest *my_dest,
 				         struct pingpong_dest *rem_dest);
 
