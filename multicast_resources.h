@@ -65,9 +65,8 @@
 
 
 #define MCG_LID 					0xc00f
-#define PINGPONG_SEND_WRID  		1
-#define DEF_QKEY            		0x11111111
 #define QPNUM_MCAST 				0xffffff
+#define DEF_QKEY     			    0x11111111
 #define DEF_PKEY_IDX        		0
 #define DEF_SL              		0
 #define MAX_POLL_ITERATION_TIMEOUT  1000000
@@ -82,12 +81,6 @@
 #define DEF_TRANS_ID                   0x12345678 /* TransactionID */
 #define DEF_TCLASS                     0
 #define DEF_FLOW_LABLE                 0
-
-
-// Macro for allocating.
-#define ALLOCATE(var,type,size)                                 \
-    { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)    \
-        { fprintf(stderr, "Cannot Allocate\n"); exit(1);}}
 
 // Macro for 64 bit variables to switch to from net 
 #define ntohll(x) (((u_int64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32)))) 
@@ -133,9 +126,6 @@ typedef enum {
 	MCAST_IS_ATTACHED = (1 << 1)
 } mcast_state;
 
-// Using the Bool to avoid program compilation with -C99 flag.
-typedef enum { FALSE , TRUE } Bool;
-
 
 /************************************************************************ 
  *   Multicast data structures.						    			    *
@@ -143,44 +133,19 @@ typedef enum { FALSE , TRUE } Bool;
 
 // Needed parameters for creating a multiple multicast group entity.
 struct mcast_parameters {
-    struct ibv_pd       *pd;
-    struct ibv_recv_wr  *rwr; 
-	struct ibv_device   *ib_dev;
-	struct ibv_context 	*ctx;
-    int                 num_of_groups;
-    int                 num_qps_on_group;
-    int                 iterations;
-    int                 tx_depth;
-    int                 rx_depth;
-	int 				inline_size;
-	int 				ib_port;
-    unsigned            size;
-	const char			*user_mgid;
-    Bool                is_client;
-	Bool				is_user_mgid;
-	uint16_t 			pkey;	
-	union ibv_gid 		port_gid;	
-};
-
-// Basic structure of the Multicast entity.
-struct mcast_group {
-	struct ibv_qp       *send_qp;
-	struct ibv_cq       *mcg_cq;
-	struct ibv_send_wr  *wr;
-	struct ibv_ah       *ah;
-    struct mcg_qp       *recv_mcg;
-    cycles_t	        *posted;
-    cycles_t	        *completed;
-	uint16_t			mlid;		 /* the multicast group's mlid */
-	union ibv_gid		mgid;
-	int					mcast_state; 
-};
-
-// A single QP that is attached.
-struct mcg_qp {
-	struct ibv_qp *qp;
-	unsigned int package_counter;
-	cycles_t *completion_array;		 
+    int             	  num_qps_on_group;
+	int					  is_user_mgid;
+	int					  mcast_state;
+	int 				  ib_port;
+	int 				  mlid;
+	const char			  *user_mgid;
+	const char			  *ib_devname;
+	uint16_t 			  pkey;
+	uint16_t			  sm_lid;
+	uint8_t 			  sm_sl;
+	union ibv_gid 		  port_gid;
+	union ibv_gid 		  mgid;
+	
 };
 
 // according to Table 195 in the IB spec 1.2.1 
@@ -199,72 +164,9 @@ struct sa_mad_packet_t {
  ************************************************************************/
 
 
-/* 
- *
- */
-struct mcast_group* mcast_create_resources(struct mcast_parameters *params);
+void set_multicast_gid(struct mcast_parameters *params);
 
-/*
- *
- */
-int mcast_init_resources(struct mcast_group *mcast_manager,
-						 struct mcast_parameters *params,
-						 struct ibv_qp_attr *attr,int flags);
-
-/*
- *
- */
-int mcast_create_qps(struct mcast_group *mcast_manager,
-					 struct mcast_parameters *params,
-					 struct ibv_qp_init_attr *attr);
-
-/*
- *
- */
-int mcast_modify_qp_to_rtr(struct mcast_group *mcast_manager,
-                           struct mcast_parameters *params,
-						   struct ibv_qp_attr *attr);
-
-
-/*
- *
- */
-int mcast_post_receive(struct mcast_group *mcast_manager,
-					   struct mcast_parameters *params);
-
-/*
- *
- */
-int mcast_post_send(struct mcast_group *mcast_manager,
-					struct mcast_parameters *params,
-					struct ibv_sge *sge_list);
-
-/*
- *
- */
-int mcast_run_iter_uni(struct mcast_group *mcast_manager,
-					   struct mcast_parameters *params);
-
-
-/*
- *
- */
-void mcast_print_server(struct mcast_group *mcast_manager,
-						struct mcast_parameters *params,
-						int no_cpu_freq_fail);
-
-/*
- *
- */
-void mcast_print_client(struct mcast_group *mcast_manager,
-						struct mcast_parameters *params,
-						int no_cpu_freq_fail);
-
-/* 
- *
- */
-int mcast_destroy_resources(struct mcast_group *mcast_manager,
-							struct mcast_parameters *params);
+int join_multicast_group(subn_adm_method method,struct mcast_parameters *params);
 
 
 #endif /* MULTICAST_RESOURCES_H */
