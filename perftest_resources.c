@@ -469,6 +469,23 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 /****************************************************************************** 
  *
  ******************************************************************************/
+inline void increase_rem_addr(struct ibv_send_wr *wr, int size,  int scnt,
+							  uint64_t prim_rem_addr, uint64_t prim_addr) {
+
+	wr->wr.rdma.remote_addr += INC(size);		    
+	wr->sg_list->addr       += INC(size);
+
+	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) {
+				
+		wr->wr.rdma.remote_addr = prim_rem_addr;
+		wr->sg_list->addr       = prim_addr;
+		     		
+	 }
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int ctx_close_connection(struct perftest_parameters  *params,
 				         struct pingpong_dest *my_dest,
 				         struct pingpong_dest *rem_dest) {

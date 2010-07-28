@@ -163,9 +163,39 @@ struct sa_mad_packet_t {
  *   Multicast resources methods.					    			    *
  ************************************************************************/
 
-
+/* set_multicast_gid .
+ *
+ * Description :
+ *
+ *  Sets the Multicast GID , and stores it in the "mgid" value of 
+ *  mcast resourcs. If the user requested for a specific MGID, which
+ *  is stored in params->user_mgid (in this case params->is_user_mgid should be 1)
+ *  than it will be his MGID, if not the library choose a default one.  
+ *
+ * Parameters : 
+ *
+ *  params            - The parameters of the machine
+ *  my_dest ,rem_dest - The 2 sides that ends the connection.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
 void set_multicast_gid(struct mcast_parameters *params);
 
+
+/* ctx_close_connection .
+ *
+ * Description :
+ *
+ *  Close the connection between the 2 machines.
+ *  It performs an handshake to ensure the 2 sides are there.
+ *
+ * Parameters : 
+ *
+ *  params            - The parameters of the machine
+ *  my_dest ,rem_dest - The 2 sides that ends the connection.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
 int join_multicast_group(subn_adm_method method,struct mcast_parameters *params);
 
 

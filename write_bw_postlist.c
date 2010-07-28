@@ -93,7 +93,7 @@ static int set_up_connection(struct pingpong_context *ctx,
 		}
 	}
 	
-	for (i=0; i < user_parm->numofqps; i++) {
+	for (i=0; i < user_parm->num_of_qps; i++) {
 		my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 		my_dest[i].psn   = lrand48() & 0xffffff;
@@ -124,7 +124,7 @@ static int init_connection(struct perftest_parameters *params,
 	params->machine   = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
 
-	for (i=0; i < params->numofqps; i++) {
+	for (i=0; i < params->num_of_qps; i++) {
 		ctx_print_pingpong_data(&my_dest[i],params);
 	}
 
@@ -150,29 +150,29 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
 		return NULL;
-	ctx->qp = malloc(sizeof (struct ibv_qp*) * user_parm->numofqps );
+	ctx->qp = malloc(sizeof (struct ibv_qp*) * user_parm->num_of_qps );
 	ctx->size     = size;
 	ctx->tx_depth = user_parm->tx_depth;
-	ctx->scnt = malloc(user_parm->numofqps * sizeof (int));
+	ctx->scnt = malloc(user_parm->num_of_qps * sizeof (int));
 	if (!ctx->scnt) {
 		perror("malloc");
 		return NULL;
 	}
-	ctx->ccnt = malloc(user_parm->numofqps * sizeof (int));
+	ctx->ccnt = malloc(user_parm->num_of_qps * sizeof (int));
 	if (!ctx->ccnt) {
 		perror("malloc");
 		return NULL;
 	}
-	memset(ctx->scnt, 0, user_parm->numofqps * sizeof (int));
-	memset(ctx->ccnt, 0, user_parm->numofqps * sizeof (int));
+	memset(ctx->scnt, 0, user_parm->num_of_qps * sizeof (int));
+	memset(ctx->ccnt, 0, user_parm->num_of_qps * sizeof (int));
 	
-	ctx->buf = memalign(page_size, size * 2 * user_parm->numofqps  );
+	ctx->buf = memalign(page_size, size * 2 * user_parm->num_of_qps  );
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
 
-	memset(ctx->buf, 0, size * 2 * user_parm->numofqps);
+	memset(ctx->buf, 0, size * 2 * user_parm->num_of_qps);
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -208,19 +208,19 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	/* We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says:
 	 * The Consumer is not allowed to assign Remote Write or Remote Atomic to
 	 * a Memory Region that has not been assigned Local Write. */
-	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2 * user_parm->numofqps,
+	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2 * user_parm->num_of_qps,
 			     IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context,user_parm->tx_depth*user_parm->numofqps,NULL,NULL,0);
+	ctx->cq = ibv_create_cq(ctx->context,user_parm->tx_depth*user_parm->num_of_qps,NULL,NULL,0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
 	}
-	for (counter =0 ; counter < user_parm->numofqps ; counter++)
+	for (counter =0 ; counter < user_parm->num_of_qps ; counter++)
 	{
 		struct ibv_qp_init_attr initattr;
 		struct ibv_qp_attr attr;
@@ -402,8 +402,8 @@ static void print_report(unsigned size, int duplex,
 	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
 
 	/* Find the peak bandwidth */
-	for (i = 0; i < user_param->iters * user_param->numofqps; ++i)
-		for (j = i; j < user_param->iters * user_param->numofqps; ++j) {
+	for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i)
+		for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
 			t = (tcompleted[j] - tposted[i]) / (j - i + 1);
 			if (t < opt_delta) {
 				opt_delta  = t;
@@ -418,7 +418,7 @@ static void print_report(unsigned size, int duplex,
 	tsize = tsize * size;
 	printf("%7d        %d            %7.2f               %7.2f\n",
 	       size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
-	       tsize * user_param->iters * user_param->numofqps * cycles_to_units /(tcompleted[(user_param->iters* user_param->numofqps) - 1] - tposted[0]) / 0x100000);
+	       tsize * user_param->iters * user_param->num_of_qps * cycles_to_units /(tcompleted[(user_param->iters* user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
 int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
 	     struct pingpong_dest *rem_dest, int size,int maxpostsofqpiniteration)
@@ -431,7 +431,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
     struct ibv_send_wr *bad_wr;
     struct ibv_wc wc;
 
-    wrlist = malloc(user_param->numofqps * sizeof (struct ibv_send_wr) * user_param->tx_depth);
+    wrlist = malloc(user_param->num_of_qps * sizeof (struct ibv_send_wr) * user_param->tx_depth);
     if (!wrlist) {
         perror("malloc");
         return -1;
@@ -454,7 +454,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	ctx->wr.wr.rdma.remote_addr = rem_dest[0].vaddr;
 	ctx->wr.wr.rdma.rkey = rem_dest[0].rkey;
     /* lets make the list with the right id's*/
-	for (qpindex=0 ; qpindex < user_param->numofqps ; qpindex++) {
+	for (qpindex=0 ; qpindex < user_param->num_of_qps ; qpindex++) {
 	  for (index =0 ; index <  maxpostsofqpiniteration ; index++) {
 	    wrlist[qpindex*maxpostsofqpiniteration+index]=ctx->wr;
 	    wrlist[qpindex*maxpostsofqpiniteration+ index].wr_id      = qpindex ;
@@ -468,7 +468,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	totscnt = 0;
 	totccnt = 0;
 	/*clear the scnt ccnt counters for each iteration*/
-	for (index =0 ; index < user_param->numofqps ; index++) {
+	for (index =0 ; index < user_param->num_of_qps ; index++) {
 	  ctx->scnt[index] = 0;
 	  ctx->ccnt[index] = 0;
 	}
@@ -476,9 +476,9 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	
 	/* Done with setup. Start the test. */
 
-	while (totscnt < (user_param->iters * user_param->numofqps)  || totccnt < (user_param->iters * user_param->numofqps) ) {
+	while (totscnt < (user_param->iters * user_param->num_of_qps)  || totccnt < (user_param->iters * user_param->num_of_qps) ) {
 	  /* main loop to run over all the qps and post for each accumulated 40 wq's  */
-	  for (qpindex =0 ; qpindex < user_param->numofqps ; qpindex++) {
+	  for (qpindex =0 ; qpindex < user_param->num_of_qps ; qpindex++) {
 	    qp = ctx->qp[qpindex];
 	    if (user_param->iters > ctx->scnt[qpindex] ) {
             numpostperqp = maxpostsofqpiniteration - (ctx->scnt[qpindex] - ctx->ccnt[qpindex]);
@@ -497,7 +497,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	    }
 	    /*FINISHED POSTING  */
       }
-      if (totccnt < (user_param->iters * user_param->numofqps) ) {
+      if (totccnt < (user_param->iters * user_param->num_of_qps) ) {
           int ne;
           do {
               ne = ibv_poll_cq(ctx->cq, 1, &wc);
@@ -550,7 +550,7 @@ int main(int argc, char *argv[])
 	user_param.tx_depth = 100;
 	user_param.port = 18515;
 	user_param.ib_port = 1;
-	user_param.numofqps = 1;
+	user_param.num_of_qps = 1;
 	user_param.inline_size = MAX_INLINE;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; /*gid will not be used*/
@@ -605,7 +605,7 @@ int main(int argc, char *argv[])
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
 		case 'q':
-			user_param.numofqps = strtol(optarg, NULL, 0);
+			user_param.num_of_qps = strtol(optarg, NULL, 0);
 			break;
 		case 'g':
 			maxpostsofqpiniteration = strtol(optarg, NULL, 0);
@@ -702,7 +702,7 @@ int main(int argc, char *argv[])
 	  printf("                    RDMA_Write Post List BW Test\n");
 	}
 	
-	printf("Number of qp's running %d\n",user_param.numofqps);
+	printf("Number of qp's running %d\n",user_param.num_of_qps);
 	if (user_param.connection_type==RC) {
 		printf("Connection type : RC\n");
 	} else {
@@ -762,8 +762,8 @@ int main(int argc, char *argv[])
 	if (!ctx)
 		return 1;
 
-	my_dest  = malloc(sizeof(struct pingpong_dest)*user_param.numofqps);
-	rem_dest = malloc(sizeof(struct pingpong_dest)*user_param.numofqps);
+	my_dest  = malloc(sizeof(struct pingpong_dest)*user_param.num_of_qps);
+	rem_dest = malloc(sizeof(struct pingpong_dest)*user_param.num_of_qps);
     if (!my_dest || !rem_dest) {
 		perror("malloc my_dest or rem_dest");
 		return 1;
@@ -783,7 +783,7 @@ int main(int argc, char *argv[])
 
 	// Shaking hands and gather the other side info.
 	user_param.side = REMOTE;
-	for (i=0; i < user_param.numofqps; i++) {
+	for (i=0; i < user_param.num_of_qps; i++) {
 		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1;   
@@ -814,14 +814,14 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	tposted = malloc(user_param.iters * user_param.numofqps * sizeof *tposted);
+	tposted = malloc(user_param.iters * user_param.num_of_qps * sizeof *tposted);
 
 	if (!tposted) {
 		perror("malloc");
 		return 1;
 	}
 
-	tcompleted = malloc(user_param.iters * user_param.numofqps * sizeof *tcompleted);
+	tcompleted = malloc(user_param.iters * user_param.num_of_qps * sizeof *tcompleted);
 
 	if (!tcompleted) {
 		perror("malloc");

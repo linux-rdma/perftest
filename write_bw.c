@@ -70,8 +70,7 @@ struct pingpong_context {
 	void               *buf;
 	unsigned            size;
 	int                 tx_depth;
-	struct ibv_sge      list;
-    struct ibv_send_wr  wr;
+	
     int                 *scnt;
     int                 *ccnt;
 };
@@ -84,24 +83,25 @@ static int set_up_connection(struct pingpong_context *ctx,
 							 struct pingpong_dest *my_dest) {
 
 	int i;
-	int use_i = user_parm->gid_index;
-	int port  = user_parm->ib_port;
+	union ibv_gid temp_gid;
 
-	if (use_i != -1) {
-		if (ibv_query_gid(ctx->context,port,use_i,&my_dest->gid)) {
+	if (user_parm->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
 			return -1;
 		}
 	}
 	
-	for (i=0; i < user_parm->numofqps; i++) {
+	for (i=0; i < user_parm->num_of_qps; i++) {
 		my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 		my_dest[i].psn   = lrand48() & 0xffffff;
 		my_dest[i].rkey  = ctx->mr->rkey;
-		my_dest[i].vaddr = (uintptr_t)ctx->buf + ctx->size;
+		// Each qp gives his receive buffer address .
+		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_parm->num_of_qps + i)*BUFF_SIZE(ctx->size);
+		memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
 		// We do not fail test upon lid above RoCE.
-		if (use_i < 0) {
+		if (user_parm->gid_index < 0) {
 			if (!my_dest[i].lid) {
 				fprintf(stderr,"Local lid 0x0 detected. Is an SM running? \n");
 				return -1;
@@ -123,7 +123,7 @@ static int init_connection(struct perftest_parameters *params,
 	params->machine      = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
 
-	for (i=0; i < params->numofqps; i++) {
+	for (i=0; i < params->num_of_qps; i++) {
 		ctx_print_pingpong_data(&my_dest[i],params);
 	}
 
@@ -149,32 +149,26 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	struct ibv_device_attr device_attr;
 	int counter;
 
-	ctx = malloc(sizeof *ctx);
-	if (!ctx)
-		return NULL;
-	ctx->qp = malloc(sizeof (struct ibv_qp*) * user_parm->numofqps );
+	ALLOCATE(ctx,struct pingpong_context,1);
+	ALLOCATE(ctx->qp,struct ibv_qp*,user_parm->num_of_qps);
+	ALLOCATE(ctx->scnt,int,user_parm->num_of_qps);
+	ALLOCATE(ctx->ccnt,int,user_parm->num_of_qps);
+
+	memset(ctx->scnt, 0, user_parm->num_of_qps * sizeof (int));
+	memset(ctx->ccnt, 0, user_parm->num_of_qps * sizeof (int));
+	
 	ctx->size     = size;
 	ctx->tx_depth = user_parm->tx_depth;
-	ctx->scnt = malloc(user_parm->numofqps * sizeof (int));
-	if (!ctx->scnt) {
-		perror("malloc");
-		return NULL;
-	}
-	ctx->ccnt = malloc(user_parm->numofqps * sizeof (int));
-	if (!ctx->ccnt) {
-		perror("malloc");
-		return NULL;
-	}
-	memset(ctx->scnt, 0, user_parm->numofqps * sizeof (int));
-	memset(ctx->ccnt, 0, user_parm->numofqps * sizeof (int));
-	
-	ctx->buf = memalign(page_size, size * 2 * user_parm->numofqps  );
+
+	// We allocate the buffer in BUFF_SIZE size to support max performance in
+	// "Nahalem" systems , as described in BUFF_SIZE macro in perftest_resources.h
+	ctx->buf = memalign(page_size, BUFF_SIZE(size) * 2 * user_parm->num_of_qps);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
 
-	memset(ctx->buf, 0, size * 2 * user_parm->numofqps);
+	memset(ctx->buf, 0, BUFF_SIZE(size) * 2 * user_parm->num_of_qps);
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -207,22 +201,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		return NULL;
 	}
 
-	/* We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says:
-	 * The Consumer is not allowed to assign Remote Write or Remote Atomic to
-	 * a Memory Region that has not been assigned Local Write. */
-	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2 * user_parm->numofqps,
-			     IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+	// We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says:
+	// The Consumer is not allowed to assign Remote Write or Remote Atomic to
+	// a Memory Region that has not been assigned Local Write.
+	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, BUFF_SIZE(size) * 2 * user_parm->num_of_qps,IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context,user_parm->tx_depth*user_parm->numofqps,NULL,NULL,0);
+	ctx->cq = ibv_create_cq(ctx->context,user_parm->tx_depth*user_parm->num_of_qps,NULL,NULL,0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
 	}
-	for (counter =0 ; counter < user_parm->numofqps ; counter++)
+	for (counter =0 ; counter < user_parm->num_of_qps ; counter++)
 	{
 		struct ibv_qp_init_attr initattr;
 		struct ibv_qp_attr attr;
@@ -408,8 +401,8 @@ static void print_report(unsigned size, int duplex,cycles_t *tposted, cycles_t *
 
 	if (!noPeak) {
 		/* Find the peak bandwidth unless asked not to in command line*/
-		for (i = 0; i < iters * user_param->numofqps; ++i)
-		  for (j = i; j < iters * user_param->numofqps; ++j) {
+		for (i = 0; i < iters * user_param->num_of_qps; ++i)
+		  for (j = i; j < iters * user_param->num_of_qps; ++j) {
 		    t = (tcompleted[j] - tposted[i]) / (j - i + 1);
 		    if (t < opt_delta) {
 		      opt_delta  = t;
@@ -423,110 +416,136 @@ static void print_report(unsigned size, int duplex,cycles_t *tposted, cycles_t *
 
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
-	printf("%7d        %d            %7.2f               %7.2f\n",
+	printf(" %-7d    %d            %-7.2f             %-7.2f\n",
 	       size,iters,!(noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
-	       tsize*iters*user_param->numofqps*cycles_to_units/(tcompleted[(iters*user_param->numofqps) - 1] - tposted[0]) / 0x100000);
+	       tsize*iters*user_param->num_of_qps*cycles_to_units/(tcompleted[(iters*user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
+
+/*
+ *
+ */
 int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
 			struct pingpong_dest *rem_dest, int size,int maxpostsofqpiniteration)
 {
 
-    struct ibv_qp           *qp;
-    int                      totscnt, totccnt ;
-    int                      index ,warmindex;
-    int                      inline_size;
+    int                totscnt, totccnt ;
+    int                index ,warmindex ,inc_size;
     struct ibv_send_wr *bad_wr;
-    struct ibv_wc wc;
-    ctx->list.addr = (uintptr_t) ctx->buf;
-	ctx->list.length = size;
-	ctx->list.lkey = ctx->mr->lkey;
-	
-	
-	ctx->wr.sg_list    = &ctx->list;
-	ctx->wr.num_sge    = 1;
-	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-    inline_size        = user_param->inline_size;
-	if (size > inline_size) {/* complaince to perf_main */
-		ctx->wr.send_flags = IBV_SEND_SIGNALED;
-	} else {
-		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
-	}
-	ctx->wr.next       = NULL;
+    struct ibv_wc 	   wc;
+	struct ibv_sge     *sge_list = NULL;
+    struct ibv_send_wr *wr       = NULL;
+	uint64_t		   *my_addr  = NULL;
+	uint64_t		   *rem_addr = NULL;
 
-	totscnt = 0;
-	totccnt = 0;
-	/*clear the scnt ccnt counters for each iteration*/
-	for (index =0 ; index < user_param->numofqps ; index++) {
-	  ctx->scnt[index] = 0;
-	  ctx->ccnt[index] = 0;
+	ALLOCATE(wr ,struct ibv_send_wr , user_param->num_of_qps);
+	ALLOCATE(sge_list ,struct ibv_sge , user_param->num_of_qps);
+	ALLOCATE(my_addr ,uint64_t ,user_param->num_of_qps);
+	ALLOCATE(rem_addr ,uint64_t ,user_param->num_of_qps);
+
+
+	// Each QP has its own wr and sge , that holds the qp addresses and attr.
+	// We write in cycles on the buffer to exploid the "Nahalem" system.
+	for (index = 0 ; index < user_param->num_of_qps ; index++) {
+
+		sge_list[index].addr   = (uintptr_t)ctx->buf + (index*BUFF_SIZE(size));
+		sge_list[index].length = size;
+		sge_list[index].lkey   = ctx->mr->lkey;
+
+		wr[index].sg_list             = &sge_list[index]; 
+		wr[index].num_sge             = MAX_SEND_SGE;
+		wr[index].opcode	          = IBV_WR_RDMA_WRITE;
+		wr[index].next                = NULL;
+		wr[index].wr.rdma.remote_addr = rem_dest[index].vaddr;
+		wr[index].wr.rdma.rkey        = rem_dest[index].rkey;
+		wr[index].wr_id               = index;
+		wr[index].send_flags          = IBV_SEND_SIGNALED;
+		if (size <= user_param->inline_size) 
+			wr[index].send_flags |= IBV_SEND_INLINE;
+
+		ctx->scnt[index] = 0;
+		ctx->ccnt[index] = 0;
+		my_addr[index]	 = sge_list[index].addr;
+		rem_addr[index]  = wr[index].wr.rdma.remote_addr;
+
 	}
-	index = 0;
 	
-	/* Done with setup. Start the test. 
-       warm up posting of total 100 wq's per qp 
-       1 for each qp till all qps have 100  */
-	for (warmindex =0 ;warmindex < maxpostsofqpiniteration ;warmindex ++ ) {
-	  for (index =0 ; index < user_param->numofqps ; index++) {
-      	    ctx->wr.wr.rdma.remote_addr = rem_dest[index].vaddr;
-            ctx->wr.wr.rdma.rkey = rem_dest[index].rkey;
-            qp = ctx->qp[index];
-            ctx->wr.wr_id      = index ;
+	totscnt  = 0;
+	totccnt  = 0;
+	inc_size = (BUFF_SIZE(size) / 2);
+	
+	// Done with setup. Start the test. warm up posting of total 100 wq's per 
+    // qp 1 for each qp till all qps have 100.
+	for (warmindex = 0 ;warmindex < maxpostsofqpiniteration ;warmindex ++ ) {
+	  for (index =0 ; index < user_param->num_of_qps ; index++) {
+
             tposted[totscnt] = get_cycles();
-            if (ibv_post_send(qp, &ctx->wr, &bad_wr)) {
-                fprintf(stderr, "Couldn't post warmup send: qp index = %d qp scnt=%d total scnt %d\n",
-                        index,ctx->scnt[index],totscnt);
+            if (ibv_post_send(ctx->qp[index],&wr[index],&bad_wr)) {
+                fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
                 return 1;
             }
-            ctx->scnt[index]= ctx->scnt[index]+1;
-            ++totscnt;
+			// If we can increase the remote address , so the next write will be to other address ,
+			// We do it.
+			if (size <= inc_size) 
+				increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index],my_addr[index]);
+
+			ctx->scnt[index] = ctx->scnt[index]+1;
+            totscnt++;
+
       }
-	}    
-	/* main loop for posting */
-	while (totscnt < (user_param->iters * user_param->numofqps)  || totccnt < (user_param->iters * user_param->numofqps) ) {
-	  /* main loop to run over all the qps and post each time n messages */
-	  for (index =0 ; index < user_param->numofqps ; index++) {
-          ctx->wr.wr.rdma.remote_addr = rem_dest[index].vaddr;
-          ctx->wr.wr.rdma.rkey = rem_dest[index].rkey;
-          qp = ctx->qp[index];
-          ctx->wr.wr_id      = index ;
-          while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < maxpostsofqpiniteration) {
-	      tposted[totscnt] = get_cycles();
-	      if (ibv_post_send(qp, &ctx->wr, &bad_wr)) {
-              fprintf(stderr, "Couldn't post send: qp index = %d qp scnt=%d total scnt %d\n",
-                      index,ctx->scnt[index],totscnt);
-              return 1;
-	      }     
-	      ctx->scnt[index]= ctx->scnt[index]+1;
-	      ++totscnt;
-	    }
-	  }
-	  /* finished posting now polling */
-	  if (totccnt < (user_param->iters * user_param->numofqps) ) {
+	}  
+
+	// main loop for posting 
+	while (totscnt < (user_param->iters * user_param->num_of_qps)  || totccnt < (user_param->iters * user_param->num_of_qps) ) {
+
+		// main loop to run over all the qps and post each time n messages 
+		for (index =0 ; index < user_param->num_of_qps ; index++) {
+          
+			while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < maxpostsofqpiniteration) {
+
+				tposted[totscnt] = get_cycles();
+				if (ibv_post_send(ctx->qp[index],&wr[index],&bad_wr)) {
+					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
+					return 1;
+				}     
+				
+				if (size <= inc_size) 
+					increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index],my_addr[index]);
+
+				ctx->scnt[index] = ctx->scnt[index]+1;
+				totscnt++;
+			}
+		}
+
+		// finished posting now polling 
+		if (totccnt < (user_param->iters * user_param->num_of_qps) ) {
 	    
-	    int ne;
-	    do {
-	      ne = ibv_poll_cq(ctx->cq, 1, &wc);
-	    } while (ne == 0);
-	    tcompleted[totccnt] = get_cycles();
-        if (ne < 0) {
-	      fprintf(stderr, "poll CQ failed %d\n", ne);
-	      return 1;
-	    }
-	    if (wc.status != IBV_WC_SUCCESS) {
-	      fprintf(stderr, "Completion wth error at %s:\n",
-		      user_param->machine == CLIENT ? "client" : "server");
-	      fprintf(stderr, "Failed status %d: wr_id %d\n",
-		      wc.status, (int) wc.wr_id);
-	      fprintf(stderr, "qp index %d ,qp scnt=%d, qp ccnt=%d total scnt %d total ccnt %d\n",
-		      (int)wc.wr_id, ctx->scnt[(int)wc.wr_id], ctx->ccnt[(int)wc.wr_id], totscnt, totccnt);
-	      return 1;
-	    }
-	    /*here the id is the index to the qp num */
-	    ctx->ccnt[(int)wc.wr_id] = ctx->ccnt[(int)wc.wr_id]+1;
-	    totccnt += 1;
-	  }
+			int ne;
+			do {
+				ne = ibv_poll_cq(ctx->cq, 1, &wc);
+			} while (ne == 0);
+
+			tcompleted[totccnt] = get_cycles();
+
+			if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return 1;
+			}
+
+			if (wc.status != IBV_WC_SUCCESS) {
+				fprintf(stderr,"Completion with error at %s:\n",user_param->machine == CLIENT ? "client" : "server");
+				fprintf(stderr, "Failed status %d: wr_id %d\n",wc.status, (int) wc.wr_id);
+				fprintf(stderr, "qp index %d ,qp scnt=%d, qp ccnt=%d\n",(int)wc.wr_id, ctx->scnt[(int)wc.wr_id],ctx->ccnt[(int)wc.wr_id]);
+				return 1;
+			}
+
+			// here the id is the index to the qp num 
+			ctx->ccnt[(int)wc.wr_id] = ctx->ccnt[(int)wc.wr_id] + 1;
+			totccnt++;
+		}
 	}
-	return(0);
+	free(wr);
+	free(sge_list);
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -556,7 +575,7 @@ int main(int argc, char *argv[])
 	user_param.port = 18515;
 	user_param.ib_port = 1;
 	user_param.tx_depth = 100;
-	user_param.numofqps = 1;
+	user_param.num_of_qps = 1;
 	user_param.inline_size = 0;
 	user_param.qp_timeout = 14;
 	user_param.gid_index = -1; 
@@ -613,7 +632,7 @@ int main(int argc, char *argv[])
 			user_param.mtu = strtol(optarg, NULL, 0);
 			break;
 		case 'q':
-			user_param.numofqps = strtol(optarg, NULL, 0);
+			user_param.num_of_qps = strtol(optarg, NULL, 0);
 			break;
 		case 'g':
 			maxpostsofqpiniteration = strtol(optarg, NULL, 0);
@@ -713,21 +732,21 @@ int main(int argc, char *argv[])
 	  printf("                    RDMA_Write BW Test\n");
 	}
 	
-	printf("Number of qp's running %d\n",user_param.numofqps);
+	printf(" Number of qp's running %d\n",user_param.num_of_qps);
 	if (user_param.connection_type==RC) {
-		printf("Connection type : RC\n");
+		printf(" Connection type : RC\n");
 	} else {
-		printf("Connection type : UC\n");
+		printf(" Connection type : UC\n");
 	}
 	if (maxpostsofqpiniteration > user_param.tx_depth ) {
-	  printf("Can not post more than tx_depth , adjusting number of post to tx_depth\n");
+	  printf(" Can not post more than tx_depth , adjusting number of post to tx_depth\n");
 	  maxpostsofqpiniteration = user_param.tx_depth;
 	}
     if (maxpostsofqpiniteration > user_param.iters ) {
-	  printf("Can not post more than iterations per qp , adjusting max number of post to num of iteration\n");
+	  printf(" Can not post more than iterations per qp , adjusting max number of post to num of iteration\n");
 	  maxpostsofqpiniteration = user_param.iters;
 	} 
-    printf("Each Qp will post up to %d messages each time\n",maxpostsofqpiniteration);
+    printf(" Each Qp will post up to %d messages each time\n",maxpostsofqpiniteration);
 
 	/* Done with parameter parsing. Perform setup. */
 	if (all == ALL) {
@@ -743,7 +762,7 @@ int main(int argc, char *argv[])
 	if (!ib_devname) {
 		ib_dev = dev_list[0];
 		if (!ib_dev) {
-			fprintf(stderr, "No IB devices found\n");
+			fprintf(stderr, " No IB devices found\n");
 			return 1;
 		}
 	} else {
@@ -751,14 +770,14 @@ int main(int argc, char *argv[])
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
 				break;
 		if (!ib_dev) {
-			fprintf(stderr, "IB device %s not found\n", ib_devname);
+			fprintf(stderr, " IB device %s not found\n", ib_devname);
 			return 1;
 		}
 	}
 
 	context = ibv_open_device(ib_dev);
 	if (ibv_query_device(context, &device_attribute)) {
-		fprintf(stderr, "Failed to query device props");
+		fprintf(stderr, " Failed to query device props");
 		return 1;
 	}
 	if ((device_attribute.vendor_part_id == 25408 ||
@@ -768,14 +787,14 @@ int main(int argc, char *argv[])
 		device_attribute.vendor_part_id == 26428) && (!inline_given_in_cmd)) {
 		user_param.inline_size = 0;
         }
-	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
+	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
 
 	ctx = pp_init_ctx(ib_dev,size,&user_param);
 	if (!ctx)
 		return 1;
 
-	ALLOCATE(my_dest,struct pingpong_dest,user_param.numofqp);
-	ALLOCATE(rem_dest,struct pingpong_dest,user_param.numofqp);
+	ALLOCATE(my_dest,struct pingpong_dest,user_param.num_of_qps);
+	ALLOCATE(rem_dest,struct pingpong_dest,user_param.num_of_qps);
 
 	// Set up the Connection.
 	if (set_up_connection(ctx,&user_param,my_dest)) {
@@ -791,9 +810,9 @@ int main(int argc, char *argv[])
 
 	// shaking hands and gather the other side info.
 	user_param.side = REMOTE;
-	for (i=0; i < user_param.numofqps; i++) {
+	for (i=0; i < user_param.num_of_qps; i++) {
 		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange date between server and clients\n");
 			return 1;   
 		}
 		ctx_print_pingpong_data(&rem_dest[i],&user_param);
@@ -805,13 +824,13 @@ int main(int argc, char *argv[])
 
 		// An additional handshake is required after moving qp to RTR.
 		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange date between server and clients\n");
 			return 1; 
 		}
 	}
-	printf("Mtu : %d\n", user_param.mtu);
+	printf(" Mtu : %d\n", user_param.mtu);
 	printf("------------------------------------------------------------------\n");
-	printf(" #bytes #iterations    BW peak[MB/sec]    BW average[MB/sec]  \n");
+	printf(" #bytes     #iterations     BW peak[MB/sec]     BW average[MB/sec]\n");
 
 	// For half duplex tests, server just waits for client to exit 
 	if (!servername && !duplex) {
@@ -822,19 +841,8 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	tposted = malloc(user_param.iters * user_param.numofqps * sizeof *tposted);
-
-	if (!tposted) {
-		perror("malloc");
-		return 1;
-	}
-
-	tcompleted = malloc(user_param.iters * user_param.numofqps * sizeof *tcompleted);
-
-	if (!tcompleted) {
-		perror("malloc");
-		return 1;
-	}
+	ALLOCATE(tposted,cycles_t,(user_param.iters*user_param.num_of_qps));
+	ALLOCATE(tcompleted,cycles_t,(user_param.iters*user_param.num_of_qps));
 
 	if (all == ALL) {
 		for (i = 1; i < 24 ; ++i) {
@@ -859,6 +867,10 @@ int main(int argc, char *argv[])
 	free(tcompleted);
 	free(my_dest);
 	free(rem_dest);
+	free(ctx->qp);
+	free(ctx->scnt);
+	free(ctx->ccnt);
+	free(ctx);
 
 	printf("------------------------------------------------------------------\n");
 	return 0;

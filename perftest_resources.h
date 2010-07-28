@@ -61,18 +61,23 @@
 #define UD  2
 // #define XRC 3
 
+#define CYCLE_BUFFER        4096
+#define CACHE_LINE_SIZE     64
+
 // Outstanding reads for "read" verb only.
 #define MAX_OUT_READ_HERMON 16
 #define MAX_OUT_READ        4
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
+
+// Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
 #define PINGPONG_SEND_WRID  0
 #define DEF_QKEY            0x11111111
 #define ALL 		        1
 
-#define KEY_MSG_SIZE 	 50     // Message size without gid.
-#define KEY_MSG_SIZE_GID 98 // Message size with gid (MGID as well).
+#define KEY_MSG_SIZE 	    50     // Message size without gid.
+#define KEY_MSG_SIZE_GID    98 // Message size with gid (MGID as well).
 
 // The Format of the message we pass through sockets , without passing Gid.
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx"
@@ -91,9 +96,18 @@
     { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)    \
         { fprintf(stderr, "Cannot Allocate\n"); exit(1);}}
 
-// Macro to determine packet size in case of UD.
+// Macro to determine packet size in case of UD. 
+// The UD addition is for the GRH .
 #define SIZE(type,size) ((type == UD) ? (size + UD_ADDITION) : (size))
 
+// Macro to define the buffer size (according to "Nahalem" chip set).
+// for small message size (under 4K) , we allocate 4K buffer , and the RDMA write
+// verb will write in cycle on the buffer. this improves the BW in "Nahalem" systems.
+#define BUFF_SIZE(size) ((size < CYCLE_BUFFER) ? (CYCLE_BUFFER) : (size))
+
+// Macro that defines the adress where we write in RDMA.
+// If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
+#define INC(size) ((size > CACHE_LINE_SIZE) ? (size) : (CACHE_LINE_SIZE))
 
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE , READ } VerbType;
@@ -116,7 +130,6 @@ struct perftest_parameters {
 	int mtu;
 	int tx_depth;
 	int rx_depth;
-	int numofqps;
 	int inline_size;
 	int qp_timeout;
 	int gid_index;
@@ -163,25 +176,40 @@ struct pingpong_dest {
  */
 int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
 
-/* 
+/* ctx_qp_create.
  *
+ * Description : 
  *
+ *	Creates a QP , according to the attributes given in param.
+ *	The relevent attributes are tx_depth,rx_depth,inline_size and connection_type.
  *
+ * Parameters :
  *
+ *	pd      - The Protection domain , each the qp will be assigned to.
+ *	send_cq - The CQ that will produce send CQE.
+ *	recv_qp - The CQ that will produce recv CQE.
+ *	param   - The parameters for the QP.
  *
- *
+ * Return Value : Adress of the new QP.
  */
 struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
 							 struct ibv_cq *send_cq,
 							 struct ibv_cq *recv_cq,
 							 struct perftest_parameters *param);
 
-/* 
+/* ctx_modify_qp_to_init.
  *
+ * Description :
  *
+ *	Modifies the given QP to INIT state , according to attributes in param.
+ *  The relevent attributes are ib_port, connection_type and verb. 
  *
+ * Parameters :
  *
+ *	qp     - The QP that will be moved to INIT.
+ *	param  - The parameters for the QP.
  *
+ * Return Value : 0 if success , 1 otherwise.
  *
  */
 int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param);
@@ -202,13 +230,20 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param);
  */
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
 
-/* 
+/* ctx_set_out_reads.
  *
+ * Description :
  *
+ *  This Method is used in READ verb.
+ *  it sets the outstanding reads number according to the HCA gen.
  *
+ * Parameters : 
  *
+ *  context        - the context of the HCA device.
+ *  num_user_reads - The num of outstanding reads the user requested 
+ *					 ( 0 if he/she didn't requested ) and then MAX is selected. 
  *
- *
+ * Return Value : The number of outstanding reads , -1 if query device failed.
  */
 int ctx_set_out_reads(struct ibv_context *context,int num_user_reads);
 
@@ -280,6 +315,19 @@ int ctx_hand_shake(struct perftest_parameters *params,
  */
 void ctx_print_pingpong_data(struct pingpong_dest *element, 
 							 struct perftest_parameters *params);
+
+/* increase_rem_addr.
+ *
+ * Description : 
+ *	Increases the remote address in RDMA verbs by INC , 
+ *  (at least 64 CACHE_LINE size) , so that the system 
+ *
+ */
+inline void increase_rem_addr(struct ibv_send_wr *wr, 
+							  int size,  
+							  int scnt,
+							  uint64_t prim_rem_addr, 
+							  uint64_t prim_addr);
 
 /* ctx_close_connection .
  *

@@ -274,7 +274,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,int my_out_rea
 		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
-	printf("Mtu : %d\n", user_parm->mtu);
+	printf(" Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num 	= dest->qpn;
 	attr.rq_psn 		= dest->psn;
 	attr.ah_attr.dlid       = dest->lid;	
