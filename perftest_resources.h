@@ -69,11 +69,12 @@
 #define MAX_OUT_READ        4
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
-#define DEF_WC_SIZE         1
+#define DEF_WC_SIZE         5
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
 #define PINGPONG_SEND_WRID  60
+#define PINGPONG_READ_WRID	1
 #define DEF_QKEY            0x11111111
 #define ALL 		        1
 
@@ -98,10 +99,26 @@
 // The print format of a global address or a multicast address.
 #define GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
 
+// End of Test
+#define RESULT_LINE "------------------------------------------------------------------\n"
+
+// The format of the results
+#define RESULT_FMT  " #bytes     #iterations     BW peak[MB/sec]     BW average[MB/sec]\n"
+
+// Result print format
+#define REPORT_FMT  " %-7d    %d            %-7.2f             %-7.2f\n"
+
 // Macro for allocating.
-#define ALLOCATE(var,type,size)                                 \
-    { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)    \
-        { fprintf(stderr, "Cannot Allocate\n"); exit(1);}}
+#define ALLOCATE(var,type,size)                                  \
+    { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)     \
+        { fprintf(stderr," Cannot Allocate\n"); exit(1);}}
+
+#define NOTIFY_COMP_ERROR_SEND(side,wc,scnt,ccnt)                     \
+	{ fprintf(stderr," Completion with error at %s\n",                \
+	          side == CLIENT ? "client" : "server");                  \
+	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n"     \
+	          ,wc.status,(int) wc.wr_id,wc.vendor_err);			      \
+	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;}     
 
 // Macro to determine packet size in case of UD. 
 // The UD addition is for the GRH .

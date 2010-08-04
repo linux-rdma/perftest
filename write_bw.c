@@ -470,7 +470,6 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	
 	totscnt  = 0;
 	totccnt  = 0;
-	inc_size = (BUFF_SIZE(size) / 2);
 	
 	// Done with setup. Start the test. warm up posting of total 100 wq's per 
     // qp 1 for each qp till all qps have 100.
@@ -484,7 +483,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
             }
 			// If we can increase the remote address , so the next write will be to other address ,
 			// We do it.
-			if (size <= inc_size) { 
+			if (size <= (CYCLE_BUFFER / 2)) { 
 				increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index]);
 				increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index]);
 			}
@@ -509,7 +508,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 					return 1;
 				}     
 				
-				if (size <= inc_size) { 
+				if (size <= (CYCLE_BUFFER / 2)) { 
 					increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index]);
 					increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index]);
 				}

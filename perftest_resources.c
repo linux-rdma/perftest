@@ -196,7 +196,10 @@ struct ibv_cq* ctx_cq_create(struct ibv_context *context,
 	int cq_depth;
 	struct ibv_cq *curr_cq = NULL;
 
-	if (param->duplex) 
+	if (param->verb == WRITE || param->verb == READ)
+		cq_depth = param->tx_depth;
+
+	else if (param->duplex) 
 		cq_depth = param->tx_depth + param->rx_depth*(param->num_of_qps);
 
 	else if (param->machine == CLIENT) 
@@ -266,8 +269,8 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param)  
 
 	} else {
 		switch(param->verb) {
-			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;
-			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
+			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
+			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
 			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE	|
 											    IBV_ACCESS_LOCAL_WRITE;
 		}
@@ -475,7 +478,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	// First of all we print the basic format.
     printf(BASIC_ADDR_FMT,sideArray[params->side],element->lid,element->qpn,element->psn);
 
-	switch (params->machine) {
+	switch (params->verb) {
 
 		case READ  : printf(READ_FMT,element->out_reads);
 		case WRITE : printf(RDMA_FMT,element->rkey,element->vaddr);
