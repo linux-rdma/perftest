@@ -70,7 +70,6 @@ struct pingpong_context {
 	void               *buf;
 	unsigned            size;
 	int                 tx_depth;
-	
     int                 *scnt;
     int                 *ccnt;
 };
@@ -485,8 +484,10 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
             }
 			// If we can increase the remote address , so the next write will be to other address ,
 			// We do it.
-			if (size <= inc_size) 
-				increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index],my_addr[index]);
+			if (size <= inc_size) { 
+				increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index]);
+				increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index]);
+			}
 
 			ctx->scnt[index] = ctx->scnt[index]+1;
             totscnt++;
@@ -508,8 +509,10 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 					return 1;
 				}     
 				
-				if (size <= inc_size) 
-					increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index],my_addr[index]);
+				if (size <= inc_size) { 
+					increase_rem_addr(&wr[index],size,ctx->scnt[index],rem_addr[index]);
+					increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index]);
+				}
 
 				ctx->scnt[index] = ctx->scnt[index]+1;
 				totscnt++;

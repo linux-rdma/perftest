@@ -299,21 +299,20 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
-	int i,m_size;
+	int i;
 
 	ALLOCATE(ctx,struct pingpong_context,1);
 
 	ctx->ah 	  = NULL;
 	ctx->size     = size;
-
-	m_size = size < 64 ? 64 : size; 
+ 
 	// Allocating the Buff size according to connection type and size.
-	ctx->buf = memalign(page_size, 2*SIZE(user_parm->connection_type,m_size));
+	ctx->buf = memalign(page_size, 2*SIZE(user_parm->connection_type,size));
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
-	memset(ctx->buf, 0, 2*SIZE(user_parm->connection_type,m_size));
+	memset(ctx->buf, 0, 2*SIZE(user_parm->connection_type,size));
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -355,7 +354,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 		return NULL;
 	}
 
-	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,2*SIZE(user_parm->connection_type,m_size),
+	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,2*SIZE(user_parm->connection_type,size),
 						 IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
@@ -803,6 +802,9 @@ int main(int argc, char *argv[])
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&mcg_params, 0, sizeof(struct mcast_parameters));
+	memset(&my_dest   , 0 , sizeof(struct pingpong_dest));
+	memset(&rem_dest   , 0 , sizeof(struct pingpong_dest));
+
 	user_param.iters = 1000;
 	user_param.port = 18515;
 	user_param.ib_port = 1;

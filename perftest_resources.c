@@ -179,11 +179,35 @@ int ctx_set_link_layer(struct ibv_context *context,
 		params->gid_index = 0;
 	}
 
-	if (params->gid_index > -1) {
+	if (params->gid_index > -1 && (params->machine == CLIENT || params->duplex)) {
 		fprintf(stdout," Using gid index %d as source GID\n",params->gid_index);
 	}
 
 	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+struct ibv_cq* ctx_cq_create(struct ibv_context *context, 
+							 struct ibv_comp_channel *channel,
+							 struct perftest_parameters *param) {
+
+	int cq_depth;
+	struct ibv_cq *curr_cq = NULL;
+
+	if (param->duplex) 
+		cq_depth = param->tx_depth + param->rx_depth*(param->num_of_qps);
+
+	else if (param->machine == CLIENT) 
+		cq_depth = param->tx_depth;
+
+	else 
+		cq_depth = param->rx_depth*param->num_of_qps;
+
+	curr_cq = ibv_create_cq(context,cq_depth,NULL,channel,0);
+
+	return curr_cq;
 }
 
 /****************************************************************************** 
@@ -205,8 +229,7 @@ struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
 	attr.cap.max_send_sge = MAX_SEND_SGE;
 	attr.cap.max_recv_sge = MAX_RECV_SGE;
 	attr.cap.max_inline_data = param->inline_size;
-	// attr.sq_sig_all = 1;
-	
+		
 	switch (param->connection_type) {
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
@@ -448,10 +471,17 @@ int ctx_hand_shake(struct perftest_parameters  *params,
  ******************************************************************************/
 void ctx_print_pingpong_data(struct pingpong_dest *element,
 							 struct perftest_parameters *params) {
- 
-    printf(ADDR_FMT,sideArray[params->side],element->lid,element->out_reads,
-		   element->qpn,element->psn,element->rkey,element->vaddr);
 
+	// First of all we print the basic format.
+    printf(BASIC_ADDR_FMT,sideArray[params->side],element->lid,element->qpn,element->psn);
+
+	switch (params->machine) {
+
+		case READ  : printf(READ_FMT,element->out_reads);
+		case WRITE : printf(RDMA_FMT,element->rkey,element->vaddr);
+		default    : putchar('\n');
+	}
+	
 	if (params->gid_index > -1 || params->use_mcg) {
 
 		printf(GID_FMT,gidArray[params->use_mcg],
@@ -469,18 +499,49 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline void increase_rem_addr(struct ibv_send_wr *wr, int size,  int scnt,
-							  uint64_t prim_rem_addr, uint64_t prim_addr) {
+inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel) {
+
+	struct ibv_cq 		*ev_cq;
+	void          		*ev_ctx;
+
+	if (ibv_get_cq_event(channel,&ev_cq,&ev_ctx)) {
+		fprintf(stderr, "Failed to get cq_event\n");
+		return 1;
+	}                
+
+	if (ev_cq != cq) {
+		fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
+		return 1;
+	}
+
+	if (ibv_req_notify_cq(cq, 0)) {
+		fprintf(stderr, "Couldn't request CQ notification\n");
+		return 1;
+	}
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+inline void	increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr) {
 
 	wr->wr.rdma.remote_addr += INC(size);		    
-	wr->sg_list->addr       += INC(size);
 
-	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) {
-				
-		wr->wr.rdma.remote_addr = prim_rem_addr;
-		wr->sg_list->addr       = prim_addr;
+	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+		wr->wr.rdma.remote_addr = prim_addr;
+}
 		     		
-	 }
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr) {
+		    
+	sg->addr  += INC(size);
+
+	if( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) 	
+		sg->addr = prim_addr;
+		     		
 }
 
 /****************************************************************************** 
