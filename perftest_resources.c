@@ -197,7 +197,7 @@ struct ibv_cq* ctx_cq_create(struct ibv_context *context,
 	struct ibv_cq *curr_cq = NULL;
 
 	if (param->verb == WRITE || param->verb == READ)
-		cq_depth = param->tx_depth;
+		cq_depth = param->tx_depth*param->num_of_qps;
 
 	else if (param->duplex) 
 		cq_depth = param->tx_depth + param->rx_depth*(param->num_of_qps);

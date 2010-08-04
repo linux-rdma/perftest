@@ -212,7 +212,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	}
 	
 	if (user_parm->mtu == 0) {	
-		if (device_attr.vendor_part_id == 23108)
+		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index != -1)
 			user_parm->mtu = 1024;
 		else
 			user_parm->mtu = 2048;
@@ -416,7 +416,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 	ALLOCATE(wc , struct ibv_wc , DEF_WC_SIZE);
 
-	ctx->list.addr   = (uintptr_t) ctx->buf;
+	ctx->list.addr   = (uintptr_t)ctx->buf;
 	ctx->list.length = size;
 	ctx->list.lkey   = ctx->mr->lkey;
 
@@ -464,7 +464,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 					for (i = 0; i < ne; i++) {
 
 						if (wc[i].status != IBV_WC_SUCCESS) 
-							NOTIFY_COMP_ERROR_SEND(user_param->machine,wc[i],scnt,ccnt);
+							NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
 						tcompleted[ccnt++] = get_cycles();
 					}
@@ -511,6 +511,7 @@ int main(int argc, char *argv[])
 	user_param.rx_depth   = 1;
 	user_param.iters      = 1000;
 	user_param.use_event  = 0;
+	user_param.num_of_qps  = 1;
 	user_param.qp_timeout = 14;
 	user_param.gid_index  = -1; 
 	user_param.verb 	  = READ;
@@ -638,7 +639,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	printf("------------------------------------------------------------------\n");
+	printf(RESULT_LINE);
 
 	if (user_param.duplex == 1)
 		printf("                    RDMA_Read Bidirectional BW Test\n");
@@ -758,7 +759,10 @@ int main(int argc, char *argv[])
 	}
 	
 	printf(RESULT_LINE);
-	// destroy_ctx_resources(ctx);
+
+	if(!user_param.use_event)
+		 destroy_ctx_resources(ctx);
+
 	return 0;
 	
 }

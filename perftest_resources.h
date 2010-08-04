@@ -69,11 +69,12 @@
 #define MAX_OUT_READ        4
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
-#define DEF_WC_SIZE         5
+#define DEF_WC_SIZE         1
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
 #define PINGPONG_SEND_WRID  60
+#define PINGPONG_RDMA_WRID	3
 #define PINGPONG_READ_WRID	1
 #define DEF_QKEY            0x11111111
 #define ALL 		        1
@@ -113,12 +114,15 @@
     { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)     \
         { fprintf(stderr," Cannot Allocate\n"); exit(1);}}
 
-#define NOTIFY_COMP_ERROR_SEND(side,wc,scnt,ccnt)                     \
-	{ fprintf(stderr," Completion with error at %s\n",                \
-	          side == CLIENT ? "client" : "server");                  \
-	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n"     \
-	          ,wc.status,(int) wc.wr_id,wc.vendor_err);			      \
-	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;}     
+#define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
+	{ fprintf(stderr," Completion with error at client\n");      											\
+	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
+	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;} 
+
+#define NOTIFY_COMP_ERROR_RECV(wc,rcnt)                     											    \
+	{ fprintf(stderr," Completion with error at server\n");      											\
+	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
+	  fprintf(stderr, "rcnt=%d\n",rcnt); return 1;} 
 
 // Macro to determine packet size in case of UD. 
 // The UD addition is for the GRH .
