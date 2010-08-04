@@ -69,10 +69,11 @@
 #define MAX_OUT_READ        4
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
+#define DEF_WC_SIZE         1
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
-#define PINGPONG_SEND_WRID  0
+#define PINGPONG_SEND_WRID  60
 #define DEF_QKEY            0x11111111
 #define ALL 		        1
 
@@ -85,8 +86,14 @@
 // The Format of the message we pass through sockets (With Gid).
 #define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
 
-// The print format of the pingpong_dest element.
-#define ADDR_FMT " %s address: LID %#04x OUT %#04x QPN %#06x PSN %#06x RKey %#08x VAddr %#016Lx\n"
+// The Basic print format for all verbs.
+#define BASIC_ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x"
+
+// Addition format string for READ - the outstanding reads.
+#define READ_FMT       " OUT %#04x"
+
+// The print format of the pingpong_dest element for RDMA verbs.
+#define RDMA_FMT       " RKey %#08x VAddr %#016Lx"
 
 // The print format of a global address or a multicast address.
 #define GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
@@ -175,6 +182,26 @@ struct pingpong_dest {
  * Return Value : 0 upon success. -1 if it fails.
  */
 int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
+
+/* ctx_cq_create.
+ *
+ * Description : 
+ *
+ *	Creates a QP , according to the attributes given in param.
+ *	The relevent attributes are tx_depth,rx_depth,inline_size and connection_type.
+ *
+ * Parameters :
+ *
+ *	pd      - The Protection domain , each the qp will be assigned to.
+ *	send_cq - The CQ that will produce send CQE.
+ *	recv_qp - The CQ that will produce recv CQE.
+ *	param   - The parameters for the QP.
+ *
+ * Return Value : Adress of the new QP.
+ */
+struct ibv_cq* ctx_cq_create(struct ibv_context *context, 
+							 struct ibv_comp_channel *channel,
+							 struct perftest_parameters *param);
 
 /* ctx_qp_create.
  *
@@ -316,6 +343,17 @@ int ctx_hand_shake(struct perftest_parameters *params,
 void ctx_print_pingpong_data(struct pingpong_dest *element, 
 							 struct perftest_parameters *params);
 
+/* 
+ * Description :
+ *
+ *  
+ *
+ * Parameters : 
+ *
+ *         
+ */
+inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel);
+
 /* increase_rem_addr.
  *
  * Description : 
@@ -323,11 +361,15 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
  *  (at least 64 CACHE_LINE size) , so that the system 
  *
  */
-inline void increase_rem_addr(struct ibv_send_wr *wr, 
-							  int size,  
-							  int scnt,
-							  uint64_t prim_rem_addr, 
-							  uint64_t prim_addr);
+inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr);
+
+/* increase_loc_addr.
+ *
+ * Description : 
+ *	 
+ *
+ */
+inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr);
 
 /* ctx_close_connection .
  *
