@@ -53,9 +53,8 @@
 #include "multicast_resources.h"
 #include "perftest_resources.h"
 
-#define VERSION 1.3
+#define VERSION 2.0
 #define SIGNAL 1
-#define MAX_INLINE 400
 
 static int sl;
 static int page_size;
@@ -103,7 +102,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_parm->ib_port;
-	set_multicast_gid(mcg_params);
+	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num);
 
 	// Request for Mcast group create registery in SM.
 	if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
@@ -553,8 +552,7 @@ static int set_recv_wqes(struct pingpong_context *ctx,int size,
 /****************************************************************************** 
  *
  ******************************************************************************/
-static void set_send_wqe(struct pingpong_context *ctx,
-						 int size, int rem_qpn,
+static void set_send_wqe(struct pingpong_context *ctx,int rem_qpn,
 						 struct perftest_parameters *user_param) {
 
 	ctx->list.addr     = (uintptr_t)ctx->buf;
@@ -566,9 +564,6 @@ static void set_send_wqe(struct pingpong_context *ctx,
 	ctx->wr.next       = NULL;
 	ctx->wr.wr_id      = PINGPONG_SEND_WRID;
 	ctx->wr.send_flags = IBV_SEND_SIGNALED;
-
-	if (size <= user_param->inline_size)
-		ctx->wr.send_flags |= IBV_SEND_INLINE; 
 
 	if (user_param->connection_type == UD) {
 		ctx->wr.wr.ud.ah          = ctx->ah;
@@ -691,6 +686,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
+	if (size <= user_param->inline_size) ctx->wr.send_flags |= IBV_SEND_INLINE; 
 
 	while (ccnt < user_param->iters || rcnt < user_param->iters*num_of_qps) {
 
@@ -754,6 +750,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 			return 1;
 		}
 	}
+	ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 	free(rcnt_for_qp);
 	free(wc);
 	return 0;
@@ -898,8 +895,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
  ******************************************************************************/
 int main(int argc, char *argv[])
 {
-	struct ibv_device      	 	**dev_list;
-	struct ibv_device		 	*ib_dev;
+	struct ibv_device		 	*ib_dev = NULL;
 	struct pingpong_context  	*ctx;
 	struct pingpong_dest	 	my_dest,rem_dest;
 	struct perftest_parameters  user_param;
@@ -1147,23 +1143,9 @@ int main(int argc, char *argv[])
 
 	page_size = sysconf(_SC_PAGESIZE);
 
-	dev_list = ibv_get_device_list(NULL);
-
-	if (!ib_devname) {
-		ib_dev = dev_list[0];
-		if (!ib_dev) {
-			fprintf(stderr, "No IB devices found\n");
-			return 1;
-		}
-	} else {
-		for (; (ib_dev = *dev_list); ++dev_list)
-			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
-				break;
-		if (!ib_dev) {
-			fprintf(stderr, "IB device %s not found\n", ib_devname);
-			return 1;
-		}
-	}
+	ib_dev = ctx_find_dev(ib_devname);
+	if (!ib_dev)
+		return 7;
 
 	if (user_param.use_mcg) 
 		mcg_params.ib_devname = ibv_get_device_name(ib_dev);
@@ -1250,7 +1232,7 @@ int main(int argc, char *argv[])
 	ptr_to_run_iter_uni = (user_param.machine == CLIENT) ?	&run_iter_uni_client : &run_iter_uni_server;
 
 	if (user_param.machine == CLIENT || user_param.duplex) {
-		set_send_wqe(ctx,size,rem_dest.qpn,&user_param);
+		set_send_wqe(ctx,rem_dest.qpn,&user_param);
 		if (noPeak != 2) noPeak = 0;
 	}
 	

@@ -179,7 +179,7 @@ struct sa_mad_packet_t {
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
-void set_multicast_gid(struct mcast_parameters *params);
+void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num);
 
 
 /* ctx_close_connection .
