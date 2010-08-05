@@ -51,9 +51,7 @@
 #include "get_clock.h"
 #include "perftest_resources.h"
 
-#define PINGPONG_RDMA_WRID	3
-#define VERSION 1.1
-#define MAX_INLINE 400
+#define VERSION 2.0
 
 static int sl = 0;
 static int page_size;
@@ -72,17 +70,14 @@ struct pingpong_context {
 	struct ibv_cq      *cq;
 	struct ibv_qp      *qp;
 	void               *buf;
-	volatile char      *post_buf;
-	volatile char      *poll_buf;
-	int                 size;
-	int                 tx_depth;
-	struct ibv_sge list;
-	struct ibv_send_wr wr;
+	int                size;
+	int                tx_depth;
+	
 };
 
-/*
- * 
- */
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int set_up_connection(struct pingpong_context *ctx,
 							 struct perftest_parameters *user_parm,
 							 struct pingpong_dest *my_dest) {
@@ -99,7 +94,7 @@ static int set_up_connection(struct pingpong_context *ctx,
 	my_dest->qpn   = ctx->qp->qp_num;
 	my_dest->psn   = lrand48() & 0xffffff;
 	my_dest->rkey  = ctx->mr->rkey;
-	my_dest->vaddr = (uintptr_t)ctx->buf + ctx->size;
+	my_dest->vaddr = (uintptr_t)ctx->buf + BUFF_SIZE(ctx->size);
 
 	// We do not fail test upon lid in RDMAoE/Eth conf.
 	if (use_i < 0) {
@@ -112,14 +107,13 @@ static int set_up_connection(struct pingpong_context *ctx,
 	return 0;
 }
 
-/*
- * 
- */
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int init_connection(struct perftest_parameters *params,
 						   struct pingpong_dest *my_dest,
 						   const char *servername) {
 
-	params->machine      = servername ? CLIENT : SERVER;
 	params->side      = LOCAL;
 	ctx_print_pingpong_data(my_dest,params);
 
@@ -135,52 +129,26 @@ static int init_connection(struct perftest_parameters *params,
 	return 0;
 }
 
-/*
- * 
- */
-static struct ibv_device *pp_find_dev(const char *ib_devname) {
-	struct ibv_device **dev_list;
-	struct ibv_device *ib_dev = NULL;
-
-	dev_list = ibv_get_device_list(NULL);
-
-	if (!ib_devname) {
-		ib_dev = dev_list[0];
-		if (!ib_dev)
-			fprintf(stderr, "No IB devices found\n");
-	} else {
-		for (; (ib_dev = *dev_list); ++dev_list)
-			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
-				break;
-		if (!ib_dev)
-			fprintf(stderr, "IB device %s not found\n", ib_devname);
-	}
-	return ib_dev;
-}
-
-
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 											struct perftest_parameters *user_parm) {
 	struct pingpong_context *ctx;
 	struct ibv_device_attr device_attr;
 
-	ctx = malloc(sizeof *ctx);
-	if (!ctx)
-		return NULL;
+	ALLOCATE(ctx,struct pingpong_context,1);
 
 	ctx->size     = size;
 	ctx->tx_depth = user_parm->tx_depth;
 
-	ctx->buf = memalign(page_size, size * 2);
+	ctx->buf = memalign(page_size,BUFF_SIZE(size)*2);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
 
-	memset(ctx->buf, 0, size * 2);
-
-	ctx->post_buf = (char*)ctx->buf + (size - 1);
-	ctx->poll_buf = (char*)ctx->buf + (2 * size - 1);
+	memset(ctx->buf, 0, BUFF_SIZE(size)*2);
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -206,79 +174,42 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 			user_parm->mtu = 2048;
 		}
 	}
+
 	ctx->pd = ibv_alloc_pd(ctx->context);
 	if (!ctx->pd) {
 		fprintf(stderr, "Couldn't allocate PD\n");
 		return NULL;
 	}
 
-	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size * 2,
-			     IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf,BUFF_SIZE(size) * 2,IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return NULL;
 	}
 
-	ctx->cq = ibv_create_cq(ctx->context, user_parm->tx_depth, NULL, NULL, 0);
+	// Creates the CQ according to ctx_cq_create in perfetst_resources.
+	ctx->cq = ctx_cq_create(ctx->context,NULL,user_parm);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
 	}
 
-	{
-		struct ibv_qp_init_attr attr;
-		memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
-		attr.send_cq = ctx->cq;
-		attr.recv_cq = ctx->cq;
-		attr.cap.max_send_wr  = user_parm->tx_depth;
-		/* Work around:  driver doesnt support
-		 * recv_wr = 0 */
-		attr.cap.max_recv_wr  = 1;
-		attr.cap.max_send_sge = 1;
-		attr.cap.max_recv_sge = 1;
-		attr.cap.max_inline_data = user_parm->inline_size;
-
-		if (user_parm->connection_type==1) {
-			attr.qp_type = IBV_QPT_UC;
-		} else {
-			attr.qp_type = IBV_QPT_RC;
-		}
-		ctx->qp = ibv_create_qp(ctx->pd, &attr);
-		if (!ctx->qp) {
-			fprintf(stderr, "Couldn't create QP\n");
-			return NULL;
-		}
+	ctx->qp = ctx_qp_create(ctx->pd,ctx->cq,ctx->cq,user_parm);
+	if (!ctx->qp)  {
+		fprintf(stderr, "Couldn't create QP\n");
+		return NULL;
 	}
 
-	{
-		struct ibv_qp_attr attr = {
-			.qp_state        = IBV_QPS_INIT,
-			.pkey_index      = 0,
-			.port_num        = user_parm->ib_port,
-			.qp_access_flags = IBV_ACCESS_REMOTE_WRITE
-		};
-
-		if (ibv_modify_qp(ctx->qp, &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_PKEY_INDEX         |
-				  IBV_QP_PORT               |
-				  IBV_QP_ACCESS_FLAGS)) {
-			fprintf(stderr, "Failed to modify QP to INIT\n");
-			return NULL;
-		}
+	if (ctx_modify_qp_to_init(ctx->qp,user_parm)) {
+		fprintf(stderr, "Failed to modify QP to INIT\n");
+		return NULL;
 	}
-
-	memset(&ctx->wr, 0, sizeof(ctx->wr));
-
-	ctx->wr.wr_id      = PINGPONG_RDMA_WRID;
-	ctx->wr.sg_list    = &ctx->list;
-	ctx->wr.num_sge    = 1;
-	ctx->wr.opcode     = IBV_WR_RDMA_WRITE;
-	ctx->wr.next       = NULL;
-
 	return ctx;
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 						  struct pingpong_dest *dest,
 						  struct perftest_parameters *user_parm)
@@ -303,12 +234,12 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
-	printf("Mtu : %d\n", user_parm->mtu);
+	printf(" Mtu : %d\n", user_parm->mtu);
 	attr.dest_qp_num      = dest->qpn;
 	attr.rq_psn           = dest->psn;
 	attr.ah_attr.dlid     = dest->lid;
 
-	if (user_parm->connection_type==0) {
+	if (user_parm->connection_type == RC) {
 		attr.max_dest_rd_atomic     = 1;
 		attr.min_rnr_timer          = 12;
 	}
@@ -326,7 +257,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = user_parm->ib_port;
 
-	if (user_parm->connection_type == 0) {
+	if (user_parm->connection_type == RC) {
 		if (ibv_modify_qp(ctx->qp, &attr,
 				  IBV_QP_STATE              |
 				  IBV_QP_AV                 |
@@ -356,7 +287,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	attr.qp_state             = IBV_QPS_RTS;
 	attr.sq_psn       = my_psn;
 
-	if (user_parm->connection_type == 0) {
+	if (user_parm->connection_type == RC) {
 		attr.max_rd_atomic  = 1;
 		if (ibv_modify_qp(ctx->qp, &attr,
 				  IBV_QP_STATE              |
@@ -380,6 +311,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	return 0;
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static void usage(const char *argv0)
 {
 	printf("Usage:\n");
@@ -422,6 +356,9 @@ static inline cycles_t get_median(int n, cycles_t delta[])
 		return delta[n / 2];
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int cycles_compare(const void * aptr, const void * bptr)
 {
 	const cycles_t *a = aptr;
@@ -432,6 +369,9 @@ static int cycles_compare(const void * aptr, const void * bptr)
 
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static void print_report(struct report_options * options,
 			 unsigned int iters, cycles_t *tstamp, int size, int no_cpu_freq_fail)
 {
@@ -473,112 +413,102 @@ static void print_report(struct report_options * options,
 	}
 
 	median = get_median(iters - 1, delta);
-	printf("%7d        %d        %7.2f        %7.2f          %7.2f\n",
-	       size,iters,delta[0] / cycles_to_units / 2,
+	printf(REPORT_FMT_LAT,size,iters,delta[0] / cycles_to_units / 2,
 	       delta[iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
 
 	free(delta);
 }
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
-	     struct pingpong_dest *rem_dest,int size,int all)
-{
-	struct ibv_qp           *qp;
-	struct ibv_send_wr      *wr;
-	volatile char           *poll_buf; 
-	volatile char           *post_buf;
-	int                      scnt, ccnt, rcnt;
-	int                      tx_depth;
-	int                      inline_size;
+	         struct pingpong_dest *rem_dest,int size,int all) {
 
-	tx_depth = user_param->tx_depth;
-	inline_size = user_param->inline_size;
+	int 					scnt = 0;
+	int 					ccnt = 0;
+	int 					rcnt = 0;
+	int                     ne;
+	volatile char           *poll_buf = NULL; 
+	volatile char           *post_buf = NULL;
+	struct ibv_sge     		list;
+	struct ibv_send_wr 		wr;
+	struct ibv_send_wr 		*bad_wr = NULL;
+	struct ibv_wc 			wc;
+	          
+	list.addr   = (uintptr_t)ctx->buf ;
+	list.length = size;
+	list.lkey   = ctx->mr->lkey;
 
-	wr = &ctx->wr;
-	ctx->list.addr = (uintptr_t) ctx->buf ;
-	ctx->list.length = size;
-	ctx->list.lkey = ctx->mr->lkey;
-	wr->wr.rdma.remote_addr = rem_dest->vaddr;
-	wr->wr.rdma.rkey = rem_dest->rkey;
+	wr.sg_list             = &list;
+	wr.wr.rdma.remote_addr = rem_dest->vaddr;
+	wr.wr.rdma.rkey        = rem_dest->rkey;
+	wr.wr_id      		   = PINGPONG_READ_WRID;
+	wr.num_sge             = MAX_RECV_SGE;
+	wr.opcode              = IBV_WR_RDMA_WRITE;
+	wr.send_flags          = IBV_SEND_SIGNALED;
+	wr.next                = NULL;
 
-	if (size > inline_size) {/* complaince to perf_main */
-		ctx->wr.send_flags = IBV_SEND_SIGNALED;
-	} else {
-		ctx->wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
-	}
-	scnt = 0;
-	rcnt = 0;
-	ccnt = 0;
+	if (size <= user_param->inline_size)
+		wr.send_flags |= IBV_SEND_INLINE;
 
-	if(all == ALL) {
-		post_buf = (char*)ctx->buf + size - 1;
-		poll_buf = (char*)ctx->buf + 8388608 + size - 1;
-	} else {
-		poll_buf = ctx->poll_buf;
-		post_buf = ctx->post_buf;
-	}    
-	qp = ctx->qp;
+	post_buf = (char*)ctx->buf + size - 1;
+	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + size - 1;
 
 	/* Done with setup. Start the test. */
 	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters) {
 
-		/* Wait till buffer changes. */
 		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == SERVER)) {
-			++rcnt;
-			while (*poll_buf != (char)rcnt)
-				;
-			/* Here the data is already in the physical memory.
-			   If we wanted to actually use it, we may need
-			   a read memory barrier here. */
+			rcnt++;
+			while (*poll_buf != (char)rcnt);
 		}
 
 		if (scnt < user_param->iters) {
-			struct ibv_send_wr *bad_wr;
+
 			tstamp[scnt] = get_cycles();
-
 			*post_buf = (char)++scnt;
-
-			if (ibv_post_send(qp, wr, &bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",
-					scnt);
+			if (ibv_post_send(ctx->qp,&wr,&bad_wr)) {
+				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return 11;
 			}
+
 		}
 
-		if (ccnt < user_param->iters) {
-			struct ibv_wc wc;
-			int ne;
-			++ccnt;
+		if (ccnt < user_param->iters) {	
+		
 			do {
 				ne = ibv_poll_cq(ctx->cq, 1, &wc);
 			} while (ne == 0);
-			if (ne < 0) {
+
+			if(ne > 0) {
+				if (wc.status != IBV_WC_SUCCESS) 
+					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
+				ccnt++;
+			}
+
+			else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 12;
-			}
-			if (wc.status != IBV_WC_SUCCESS) {
-				fprintf(stderr, "Completion wth error at %s:\n",
-					user_param->machine == CLIENT ? "client" : "server");
-				fprintf(stderr, "Failed status %d: wr_id %d\n",
-					wc.status, (int) wc.wr_id);
-				fprintf(stderr, "scnt=%d, rcnt=%d, ccnt=%d\n",
-					scnt, rcnt, ccnt);
-				return 13;
-			}
+			}		
 		}
 	}
-	return(0);
+	return 0;
 }
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int main(int argc, char *argv[])
 {
-	const char              *ib_devname = NULL;
-	int                      size = 2;
-	int                      i = 0;
-	struct report_options    report = {};
-	struct pingpong_context *ctx;
-	struct pingpong_dest     my_dest,rem_dest;
-	struct ibv_device       *ib_dev;
+	const char                  *ib_devname = NULL;
+	int                         size = 2;
+	int                         i = 0;
+	struct report_options       report = {};
+	struct pingpong_context     *ctx;
+	struct pingpong_dest        my_dest,rem_dest;
+	struct ibv_device           *ib_dev;
 	struct perftest_parameters  user_param;
-	int                      no_cpu_freq_fail = 0;
+	int                         no_cpu_freq_fail = 0;
 
 	int all = 0;
 	const char *servername = NULL;
@@ -586,14 +516,21 @@ int main(int argc, char *argv[])
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
-	user_param.mtu = 0; /* signal choose default by device */
-	user_param.tx_depth = 50;
-	user_param.ib_port = 1;
-	user_param.port = 18515;
-	user_param.iters = 1000;
+	memset(&my_dest,0,sizeof(struct pingpong_dest));
+	memset(&rem_dest,0,sizeof(struct pingpong_dest));
+
+	user_param.mtu         = 0;
+	user_param.tx_depth    = 50;
+	user_param.ib_port     = 1;
+	user_param.port        = 18515;
+	user_param.iters       = 1000;
 	user_param.inline_size = MAX_INLINE;
-	user_param.qp_timeout = 14;
-	user_param.gid_index = -1; /*gid will not be used*/
+	user_param.qp_timeout  = 14;
+	user_param.gid_index   = -1;
+	user_param.num_of_qps  = 1;
+	user_param.rx_depth    = 1;
+	user_param.verb        = WRITE;
+
 	/* Parameter parsing. */
 	while (1) {
 		int c;
@@ -620,7 +557,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:aCHUVF", long_options, NULL);///cpufreq
+		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:aCHUVF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -735,22 +672,20 @@ int main(int argc, char *argv[])
 		return 6;
 	}
 
-	/*
-	 *  Done with parameter parsing. Perform setup.
-	 */
+	
 
-	tstamp = malloc(user_param.iters * sizeof *tstamp);
-	if (!tstamp) {
-		perror("malloc");
-		return 10;
-	}
-	printf("------------------------------------------------------------------\n");
+	ALLOCATE(tstamp,cycles_t,user_param.iters);
+	user_param.machine = servername ? CLIENT : SERVER;
+	
+	printf(RESULT_LINE);
+
 	printf("                    RDMA_Write Latency Test\n");
-	printf("Inline data is used up to %d bytes message\n", user_param.inline_size);
+	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
+
 	if (user_param.connection_type==0) {
-		printf("Connection type : RC\n");
+		printf(" Connection type : RC\n");
 	} else {
-		printf("Connection type : UC\n");
+		printf(" Connection type : UC\n");
 	}
 	
 	if (all == ALL) {
@@ -760,7 +695,7 @@ int main(int argc, char *argv[])
 	srand48(getpid() * time(NULL));
 	page_size = sysconf(_SC_PAGESIZE);
 
-	ib_dev = pp_find_dev(ib_devname);
+	ib_dev = ctx_find_dev(ib_devname);
 	if (!ib_dev)
 		return 7;
 
@@ -800,26 +735,28 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-	printf("------------------------------------------------------------------\n");
-	printf(" #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n");
+	printf(RESULT_LINE);
+	printf(RESULT_FMT_LAT);
 
 	if (all == ALL) {
+
 		for (i = 1; i < 24 ; ++i) {
 			size = 1 << i;
 			if(run_iter(ctx,&user_param,&rem_dest,size,all))
 				return 17;
 			print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
 		}
+
 	} else {
+
 		if(run_iter(ctx,&user_param, &rem_dest,size,all))
 			return 18;
 		print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
 	}
 	
-	// Done close sockets
-	close(user_param.sockfd);
+	
 
-	printf("------------------------------------------------------------------\n");
+	printf(RESULT_LINE);
 	free(tstamp);
 	return 0;
 }
