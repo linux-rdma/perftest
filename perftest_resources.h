@@ -63,6 +63,7 @@
 
 #define CYCLE_BUFFER        4096
 #define CACHE_LINE_SIZE     64
+#define MAX_INLINE 			400
 
 // Outstanding reads for "read" verb only.
 #define MAX_OUT_READ_HERMON 16
@@ -70,6 +71,7 @@
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
 #define DEF_WC_SIZE         1
+#define CQ_MODERATION       50
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
@@ -104,10 +106,15 @@
 #define RESULT_LINE "------------------------------------------------------------------\n"
 
 // The format of the results
-#define RESULT_FMT  " #bytes     #iterations     BW peak[MB/sec]     BW average[MB/sec]\n"
+#define RESULT_FMT     " #bytes     #iterations     BW peak[MB/sec]     BW average[MB/sec]\n"
+
+#define RESULT_FMT_LAT " #bytes     #iterations     t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 // Result print format
-#define REPORT_FMT  " %-7d    %d            %-7.2f             %-7.2f\n"
+#define REPORT_FMT     " %-7d    %d            %-7.2f             %-7.2f\n"
+
+// Result print format for latency tests.
+#define REPORT_FMT_LAT " %-7d    %d            %-7.2f        %-7.2f      %-7.2f\n"
 
 // Macro for allocating.
 #define ALLOCATE(var,type,size)                                  \
@@ -190,6 +197,16 @@ struct pingpong_dest {
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
+
+/* 
+ *
+ * Description : Determines the link layer type (IB or ETH).
+ *
+ * Parameters : 
+ *
+ * Value : 0 upon success. -1 if it fails.
+ */
+struct ibv_device* ctx_find_dev(const char *ib_devname);
 
 /* ctx_set_link_layer.
  *

@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <byteswap.h>
+// #include <byteswap.h>
 #include "perftest_resources.h"
 
 
@@ -150,6 +150,30 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 	}
 	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+struct ibv_device* ctx_find_dev(const char *ib_devname) {
+
+	struct ibv_device **dev_list;
+	struct ibv_device *ib_dev = NULL;
+
+	dev_list = ibv_get_device_list(NULL);
+
+	if (!ib_devname) {
+		ib_dev = dev_list[0];
+		if (!ib_dev)
+			fprintf(stderr, "No IB devices found\n");
+	} else {
+		for (; (ib_dev = *dev_list); ++dev_list)
+			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
+				break;
+		if (!ib_dev)
+			fprintf(stderr, "IB device %s not found\n", ib_devname);
+	}
+	return ib_dev;
 }
 
 /****************************************************************************** 

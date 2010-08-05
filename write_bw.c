@@ -51,8 +51,7 @@
 #include "get_clock.h"
 #include "perftest_resources.h"
 
-#define VERSION 2.1
-#define MAX_INLINE 400
+#define VERSION 2.2
 
 static int sl = 0;
 static int page_size;
@@ -581,8 +580,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
  ******************************************************************************/
 int main(int argc, char *argv[])
 {
-	struct ibv_device           **dev_list;
-	struct ibv_device		    *ib_dev;
+	struct ibv_device		    *ib_dev = NULL;
 	struct pingpong_context     *ctx;
 	struct pingpong_dest        *my_dest,*rem_dest;
 	struct perftest_parameters  user_param;
@@ -792,23 +790,9 @@ int main(int argc, char *argv[])
 
 	page_size = sysconf(_SC_PAGESIZE);
 
-	dev_list = ibv_get_device_list(NULL);
-
-	if (!ib_devname) {
-		ib_dev = dev_list[0];
-		if (!ib_dev) {
-			fprintf(stderr, " No IB devices found\n");
-			return 1;
-		}
-	} else {
-		for (; (ib_dev = *dev_list); ++dev_list)
-			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
-				break;
-		if (!ib_dev) {
-			fprintf(stderr, " IB device %s not found\n", ib_devname);
-			return 1;
-		}
-	}
+	ib_dev = ctx_find_dev(ib_devname);
+	if (!ib_dev)
+		return 7;
 
 	context = ibv_open_device(ib_dev);
 	if (ibv_query_device(context, &device_attribute)) {
