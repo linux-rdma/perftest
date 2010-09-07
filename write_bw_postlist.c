@@ -54,7 +54,6 @@
 #define PINGPONG_RDMA_WRID	3
 #define VERSION 1.1
 #define ALL 1
-#define MAX_INLINE 400
 
 static int sl = 0;
 static int page_size;

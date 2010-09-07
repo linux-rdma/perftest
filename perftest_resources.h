@@ -63,7 +63,7 @@
 
 #define CYCLE_BUFFER        4096
 #define CACHE_LINE_SIZE     64
-#define MAX_INLINE 			400
+#define MAX_INLINE 	    	400
 
 // Outstanding reads for "read" verb only.
 #define MAX_OUT_READ_HERMON 16

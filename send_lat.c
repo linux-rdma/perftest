@@ -702,9 +702,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	
 	ctx->list.length   = size;
 	ctx->wr.send_flags = size > user_param->inline_size ? 0 : IBV_SEND_INLINE;
-
 	while (scnt < user_param->iters || rcnt < user_param->iters) {
-
 		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == CLIENT)) {
 		  
 			// Server is polling on recieve first .
@@ -744,7 +742,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 			tstamp[scnt++] = get_cycles();
 
-			if (scnt %CQ_MODERATION == 0) {
+			if (scnt % CQ_MODERATION == 0) {
 				poll = 1;
 				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 			}

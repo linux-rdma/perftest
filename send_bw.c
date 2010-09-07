@@ -208,7 +208,8 @@ static int init_connection(struct perftest_parameters *params,
 		params->sockfd = ctx_client_connect(servername,params->port);
 	else 
 		params->sockfd = ctx_server_connect(params->port);
-
+	
+		
 	if(params->sockfd < 0) {
 		fprintf(stderr,"Unable to open file descriptor for socket connection");
 		return 1;
@@ -365,6 +366,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	}
 
 	// Create the CQ according to Client/Server or Duplex setting.
+
 	ctx->cq = ctx_cq_create(ctx->context,ctx->channel,user_parm);
 	if (ctx->cq == NULL) {
 		fprintf(stderr, "Couldn't create CQ \n");
@@ -686,11 +688,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
-	if (size <= user_param->inline_size) ctx->wr.send_flags |= IBV_SEND_INLINE; 
+	
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags |= IBV_SEND_INLINE; 
 
-	while (ccnt < user_param->iters || rcnt < user_param->iters*num_of_qps) {
-
-		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth) {
+	while (ccnt < user_param->iters) {
+                
+		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
 
 			tposted[scnt] = get_cycles();
 			if (ibv_post_send(ctx->qp[0],&ctx->wr, &bad_wr)) {
@@ -716,6 +720,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 			ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
+					
 					if (wc[i].status != IBV_WC_SUCCESS)
 						 NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
@@ -750,7 +755,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 			return 1;
 		}
 	}
-	ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
+	
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags &= ~IBV_SEND_INLINE;
+	
 	free(rcnt_for_qp);
 	free(wc);
 	return 0;
@@ -791,7 +799,7 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 			ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-
+					
 					if (wc[i].status != IBV_WC_SUCCESS) 
 						NOTIFY_COMP_ERROR_RECV(wc[i],rcnt_for_qp[wc[i].wr_id]);
 						
@@ -878,6 +886,8 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 						tcompleted[ccnt++] = get_cycles();
 					}	
 				}
+                         
+					
 			} while (ne > 0);
 
 			if (ne < 0) {
@@ -905,7 +915,7 @@ int main(int argc, char *argv[])
 	long long                	size = 65536;
 	int                      	i = 0;
 	int                      	size_max_pow = 24;
-	int                      	noPeak = 1;
+	int                      	noPeak = 0;
 	int                      	inline_given_in_cmd = 0;
 	struct ibv_context       	*context;
 	int                      	no_cpu_freq_fail = 0;
@@ -1066,7 +1076,7 @@ int main(int argc, char *argv[])
 			break;
 
 		case 'N':
-			noPeak = 2;
+			noPeak = 1;
 			break;
 
 		case 'F':
@@ -1098,9 +1108,9 @@ int main(int argc, char *argv[])
 	}
 
 	printf(RESULT_LINE);
+	user_param.rx_depth = (user_param.iters < user_param.rx_depth) ? user_param.iters : user_param.rx_depth ;
 
 	user_param.machine = servername ? CLIENT : SERVER;
-
     if (user_param.use_mcg) {
 
 		user_param.connection_type = UD;
@@ -1152,6 +1162,7 @@ int main(int argc, char *argv[])
 
 	// Should be a function over here that computes the inline.
 	context = ibv_open_device(ib_dev);
+	
 	if (ibv_query_device(context, &device_attribute)) {
 		fprintf(stderr, "Failed to query device props");
 		return 1;
@@ -1230,10 +1241,13 @@ int main(int argc, char *argv[])
 	}
 
 	ptr_to_run_iter_uni = (user_param.machine == CLIENT) ?	&run_iter_uni_client : &run_iter_uni_server;
+	
+	if (user_param.machine == SERVER && !user_param.duplex) {
+		noPeak = 1;
+	}
 
 	if (user_param.machine == CLIENT || user_param.duplex) {
 		set_send_wqe(ctx,rem_dest.qpn,&user_param);
-		if (noPeak != 2) noPeak = 0;
 	}
 	
 	if (all == ALL) {
