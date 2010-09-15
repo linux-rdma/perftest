@@ -812,8 +812,10 @@ int main(int argc, char *argv[])
 	if (!ctx)
 		return 1;
 
-	ALLOCATE(my_dest,struct pingpong_dest,user_param.num_of_qps);
-	ALLOCATE(rem_dest,struct pingpong_dest,user_param.num_of_qps);
+	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
+	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	// Set up the Connection.
 	if (set_up_connection(ctx,&user_param,my_dest)) {
