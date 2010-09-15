@@ -692,7 +692,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
 
-	while (ccnt < user_param->iters) {
+	while (ccnt < user_param->iters || rcnt < user_param->iters) {
                 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
 
@@ -828,6 +828,10 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 			return 1;
 		}
 	}
+
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags &= ~IBV_SEND_INLINE;
+
 	tposted[0] = tcompleted[0];
 	free(wc);
 	free(rcnt_for_qp);
@@ -851,6 +855,9 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 	// Set the lenght of the scatter in case of ALL option.
 	ctx->list.length = size;
+
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags |= IBV_SEND_INLINE; 
 
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
