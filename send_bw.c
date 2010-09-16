@@ -794,13 +794,7 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 						return 15;
-					}
-
-					if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
-							increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
-								SIZE(user_param->connection_type,size),
-								rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
-								ctx->my_addr[wc[i].wr_id]);					
+					}						
 				}
 			}
 		} while (ne > 0);
@@ -1242,10 +1236,11 @@ int main(int argc, char *argv[])
 		set_send_wqe(ctx,rem_dest.qpn,&user_param);
 	}
 
-	// Post recevie recv_wqe's.
-	if (set_recv_wqes(ctx,size,&user_param)) {
-		fprintf(stderr," Failed to post receive recv_wqes\n");
-		return 1;
+	if (user_param.machine == SERVER || user_param.duplex) {
+		if (set_recv_wqes(ctx,size,&user_param)) {
+			fprintf(stderr," Failed to post receive recv_wqes\n");
+			return 1;
+		}
 	}
 
 	if (all == ALL) {
