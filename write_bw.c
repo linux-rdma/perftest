@@ -486,6 +486,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		wr[index].wr.rdma.rkey        = rem_dest[index].rkey;
 		wr[index].wr_id               = index;
 		wr[index].send_flags          = IBV_SEND_SIGNALED;
+
 		if (size <= user_param->inline_size) 
 			wr[index].send_flags |= IBV_SEND_INLINE;
 

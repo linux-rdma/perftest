@@ -700,8 +700,11 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		return 1;
 	}
 	
-	ctx->list.length   = size;
-	ctx->wr.send_flags = size > user_param->inline_size ? 0 : IBV_SEND_INLINE;
+	ctx->list.length = size;
+
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags = IBV_SEND_INLINE; 
+
 	while (scnt < user_param->iters || rcnt < user_param->iters) {
 		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == CLIENT)) {
 		  
@@ -742,7 +745,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 			tstamp[scnt++] = get_cycles();
 
-			if (scnt % CQ_MODERATION == 0) {
+			if (scnt % CQ_MODERATION == 0 || scnt == user_param->iters) {
 				poll = 1;
 				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 			}
@@ -781,6 +784,10 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 		}
 	}
+
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags &= ~IBV_SEND_INLINE;
+
 	free(wc);
 	free(rcnt_for_qp);
 	return 0;
@@ -1000,7 +1007,9 @@ int main(int argc, char *argv[])
 		printf("                    Send Latency Test\n");
 	}
 
-	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
+	 if (user_param.use_event) 
+        printf("Test with events.\n");
+
 	if (user_param.connection_type==RC) {
 		printf(" Connection type : RC\n");
 	} else if (user_param.connection_type==UC) { 
@@ -1008,6 +1017,8 @@ int main(int argc, char *argv[])
 	} else {
 		printf(" Connection type : UD\n");
 	}
+
+	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
 
 	if (all == ALL) {
 		/*since we run all sizes lets allocate big enough buffer */
@@ -1122,10 +1133,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
-
-	if (!user_param.use_event)
-		destroy_ctx_resources(ctx,&user_param,&mcg_params);
-
+	
 	printf(RESULT_LINE);
-	return 0;
+
+	return destroy_ctx_resources(ctx,&user_param,&mcg_params);
 }

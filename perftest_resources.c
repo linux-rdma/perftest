@@ -533,12 +533,14 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
 	if (ibv_get_cq_event(channel,&ev_cq,&ev_ctx)) {
 		fprintf(stderr, "Failed to get cq_event\n");
 		return 1;
-	}                
+	}
 
 	if (ev_cq != cq) {
 		fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
 		return 1;
 	}
+
+	ibv_ack_cq_events(cq,1);
 
 	if (ibv_req_notify_cq(cq, 0)) {
 		fprintf(stderr, "Couldn't request CQ notification\n");

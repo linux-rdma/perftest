@@ -829,9 +829,6 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 		}
 	}
 
-	if (size <= user_param->inline_size) 
-		ctx->wr.send_flags &= ~IBV_SEND_INLINE;
-
 	tposted[0] = tcompleted[0];
 	free(wc);
 	free(rcnt_for_qp);
@@ -858,6 +855,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
+	
 
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
@@ -903,6 +901,10 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 			}
 		}
 	}
+
+	if (size <= user_param->inline_size) 
+		ctx->wr.send_flags &= ~IBV_SEND_INLINE;
+
 	free(wc);
 	return 0;
 }
@@ -1137,6 +1139,9 @@ int main(int argc, char *argv[])
 	} else 
 		printf("                    Send BW Test\n");
 
+	if (user_param.use_event) 
+		printf(" Test with events.\n");
+
 	if (user_param.connection_type == RC)
 		printf(" Connection type : RC\n");
 	else if (user_param.connection_type == UC)
@@ -1225,10 +1230,8 @@ int main(int argc, char *argv[])
     }
 
 	if (user_param.use_event) {
-		printf(" Test with events.\n");
-
 		if (ibv_req_notify_cq(ctx->cq, 0)) {
-			fprintf(stderr, "Couldn't request CQ notification\n");
+			fprintf(stderr, " Couldn't request CQ notification\n");
 			return 1;
 		} 
 	}
@@ -1300,9 +1303,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (!user_param.use_event)
-		destroy_ctx_resources(ctx,&user_param,&mcg_params); 
-	
 	printf(RESULT_LINE);
-	return 0;
+	return destroy_ctx_resources(ctx,&user_param,&mcg_params);
 }

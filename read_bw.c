@@ -643,6 +643,9 @@ int main(int argc, char *argv[])
 	else
 		printf("                    RDMA_Read BW Test\n");
 
+	if (user_param.use_event)
+		printf(" Test with events.\n");
+
 	printf(" Connection type : RC\n");
 
 	// Set the machine role in the benchmark.
@@ -704,10 +707,11 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 		printf(RESULT_LINE);
-		return 0;
+		return destroy_ctx_resources(ctx);;
 
-	} else if (user_param.use_event) {
-		printf("Test with events.\n");
+	} 
+
+	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx->cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
@@ -743,9 +747,6 @@ int main(int argc, char *argv[])
 	
 	printf(RESULT_LINE);
 
-	if(!user_param.use_event)
-		 destroy_ctx_resources(ctx);
-
-	return 0;
+	return destroy_ctx_resources(ctx);
 	
 }
