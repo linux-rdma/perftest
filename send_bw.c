@@ -680,12 +680,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 	if (user_param->use_mcg)
 		num_of_qps--; 
 
-	// Post recevie recv_wqe's.
-	if (set_recv_wqes(ctx,size,user_param)) {
-		fprintf(stderr," Failed to post receive recv_wqes\n");
-		return 1;
-	}
-
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
 	
@@ -731,20 +725,16 @@ int run_iter_bi(struct pingpong_context *ctx,
 					else {
 						rcnt_for_qp[wc[i].wr_id]++;
 						rcnt++;
-						if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth  <= user_param->iters) {
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
+							return 15;
+						}
 
-							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
-								return 15;
-							}
-
-							if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
-								increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
-												  SIZE(user_param->connection_type,size),
-											      rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
-											      ctx->my_addr[wc[i].wr_id]);
-
-						}	
+						if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
+							increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
+							  SIZE(user_param->connection_type,size),
+							  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
+							  ctx->my_addr[wc[i].wr_id]);	
 					}
 				}
 			}
@@ -781,11 +771,6 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
-	if (set_recv_wqes(ctx,size,user_param)) {
-		fprintf(stderr ," Failed to post receive recv_wqes\n");
-		return 1;
-	}
-
 	while (rcnt < user_param->iters) {
 
 		if (user_param->use_event) {
@@ -806,19 +791,16 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 					rcnt_for_qp[wc[i].wr_id]++;
 					tcompleted[rcnt++] = get_cycles();
 								
-					if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth  <= user_param->iters) {
+					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+						return 15;
+					}
 
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return 15;
-						}
-
-						if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
+					if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
 							increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
-											  SIZE(user_param->connection_type,size),
-											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
-											  ctx->my_addr[wc[i].wr_id]);
-					}	
+								SIZE(user_param->connection_type,size),
+								rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
+								ctx->my_addr[wc[i].wr_id]);					
 				}
 			}
 		} while (ne > 0);
@@ -1259,7 +1241,13 @@ int main(int argc, char *argv[])
 	if (user_param.machine == CLIENT || user_param.duplex) {
 		set_send_wqe(ctx,rem_dest.qpn,&user_param);
 	}
-	
+
+	// Post recevie recv_wqe's.
+	if (set_recv_wqes(ctx,size,&user_param)) {
+		fprintf(stderr," Failed to post receive recv_wqes\n");
+		return 1;
+	}
+
 	if (all == ALL) {
 		if (user_param.connection_type == UD) {
 			if (user_param.gid_index < 0 || user_param.use_mcg) {
