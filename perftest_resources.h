@@ -106,15 +106,15 @@
 #define RESULT_LINE "------------------------------------------------------------------\n"
 
 // The format of the results
-#define RESULT_FMT     " #bytes     #iterations     BW peak[MB/sec]     BW average[MB/sec]\n"
+#define RESULT_FMT     " #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]\n"
 
-#define RESULT_FMT_LAT " #bytes     #iterations     t_min[usec]    t_max[usec]  t_typical[usec]\n"
+#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 // Result print format
-#define REPORT_FMT     " %-7d    %d            %-7.2f             %-7.2f\n"
+#define REPORT_FMT     " %-7d    %d           %-7.2f            %-7.2f\n"
 
 // Result print format for latency tests.
-#define REPORT_FMT_LAT " %-7d    %d            %-7.2f        %-7.2f      %-7.2f\n"
+#define REPORT_FMT_LAT " %-7d %d          %-7.2f        %-7.2f      %-7.2f\n"
 
 // Macro for allocating.
 #define ALLOCATE(var,type,size)                                  \
