@@ -1101,19 +1101,19 @@ int main(int argc, char *argv[])
 		user_param.connection_type = UD;
 		if (user_param.duplex) {
 			user_param.num_of_qps++;
-			printf("                Send Bidirectional BW  -  Multicast Test\n");
+			printf("                    Send Bidirectional BW  -  Multicast Test\n");
 		}
 		else {
-			printf("                Send BW  -  Multicast Test\n");
+			printf("                    Send BW  -  Multicast Test\n");
 			if (user_param.machine == CLIENT)
 				user_param.num_of_qps = 1;
 		}
     }
 
 	else if (user_param.duplex) {
-		printf("                    Send Bidirectional BW Test\n");
+		    printf("                    Send Bidirectional BW Test\n");
 	} else 
-		printf("                    Send BW Test\n");
+		    printf("                    Send BW Test\n");
 
 	if (user_param.use_event) 
 		printf(" Test with events.\n");
