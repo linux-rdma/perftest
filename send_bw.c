@@ -418,7 +418,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		attr.path_mtu               = IBV_MTU_4096;
 		break;
 	}
-	printf(" Mtu : %d\n", user_parm->mtu);
+	
     attr.dest_qp_num   = dest->qpn;
 	attr.rq_psn        = dest->psn;
 	attr.ah_attr.dlid  = dest->lid;
@@ -469,7 +469,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	else {
 		for (i = 0; i < user_parm->num_of_qps; i++) {
 			if (ibv_modify_qp(ctx->qp[i],&attr,IBV_QP_STATE )) {
-				fprintf(stderr, "Failed to modify UC QP to RTR\n");
+				fprintf(stderr, "Failed to modify UD QP to RTR\n");
 				return 1;
 			}
 		}
@@ -577,6 +577,48 @@ static void set_send_wqe(struct pingpong_context *ctx,int rem_qpn,
 /****************************************************************************** 
  *
  ******************************************************************************/
+static int pp_drain_qp(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param,
+						int psn,struct pingpong_dest *dest) {
+
+	struct ibv_qp_attr attr;
+	struct ibv_wc      wc;
+	int                i;
+
+	memset(&attr, 0, sizeof attr);
+	attr.qp_state = IBV_QPS_ERR;
+
+	for (i = 0; i <  user_param->num_of_qps; i++) {
+
+		if (ibv_modify_qp(ctx->qp[i],&attr,IBV_QP_STATE)) {
+			fprintf(stderr, "Failed to modify RC QP to ERR\n");
+			return 1;
+		}
+
+		while (ibv_poll_cq(ctx->cq,1,&wc));
+   
+		attr.qp_state = IBV_QPS_RESET;
+
+		if (ibv_modify_qp(ctx->qp[i],&attr,IBV_QP_STATE)) {
+			fprintf(stderr, "Failed to modify RC QP to RESET\n");
+			return 1;
+		}
+
+		if(ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
+			return 1;
+		}
+  
+		if (pp_connect_ctx(ctx,psn,dest,user_param)) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 
 static void usage(const char *argv0)
 {
@@ -679,7 +721,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (user_param->use_mcg)
 		num_of_qps--; 
-
+	
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
 	
@@ -770,11 +812,6 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
-
-	if (set_recv_wqes(ctx,size,user_param)) {
-		fprintf(stderr," Failed to post receive recv_wqes\n");
-		return 1;
-	}
 
 	while (rcnt < user_param->iters) {
 
@@ -1208,7 +1245,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
 		return 1;
 	}
-
+	printf(" Mtu : %d\n", user_param.mtu);
 	// shaking hands and gather the other side info.
     if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
@@ -1247,13 +1284,6 @@ int main(int argc, char *argv[])
 		set_send_wqe(ctx,rem_dest.qpn,&user_param);
 	}
 
-	if (user_param.duplex) {
-		if (set_recv_wqes(ctx,size,&user_param)) {
-			fprintf(stderr," Failed to post receive recv_wqes\n");
-			return 1;
-		}
-	}
-
 	if (all == ALL) {
 		if (user_param.connection_type == UD) {
 			if (user_param.gid_index < 0 || user_param.use_mcg) {
@@ -1265,6 +1295,19 @@ int main(int argc, char *argv[])
 
 		for (i = 1; i < size_max_pow ; ++i) {
 			size = 1 << i;
+
+			if (user_param.machine == SERVER || user_param.duplex) {
+				if (set_recv_wqes(ctx,size,&user_param)) {
+					fprintf(stderr," Failed to post receive recv_wqes\n");
+					return 1;
+				}
+			}
+
+			if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
+				fprintf(stderr,"Failed to exchange date between server and clients\n");
+				return 1;
+			}
+
 			if (user_param.duplex) {
 				if(run_iter_bi(ctx,&user_param,size))
 					return 17;
@@ -1272,7 +1315,12 @@ int main(int argc, char *argv[])
 				if((*ptr_to_run_iter_uni)(ctx,&user_param,size))
 					return 17;
 			}
-			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);	
+			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
+
+			if (pp_drain_qp(ctx,&user_param,my_dest.psn,&rem_dest)) {
+				fprintf(stderr,"..................\n");
+				return 1;
+			}
 
 			if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
 				fprintf(stderr,"Failed to exchange date between server and clients\n");
