@@ -1318,7 +1318,7 @@ int main(int argc, char *argv[])
 			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 
 			if (pp_drain_qp(ctx,&user_param,my_dest.psn,&rem_dest)) {
-				fprintf(stderr,"..................\n");
+				fprintf(stderr,"Failed to drain Recv queue (performance optimization)\n");
 				return 1;
 			}
 
@@ -1330,13 +1330,28 @@ int main(int argc, char *argv[])
 		}
 
 	} else {
+
+		if (user_param.machine == SERVER || user_param.duplex) {
+			if (set_recv_wqes(ctx,size,&user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				return 1;
+			}
+		}
+
+		if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1;
+		}
+
 		if (user_param.duplex) {
 			if(run_iter_bi(ctx,&user_param,size))
 				return 18;
+
 		} else {
 			if((*ptr_to_run_iter_uni)(ctx,&user_param,size))
 				return 18;
 		}
+
 		print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);	
 	}
 		
