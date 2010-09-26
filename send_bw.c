@@ -579,7 +579,8 @@ static void set_send_wqe(struct pingpong_context *ctx,int rem_qpn,
  ******************************************************************************/
 static int pp_drain_qp(struct pingpong_context *ctx,
 						struct perftest_parameters *user_param,
-						int psn,struct pingpong_dest *dest) {
+						int psn,struct pingpong_dest *dest,
+						struct mcast_parameters *mcg_params) {
 
 	struct ibv_qp_attr attr;
 	struct ibv_wc      wc;
@@ -607,10 +608,20 @@ static int pp_drain_qp(struct pingpong_context *ctx,
 		if(ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
 			return 1;
 		}
-  
-		if (pp_connect_ctx(ctx,psn,dest,user_param)) {
-			return 1;
+
+		if (user_param->use_mcg) {
+
+			if ((!user_param->duplex && user_param->machine == SERVER) || (user_param->duplex && i > 0)) {
+				if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
+					fprintf(stderr, "Couldn't attach QP to MultiCast group");
+					return 1;
+				}
+			}
 		}
+	}
+
+	if (pp_connect_ctx(ctx,psn,dest,user_param)) {
+		return 1;
 	}
 
 	return 0;
@@ -1317,7 +1328,7 @@ int main(int argc, char *argv[])
 			}
 			print_report(user_param.iters, size, user_param.duplex, tposted, tcompleted, noPeak, no_cpu_freq_fail);
 
-			if (pp_drain_qp(ctx,&user_param,my_dest.psn,&rem_dest)) {
+			if (pp_drain_qp(ctx,&user_param,my_dest.psn,&rem_dest,&mcg_params)) {
 				fprintf(stderr,"Failed to drain Recv queue (performance optimization)\n");
 				return 1;
 			}
