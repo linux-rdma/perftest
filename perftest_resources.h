@@ -72,6 +72,7 @@
 #define MAX_RECV_SGE        1
 #define DEF_WC_SIZE         1
 #define CQ_MODERATION       50
+#define MTU_FIX				7
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
@@ -144,6 +145,10 @@
 // If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
 #define INC(size) ((size > CACHE_LINE_SIZE) ? (size) : (CACHE_LINE_SIZE))
 
+//
+//
+#define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
+
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE , READ } VerbType;
 
@@ -162,7 +167,6 @@ typedef enum { UNDETECTED = 0 , IB = 1 , ETH = 2 } LinkType;
 
 struct perftest_parameters {
 	int connection_type;
-	int mtu;
 	int tx_depth;
 	int rx_depth;
 	int inline_size;
@@ -179,9 +183,12 @@ struct perftest_parameters {
 	int out_reads;
 	int duplex;
 	int sl;
+	int mtu;
+	enum ibv_mtu curr_mtu;
     MachineType machine;
     PrintDataSide side;
 	VerbType verb;
+	LinkType type;
 };
 
 struct pingpong_dest {
@@ -207,6 +214,21 @@ struct pingpong_dest {
  * Value : 0 upon success. -1 if it fails.
  */
 struct ibv_device* ctx_find_dev(const char *ib_devname);
+
+int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params);
+
+/* ctx_set_link_layer.
+ *
+ * Description : Determines the link layer type (IB or ETH).
+ *
+ * Parameters : 
+ *
+ *  context - The context of the HCA device.
+ *  params  - The perftest parameters of the device.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
 
 /* ctx_set_link_layer.
  *

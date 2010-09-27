@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <math.h>
 // #include <byteswap.h>
 #include "perftest_resources.h"
 
@@ -179,31 +180,71 @@ struct ibv_device* ctx_find_dev(const char *ib_devname) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-int ctx_set_link_layer(struct ibv_context *context,
-					   struct perftest_parameters *params) {
+int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params) {
 
-	LinkType type;
 	struct ibv_port_attr port_attr;
 
 	if (ibv_query_port(context,params->ib_port,&port_attr)) {
 		fprintf(stderr,"Unable to query port\n");
 		return -1;
 	}
-	type = (LinkType)port_attr.link_layer; 
 
-	if (type == UNDETECTED) {
+	// User did not ask for specific mtu.
+	if (params->mtu == 0) {
+		params->curr_mtu = port_attr.active_mtu;
+
+	} else {
+
+		switch (params->mtu) {
+
+			case 256  :	params->curr_mtu = IBV_MTU_256;	 break;
+			case 512  : params->curr_mtu = IBV_MTU_512;	 break;
+			case 1024 :	params->curr_mtu = IBV_MTU_1024; break;
+			case 2048 :	params->curr_mtu = IBV_MTU_2048; break;
+			case 4096 :	params->curr_mtu = IBV_MTU_4096; break;
+			default   :	
+				fprintf(stderr," Invalid MTU - %d \n",params->mtu);
+				fprintf(stderr," Please choose valid mtu\n");
+				return -1;
+		}
+		
+		if (params->curr_mtu > port_attr.active_mtu) {
+			fprintf(stdout,"Requested mtu is higher than active mtu \n");
+			fprintf(stdout,"Changing to active mtu \n");
+			params->curr_mtu = port_attr.active_mtu;
+		}
+	}
+	printf(" Mtu : %d\n",MTU_SIZE(params->curr_mtu)); 
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+int ctx_set_link_layer(struct ibv_context *context,
+					   struct perftest_parameters *params) {
+
+	struct ibv_port_attr port_attr;
+
+	if (ibv_query_port(context,params->ib_port,&port_attr)) {
+		fprintf(stderr,"Unable to query port\n");
+		return -1;
+	}
+	params->type = (LinkType)port_attr.link_layer; 
+
+	if (params->type == UNDETECTED) {
 		fprintf(stderr," Unable to determine link layer \n");
 		return -1;
 	}
 	else {
-		printf(" Link type is %s \n",linkArray[type]);
+		printf(" Link type is %s \n",linkArray[params->type]);
 	}
 	
-	if ((type == ETH || params->use_mcg) && params->gid_index == -1) {
+	if ((params->type == ETH || params->use_mcg) && params->gid_index == -1) {
 		params->gid_index = 0;
 	}
 
-	if (type == ETH && params->use_mcg) {
+	if (params->type == ETH && params->use_mcg) {
 		fprintf(stdout," Multicast Mode is not yet availible in RoCE\n");
 		fprintf(stdout," Switching to Unicast UD\n");
 		params->use_mcg = 0;

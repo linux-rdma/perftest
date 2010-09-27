@@ -186,7 +186,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 											struct perftest_parameters *user_parm)
 {
 	struct pingpong_context *ctx;
-	struct ibv_device_attr device_attr;
 	int counter;
 
 	ALLOCATE(ctx,struct pingpong_context,1);
@@ -223,16 +222,10 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		return NULL;
 	}
 
-	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
-		if (ibv_query_device(ctx->context, &device_attr)) {
-			fprintf(stderr, "Failed to query device props");
-			return NULL;
-		}
-		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index != -1) {
-			user_parm->mtu = 1024;
-		} else {
-			user_parm->mtu = 2048;
-		}
+	// Configure the Link MTU acoording to the user or the active mtu.
+	if (ctx_set_mtu(ctx->context,user_parm)) {
+		fprintf(stderr, "Couldn't set the link layer\n");
+		return NULL;
 	}
 
 	ctx->pd = ibv_alloc_pd(ctx->context);
@@ -285,23 +278,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	memset(&attr, 0, sizeof attr);
 
 	attr.qp_state 		= IBV_QPS_RTR;
-	switch (user_parm->mtu) {
-	case 256 : 
-		attr.path_mtu               = IBV_MTU_256;
-		break;
-	case 512 :
-		attr.path_mtu               = IBV_MTU_512;
-		break;
-	case 1024 :
-		attr.path_mtu               = IBV_MTU_1024;
-		break;
-	case 2048 :
-		attr.path_mtu               = IBV_MTU_2048;
-		break;
-	case 4096 :
-		attr.path_mtu               = IBV_MTU_4096;
-		break;
-	}
+	attr.path_mtu       = user_parm->curr_mtu;
 	attr.dest_qp_num 	= dest->qpn;
 	attr.rq_psn 		= dest->psn;
 	attr.ah_attr.dlid   = dest->lid;
@@ -850,7 +827,6 @@ int main(int argc, char *argv[])
 			return 1; 
 		}
 	}
-	printf(" Mtu : %d\n", user_param.mtu);
 	printf(RESULT_LINE);
 	printf(RESULT_FMT);
 

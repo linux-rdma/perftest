@@ -104,6 +104,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->ib_port = user_parm->ib_port;
 	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num);
 
+
 	// Request for Mcast group create registery in SM.
 	if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
 		fprintf(stderr,"Couldn't Register the Mcast group on the SM\n");
@@ -297,7 +298,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 	int i,m_size;
 	int duplex_uni_ind;
 	struct pingpong_context *ctx;
-	struct ibv_device_attr device_attr;
 
 	ALLOCATE(ctx,struct pingpong_context,1);
 
@@ -329,18 +329,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		return NULL;
 	}
 	
-	if (user_parm->mtu == 0) {/*user did not ask for specific mtu */
-		if (ibv_query_device(ctx->context, &device_attr)) {
-			fprintf(stderr, "Failed to query device props");
-			return NULL;
-		}
-		if (device_attr.vendor_part_id == 23108 || user_parm->gid_index != -1) {
-			user_parm->mtu = 1024;
-		} else {
-			user_parm->mtu = 2048;
-		}
-	}
-
 	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
 		if (!ctx->channel) {
@@ -401,27 +389,10 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	int i;
 
 	attr.qp_state 		= IBV_QPS_RTR;
-	switch (user_parm->mtu) {
-	case 256 : 
-		attr.path_mtu               = IBV_MTU_256;
-		break;
-	case 512 :
-		attr.path_mtu               = IBV_MTU_512;
-		break;
-	case 1024 :
-		attr.path_mtu               = IBV_MTU_1024;
-		break;
-	case 2048 :
-		attr.path_mtu               = IBV_MTU_2048;
-		break;
-	case 4096 :
-		attr.path_mtu               = IBV_MTU_4096;
-		break;
-	}
-	
-    attr.dest_qp_num   = dest->qpn;
-	attr.rq_psn        = dest->psn;
-	attr.ah_attr.dlid  = dest->lid;
+	attr.path_mtu       = user_parm->curr_mtu;
+    attr.dest_qp_num    = dest->qpn;
+	attr.rq_psn         = dest->psn;
+	attr.ah_attr.dlid   = dest->lid;
 	if (user_parm->connection_type == RC) {
 		attr.max_dest_rd_atomic     = 1;
 		attr.min_rnr_timer          = 12;
@@ -887,6 +858,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 	// Set the lenght of the scatter in case of ALL option.
 	ctx->list.length = size;
+	ctx->list.addr   = (uintptr_t)ctx->buf;
 
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
@@ -1191,11 +1163,6 @@ int main(int argc, char *argv[])
 		size = 8388608;
 	}
 
-	else if (user_param.connection_type == UD && size > 2048) {
-		printf(" Max msg size in UD is 2048 changing to 2048\n");
-		size = 2048;
-	}
-
 	srand48(getpid() * time(NULL));
 
 	page_size = sysconf(_SC_PAGESIZE);
@@ -1224,6 +1191,17 @@ int main(int argc, char *argv[])
             user_param.inline_size = 0;
 	}
 	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
+
+	// Configure the Link MTU acoording to the user or the active mtu.
+	if (ctx_set_mtu(context,&user_param)) {
+		fprintf(stderr, "Couldn't set the link layer\n");
+		return 1;
+	}
+
+	if (user_param.connection_type == UD && size > MTU_SIZE(user_param.curr_mtu)) {	 
+		printf(" Max msg size in UD is MTU - %d . changing to MTU\n",MTU_SIZE(user_param.curr_mtu));
+		size = MTU_SIZE(user_param.curr_mtu);
+	}
 
 	ctx = pp_init_ctx(ib_dev,size,&user_param);
 	if (!ctx)
