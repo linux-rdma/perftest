@@ -210,7 +210,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 
-	attr.path_mtu       = user_parm->curr_mtu;
+	attr.qp_state         = IBV_QPS_RTR;
+	attr.path_mtu         = user_parm->curr_mtu;
 	attr.dest_qp_num      = dest->qpn;
 	attr.rq_psn           = dest->psn;
 	attr.ah_attr.dlid     = dest->lid;

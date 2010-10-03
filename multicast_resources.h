@@ -63,8 +63,6 @@
 #include <infiniband/umad.h>
 #include "get_clock.h"
 
-
-#define MCG_LID 					0xc00f
 #define QPNUM_MCAST 				0xffffff
 #define DEF_QKEY     			    0x11111111
 #define DEF_PKEY_IDX        		0

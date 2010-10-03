@@ -244,13 +244,6 @@ int ctx_set_link_layer(struct ibv_context *context,
 		params->gid_index = 0;
 	}
 
-	if (params->type == ETH && params->use_mcg) {
-		fprintf(stdout," Multicast Mode is not yet availible in RoCE\n");
-		fprintf(stdout," Switching to Unicast UD\n");
-		params->use_mcg = 0;
-		params->num_of_qps = 1;
-	}
-
 	if (params->gid_index > -1 && (params->machine == CLIENT || params->duplex)) {
 		fprintf(stdout," Using gid index %d as source GID\n",params->gid_index);
 	}

@@ -107,10 +107,12 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->ib_port = user_parm->ib_port;
 	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num);
 
-	// Request for Mcast group create registery in SM.
-	if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
-		fprintf(stderr," Failed to Join Mcast request\n");
-		return 1;
+	if (user_parm->type == IB) {
+		// Request for Mcast group create registery in SM.
+		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
+			fprintf(stderr," Failed to Join Mcast request\n");
+			return 1;
+		}
 	}
 
 	for (i=0; i < user_parm->num_of_qps; i++) {
@@ -139,11 +141,12 @@ static int destroy_mcast_group(struct pingpong_context *ctx,
 			return 1;
 		}
 	}
-
-	// Removal Request for Mcast group in SM.
-	if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
-		fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
-		return 1;
+	if (user_parm->type == IB) {
+		// Removal Request for Mcast group in SM.
+		if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+			fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+			return 1;
+		}
 	}
 
 	mcg_params->mcast_state &= ~MCAST_IS_ATTACHED;
@@ -157,8 +160,6 @@ static int set_up_connection(struct pingpong_context *ctx,
 							 struct perftest_parameters *user_parm,
 							 struct pingpong_dest *my_dest,
 							 struct mcast_parameters *mcg_params) {
-
-	
 
 	if (user_parm->use_mcg) {
 

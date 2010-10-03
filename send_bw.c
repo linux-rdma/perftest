@@ -104,11 +104,12 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->ib_port = user_parm->ib_port;
 	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num);
 
-
-	// Request for Mcast group create registery in SM.
-	if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
-		fprintf(stderr,"Couldn't Register the Mcast group on the SM\n");
-		return 1;
+	if (user_parm->type == IB) {
+		// Request for Mcast group create registery in SM.
+		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
+			fprintf(stderr,"Couldn't Register the Mcast group on the SM\n");
+			return 1;
+		}
 	}
 
 	while (i < user_parm->num_of_qps) {
@@ -141,13 +142,13 @@ static int destroy_mcast_group(struct pingpong_context *ctx,
 		}
 		i++;
 	}
-
-	// Removal Request for Mcast group in SM.
-	if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
-		fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
-		return 1;
+	if (user_parm->type == IB) {
+		// Removal Request for Mcast group in SM.
+		if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+			fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+			return 1;
+		}
 	}
-
 	mcg_params->mcast_state &= ~MCAST_IS_ATTACHED;
 
 	return 0;
