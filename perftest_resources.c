@@ -21,7 +21,23 @@ static const char *sideArray[] = {"local", "remote"};
 
 static const char *gidArray[] =  {"GID", "MGID"};
 
-static const char *linkArray[] = {"No link", "IB", "ETH"};
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+
+const char *link_layer_str(uint8_t link_layer) {
+
+	switch (link_layer) {
+
+        case IBV_LINK_LAYER_UNSPECIFIED:
+        case IBV_LINK_LAYER_INFINIBAND:	
+			return "IB";
+        case IBV_LINK_LAYER_ETHERNET:	
+			return "Ethernet";
+        default:
+		    return "Unknown";
+    }
+}
 
 /****************************************************************************** 
  *
@@ -230,18 +246,20 @@ int ctx_set_link_layer(struct ibv_context *context,
 		fprintf(stderr,"Unable to query port\n");
 		return -1;
 	}
-	params->type = (LinkType)port_attr.link_layer; 
 
-	if (params->type == UNDETECTED) {
+	params->link_type = port_attr.link_layer; 
+
+	if (!strcmp(link_layer_str(params->link_type),"Unknown")) {
 		fprintf(stderr," Unable to determine link layer \n");
 		return -1;
 	}
 	else {
-		printf(" Link type is %s \n",linkArray[params->type]);
+		printf(" Link type is %s\n",link_layer_str(params->link_type));
 	}
 	
-	if ((params->type == ETH || params->use_mcg) && params->gid_index == -1) {
-		params->gid_index = 0;
+	if ((!strcmp(link_layer_str(params->link_type),"Ethernet") || params->use_mcg) 
+		&&  params->gid_index == -1) {
+			params->gid_index = 0;
 	}
 
 	if (params->gid_index > -1 && (params->machine == CLIENT || params->duplex)) {

@@ -158,9 +158,6 @@ typedef enum { SERVER , CLIENT } MachineType;
 // The type of the machine ( server or client actually).
 typedef enum { LOCAL , REMOTE } PrintDataSide;
 
-// The link layer of the current port.
-typedef enum { UNDETECTED = 0 , IB = 1 , ETH = 2 } LinkType;
-
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
@@ -184,11 +181,11 @@ struct perftest_parameters {
 	int duplex;
 	int sl;
 	int mtu;
+	uint8_t link_type;
 	enum ibv_mtu curr_mtu;
     MachineType machine;
     PrintDataSide side;
 	VerbType verb;
-	LinkType type;
 };
 
 struct pingpong_dest {
@@ -204,7 +201,7 @@ struct pingpong_dest {
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
-
+const char *link_layer_str(uint8_t link_layer);
 /* 
  *
  * Description : Determines the link layer type (IB or ETH).
