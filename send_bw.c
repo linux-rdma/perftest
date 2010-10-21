@@ -1072,6 +1072,7 @@ int main(int argc, char *argv[])
 				usage(argv[0]);
 				return 7;
 			}
+			break;
 
 		case 'r':
 			errno = 0;
