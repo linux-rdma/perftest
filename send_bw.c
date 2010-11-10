@@ -1236,7 +1236,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
 		return 1;
 	}
-	printf(" Mtu : %d\n", user_param.mtu);
+	
 	// shaking hands and gather the other side info.
     if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");

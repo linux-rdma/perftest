@@ -174,10 +174,17 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
  ******************************************************************************/
 struct ibv_device* ctx_find_dev(const char *ib_devname) {
 
+	int num_of_device;
 	struct ibv_device **dev_list;
 	struct ibv_device *ib_dev = NULL;
 
-	dev_list = ibv_get_device_list(NULL);
+	dev_list = ibv_get_device_list(&num_of_device);
+
+	if (num_of_device <= 0) {
+		fprintf(stderr," Did not detect devices \n");
+		fprintf(stderr," If device exists, check if driver is up\n");
+		return NULL;
+	}
 
 	if (!ib_devname) {
 		ib_dev = dev_list[0];
