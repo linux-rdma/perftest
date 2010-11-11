@@ -21,6 +21,8 @@ static const char *sideArray[] = {"local", "remote"};
 
 static const char *gidArray[] =  {"GID", "MGID"};
 
+static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
+
 /****************************************************************************** 
  *
  ******************************************************************************/
@@ -251,6 +253,13 @@ int ctx_set_link_layer(struct ibv_context *context,
 
 	if (ibv_query_port(context,params->ib_port,&port_attr)) {
 		fprintf(stderr,"Unable to query port\n");
+		return -1;
+	}
+
+	if (port_attr.state != IBV_PORT_ACTIVE) {
+		fprintf(stderr," Port number %d state is %s\n"
+					  ,params->ib_port
+					  ,portStates[port_attr.state]);
 		return -1;
 	}
 

@@ -99,8 +99,8 @@ static int set_up_connection(struct pingpong_context *ctx,
 	// We do not fail test upon lid in RDMAoE/Eth conf.
 	if (use_i < 0) {
 		if (!my_dest->lid) {
-			fprintf(stderr,"Local lid 0x0 detected. Is an SM running? \n");
-			fprintf(stderr,"If you're running RMDAoE you must use GIDs\n");
+			fprintf(stderr," Local lid 0x0 detected. Is an SM running? \n");
+			fprintf(stderr," If you're running RMDAoE you must use GIDs\n");
 			return -1;
 		}
 	}
@@ -158,7 +158,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 
 	// Finds the link type and configure the HCA accordingly.
 	if (ctx_set_link_layer(ctx->context,user_parm)) {
-		fprintf(stderr, "Couldn't set the link layer\n");
+		fprintf(stderr, " Couldn't set the link layer\n");
 		return NULL;
 	}
 

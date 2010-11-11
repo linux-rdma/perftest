@@ -189,7 +189,7 @@ static int set_up_connection(struct pingpong_context *ctx,
 
 	if (user_parm->gid_index < 0) {
 		if (!my_dest->lid) {
-			fprintf(stderr,"Local lid 0x0 detected,without any use of gid. Is SM running?\n");
+			fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
 			return -1;
 		}
 	}
@@ -326,7 +326,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 
 	// Finds the link type and configure the HCA accordingly.
 	if (ctx_set_link_layer(ctx->context,user_parm)) {
-		fprintf(stderr, "Couldn't set the link layer\n");
+		fprintf(stderr, " Couldn't set the link layer\n");
 		return NULL;
 	}
 	
