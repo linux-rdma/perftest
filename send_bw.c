@@ -85,7 +85,6 @@ static int set_mcast_group(struct pingpong_context *ctx,
 						   struct perftest_parameters *user_parm,
 						   struct mcast_parameters *mcg_params) {
 
-	int i = (user_parm->duplex) ? 1 : 0;
 	struct ibv_port_attr port_attr;
 
 	if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&mcg_params->port_gid)) {
@@ -102,8 +101,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_parm->ib_port;
-	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num);
-
+	
 	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
 		// Request for Mcast group create registery in SM.
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
@@ -111,46 +109,6 @@ static int set_mcast_group(struct pingpong_context *ctx,
 			return 1;
 		}
 	}
-
-	while (i < user_parm->num_of_qps) {
-
-		if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-			fprintf(stderr, "Couldn't attach QP to MultiCast group");
-			return 1;
-		}
-		i++;
-	}
-	mcg_params->mcast_state |= MCAST_IS_ATTACHED;
-
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int destroy_mcast_group(struct pingpong_context *ctx,
-							   struct perftest_parameters *user_parm,
-						       struct mcast_parameters *mcg_params) {
-
-	int i = (user_parm->duplex) ? 1 : 0;
-
-	while (i < user_parm->num_of_qps) {
-
-		if (ibv_detach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-			fprintf(stderr, "Couldn't deattach QP from MultiCast group\n");
-			return 1;
-		}
-		i++;
-	}
-	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
-		// Removal Request for Mcast group in SM.
-		if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
-			fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
-			return 1;
-		}
-	}
-	mcg_params->mcast_state &= ~MCAST_IS_ATTACHED;
-
 	return 0;
 }
 
@@ -162,14 +120,24 @@ static int set_up_connection(struct pingpong_context *ctx,
 							 struct pingpong_dest *my_dest,
 							 struct mcast_parameters *mcg_params) {
 
-	
+	int i = (user_parm->duplex) ? 1 : 0;
 
 	if (user_parm->use_mcg && (user_parm->duplex || user_parm->machine == SERVER)) {
 
+		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_parm->machine);
 		if (set_mcast_group(ctx,user_parm,mcg_params)) {
 			return 1;
 		}
+		
+		while (i < user_parm->num_of_qps) {
+			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
+				fprintf(stderr, "Couldn't attach QP to MultiCast group");
+				return 1;
+			}
+			i++;
+		}
 
+		mcg_params->mcast_state |= MCAST_IS_ATTACHED;
 		my_dest->gid = mcg_params->mgid;
 		my_dest->lid = mcg_params->mlid;
 		my_dest->qpn = QPNUM_MCAST;
@@ -224,16 +192,45 @@ static int init_connection(struct perftest_parameters *params,
  ******************************************************************************/
 static int destroy_ctx_resources(struct pingpong_context    *ctx, 
 								 struct perftest_parameters *user_parm,
+								 struct pingpong_dest		*my_dest,
+								 struct pingpong_dest		*rem_dest,
 								 struct mcast_parameters    *mcg_params)  {
 
-	int i,test_result = 0;
+	int test_result = 0;
+	int i = (user_parm->duplex) ? 1 : 0;
 
-	if (user_parm->use_mcg && (user_parm->machine == SERVER || user_parm->duplex)) {
-		if (destroy_mcast_group(ctx,user_parm,mcg_params)) {
-			fprintf(stderr, "failed to destroy MultiCast resources\n");
-			test_result = 1;
+	if (user_parm->use_mcg) {
+
+		if (user_parm->machine == SERVER || user_parm->duplex) {
+			
+			while (i < user_parm->num_of_qps) {
+				if (ibv_detach_mcast(ctx->qp[i],&my_dest->gid,my_dest->lid)) {
+					fprintf(stderr, "Couldn't deattach QP from MultiCast group\n");
+					return 1;
+				}
+				i++;
+			}
+			mcg_params->mgid = my_dest->gid;
+			if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
+				if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+					fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+					return 1;
+				}
+			}
 		}
-	}
+
+		if (user_parm->machine == CLIENT || user_parm->duplex) {
+
+			mcg_params->mgid = rem_dest->gid;
+			if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
+				if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+					fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+					return 1;
+				}
+			}
+
+		}
+	}	
 
 	if (ctx->ah) {
 		if (ibv_destroy_ah(ctx->ah)) {
@@ -629,9 +626,9 @@ static void usage(const char *argv0)
 	printf("  -e, --events                Sleep on CQ events (default poll)\n");
 	printf("  -N, --no peak-bw            Cancel peak-bw calculation (default with peak-bw)\n");
 	printf("  -F, --CPU-freq              Do not fail even if cpufreq_ondemand module is loaded\n");
-	printf("  -g, --mcg=<num_of_qps>       Send messages to multicast group with <num_of_qps> qps attached to it.\n");
-	printf("  -M, --MGID=<multicast_gid>   In case of multicast, uses <multicast_gid> as the group MGID.\n");
-	printf("                               The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
+	printf("  -g, --mcg=<num_of_qps>      Send messages to multicast group with <num_of_qps> qps attached to it.\n");
+	printf("  -M, --MGID=<multicast_gid>  In case of multicast, uses <multicast_gid> as the group MGID.\n");
+	printf("                              The format must be '255:1:X:X:X:X:X:X:X:X:X:X:X:X:X:X', where X is a vlaue within [0,255].\n");
 }
 
 /****************************************************************************** 
@@ -748,6 +745,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					}
 
 					else {
+
 						rcnt_for_qp[wc[i].wr_id]++;
 						rcnt++;
 						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
@@ -816,7 +814,7 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 					rcnt_for_qp[wc[i].wr_id]++;
 					tcompleted[rcnt++] = get_cycles();
 
-					if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
+                    if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
 
 					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
@@ -824,8 +822,12 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 					}
 
 					if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
-						increase_loc_addr(&ctx->sge_list[wc[i].wr_id],SIZE(user_param->connection_type,size),rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,ctx->my_addr[wc[i].wr_id]);
+						increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
+										  SIZE(user_param->connection_type,size),
+										  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
+										  ctx->my_addr[wc[i].wr_id]);
 					}
+					
 				}
 			}
 		} while (ne > 0);
@@ -958,7 +960,6 @@ int main(int argc, char *argv[])
 	user_param.gid_index = -1; 
 	user_param.verb = SEND;
 	user_param.num_of_qps = 1;
-	// mcg_params.num_qps_on_group = 1;
 
 	/* Parameter parsing. */
 	while (1) {
@@ -1231,6 +1232,15 @@ int main(int argc, char *argv[])
 	user_param.side = REMOTE;
 	ctx_print_pingpong_data(&rem_dest,&user_param);
 
+	// Joining the Send side port the Mcast gid
+	if (user_param.use_mcg && (user_param.machine == CLIENT || user_param.duplex)) {
+		memcpy(mcg_params.mgid.raw, rem_dest.gid.raw, 16);
+		if (set_mcast_group(ctx,&user_param,&mcg_params)) {
+			fprintf(stderr," Unable to Join Sender to Mcast gid\n");
+			return 1;
+		}
+	}
+
 	// Prepare IB resources for rtr/rts.
 	if (pp_connect_ctx(ctx,my_dest.psn,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
@@ -1352,5 +1362,5 @@ int main(int argc, char *argv[])
 	}
 
 	printf(RESULT_LINE);
-	return destroy_ctx_resources(ctx,&user_param,&mcg_params);
+	return destroy_ctx_resources(ctx,&user_param,&my_dest,&rem_dest,&mcg_params);
 }

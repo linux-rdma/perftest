@@ -273,8 +273,11 @@ int ctx_set_link_layer(struct ibv_context *context,
 		printf(" Link type is %s\n",link_layer_str(params->link_type));
 	}
 	
-	if ((!strcmp(link_layer_str(params->link_type),"Ethernet") || params->use_mcg) 
-		&&  params->gid_index == -1) {
+	if (!strcmp(link_layer_str(params->link_type),"Ethernet") &&  params->gid_index == -1) {
+			params->gid_index = 0;
+	}
+
+	if (params->use_mcg &&  params->gid_index == -1) {
 			params->gid_index = 0;
 	}
 
@@ -573,6 +576,8 @@ int ctx_hand_shake(struct perftest_parameters  *params,
 void ctx_print_pingpong_data(struct pingpong_dest *element,
 							 struct perftest_parameters *params) {
 
+	int is_there_mgid,local_mgid,remote_mgid;
+
 	// First of all we print the basic format.
     printf(BASIC_ADDR_FMT,sideArray[params->side],element->lid,element->qpn,element->psn);
 
@@ -582,10 +587,14 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 		case WRITE : printf(RDMA_FMT,element->rkey,element->vaddr);
 		default    : putchar('\n');
 	}
-	
-	if (params->gid_index > -1 || params->use_mcg) {
 
-		printf(GID_FMT,gidArray[params->use_mcg],
+	local_mgid    = (params->side == LOCAL)  && (params->machine == SERVER);
+	remote_mgid   = (params->side == REMOTE) && (params->machine == CLIENT);
+	is_there_mgid =  params->duplex || remote_mgid || local_mgid;
+
+	if (params->gid_index > -1 || (params->use_mcg && is_there_mgid)) {
+
+		printf(GID_FMT,gidArray[params->use_mcg && is_there_mgid],
 				element->gid.raw[0], element->gid.raw[1],
 				element->gid.raw[2], element->gid.raw[3], 
 			    element->gid.raw[4], element->gid.raw[5], 

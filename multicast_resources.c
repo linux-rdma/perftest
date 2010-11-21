@@ -109,7 +109,7 @@ static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,int *mlid) {
 /******************************************************************************
  * set_multicast_gid
  ******************************************************************************/
-void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num) {
+void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_client) {
 
 	uint8_t mcg_gid[16] = MCG_GID;
 	const char *pstr = params->user_mgid;
@@ -137,6 +137,8 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num) {
 		*(uint32_t *)(&mcg_gid[12]) = qp_num;
 	}
 	memcpy(params->mgid.raw,mcg_gid,16);
+	if (is_client)
+		params->mgid.raw[15]++;
 }
 
 /****************************************************************************** 
