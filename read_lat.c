@@ -274,7 +274,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	attr.dest_qp_num            = dest->qpn;
 	attr.rq_psn                 = dest->psn;
 	attr.ah_attr.dlid           = dest->lid;
-	attr.max_dest_rd_atomic     = dest->out_reads;
+	attr.max_dest_rd_atomic     = my_reads;
 	attr.min_rnr_timer          = 12;
 	if (user_parm->gid_index < 0) {
 		attr.ah_attr.is_global      = 0;
@@ -303,7 +303,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	attr.retry_cnt          = 7;
 	attr.rnr_retry          = 7;
 	attr.qp_state           = IBV_QPS_RTS;
-	attr.max_rd_atomic      = my_reads;
+	attr.max_rd_atomic      = dest->out_reads;
 	attr.sq_psn             = my_psn;
 
 	if (ibv_modify_qp(ctx->qp, &attr,
