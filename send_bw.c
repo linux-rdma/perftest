@@ -241,36 +241,30 @@ static int destroy_ctx_resources(struct pingpong_context    *ctx,
 
 	for(i = 0; i < user_parm->num_of_qps; i++) {
 		if (ibv_destroy_qp(ctx->qp[i])) {
-			fprintf(stderr, "failed to destroy QP\n");
 			test_result = 1;
 		}
 	}
 	free(ctx->qp);
 
 	if (ibv_destroy_cq(ctx->cq)) {
-		fprintf(stderr, "failed to destroy CQ\n");
 		test_result = 1;
 	}
 	
 	if (ibv_dereg_mr(ctx->mr)) {
-		fprintf(stderr, "failed to deregister MR\n");
 		test_result = 1;
 	}
 	
 	if (ibv_dealloc_pd(ctx->pd)) {
-		fprintf(stderr, "failed to deallocate PD\n");
 		test_result = 1;
 	}
 
 	if (ctx->channel) {
 		if (ibv_destroy_comp_channel(ctx->channel)) {
-			fprintf(stderr, "failed to destroy channel \n");
 			test_result = 1;
 		}
 	}
 	
 	if (ibv_close_device(ctx->context)) {
-		fprintf(stderr, "failed to close device context\n");
 		test_result = 1;
 	}
 
