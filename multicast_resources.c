@@ -133,9 +133,7 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 		strcpy(tmp, pstr);
 		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
 	}
-	else {
-		*(uint32_t *)(&mcg_gid[12]) = qp_num;
-	}
+
 	memcpy(params->mgid.raw,mcg_gid,16);
 	if (is_client)
 		params->mgid.raw[15]++;
