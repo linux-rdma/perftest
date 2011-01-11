@@ -410,6 +410,9 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
 
+			if (scnt%CQ_MODERATION == 0)
+			    ctx->wr.send_flags  &= ~IBV_SEND_SIGNALED;
+
 			tposted[scnt] = get_cycles();
 			if (ibv_post_send(ctx->qp, &ctx->wr, &bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
@@ -421,6 +424,9 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 				increase_loc_addr(&ctx->list,size,scnt,my_addr,0);
 			}
 			++scnt;
+
+			if (scnt%CQ_MODERATION == CQ_MODERATION - 1 || scnt == user_param->iters - 1)
+				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 		}
 
 		if (ccnt < user_param->iters) {
@@ -440,7 +446,13 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 						if (wc[i].status != IBV_WC_SUCCESS) 
 							NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
-						tcompleted[ccnt++] = get_cycles();
+						ccnt+=CQ_MODERATION;
+
+						if (ccnt >= user_param->iters - 1)
+						    tcompleted[user_param->iters - 1] =  get_cycles();
+
+						else 
+						    tcompleted[ccnt - 1] = get_cycles();
 					}
 				}
 			} while (ne > 0 );

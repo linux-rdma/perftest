@@ -479,7 +479,10 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	for (warmindex = 0 ;warmindex < maxpostsofqpiniteration ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->num_of_qps ; index++) {
 
-            tposted[totscnt] = get_cycles();
+			if (totscnt % CQ_MODERATION == 0)
+				wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+
+			tposted[totscnt] = get_cycles();
             if (ibv_post_send(ctx->qp[index],&wr[index],&bad_wr)) {
                 fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
                 return 1;
@@ -491,8 +494,12 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 				increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index],0);
 			}
 
+
 			ctx->scnt[index]++;
             totscnt++;
+
+			if (totscnt%CQ_MODERATION == CQ_MODERATION - 1 || totscnt == user_param->iters - 1)
+				wr[index].send_flags |= IBV_SEND_SIGNALED;
 
       }
 	}  
@@ -504,6 +511,9 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		for (index =0 ; index < user_param->num_of_qps ; index++) {
           
 			while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < maxpostsofqpiniteration) {
+
+				if (totscnt % CQ_MODERATION == 0)
+					wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 				tposted[totscnt] = get_cycles();
 				if (ibv_post_send(ctx->qp[index],&wr[index],&bad_wr)) {
@@ -518,6 +528,9 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 				ctx->scnt[index] = ctx->scnt[index]+1;
 				totscnt++;
+
+				if (totscnt%CQ_MODERATION == CQ_MODERATION - 1 || totscnt == user_param->iters - 1)
+					wr[index].send_flags |= IBV_SEND_SIGNALED;
 			}
 		}
 
@@ -532,8 +545,14 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 						if (wc[i].status != IBV_WC_SUCCESS) 
 							NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
 
-						ctx->ccnt[(int)wc[i].wr_id]++;
-						tcompleted[totccnt++] = get_cycles();
+						ctx->ccnt[(int)wc[i].wr_id] += CQ_MODERATION;
+						totccnt += CQ_MODERATION;
+
+						if (totccnt >= user_param->iters - 1)
+							tcompleted[user_param->iters - 1] = get_cycles();
+
+						else 
+							tcompleted[totccnt-1] = get_cycles();
 					}
 				}
 			} while (ne > 0);

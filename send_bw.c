@@ -716,6 +716,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
 	ctx->list.addr   = (uintptr_t)ctx->buf[0];
+	ctx->wr.send_flags = IBV_SEND_SIGNALED;
 	
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
@@ -723,6 +724,9 @@ int run_iter_bi(struct pingpong_context *ctx,
 	while (ccnt < user_param->iters || rcnt < user_param->iters) {
                 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
+
+			if (scnt %  CQ_MODERATION == 0)
+				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
 			if (ibv_post_send(ctx->qp[0],&ctx->wr, &bad_wr)) {
@@ -734,6 +738,9 @@ int run_iter_bi(struct pingpong_context *ctx,
 				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf[0],0);
 
 			++scnt;
+
+			if ((scnt % CQ_MODERATION) == (CQ_MODERATION - 1) || scnt == (user_param->iters - 1)) 
+				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 		}
 
 		if (user_param->use_event) {
@@ -753,7 +760,12 @@ int run_iter_bi(struct pingpong_context *ctx,
 						 NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
 					if ((int) wc[i].wr_id == PINGPONG_SEND_WRID) {
-						tcompleted[ccnt++] = get_cycles();
+						ccnt += CQ_MODERATION;
+						if (ccnt >= user_param->iters - 1) 
+							tcompleted[user_param->iters - 1] = get_cycles();
+
+						else 
+							tcompleted[ccnt - 1] = get_cycles();
 					}
 
 					else {
@@ -868,6 +880,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 	// Set the lenght of the scatter in case of ALL option.
 	ctx->list.length = size;
 	ctx->list.addr   = (uintptr_t)ctx->buf[0];
+	ctx->wr.send_flags = IBV_SEND_SIGNALED; 
 
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
@@ -875,6 +888,9 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
+
+			if (scnt %  CQ_MODERATION == 0)
+				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
 			if (ibv_post_send(ctx->qp[0], &ctx->wr, &bad_wr)) {
@@ -886,6 +902,9 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf[0],0);
 
 			scnt++;
+
+			if ((scnt % CQ_MODERATION) == (CQ_MODERATION - 1) || scnt == (user_param->iters - 1)) 
+				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 		}
 
 		if (ccnt < user_param->iters) {	
@@ -903,9 +922,14 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 						if (wc[i].status != IBV_WC_SUCCESS) 
 							NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
+			
+						ccnt += CQ_MODERATION;
+						if (ccnt >= user_param->iters - 1) 
+							tcompleted[user_param->iters - 1] = get_cycles();
 
-						tcompleted[ccnt++] = get_cycles();
-					}	
+						else 
+							tcompleted[ccnt - 1] = get_cycles();
+					}
 				}
                          
 					
