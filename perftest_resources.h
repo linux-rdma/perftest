@@ -141,12 +141,14 @@
 // verb will write in cycle on the buffer. this improves the BW in "Nahalem" systems.
 #define BUFF_SIZE(size) ((size < CYCLE_BUFFER) ? (CYCLE_BUFFER) : (size))
 
+// UD addition to the buffer.
+#define IF_UD_ADD(type) ((type == UD) ? (CACHE_LINE_SIZE) : (0))
+
 // Macro that defines the adress where we write in RDMA.
 // If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
-#define INC(size) ((size > CACHE_LINE_SIZE) ? (size) : (CACHE_LINE_SIZE))
+#define INC(size) ((size > CACHE_LINE_SIZE) ? ((size%CACHE_LINE_SIZE == 0) ?  \
+	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
 
-//
-//
 #define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
 
 // The Verb of the benchmark.
@@ -426,7 +428,8 @@ inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t 
  *	 
  *
  */
-inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr);
+inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
+							  uint64_t prim_addr,int server_is_ud);
 
 /* ctx_close_connection .
  *

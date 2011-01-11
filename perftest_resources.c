@@ -636,24 +636,32 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline void	increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr) {
+inline void	increase_rem_addr(struct ibv_send_wr *wr,int size,
+							  int scnt,uint64_t prim_addr) {
 
 	wr->wr.rdma.remote_addr += INC(size);		    
 
-	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0)
 		wr->wr.rdma.remote_addr = prim_addr;
 }
 		     		
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr) {
-		    
+inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
+							  uint64_t prim_addr,int server_is_ud) {
+
+
+	if (server_is_ud) 
+		sg->addr -= (CACHE_LINE_SIZE - UD_ADDITION);
+
 	sg->addr  += INC(size);
 
-	if( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) 	
+    if( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
 		sg->addr = prim_addr;
-		     		
+
+    if (server_is_ud) 
+		sg->addr += (CACHE_LINE_SIZE - UD_ADDITION);
 }
 
 /****************************************************************************** 

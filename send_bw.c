@@ -65,7 +65,7 @@ struct pingpong_context {
 	struct ibv_context 		*context;
 	struct ibv_comp_channel *channel;
 	struct ibv_pd      		*pd;
-	struct ibv_mr     		*mr;
+	struct ibv_mr     		**mr;
 	struct ibv_cq      		*cq;
 	struct ibv_qp      		**qp;
 	struct ibv_sge      	list;
@@ -73,7 +73,7 @@ struct pingpong_context {
 	struct ibv_sge 			*sge_list;
 	struct ibv_recv_wr  	*rwr;
 	struct ibv_ah			*ah;
-	void               		*buf;
+	void               		**buf;
 	unsigned            	size;
 	uint64_t				*my_addr;
 };
@@ -249,9 +249,13 @@ static int destroy_ctx_resources(struct pingpong_context    *ctx,
 	if (ibv_destroy_cq(ctx->cq)) {
 		test_result = 1;
 	}
-	
-	if (ibv_dereg_mr(ctx->mr)) {
-		test_result = 1;
+
+	for(i = 0; i < user_parm->num_of_qps; i++) {
+
+		if (ibv_dereg_mr(ctx->mr[i])) {
+			test_result = 1;
+		}
+		free(ctx->buf[i]);
 	}
 	
 	if (ibv_dealloc_pd(ctx->pd)) {
@@ -274,6 +278,7 @@ static int destroy_ctx_resources(struct pingpong_context    *ctx,
 		free(ctx->my_addr);
 	}
 
+	free(ctx->mr);
 	free(ctx->buf);
 	free(ctx);
 	free(tposted);
@@ -288,25 +293,18 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 											struct perftest_parameters *user_parm) {
 
 	int i,m_size;
-	int duplex_uni_ind;
+	int duplex_ind;
 	struct pingpong_context *ctx;
 
 	ALLOCATE(ctx,struct pingpong_context,1);
+	ALLOCATE(ctx->buf,void*,user_parm->num_of_qps);
+	ALLOCATE(ctx->mr,struct ibv_mr*,user_parm->num_of_qps);
 
 	ctx->ah       = NULL;
 	ctx->channel  = NULL;
 	ctx->size     = size;
 
-	duplex_uni_ind = (user_parm->duplex && !user_parm->use_mcg) ? 2 : 1;
-	m_size = BUFF_SIZE(SIZE(user_parm->connection_type,size))*user_parm->num_of_qps*duplex_uni_ind;
-	
-	// Allocating the Buff size according to connection type and size.
-	ctx->buf = memalign(page_size,m_size);
-	if (!ctx->buf) {
-		fprintf(stderr, "Couldn't allocate work buf.\n");
-		return NULL;
-	}
-	memset(ctx->buf, 0, m_size);
+	duplex_ind = (user_parm->duplex && !user_parm->use_mcg) ? 2 : 1;
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -336,17 +334,32 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,unsigned s
 		return NULL;
 	}
 
-	// We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says :
-	// The Consumer is not allowed to assign Remote Write or Remote Atomic to
-	// a Memory Region that has not been assigned Local Write. 
-	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,m_size,IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
-	if (!ctx->mr) {
-		fprintf(stderr, "Couldn't allocate MR\n");
-		return NULL;
+	for (i = 0; i < user_parm->num_of_qps; i++) {
+
+		m_size = (BUFF_SIZE(size) + IF_UD_ADD(user_parm->connection_type))*duplex_ind;
+		ctx->buf[i] = memalign(page_size,m_size);
+		if (!ctx->buf[i]) {
+			fprintf(stderr, "Couldn't allocate work buf.\n");
+			return NULL;
+		}
+		memset(ctx->buf[i],0,m_size);
+
+		// We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says :
+		// The Consumer is not allowed to assign Remote Write or Remote Atomic to
+		// a Memory Region that has not been assigned Local Write. 
+		ctx->mr[i] = ibv_reg_mr(ctx->pd,
+								ctx->buf[i],
+								m_size,
+								IBV_ACCESS_REMOTE_WRITE | 
+								IBV_ACCESS_LOCAL_WRITE);
+
+		if (!ctx->mr[i]) {
+			fprintf(stderr, "Couldn't allocate MR\n");
+			return NULL;
+		}
 	}
 
 	// Create the CQ according to Client/Server or Duplex setting.
-
 	ctx->cq = ctx_cq_create(ctx->context,ctx->channel,user_parm);
 	if (ctx->cq == NULL) {
 		fprintf(stderr, "Couldn't create CQ \n");
@@ -480,24 +493,28 @@ static int set_recv_wqes(struct pingpong_context *ctx,int size,
 						 struct perftest_parameters *user_param) {
 						
 	int					i,j,buff_size;
-	int 				duplex_uni_ind;
+	int 				duplex_ind;
 	struct ibv_recv_wr  *bad_wr_recv;
 
-	duplex_uni_ind = (user_param->duplex && !user_param->use_mcg) ? 1 : 0 ;
 	i = (user_param->duplex && user_param->use_mcg) ? 1 : 0;
+	duplex_ind = (user_param->duplex && !user_param->use_mcg) ? 1 : 0;
 
-	buff_size = BUFF_SIZE(SIZE(user_param->connection_type,ctx->size));
+	buff_size = BUFF_SIZE(ctx->size) + IF_UD_ADD(user_param->connection_type);
 
 	while (i < user_param->num_of_qps) {
 
-		ctx->sge_list[i].addr   = (uintptr_t)ctx->buf + (i + duplex_uni_ind)*buff_size;
+		ctx->sge_list[i].addr   = (uintptr_t)ctx->buf[i] + duplex_ind*buff_size;
+
+		if (user_param->connection_type == UD) 
+			ctx->sge_list[i].addr += (CACHE_LINE_SIZE - UD_ADDITION);
+
 		ctx->sge_list[i].length = SIZE(user_param->connection_type,size);
-		ctx->sge_list[i].lkey   = ctx->mr->lkey;
+		ctx->sge_list[i].lkey   = ctx->mr[i]->lkey;
 		ctx->rwr[i].sg_list     = &ctx->sge_list[i];
 		ctx->rwr[i].wr_id       = i;
 		ctx->rwr[i].next        = NULL;
 		ctx->rwr[i].num_sge	    = MAX_RECV_SGE;
-		ctx->my_addr[i]		    = ctx->sge_list[i].addr;
+		ctx->my_addr[i]		    = (uintptr_t)ctx->buf[i] + duplex_ind*buff_size;
 		
 		for (j = 0; j < user_param->rx_depth; ++j) {
 
@@ -506,8 +523,8 @@ static int set_recv_wqes(struct pingpong_context *ctx,int size,
 				return 1;
 			}
 
-			if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
-				increase_loc_addr(&ctx->sge_list[i],SIZE(user_param->connection_type,size),j,ctx->my_addr[i]);
+			if (size <= (CYCLE_BUFFER / 2))
+				increase_loc_addr(&ctx->sge_list[i],size,j,ctx->my_addr[i],user_param->connection_type);
 		}
 		i++;
 	}
@@ -520,8 +537,8 @@ static int set_recv_wqes(struct pingpong_context *ctx,int size,
 static void set_send_wqe(struct pingpong_context *ctx,int rem_qpn,
 						 struct perftest_parameters *user_param) {
 
-	ctx->list.addr     = (uintptr_t)ctx->buf;
-	ctx->list.lkey 	   = ctx->mr->lkey;
+	ctx->list.addr     = (uintptr_t)ctx->buf[0];
+	ctx->list.lkey 	   = ctx->mr[0]->lkey;
 
 	ctx->wr.sg_list    = &ctx->list;
 	ctx->wr.num_sge    = 1;
@@ -698,6 +715,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	
 	// Set the length of the scatter in case of ALL option.
 	ctx->list.length = size;
+	ctx->list.addr   = (uintptr_t)ctx->buf[0];
 	
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
@@ -713,7 +731,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 
 			if (size <= (CYCLE_BUFFER / 2))
-				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf);
+				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf[0],0);
 
 			++scnt;
 		}
@@ -747,11 +765,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 							return 15;
 						}
 
-						if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
+						if (size <= (CYCLE_BUFFER / 2))
 							increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
-							  SIZE(user_param->connection_type,size),
-							  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
-							  ctx->my_addr[wc[i].wr_id]);	
+							  size,rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
+							  ctx->my_addr[wc[i].wr_id],user_param->connection_type);	
 					}
 				}
 			}
@@ -808,20 +825,15 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 					rcnt_for_qp[wc[i].wr_id]++;
 					tcompleted[rcnt++] = get_cycles();
 
-                    if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
-
-					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+				   	if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 						return 15;
 					}
 
-					if (SIZE(user_param->connection_type,size) <= (CYCLE_BUFFER / 2))
-						increase_loc_addr(&ctx->sge_list[wc[i].wr_id],
-										  SIZE(user_param->connection_type,size),
+					if (size <= (CYCLE_BUFFER / 2))
+						increase_loc_addr(&ctx->sge_list[wc[i].wr_id],size,
 										  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
-										  ctx->my_addr[wc[i].wr_id]);
-					}
-					
+										  ctx->my_addr[wc[i].wr_id],user_param->connection_type);						
 				}
 			}
 		} while (ne > 0);
@@ -855,7 +867,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 	// Set the lenght of the scatter in case of ALL option.
 	ctx->list.length = size;
-	ctx->list.addr   = (uintptr_t)ctx->buf;
+	ctx->list.addr   = (uintptr_t)ctx->buf[0];
 
 	if (size <= user_param->inline_size) 
 		ctx->wr.send_flags |= IBV_SEND_INLINE; 
@@ -871,7 +883,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 			}
 
 			if (size <= (CYCLE_BUFFER / 2))
-				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf);
+				increase_loc_addr(&ctx->list,size,scnt,(uintptr_t)ctx->buf[0],0);
 
 			scnt++;
 		}

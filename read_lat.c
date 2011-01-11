@@ -468,7 +468,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 		if (size <= (CYCLE_BUFFER / 2)) { 
 			increase_rem_addr(&wr,size,scnt,rem_addr);
-			increase_loc_addr(&list,size,scnt,my_addr);
+			increase_loc_addr(&list,size,scnt,my_addr,0);
 		}
 		scnt++;
 
