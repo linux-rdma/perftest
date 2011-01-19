@@ -725,7 +725,7 @@ int run_iter_bi(struct pingpong_context *ctx,
                 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
 
-			if (scnt %  CQ_MODERATION == 0)
+			if (scnt %  CQ_MODERATION == 0 && CQ_MODERATION > 1)
 				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
@@ -889,7 +889,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
 
-			if (scnt %  CQ_MODERATION == 0)
+			if (scnt %  CQ_MODERATION == 0 && CQ_MODERATION > 1)
 				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();

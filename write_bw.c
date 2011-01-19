@@ -479,7 +479,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	for (warmindex = 0 ;warmindex < maxpostsofqpiniteration ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->num_of_qps ; index++) {
 
-			if (totscnt % CQ_MODERATION == 0)
+			if (totscnt % CQ_MODERATION == 0 && CQ_MODERATION > 1)
 				wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[totscnt] = get_cycles();
@@ -512,7 +512,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
           
 			while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < maxpostsofqpiniteration) {
 
-				if (totscnt % CQ_MODERATION == 0)
+				if (totscnt % CQ_MODERATION == 0 && CQ_MODERATION > 1)
 					wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 				tposted[totscnt] = get_cycles();

@@ -410,7 +410,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
 
-			if (scnt%CQ_MODERATION == 0)
+			if (scnt%CQ_MODERATION == 0 && CQ_MODERATION > 1)
 			    ctx->wr.send_flags  &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
