@@ -1316,13 +1316,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (all == ALL) {
-		if (user_param.connection_type == UD) {
-			if (user_param.gid_index < 0 || user_param.use_mcg) {
-				size_max_pow = 12;
-			} else {
-				size_max_pow = 11;
-			}
-		}
+
+		if (user_param.connection_type == UD) 
+		   size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
 			size = 1 << i;

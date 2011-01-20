@@ -54,6 +54,7 @@
 
 // Files included for work.
 #include <infiniband/verbs.h>
+#include <math.h>
 
 // Connection types availible.
 #define RC  0
@@ -150,6 +151,8 @@
 	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
 
 #define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
+
+#define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
 
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE , READ } VerbType;

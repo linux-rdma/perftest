@@ -17,7 +17,7 @@ LOADLIBES +=
 LDFLAGS +=
 
 ${RDMACM_TESTS}: LOADLIBES += -libverbs -lrdmacm
-${MCAST_TESTS}: LOADLIBES += -libverbs -libumad
+${MCAST_TESTS}: LOADLIBES += -libverbs -libumad -lm
 ${TESTS} ${UTILS}: LOADLIBES += -libverbs
 
 ${RDMACM_TESTS}: %: %.c ${BASIC_FILES} ${BASIC_HEADERS}
