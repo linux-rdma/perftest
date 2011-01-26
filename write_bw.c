@@ -479,7 +479,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	for (warmindex = 0 ;warmindex < maxpostsofqpiniteration ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->num_of_qps ; index++) {
 
-			if (totscnt % CQ_MODERATION == 0 && CQ_MODERATION > 1)
+			if (ctx->scnt[index] % CQ_MODERATION == 0 && CQ_MODERATION > 1)
 				wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[totscnt] = get_cycles();
@@ -498,7 +498,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			ctx->scnt[index]++;
             totscnt++;
 
-			if (totscnt%CQ_MODERATION == CQ_MODERATION - 1 || totscnt == user_param->iters - 1)
+			if (ctx->scnt[index]%CQ_MODERATION == CQ_MODERATION - 1 || ctx->scnt[index] == user_param->iters - 1)
 				wr[index].send_flags |= IBV_SEND_SIGNALED;
 
       }
@@ -512,7 +512,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
           
 			while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < maxpostsofqpiniteration) {
 
-				if (totscnt % CQ_MODERATION == 0 && CQ_MODERATION > 1)
+				if (ctx->scnt[index] % CQ_MODERATION == 0 && CQ_MODERATION > 1)
 					wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 				tposted[totscnt] = get_cycles();
@@ -526,10 +526,10 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 					increase_loc_addr(wr[index].sg_list,size,ctx->scnt[index],my_addr[index],0);
 				}
 
-				ctx->scnt[index] = ctx->scnt[index]+1;
+				ctx->scnt[index]++;
 				totscnt++;
 
-				if (totscnt%CQ_MODERATION == CQ_MODERATION - 1 || totscnt == user_param->iters - 1)
+				if (ctx->scnt[index]%CQ_MODERATION == CQ_MODERATION - 1 || ctx->scnt[index] == user_param->iters - 1)
 					wr[index].send_flags |= IBV_SEND_SIGNALED;
 			}
 		}
@@ -548,8 +548,8 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 						ctx->ccnt[(int)wc[i].wr_id] += CQ_MODERATION;
 						totccnt += CQ_MODERATION;
 
-						if (totccnt >= user_param->iters - 1)
-							tcompleted[user_param->iters - 1] = get_cycles();
+						if (totccnt >= user_param->iters*user_param->num_of_qps - 1)
+							tcompleted[user_param->iters*user_param->num_of_qps - 1] = get_cycles();
 
 						else 
 							tcompleted[totccnt-1] = get_cycles();
