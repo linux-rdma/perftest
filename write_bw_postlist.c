@@ -745,6 +745,9 @@ int main(int argc, char *argv[])
 
 	my_dest  = malloc(sizeof(struct pingpong_dest)*user_param.num_of_qps);
 	rem_dest = malloc(sizeof(struct pingpong_dest)*user_param.num_of_qps);
+    my_dest  = calloc(user_param.num_of_qps, sizeof(struct pingpong_dest));
+	rem_dest = calloc(user_param.num_of_qps, sizeof(struct pingpong_dest));
+
     if (!my_dest || !rem_dest) {
 		perror("malloc my_dest or rem_dest");
 		return 1;
