@@ -345,7 +345,7 @@ static void usage(const char *argv0)
  *
  ******************************************************************************/
 static void print_report(unsigned int iters, unsigned size, int duplex,
-						 int no_cpu_freq_fail)
+						 int no_cpu_freq_fail,int noPeak)
 {
 	double cycles_to_units;
 	unsigned long tsize;	/* Transferred size, in megabytes */
@@ -357,20 +357,23 @@ static void print_report(unsigned int iters, unsigned size, int duplex,
 
 	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
 
-	/* Find the peak bandwidth */
-	for (i = 0; i < iters; ++i)
-		for (j = i; j < iters; ++j) {
-			t = (tcompleted[j] - tposted[i]) / (j - i + 1);
-			if (t < opt_delta) {
-				opt_delta  = t;
-				opt_posted = i;
-				opt_completed = j;
+	if (!noPeak) {
+		/* Find the peak bandwidth */
+		for (i = 0; i < iters; ++i)
+			for (j = i; j < iters; ++j) {
+				t = (tcompleted[j] - tposted[i]) / (j - i + 1);
+				if (t < opt_delta) {
+					opt_delta  = t;
+					opt_posted = i;
+					opt_completed = j;
+				}
 			}
-		}
+	}
+
 	cycles_to_units = get_cpu_mhz(no_cpu_freq_fail) * 1000000;
 	tsize = duplex ? 2 : 1;
 	tsize = tsize * size;
-	printf(REPORT_FMT,size,iters,tsize * cycles_to_units / opt_delta / 0x100000,
+	printf(REPORT_FMT,size,iters,!(noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize * iters * cycles_to_units /(tcompleted[iters - 1] - tposted[0]) / 0x100000);
 }
 
@@ -480,6 +483,7 @@ int main(int argc, char *argv[])
 	long long                  size = 65536;
 	int                        i = 0;
 	int                        no_cpu_freq_fail = 0;
+	int                      	noPeak = 0;
 
 	int all = 0;
 	const char *servername = NULL;
@@ -519,12 +523,13 @@ int main(int argc, char *argv[])
 			{ .name = "all",            .has_arg = 0, .val = 'a' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
+            { .name = "no_peak",        .has_arg = 0, .val = 'N' },
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:u:S:x:abVeF", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:m:o:s:n:t:u:S:x:abVNeF", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -592,6 +597,10 @@ int main(int argc, char *argv[])
 
 		case 'F':
 			no_cpu_freq_fail = 1;
+			break;
+
+		case 'N':
+			noPeak = 1;
 			break;
 
 		case 'u':
@@ -718,14 +727,14 @@ int main(int argc, char *argv[])
 			size = 1 << i;
 			if(run_iter(ctx,&user_param,&rem_dest,size))
 				return 17;
-			print_report(user_param.iters,size,user_param.duplex,no_cpu_freq_fail);
+			print_report(user_param.iters,size,user_param.duplex,no_cpu_freq_fail,noPeak);
 		}
 
 	} else {
 
 		if(run_iter(ctx,&user_param,&rem_dest,size))
 			return 18;
-		print_report(user_param.iters,size,user_param.duplex,no_cpu_freq_fail);
+		print_report(user_param.iters,size,user_param.duplex,no_cpu_freq_fail,noPeak);
 	}
 
 	if (ctx_close_connection(&user_param,&my_dest,&rem_dest)) {
