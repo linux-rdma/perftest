@@ -792,8 +792,13 @@ int main(int argc, char *argv[])
 		return 7;
 
 	context = ibv_open_device(ib_dev);
+	if (!context) {
+		fprintf(stderr, " Failed to open device %s\n",
+				ibv_get_device_name(ib_dev));
+		return 1;
+	}
 	if (ibv_query_device(context, &device_attribute)) {
-		fprintf(stderr, " Failed to query device props");
+		fprintf(stderr, " Failed to query device props\n");
 		return 1;
 	}
 	if ((device_attribute.vendor_part_id == 25408 ||
