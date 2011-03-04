@@ -47,7 +47,7 @@ static void prepare_mcast_mad(u_int8_t method,
 	(*(u_int32_t *)(ptr + 32)) = htonl(DEF_QKEY);
 	(*(u_int16_t *)(ptr + 40)) = htons(params->pkey);
 	ptr[39]                    = DEF_TCLASS;
-	ptr[44]                    = INSERTF(ptr[44], 4, DEF_SL, 0, 4);
+	ptr[44]                    = INSERTF(ptr[44], 4, DEF_SLL, 0, 4);
 	ptr[44]                    = INSERTF(ptr[44], 0, DEF_FLOW_LABLE, 16, 4);
 	ptr[45]                    = INSERTF(ptr[45], 0, DEF_FLOW_LABLE, 8, 8);
 	ptr[46]                    = INSERTF(ptr[46], 0, DEF_FLOW_LABLE, 0, 8);

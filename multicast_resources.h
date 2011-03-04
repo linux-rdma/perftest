@@ -66,7 +66,7 @@
 #define QPNUM_MCAST 				0xffffff
 #define DEF_QKEY     			    0x11111111
 #define DEF_PKEY_IDX        		0
-#define DEF_SL              		0
+#define DEF_SLL              		0
 #define MAX_POLL_ITERATION_TIMEOUT  1000000
 #define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 

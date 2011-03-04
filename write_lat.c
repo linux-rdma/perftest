@@ -51,17 +51,10 @@
 #include "get_clock.h"
 #include "perftest_resources.h"
 
-#define VERSION 2.0
+#define VERSION 2.1
 
-static int sl = 0;
 static int page_size;
 cycles_t                *tstamp;
-
-struct report_options {
-	int unsorted;
-	int histogram;
-	int cycles;   /* report delta's in cycles, not microsec's */
-};
 
 struct pingpong_context {
 	struct ibv_context *context;
@@ -111,14 +104,13 @@ static int set_up_connection(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static int init_connection(struct perftest_parameters *params,
-						   struct pingpong_dest *my_dest,
-						   const char *servername) {
+						   struct pingpong_dest *my_dest) {
 
 	params->side      = LOCAL;
 	ctx_print_pingpong_data(my_dest,params);
 
-	if (servername) 
-		params->sockfd = ctx_client_connect(servername,params->port);
+	if (params->servername) 
+		params->sockfd = ctx_client_connect(params->servername,params->port);
 	else 
 		params->sockfd = ctx_server_connect(params->port);
 
@@ -132,22 +124,22 @@ static int init_connection(struct perftest_parameters *params,
 /****************************************************************************** 
  *
  ******************************************************************************/
-static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
+static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 											struct perftest_parameters *user_parm) {
 	struct pingpong_context *ctx;
 
 	ALLOCATE(ctx,struct pingpong_context,1);
 
-	ctx->size     = size;
+	ctx->size     = user_parm->size;
 	ctx->tx_depth = user_parm->tx_depth;
 
-	ctx->buf = memalign(page_size,BUFF_SIZE(size)*2);
+	ctx->buf = memalign(page_size,BUFF_SIZE(user_parm->size)*2);
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return NULL;
 	}
 
-	memset(ctx->buf, 0, BUFF_SIZE(size)*2);
+	memset(ctx->buf, 0, BUFF_SIZE(user_parm->size)*2);
 
 	ctx->context = ibv_open_device(ib_dev);
 	if (!ctx->context) {
@@ -174,7 +166,8 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,int size,
 		return NULL;
 	}
 
-	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf,BUFF_SIZE(size) * 2,IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+	ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf,BUFF_SIZE(user_parm->size) * 2,
+						 IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return NULL;
@@ -223,7 +216,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 
 	if (user_parm->gid_index < 0) {
 		attr.ah_attr.is_global      = 0;
-		attr.ah_attr.sl             = sl;
+		attr.ah_attr.sl             = user_parm->sl;
 	} else {
 		attr.ah_attr.is_global      = 1;
 		attr.ah_attr.grh.dgid       = dest->gid;
@@ -288,36 +281,6 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	return 0;
 }
 
-/****************************************************************************** 
- *
- ******************************************************************************/
-static void usage(const char *argv0)
-{
-	printf("Usage:\n");
-	printf("  %s            start a server and wait for connection\n", argv0);
-	printf("  %s <host>     connect to server at <host>\n", argv0);
-	printf("\n");
-	printf("Options:\n");
-	printf("  -p, --port=<port>            listen on/connect to port <port> (default 18515)\n");
-	printf("  -c, --connection=<RC/UC>     connection type RC/UC (default RC)\n");
-	printf("  -m, --mtu=<mtu>              mtu size (256 - 4096. default for hermon is 2048)\n");
-	printf("  -d, --ib-dev=<dev>           use IB device <dev> (default first device found)\n");
-	printf("  -i, --ib-port=<port>         use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>            size of message to exchange (default 1)\n");
-	printf("  -a, --all                    Run sizes from 2 till 2^23\n");
-	printf("  -t, --tx-depth=<dep>         size of tx queue (default 50)\n");
-	printf("  -n, --iters=<iters>          number of exchanges (at least 2, default 1000)\n");
-	printf("  -I, --inline_size=<size>     max size of message to be sent in inline mode (default 400)\n");
-	printf("  -u, --qp-timeout=<timeout> QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14\n");
-	printf("  -S, --sl=<sl>                SL (default 0)\n");
-	printf("  -x, --gid-index=<index>      test uses GID with GID index taken from command line (for RDMAoE index should be 0)\n");
-	printf("  -C, --report-cycles          report times in cpu cycle units (default microseconds)\n");
-	printf("  -H, --report-histogram       print out all results (default print summary only)\n");
-	printf("  -U, --report-unsorted        (implies -H) print out unsorted results (default sorted)\n");
-	printf("  -V, --version                display version number\n");
-	printf("  -F, --CPU-freq               do not fail even if cpufreq_ondemand module is loaded\n");
-}
-
 /*
  * When there is an
  *	odd number of samples, the median is the middle number.
@@ -349,49 +312,48 @@ static int cycles_compare(const void * aptr, const void * bptr)
 /****************************************************************************** 
  *
  ******************************************************************************/
-static void print_report(struct report_options * options,
-			 unsigned int iters, cycles_t *tstamp, int size, int no_cpu_freq_fail)
-{
+static void print_report(struct perftest_parameters *user_param) {
+
 	double cycles_to_units;
 	cycles_t median;
 	unsigned int i;
 	const char* units;
-	cycles_t *delta = malloc((iters - 1) * sizeof *delta);
+	cycles_t *delta = malloc((user_param->iters - 1) * sizeof *delta);
 
 	if (!delta) {
 		perror("malloc");
 		return;
 	}
 
-	for (i = 0; i < iters - 1; ++i)
+	for (i = 0; i < user_param->iters - 1; ++i)
 		delta[i] = tstamp[i + 1] - tstamp[i];
 
 
-	if (options->cycles) {
+	if (user_param->r_flag->cycles) {
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
-		cycles_to_units = get_cpu_mhz(no_cpu_freq_fail);
+		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
 		units = "usec";
 	}
 
-	if (options->unsorted) {
+	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
-		for (i = 0; i < iters - 1; ++i)
+		for (i = 0; i < user_param->iters - 1; ++i)
 			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
 	}
 
-	qsort(delta, iters - 1, sizeof *delta, cycles_compare);
+	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
 
-	if (options->histogram) {
+	if (user_param->r_flag->histogram) {
 		printf("#, %s\n", units);
-		for (i = 0; i < iters - 1; ++i)
+		for (i = 0; i < user_param->iters - 1; ++i)
 			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
 	}
 
-	median = get_median(iters - 1, delta);
-	printf(REPORT_FMT_LAT,size,iters,delta[0] / cycles_to_units / 2,
-	       delta[iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
+	median = get_median(user_param->iters - 1, delta);
+	printf(REPORT_FMT_LAT,user_param->size,user_param->iters,delta[0] / cycles_to_units / 2,
+	       delta[user_param->iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
 
 	free(delta);
 }
@@ -399,8 +361,9 @@ static void print_report(struct report_options * options,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_param,
-	         struct pingpong_dest *rem_dest,int size,int all) {
+int run_iter(struct pingpong_context *ctx, 
+			 struct perftest_parameters *user_param,
+	         struct pingpong_dest *rem_dest) {
 
 	int 					scnt = 0;
 	int 					ccnt = 0;
@@ -414,7 +377,7 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	struct ibv_wc 			wc;
 	          
 	list.addr   = (uintptr_t)ctx->buf ;
-	list.length = size;
+	list.length = user_param->size;
 	list.lkey   = ctx->mr->lkey;
 
 	wr.sg_list             = &list;
@@ -426,11 +389,11 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	wr.send_flags          = IBV_SEND_SIGNALED;
 	wr.next                = NULL;
 
-	if (size <= user_param->inline_size)
+	if (user_param->size <= user_param->inline_size)
 		wr.send_flags |= IBV_SEND_INLINE;
 
-	post_buf = (char*)ctx->buf + size - 1;
-	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + size - 1;
+	post_buf = (char*)ctx->buf + user_param->size - 1;
+	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
 
 	/* Done with setup. Start the test. */
 	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters) {
@@ -475,184 +438,27 @@ int run_iter(struct pingpong_context *ctx, struct perftest_parameters *user_para
 /****************************************************************************** 
  *
  ******************************************************************************/
-int main(int argc, char *argv[])
-{
-	const char                  *ib_devname = NULL;
-	int                         size = 2;
+int main(int argc, char *argv[]) {
+
 	int                         i = 0;
 	struct report_options       report = {};
 	struct pingpong_context     *ctx;
 	struct pingpong_dest        my_dest,rem_dest;
 	struct ibv_device           *ib_dev;
 	struct perftest_parameters  user_param;
-	int                         no_cpu_freq_fail = 0;
-
-	int all = 0;
-	const char *servername = NULL;
-
 
 	/* init default values to user's parameters */
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&my_dest,0,sizeof(struct pingpong_dest));
 	memset(&rem_dest,0,sizeof(struct pingpong_dest));
 
-	user_param.mtu         = 0;
-	user_param.tx_depth    = 50;
-	user_param.ib_port     = 1;
-	user_param.port        = 18515;
-	user_param.iters       = 1000;
-	user_param.inline_size = MAX_INLINE;
-	user_param.qp_timeout  = 14;
-	user_param.gid_index   = -1;
-	user_param.num_of_qps  = 1;
-	user_param.rx_depth    = 1;
-	user_param.verb        = WRITE;
+	user_param.verb    = WRITE;
+	user_param.tst     = LAT;
+	user_param.r_flag  = &report;
+	user_param.version = VERSION;
 
-	/* Parameter parsing. */
-	while (1) {
-		int c;
-
-		static struct option long_options[] = {
-			{ .name = "port",           .has_arg = 1, .val = 'p' },
-			{ .name = "connection",     .has_arg = 1, .val = 'c' },
-			{ .name = "mtu",            .has_arg = 1, .val = 'm' },
-			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
-			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
-			{ .name = "size",           .has_arg = 1, .val = 's' },
-			{ .name = "iters",          .has_arg = 1, .val = 'n' },
-			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
-			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
-			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
-			{ .name = "sl",             .has_arg = 1, .val = 'S' },
-			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
-			{ .name = "all",            .has_arg = 0, .val = 'a' },
-			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
-			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
-			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
-			{ .name = "version",        .has_arg = 0, .val = 'V' },
-			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
-			{ 0 }
-		};
-
-		c = getopt_long(argc, argv, "p:c:m:d:i:s:n:t:I:u:S:x:aCHUVF", long_options, NULL);
-		if (c == -1)
-			break;
-
-		switch (c) {
-		case 'p':
-		   user_param.port = strtol(optarg, NULL, 0);
-			if (user_param.port < 0 || user_param.port > 65535) {
-				usage(argv[0]);
-				return 1;
-			}
-			break;
-		case 'c':
-			if (strcmp("UC",optarg)==0)
-				user_param.connection_type=1;
-			/* default is 0 for any other option RC*/
-			break;
-
-		case 'm':
-			user_param.mtu = strtol(optarg, NULL, 0);
-			break;
-		case 'a':
-			all = ALL;
-			break;
-		case 'V':
-			printf("perftest version : %.2f\n",VERSION);
-			return 0;
-			break;
-		case 'd':
-			ib_devname = strdupa(optarg);
-			break;
-
-		case 'i':
-			user_param.ib_port = strtol(optarg, NULL, 0);
-			if (user_param.ib_port < 0) {
-				usage(argv[0]);
-				return 2;
-			}
-			break;
-
-		case 's':
-			size = strtol(optarg, NULL, 0);
-			if (size < 1) {
-				usage(argv[0]); return 3;
-			}
-			break;
-
-		case 't':
-			user_param.tx_depth = strtol(optarg, NULL, 0);
-			if (user_param.tx_depth < 1) {
-				usage(argv[0]); return 4;
-			}
-			break;
-
-		case 'I':
-			user_param.inline_size = strtol(optarg, NULL, 0);
-			if (user_param.inline_size > MAX_INLINE) {
-				usage(argv[0]); return 7;
-			}
-			break;
-
-		case 'n':
-			user_param.iters = strtol(optarg, NULL, 0);
-			if (user_param.iters < 2) {
-				usage(argv[0]);
-				return 5;
-			}
-
-			break;
-
-		case 'C':
-			report.cycles = 1;
-			break;
-
-		case 'H':
-			report.histogram = 1;
-			break;
-
-		case 'U':
-			report.unsorted = 1;
-			break;
-
-		case 'F':
-			no_cpu_freq_fail = 1;
-			break;
-
-		case 'u':
-			user_param.qp_timeout = strtol(optarg, NULL, 0);
-			break;
-		case 'S':
-			sl = strtol(optarg, NULL, 0);
-			if (sl > 15) { usage(argv[0]); return 6; }
-			break;
-
-		case 'x':
-			user_param.gid_index = strtol(optarg, NULL, 0);
-			if (user_param.gid_index > 63) {
-				usage(argv[0]);
-				return 1;
-			}
-			break;
-
-		default:
-			usage(argv[0]);
-			return 7;
-		}
-	}
-
-	if (optind == argc - 1)
-		servername = strdupa(argv[optind]);
-	else if (optind < argc) {
-		usage(argv[0]);
-		return 6;
-	}
-
-	
-
-	ALLOCATE(tstamp,cycles_t,user_param.iters);
-	user_param.machine = servername ? CLIENT : SERVER;
+	if (parser(&user_param,argv,argc)) 
+		return 1;
 	
 	printf(RESULT_LINE);
 
@@ -665,18 +471,18 @@ int main(int argc, char *argv[])
 		printf(" Connection type : UC\n");
 	}
 	
-	if (all == ALL) {
-		/*since we run all sizes */
-		size = 8388608; /*2^23 */
+	if (user_param.all == ON) {
+		user_param.size = MAX_SIZE; /*2^23 */
 	}
+
 	srand48(getpid() * time(NULL));
 	page_size = sysconf(_SC_PAGESIZE);
 
-	ib_dev = ctx_find_dev(ib_devname);
+	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev)
 		return 7;
 
-	ctx = pp_init_ctx(ib_dev,size,&user_param);
+	ctx = pp_init_ctx(ib_dev,&user_param);
 	if (!ctx)
 		return 8;
 
@@ -687,7 +493,7 @@ int main(int argc, char *argv[])
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&user_param,&my_dest,servername)) {
+	if (init_connection(&user_param,&my_dest)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
@@ -712,23 +518,25 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+	ALLOCATE(tstamp,cycles_t,user_param.iters);
+
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);
 
-	if (all == ALL) {
+	if (user_param.all == ON) {
 
 		for (i = 1; i < 24 ; ++i) {
-			size = 1 << i;
-			if(run_iter(ctx,&user_param,&rem_dest,size,all))
+			user_param.size = 1 << i;
+			if(run_iter(ctx,&user_param,&rem_dest))
 				return 17;
-			print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
+			print_report(&user_param);
 		}
 
 	} else {
 
-		if(run_iter(ctx,&user_param, &rem_dest,size,all))
-			return 18;
-		print_report(&report,user_param.iters, tstamp, size, no_cpu_freq_fail);
+		if(run_iter(ctx,&user_param,&rem_dest))
+				return 17;
+			print_report(&user_param);
 	}
 	
 	
