@@ -278,21 +278,72 @@ struct report_options {
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
-int parser(struct perftest_parameters *user_param,char *argv[], int argc);
 
-Device is_dev_hermon(struct ibv_context *context);
-
-const char *link_layer_str(uint8_t link_layer);
-/* 
+/* parser
  *
- * Description : Determines the link layer type (IB or ETH).
+ * Description : Setting default test parameters and parsing the user choises
  *
- * Parameters : 
+ * Parameters :
+ *
+ *	 user_param  - the parameters element.
+ *	 argv & argc - from the user prompt. 
  *
  * Value : 0 upon success. -1 if it fails.
  */
+int parser(struct perftest_parameters *user_param,char *argv[], int argc);
+
+/* is_dev_hermon
+ *
+ * Description : Determines if the the device is ConnectX.
+ *
+ * Parameters : 
+ *
+ *	context - The context of the HCA device.
+ *
+ * Value : HERMON if it is , NOT_HERMON if not and FAILURE in case of error.
+ */
+Device is_dev_hermon(struct ibv_context *context);
+
+/* link_layer_str
+ *
+ * Description : Returns a string of the Link name.
+ *
+ * Parameters : 
+ *
+ *	link_layer - the link layer id.
+ *
+ * Return Value : "IB" , "Ethernet" or "Unknown".
+ */
+const char *link_layer_str(uint8_t link_layer);
+
+/* ctx_find_dev
+ *
+ * Description : Returns the device corresponding to ib_devname 
+ *	or the first one found , in case ib_devname == NULL
+ *
+ * Parameters : 
+ *	
+ *	ib_devname - The name of the deivce requested or NULL for the first one.
+ *
+ * Value : the deivce or NULL in case of failure.
+ */
 struct ibv_device* ctx_find_dev(const char *ib_devname);
 
+/* ctx_set_mtu.
+ *
+ * Description : Determines the link MTU . in case params->mtu == 0 
+ *	return the port MTU.
+ *
+ * Parameters : 
+ *
+ *	context - The context of the HCA device.
+ *	params  - User parameters element.
+ *
+ *  context - The context of the HCA device.
+ *  params  - The perftest parameters of the device.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
 int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params);
 
 /* ctx_set_link_layer.
