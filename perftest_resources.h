@@ -83,8 +83,6 @@
 #define DEF_RX_SEND   (600)
 
 // Max and Min allowed values for perftest parameters.
-#define MIN_PORT      (8000)
-#define MAX_PORT      (60000)
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (2) 
 #define MIN_ITER      (5)

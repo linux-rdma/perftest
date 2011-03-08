@@ -410,7 +410,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
         switch (c) {
 
-			case 'p': CHECK_VALUE(user_param->port,MIN_PORT,MAX_PORT,"Port Num"); 			  break;
+			case 'p': user_param->port = strtol(optarg, NULL, 0);                			  break;
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); 			  	  	  break;
 			case 'i': CHECK_VALUE(user_param->ib_port,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); 	  break;
             case 'm': user_param->mtu  = strtol(optarg, NULL, 0); 							  break;
