@@ -517,7 +517,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             fprintf(stderr," Invalid Command line. Please check command rerun \n"); 
             return 1;
     }
+
+	// Additional configuration and assignments.
+	if (user_param->tx_depth > user_param->iters) {
+		user_param->tx_depth = user_param->iters;
+	}
+
+	// Assign server / clients roles.
 	user_param->machine = user_param->servername ? CLIENT : SERVER;
+
     return 0;
 }
 
