@@ -224,7 +224,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
-	if (is_dev_hermon(ctx->context) != NOT_HERMON && user_parm->inline_size != 0)
+	if (is_dev_hermon(ctx->context) != HERMON && user_parm->inline_size != 0)
 		user_parm->inline_size = 0;
 
 	printf(" Inline data is used up to %d bytes message\n", user_parm->inline_size);

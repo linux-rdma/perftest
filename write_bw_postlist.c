@@ -185,6 +185,11 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+	if (is_dev_hermon(ctx->context) != HERMON && user_parm->inline_size != 0)
+		user_parm->inline_size = 0;
+
+	printf(" Inline data is used up to %d bytes message\n", user_parm->inline_size);
+
 	/* We dont really want IBV_ACCESS_LOCAL_WRITE, but IB spec says:
 	 * The Consumer is not allowed to assign Remote Write or Remote Atomic to
 	 * a Memory Region that has not been assigned Local Write. */
