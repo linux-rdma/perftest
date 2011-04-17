@@ -684,7 +684,7 @@ int run_iter(struct pingpong_context *ctx,
 
 			tstamp[scnt++] = get_cycles();
 
-			if (scnt % CQ_MODERATION == 0 || scnt == user_param->iters) {
+			if (scnt % user_param->cq_mod == 0 || scnt == user_param->iters) {
 				poll = 1;
 				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 			}

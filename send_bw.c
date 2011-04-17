@@ -703,7 +703,7 @@ int run_iter_bi(struct pingpong_context *ctx,
                 
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
 
-			if (scnt %  CQ_MODERATION == 0 && CQ_MODERATION > 1)
+			if (scnt %  user_param->cq_mod == 0 && user_param->cq_mod > 1)
 				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
@@ -717,7 +717,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 			++scnt;
 
-			if ((scnt % CQ_MODERATION) == (CQ_MODERATION - 1) || scnt == (user_param->iters - 1)) 
+			if ((scnt % user_param->cq_mod) == (user_param->cq_mod - 1) || scnt == (user_param->iters - 1)) 
 				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 		}
 
@@ -738,7 +738,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 						 NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
 					if ((int) wc[i].wr_id == PINGPONG_SEND_WRID) {
-						ccnt += CQ_MODERATION;
+						ccnt += user_param->cq_mod;
 						if (ccnt >= user_param->iters - 1) 
 							tcompleted[user_param->iters - 1] = get_cycles();
 
@@ -867,7 +867,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth ) {
 
-			if (scnt %  CQ_MODERATION == 0 && CQ_MODERATION > 1)
+			if (scnt %  user_param->cq_mod == 0 && user_param->cq_mod > 1)
 				ctx->wr.send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[scnt] = get_cycles();
@@ -881,7 +881,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 
 			scnt++;
 
-			if ((scnt % CQ_MODERATION) == (CQ_MODERATION - 1) || scnt == (user_param->iters - 1)) 
+			if ((scnt % user_param->cq_mod) == (user_param->cq_mod - 1) || scnt == (user_param->iters - 1)) 
 				ctx->wr.send_flags |= IBV_SEND_SIGNALED;
 		}
 
@@ -901,7 +901,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 						if (wc[i].status != IBV_WC_SUCCESS) 
 							NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 			
-						ccnt += CQ_MODERATION;
+						ccnt += user_param->cq_mod;
 						if (ccnt >= user_param->iters - 1) 
 							tcompleted[user_param->iters - 1] = get_cycles();
 
@@ -990,7 +990,9 @@ int main(int argc, char *argv[])
 	else{
 		printf(" Connection type : UD\n");
 	}
-	
+
+	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
+
 	// Done with parameter parsing. Perform setup.
 	if (user_param.all == ON) {
 		// since we run all sizes 

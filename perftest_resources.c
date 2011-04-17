@@ -260,6 +260,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	if (tst == BW) {
 		printf("  -b, --bidirectional ");
 		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
+		
+		printf("  -Q, --cq-mod ");
+		printf(" Generate Cqe only after <--cq-mod> completion\n");
 	}
 
 	if (verb != WRITE) {
@@ -323,6 +326,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->rx_depth    = user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
+	user_param->cq_mod		= DEF_CQ_MOD;
 
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 
@@ -395,6 +399,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
 			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
+			{ .name = "cq-mod",  		.has_arg = 1, .val = 'Q' },
 			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
             { .name = "version",        .has_arg = 0, .val = 'V' },
             { .name = "report-cycles",  .has_arg = 0, .val = 'C' },
@@ -403,7 +408,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             { 0 }
         };
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:S:x:M:lVaehbNFCHU",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:S:x:M:Q:lVaehbNFCHU",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -420,6 +425,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'u': user_param->qp_timeout = strtol(optarg, NULL, 0); 					  break;
 			case 'S': CHECK_VALUE(user_param->sl,MIN_SL,MAX_SL,"SL num");					  break;
 			case 'x': CHECK_VALUE(user_param->gid_index,MIN_GID_IX,MAX_GID_IX,"Gid index");   break;
+			case 'Q': CHECK_VALUE(user_param->cq_mod,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");  break;
 			case 'a': user_param->all 		 = ON;											  break;
 			case 'F': user_param->cpu_freq_f = ON; 											  break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
@@ -521,6 +527,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	// Additional configuration and assignments.
 	if (user_param->tx_depth > user_param->iters) {
 		user_param->tx_depth = user_param->iters;
+	}
+
+	if (user_param->cq_mod > user_param->tx_depth) {
+		user_param->cq_mod = user_param->tx_depth;
 	}
 
 	// Assign server / clients roles.

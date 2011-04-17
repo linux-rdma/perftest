@@ -448,7 +448,7 @@ int run_iter(struct pingpong_context *ctx,
 	for (warmindex = 0 ;warmindex < user_param->tx_depth ;warmindex ++ ) {
 	  for (index =0 ; index < user_param->num_of_qps ; index++) {
 
-			if (ctx->scnt[index] % CQ_MODERATION == 0 && CQ_MODERATION > 1)
+			if (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
 				wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 			tposted[totscnt] = get_cycles();
@@ -467,7 +467,7 @@ int run_iter(struct pingpong_context *ctx,
 			ctx->scnt[index]++;
             totscnt++;
 
-			if (ctx->scnt[index]%CQ_MODERATION == CQ_MODERATION - 1 || ctx->scnt[index] == user_param->iters - 1)
+			if (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || ctx->scnt[index] == user_param->iters - 1)
 				wr[index].send_flags |= IBV_SEND_SIGNALED;
 
       }
@@ -481,7 +481,7 @@ int run_iter(struct pingpong_context *ctx,
           
 			while (ctx->scnt[index] < user_param->iters && (ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) {
 
-				if (ctx->scnt[index] % CQ_MODERATION == 0 && CQ_MODERATION > 1)
+				if (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
 					wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 				tposted[totscnt] = get_cycles();
@@ -498,7 +498,7 @@ int run_iter(struct pingpong_context *ctx,
 				ctx->scnt[index]++;
 				totscnt++;
 
-				if (ctx->scnt[index]%CQ_MODERATION == CQ_MODERATION - 1 || ctx->scnt[index] == user_param->iters - 1)
+				if (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || ctx->scnt[index] == user_param->iters - 1)
 					wr[index].send_flags |= IBV_SEND_SIGNALED;
 			}
 		}
@@ -514,8 +514,8 @@ int run_iter(struct pingpong_context *ctx,
 						if (wc[i].status != IBV_WC_SUCCESS) 
 							NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
 
-						ctx->ccnt[(int)wc[i].wr_id] += CQ_MODERATION;
-						totccnt += CQ_MODERATION;
+						ctx->ccnt[(int)wc[i].wr_id] += user_param->cq_mod;
+						totccnt += user_param->cq_mod;
 
 						if (totccnt >= user_param->iters*user_param->num_of_qps - 1)
 							tcompleted[user_param->iters*user_param->num_of_qps - 1] = get_cycles();
@@ -576,6 +576,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		printf(" Connection type : UC\n");
 	}
+	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
  
     printf(" Each Qp will post up to %d messages each time\n",user_param.tx_depth);
 

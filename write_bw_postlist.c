@@ -470,7 +470,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		printf("Connection type : UC\n");
 	}
-
+	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
 	printf("Each Qp will post %d messages each time\n",user_param.tx_depth);
 
 

@@ -81,6 +81,7 @@
 #define DEF_INLINE_LT (400)
 #define DEF_RX_RDMA   (1)
 #define DEF_RX_SEND   (600)
+#define DEF_CQ_MOD	  (50)
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_IB_PORT   (1)
@@ -101,6 +102,8 @@
 #define MAX_QP_MCAST  (56)
 #define MIN_RX		  (1)
 #define MAX_RX		  (15000)
+#define MIN_CQ_MOD	  (1)
+#define MAX_CQ_MOD	  (1000)
 
 #define OFF					(0)
 #define ON 					(1)
@@ -114,7 +117,6 @@
 #define MAX_SEND_SGE        1
 #define MAX_RECV_SGE        1
 #define DEF_WC_SIZE         1
-#define CQ_MODERATION       50
 #define MTU_FIX				7
 
 // Space for GRH when we scatter the packet in UD.
@@ -223,37 +225,38 @@ typedef enum { FAILURE = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
 
 struct perftest_parameters {
 
-	int          port;
-	char         *ib_devname;
-	char         *servername;
-	int          ib_port;
-	int          mtu;
-	enum ibv_mtu curr_mtu;
-	uint64_t     size;
-	int 		 iters;
-	int 		 tx_depth;
-	int 		 qp_timeout;
-	int 		 sl;
-	int 		 gid_index;
-	int 		 all;
-	int 		 cpu_freq_f;
-	int 		 connection_type;
-	int 		 num_of_qps;
-	int 		 use_event;
-	int 		 inline_size;
-	int 		 out_reads;
-	int 		 use_mcg;
-	char	 	 *user_mgid;
-	int 		 rx_depth;
-	int 		 duplex;
-	int 		 noPeak;
-	uint8_t link_type;
-    MachineType  machine;
-    PrintDataSide side;
-	VerbType     verb;
-	TestType     tst;
-	int          sockfd;
-	float		 version;
+	int				port;
+	char			*ib_devname;
+	char			*servername;
+	int				ib_port;
+	int				mtu;
+	enum ibv_mtu	curr_mtu;
+	uint64_t		size;
+	int				iters;
+	int				tx_depth;
+	int				qp_timeout;
+	int				sl;
+	int				gid_index;
+	int				all;
+	int				cpu_freq_f;
+	int				connection_type;
+	int				num_of_qps;
+	int				use_event;
+	int 			inline_size;
+	int				out_reads;
+	int				use_mcg;
+	char			*user_mgid;
+	int				rx_depth;
+	int				duplex;
+	int				noPeak;
+	int				cq_mod;
+	uint8_t 		link_type;
+    MachineType 	machine;
+    PrintDataSide	side;
+	VerbType		verb;
+	TestType		tst;
+	int				sockfd;
+	float			version;
 	struct report_options *r_flag;
 };
 
