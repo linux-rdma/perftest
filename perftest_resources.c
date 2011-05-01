@@ -19,11 +19,16 @@
  *
  ******************************************************************************/
 
-static const char *sideArray[] = {"local", "remote"};
+static const char *sideArray[]  = {"local", "remote"};
 
-static const char *gidArray[] =  {"GID", "MGID"};
+static const char *gidArray[]   =  {"GID", "MGID"};
 
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
+
+static const char *testsStr[]   = {"Send","RDMA_Write","RDMA_Read"};
+
+static const char *connStr[]    = {"RC","UC","UD"};
+
 
 /****************************************************************************** 
  *
@@ -342,17 +347,17 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
  ******************************************************************************/
 static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 
-	if (strcmp("RC",optarg)==0) 
+	if (strcmp(connStr[0],optarg)==0) 
 		*cptr = RC;
 
-	else if (strcmp("UC",optarg)==0) { 
+	else if (strcmp(connStr[1],optarg)==0) { 
 		*cptr = UC;
 		if (verb == READ) { 
 			  fprintf(stderr," UC connection not possible in READ verb\n"); 
 			  exit(1);
 		}
 
-	} else if (strcmp("UD",optarg)==0)  { 
+	} else if (strcmp(connStr[2],optarg)==0)  { 
 		*cptr = UD;
 		if (verb != SEND) { 
 			fprintf(stderr," UD connection only possible in SEND verb\n"); 
@@ -408,7 +413,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             { 0 }
         };
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:S:x:M:Q:lVaehbNFCHU",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:lVaehbNFCHU",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -533,10 +538,76 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->cq_mod = user_param->tx_depth;
 	}
 
+	if (user_param->verb == SEND && user_param->tst == BW &&
+		user_param->rx_depth > user_param->iters) {
+		user_param->rx_depth = user_param->iters;
+	}
+
 	// Assign server / clients roles.
 	user_param->machine = user_param->servername ? CLIENT : SERVER;
 
     return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+void ctx_print_test_info(struct perftest_parameters *user_param) {
+
+	printf(RESULT_LINE);
+	printf("                    ");
+	printf("%s ",testsStr[user_param->verb]);
+
+	if (user_param->tst == BW) { 
+
+		if (user_param->duplex) {
+			printf("Bidirectional ");
+		}
+
+		if (user_param->spec) {
+			printf("Post List ");
+		}
+
+		printf("BW ");
+
+	} else {
+		printf("Latency ");
+	}
+
+	if (user_param->use_mcg) {
+		printf("Multicast ");
+
+		if (user_param->duplex) {
+			user_param->num_of_qps++;
+
+		} else if (user_param->machine == CLIENT) {
+			user_param->num_of_qps = 1;
+		}
+	}
+
+	printf("Test\n");
+
+	if (user_param->use_mcg && user_param->connection_type != UD) {
+		printf(" MultiCast only runs on UD ! changing to UD\n");
+		user_param->connection_type = UD;
+
+	}
+
+	printf(" Number of qps   : %d\n",user_param->num_of_qps);
+	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
+	
+	if (user_param->machine == CLIENT || user_param->duplex) {
+		printf(" TX depth        : %d\n",user_param->tx_depth);
+
+	} 
+
+	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) { 
+		printf(" RX depth        : %d\n",user_param->rx_depth);
+	}
+
+	if (user_param->tst == BW || user_param->verb == SEND) {
+		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
+	} 
 }
 
 /****************************************************************************** 
@@ -607,7 +678,8 @@ int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params) 
 			params->curr_mtu = port_attr.active_mtu;
 		}
 	}
-	printf(" Mtu : %d\n",MTU_SIZE(params->curr_mtu)); 
+
+	printf(" Mtu             : %d\n",MTU_SIZE(params->curr_mtu)); 
 	return 0;
 }
 
@@ -638,7 +710,7 @@ int ctx_set_link_layer(struct ibv_context *context,
 		return -1;
 	}
 	else {
-		printf(" Link type is %s\n",link_layer_str(params->link_type));
+		printf(" Link type       : %s\n",link_layer_str(params->link_type));
 	}
 	
 	if (!strcmp(link_layer_str(params->link_type),"Ethernet") &&  params->gid_index == -1) {
@@ -650,7 +722,7 @@ int ctx_set_link_layer(struct ibv_context *context,
 	}
 
 	if (params->gid_index > -1 && (params->machine == CLIENT || params->duplex)) {
-		fprintf(stdout," Using gid index %d as source GID\n",params->gid_index);
+		fprintf(stdout," Gid index       : %d\n",params->gid_index);
 	}
 
 	return 0;
@@ -785,7 +857,7 @@ int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 		num_user_reads = max_reads;
 	}
 
-	printf(" Number of outstanding reads is %d\n",num_user_reads);
+	printf(" Outstand reads  : %d\n",num_user_reads);
 
 	return num_user_reads;
 }

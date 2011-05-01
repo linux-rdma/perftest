@@ -452,26 +452,14 @@ int main(int argc, char *argv[]) {
 
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
+	user_param.spec    = PL;
 	user_param.version = VERSION;
 
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 	
-	printf("------------------------------------------------------------------\n");
-	if (user_param.duplex == 1) {
-	  printf("                    RDMA_Write Bidirectional Post List BW Test\n");
-	} else {
-	  printf("                    RDMA_Write Post List BW Test\n");
-	}
-	
-	printf("Number of qp's running %d\n",user_param.num_of_qps);
-	if (user_param.connection_type==RC) {
-		printf("Connection type : RC\n");
-	} else {
-		printf("Connection type : UC\n");
-	}
-	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
-	printf("Each Qp will post %d messages each time\n",user_param.tx_depth);
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 
 	if (user_param.all == ON) 	

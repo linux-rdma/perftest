@@ -463,18 +463,8 @@ int main(int argc, char *argv[]) {
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 	
-	printf(RESULT_LINE);
-
-	if (user_param.duplex == 1)
-		printf("                    RDMA_Read Bidirectional BW Test\n");
-	else
-		printf("                    RDMA_Read BW Test\n");
-
-	if (user_param.use_event == ON)
-		printf(" Test with events.\n");
-
-	printf(" Connection type : RC\n");
-	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 
 	// Done with parameter parsing. Perform setup. 

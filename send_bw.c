@@ -309,6 +309,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+		// Finds the link type and configure the HCA accordingly.
+	if (ctx_set_link_layer(ctx->context,user_parm)) {
+		fprintf(stderr, " Couldn't set the link layer\n");
+		return NULL;
+	}
+
 	// Configure the Link MTU acoording to the user or the active mtu.
 	if (ctx_set_mtu(ctx->context,user_parm)) {
 		fprintf(stderr, "Couldn't set the link layer\n");
@@ -326,12 +332,6 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	printf(" Inline data is used up to %d bytes message\n", user_parm->inline_size);
 
 	ctx->size = user_parm->size;
-
-	// Finds the link type and configure the HCA accordingly.
-	if (ctx_set_link_layer(ctx->context,user_parm)) {
-		fprintf(stderr, " Couldn't set the link layer\n");
-		return NULL;
-	}
 	
 	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
@@ -957,41 +957,8 @@ int main(int argc, char *argv[])
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 
-	printf(RESULT_LINE);
-
-	user_param.rx_depth = (user_param.iters < user_param.rx_depth) ? user_param.iters : user_param.rx_depth ;
-
-    if (user_param.use_mcg) {
-
-		user_param.connection_type = UD;
-		if (user_param.duplex) {
-			user_param.num_of_qps++;
-			printf("                    Send Bidirectional BW  -  Multicast Test\n");
-		}
-		else {
-			printf("                    Send BW  -  Multicast Test\n");
-			if (user_param.machine == CLIENT)
-				user_param.num_of_qps = 1;
-		}
-    }
-
-	else if (user_param.duplex) {
-		    printf("                    Send Bidirectional BW Test\n");
-	} else 
-		    printf("                    Send BW Test\n");
-
-	if (user_param.use_event) 
-		printf(" Test with events.\n");
-
-	if (user_param.connection_type == RC)
-		printf(" Connection type : RC\n");
-	else if (user_param.connection_type == UC)
-		printf(" Connection type : UC\n");
-	else{
-		printf(" Connection type : UD\n");
-	}
-
-	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 	// Done with parameter parsing. Perform setup.
 	if (user_param.all == ON) {

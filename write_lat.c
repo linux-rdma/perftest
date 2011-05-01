@@ -460,16 +460,8 @@ int main(int argc, char *argv[]) {
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 	
-	printf(RESULT_LINE);
-
-	printf("                    RDMA_Write Latency Test\n");
-	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
-
-	if (user_param.connection_type==0) {
-		printf(" Connection type : RC\n");
-	} else {
-		printf(" Connection type : UC\n");
-	}
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 	
 	if (user_param.all == ON) {
 		user_param.size = MAX_SIZE; /*2^23 */

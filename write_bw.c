@@ -220,7 +220,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	// Configure the Link MTU acoording to the user or the active mtu.
 	if (ctx_set_mtu(ctx->context,user_parm)) {
-		fprintf(stderr, "Couldn't set the link layer\n");
+		fprintf(stderr, "Couldn't set the MTUn");
 		return NULL;
 	}
 
@@ -559,26 +559,12 @@ int main(int argc, char *argv[]) {
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
+	// Configure the parameters values according to user arguments or defalut values.
 	if (parser(&user_param,argv,argc)) 
 		return 1;
-	
-	printf(RESULT_LINE);
 
-	if (user_param.duplex == 1) {
-	  printf("                    RDMA_Write Bidirectional BW Test\n");
-	} else {
-	  printf("                    RDMA_Write BW Test\n");
-	}
-	
-	printf(" Number of qp's running %d\n",user_param.num_of_qps);
-	if (user_param.connection_type==RC) {
-		printf(" Connection type : RC\n");
-	} else {
-		printf(" Connection type : UC\n");
-	}
-	printf(" CQ Moderation   : %d\n",user_param.cq_mod);
- 
-    printf(" Each Qp will post up to %d messages each time\n",user_param.tx_depth);
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 	if (user_param.all == ON) 	
 		user_param.size = MAX_SIZE;

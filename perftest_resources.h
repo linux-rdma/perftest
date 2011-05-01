@@ -118,6 +118,7 @@
 #define MAX_RECV_SGE        1
 #define DEF_WC_SIZE         1
 #define MTU_FIX				7
+#define PL					1
 
 // Space for GRH when we scatter the packet in UD.
 #define UD_ADDITION         40
@@ -205,7 +206,7 @@
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
 
 // The Verb of the benchmark.
-typedef enum { SEND , WRITE , READ } VerbType;
+typedef enum { SEND , WRITE, READ } VerbType;
 
 // The type of the machine ( server or client actually).
 typedef enum { LAT , BW } TestType;
@@ -250,6 +251,7 @@ struct perftest_parameters {
 	int				duplex;
 	int				noPeak;
 	int				cq_mod;
+	int 			spec;
 	uint8_t 		link_type;
     MachineType 	machine;
     PrintDataSide	side;
@@ -292,6 +294,8 @@ struct report_options {
  * Value : 0 upon success. -1 if it fails.
  */
 int parser(struct perftest_parameters *user_param,char *argv[], int argc);
+
+void ctx_print_test_info(struct perftest_parameters *user_param);
 
 /* is_dev_hermon
  *

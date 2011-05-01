@@ -482,13 +482,8 @@ int main(int argc, char *argv[]) {
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 
-	printf(RESULT_LINE);
-	printf("                    RDMA_Read Latency Test\n");
-
-	if (user_param.use_event == ON) 
-		printf(" Test with events.\n");
-
-	printf(" Connection type : RC\n");
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 	
 	if (user_param.all == ON) 
 		user_param.size = MAX_SIZE; 

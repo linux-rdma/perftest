@@ -299,6 +299,12 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+	// Finds the link type and configure the HCA accordingly.
+	if (ctx_set_link_layer(ctx->context,user_parm)) {
+		fprintf(stderr, " Couldn't set the link layer\n");
+		return NULL;
+	}
+
 	// Configure the Link MTU acoording to the user or the active mtu.
 	if (ctx_set_mtu(ctx->context,user_parm)) {
 		fprintf(stderr, "Couldn't set the Mtu\n");
@@ -310,11 +316,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		user_parm->size = MTU_SIZE(user_parm->curr_mtu);
 	}
 
-	// Finds the link type and configure the HCA accordingly.
-	if (ctx_set_link_layer(ctx->context,user_parm)) {
-		fprintf(stderr, " Couldn't set the link layer\n");
-		return NULL;
-	}
+	printf(" Inline data is used up to %d bytes message\n", user_parm->inline_size);
 
 	ctx->size = user_parm->size;
 	buff_size = BUFF_SIZE(SIZE(user_parm->connection_type,ctx->size))*(1 + user_parm->num_of_qps);
@@ -761,27 +763,8 @@ int main(int argc, char *argv[])
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 
-	printf(RESULT_LINE);
-
-	if (user_param.use_mcg) { 
-		user_param.connection_type = UD;
-		printf("                    Send Latency Multicast Test\n");
-	} else {
-		printf("                    Send Latency Test\n");
-	}
-
-	 if (user_param.use_event) 
-        printf(" Test with events.\n");
-
-	if (user_param.connection_type==RC) {
-		printf(" Connection type : RC\n");
-	} else if (user_param.connection_type==UC) { 
-		printf(" Connection type : UC\n");
-	} else {
-		printf(" Connection type : UD\n");
-	}
-
-	printf(" Inline data is used up to %d bytes message\n", user_param.inline_size);
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 	if (user_param.all == ON) {
 		user_param.size = MAX_SIZE;
