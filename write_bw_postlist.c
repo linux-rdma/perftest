@@ -333,7 +333,7 @@ static void print_report(struct perftest_parameters *user_param) {
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
 	printf(REPORT_FMT,
-	       user_param->size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
+	       (unsigned long)user_param->size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize * user_param->iters * user_param->num_of_qps * cycles_to_units /(tcompleted[(user_param->iters* user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
 int run_iter(struct pingpong_context *ctx, 

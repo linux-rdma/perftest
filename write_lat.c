@@ -352,7 +352,7 @@ static void print_report(struct perftest_parameters *user_param) {
 	}
 
 	median = get_median(user_param->iters - 1, delta);
-	printf(REPORT_FMT_LAT,user_param->size,user_param->iters,delta[0] / cycles_to_units / 2,
+	printf(REPORT_FMT_LAT,(unsigned long)user_param->size,user_param->iters,delta[0] / cycles_to_units / 2,
 	       delta[user_param->iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
 
 	free(delta);

@@ -388,7 +388,7 @@ static void print_report(struct perftest_parameters *user_param) {
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
-	printf(REPORT_FMT,user_param->size,iters,!(user_param->noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
+	printf(REPORT_FMT,(unsigned long)user_param->size, iters,!(user_param->noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize*iters*user_param->num_of_qps*cycles_to_units/(tcompleted[(iters*user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
 
