@@ -75,13 +75,12 @@ Device is_dev_hermon(struct ibv_context *context) {
  ******************************************************************************/
 static int ctx_write_keys(const struct pingpong_dest *my_dest,
 						  struct perftest_parameters *params) {
-    
+
     if (params->gid_index == -1 && !params->use_mcg) {
 
 		char msg[KEY_MSG_SIZE];
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
-
 		if (write(params->sockfd,msg,sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
@@ -102,7 +101,6 @@ static int ctx_write_keys(const struct pingpong_dest *my_dest,
 				my_dest->gid.raw[10],my_dest->gid.raw[11],
 				my_dest->gid.raw[12],my_dest->gid.raw[13],
 				my_dest->gid.raw[14],my_dest->gid.raw[15]);
-
 		if (write(params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
@@ -150,7 +148,6 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 			fprintf(stderr, "Couldn't read remote address\n");
 			return -1;
 		}
-
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
@@ -178,7 +175,7 @@ static int ctx_read_keys(struct pingpong_dest *rem_dest,
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
-		rem_dest->rkey = (unsigned)strtol(tmp, NULL, 16); // RKEY
+		rem_dest->rkey = (unsigned)strtoul(tmp, NULL, 16); // RKEY
 
 		pstr += term - pstr + 1;
 		term = strpbrk(pstr, ":");
