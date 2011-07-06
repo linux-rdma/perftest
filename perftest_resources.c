@@ -585,6 +585,10 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	printf("Test\n");
 
+	if (user_param->use_event) {
+		printf(" Test with events.\n");
+		
+	}
 	if (user_param->use_mcg && user_param->connection_type != UD) {
 		printf(" MultiCast only runs on UD ! changing to UD\n");
 		user_param->connection_type = UD;
