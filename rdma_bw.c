@@ -154,6 +154,11 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(data->port);
 retry_addr:
+
+		fprintf(stdout," Before resolve address\n");
+		getchar();
+		putchar('\n');
+			
 		if (rdma_resolve_addr(data->cm_id, NULL,
 					 (struct sockaddr *)&sin, 2000)) {
 			fprintf(stderr, "%d:%s: rdma_resolve_addr failed\n",
@@ -178,6 +183,11 @@ retry_addr:
 		rdma_ack_cm_event(event);
 	
 retry_route:
+
+		fprintf(stdout," Before resolve routen");
+		getchar();
+		putchar('\n');
+
 		if (rdma_resolve_route(data->cm_id, 2000)) {
 			fprintf(stderr, "%d:%s: rdma_resolve_route failed\n", 
 						pid, __func__);
@@ -199,6 +209,11 @@ retry_route:
 			rdma_ack_cm_event(event);
 			goto err1;
 		}
+
+		fprintf(stdout," Before creating QP");
+		getchar();
+		putchar('\n');
+
 		rdma_ack_cm_event(event);
 		ctx = pp_init_ctx(data->cm_id, data);
 		if (!ctx) {
@@ -217,6 +232,10 @@ retry_route:
 		conn_param.private_data = &data->my_dest;
 		conn_param.private_data_len = sizeof(data->my_dest);
 
+		fprintf(stdout," Before connecting");
+		getchar();
+		putchar('\n');
+
 		if (rdma_connect(data->cm_id, &conn_param)) {
 			fprintf(stderr, "%d:%s: rdma_connect failure\n", pid, __func__);
 			goto err2;
@@ -230,6 +249,11 @@ retry_route:
  					pid, __func__, event->event);
 			goto err1;
 		}
+
+		fprintf(stdout," After connecting");
+		getchar();
+		putchar('\n');
+
 		if (!event->param.conn.private_data || 
 		    (event->param.conn.private_data_len < sizeof(*data->rem_dest))) {
 			fprintf(stderr, "%d:%s: bad private data ptr %p len %d\n",  
@@ -356,10 +380,19 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 		sin.sin_addr.s_addr = 0;
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(data->port);
+
+		fprintf(stdout," Before bind_addr");
+		getchar();
+		putchar('\n');
+
 		if (rdma_bind_addr(data->cm_id, (struct sockaddr *)&sin)) {
 			fprintf(stderr, "%d:%s: rdma_bind_addr failed\n", pid, __func__);
 			goto err3;
 		}
+
+		fprintf(stdout," Before listen");
+		getchar();
+		putchar('\n');
 	
 		if (rdma_listen(data->cm_id, 0)) {
 			fprintf(stderr, "%d:%s: rdma_listen failed\n", pid, __func__);
@@ -388,6 +421,10 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 
 		memcpy(data->rem_dest, event->param.conn.private_data, sizeof(*data->rem_dest));
 
+		fprintf(stdout," Before creating QP");
+		getchar();
+		putchar('\n');
+
 		child_cm_id = (struct rdma_cm_id *)event->id;
 		ctx = pp_init_ctx(child_cm_id, data);
 		if (!ctx) {
@@ -404,6 +441,12 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 		conn_param.initiator_depth = 1;
 		conn_param.private_data = &data->my_dest;
 		conn_param.private_data_len = sizeof(data->my_dest);
+
+
+		fprintf(stdout," Before accept");
+		getchar();
+		putchar('\n');
+
 		if (rdma_accept(child_cm_id, &conn_param)) {
 			fprintf(stderr, "%d:%s: rdma_accept failed\n", pid, __func__);
 			goto err1;
@@ -554,7 +597,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 		}
 		
 	} else {
-		ib_dev = (struct ibv_device *)ptr;
+		ib_dev = (struct ibv_device*)ptr;
 		ctx->context = ibv_open_device(ib_dev);
 		if (!ctx->context) {
 			fprintf(stderr, "%d:%s: Couldn't get context for %s\n", 
@@ -583,8 +626,8 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 	ctx->ch = ibv_create_comp_channel(ctx->context);
 	if (!ctx->ch) {
 		fprintf(stderr, "%d:%s: Couldn't create comp channel\n", pid,
-								 __func__);
-		return NULL;
+	 							 __func__);
+	 	return NULL;
 	}
 
 	ctx->rcq = ibv_create_cq(ctx->context, 1, NULL, NULL, 0);
@@ -595,15 +638,17 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 	}
 
 	ctx->scq = ibv_create_cq(ctx->context, ctx->tx_depth, ctx, ctx->ch, 0);
+	// ctx->scq = ibv_create_cq(ctx->context, ctx->tx_depth, NULL, NULL, 0);
+
 	if (!ctx->scq) {
 		fprintf(stderr, "%d:%s: Couldn't create send CQ\n", pid,
-								 __func__);
-		return NULL;
+		 						 __func__);
+		 return NULL;
 	}
 
 
 	struct ibv_qp_init_attr attr = {
-		.send_cq = ctx->scq,
+		.send_cq = ctx->rcq,
 		.recv_cq = ctx->rcq,
 		.cap     = {
 			.max_send_wr  = ctx->tx_depth,

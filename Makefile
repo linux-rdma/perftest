@@ -7,18 +7,16 @@ all: ${RDMACM_TESTS} ${MCAST_TESTS} ${TESTS} ${UTILS}
 
 CFLAGS += -Wall -g -D_GNU_SOURCE -O2
 BASIC_FILES = get_clock.c
-EXTRA_FILES = perftest_resources.c
+EXTRA_FILES = perftest_resources.c perftest_communication.c
 MCAST_FILES = multicast_resources.c
 BASIC_HEADERS = get_clock.h
-EXTRA_HEADERS = perftest_resources.h
+EXTRA_HEADERS = perftest_resources.h perftest_communication.h
 MCAST_HEADERS = multicast_resources.h
 #The following seems to help GNU make on some platforms
-LOADLIBES += 
+LOADLIBES += -libverbs -lrdmacm
 LDFLAGS +=
 
-${RDMACM_TESTS}: LOADLIBES += -libverbs -lrdmacm
-${MCAST_TESTS}: LOADLIBES += -libverbs -libumad -lm
-${TESTS} ${UTILS}: LOADLIBES += -libverbs
+${MCAST_TESTS}: LOADLIBES += -libumad -lm
 
 ${RDMACM_TESTS}: %: %.c ${BASIC_FILES} ${BASIC_HEADERS}
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< ${BASIC_FILES} $(LOADLIBES) $(LDLIBS) -o $@

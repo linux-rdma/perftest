@@ -107,6 +107,8 @@
 
 #define OFF					(0)
 #define ON 					(1)
+#define SUCCESS				(0)
+#define FAILURE				(1)
 #define CYCLE_BUFFER        (4096)
 #define CACHE_LINE_SIZE     (64)
 #define MAX_SIZE			(8388608)
@@ -127,28 +129,6 @@
 #define PINGPONG_READ_WRID	1
 #define DEF_QKEY            0x11111111
 
-#define KEY_MSG_SIZE 	    50     // Message size without gid.
-#define KEY_MSG_SIZE_GID    98 // Message size with gid (MGID as well).
-
-// The Format of the message we pass through sockets , without passing Gid.
-#define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx"
-
-// The Format of the message we pass through sockets (With Gid).
-#define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
-
-// The Basic print format for all verbs.
-#define BASIC_ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x"
-
-// Addition format string for READ - the outstanding reads.
-#define READ_FMT       " OUT %#04x"
-
-// The print format of the pingpong_dest element for RDMA verbs.
-#define RDMA_FMT       " RKey %#08x VAddr %#016Lx"
-
-// The print format of a global address or a multicast address.
-#define GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
-
-// End of Test
 #define RESULT_LINE "------------------------------------------------------------------\n"
 
 // The format of the results
@@ -218,7 +198,7 @@ typedef enum { SERVER , CLIENT } MachineType;
 typedef enum { LOCAL , REMOTE } PrintDataSide;
 
 // The type of the device (Hermon B0/A0 or no)
-typedef enum { FAILURE = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
+typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
 
 /******************************************************************************
  * Perftest resources Structures and data types.
@@ -246,6 +226,7 @@ struct perftest_parameters {
 	int 			inline_size;
 	int				out_reads;
 	int				use_mcg;
+	int 			use_rdma_cm;
 	char			*user_mgid;
 	int				rx_depth;
 	int				duplex;
@@ -260,16 +241,6 @@ struct perftest_parameters {
 	int				sockfd;
 	float			version;
 	struct report_options *r_flag;
-};
-
-struct pingpong_dest {
-	int lid;
-	int out_reads;
-	int qpn;
-	int psn;  
-	unsigned rkey;
-	unsigned long long vaddr;
-	union ibv_gid gid;
 };
 
 struct report_options {
@@ -468,75 +439,6 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
  */
 int ctx_set_out_reads(struct ibv_context *context,int num_user_reads);
 
-/* ctx_client_connect .
- *
- * Description :
- *
- *  Connect the client the a well known server to a requested port.
- *  It assumes the Server is waiting for request on the port.
- *
- * Parameters : 
- *
- *  servername - The server name (according to DNS) or IP.
- *  port       - The port that the server is listening to.
- *
- * Return Value : The file descriptor selected in the PDT for the socket.
- */
-int ctx_client_connect(const char *servername, int port);
-
-/* ctx_server_connect .
- *
- * Description :
- *
- *  Instructs a machine to listen on a requested port.
- *  when running this command the machine will wait for 1 client to
- *  contant it , on the selected port , with the ctx_client_connect method.
- *
- * Parameters : 
- *
- *  port - The port which the machine will listen.
- *
- * Return Value : The new file descriptor selected in the PDT for the socket.
- */
-int ctx_server_connect(int port);
-
-/* ctx_hand_shake .
- *
- * Description :
- *
- *  Exchanging the data , represented in struct pingpong_dest , between 
- *  a server and client that performed the ctx_server/clinet_connect.
- *  The method fills in rem_dest the remote machine data , and passed the data
- *  in my_dest to other machine.  
- *
- * Parameters : 
- *
- *  params   - The parameters needed for this method. Are mentioned above ,and
- *             contains standard IB info. (exists on perftest).
- *  my_dest  - Contains the data you want to pass to the other side.
- *  rem_dest - The other side data.
- *
- * Return Value : 0 upon success. -1 if it fails.
- */
-int ctx_hand_shake(struct perftest_parameters *params,
-				   struct pingpong_dest *my_dest,
-				   struct pingpong_dest *rem_dest);
-
-
-/* ctx_print_pingpong_data.
- *
- * Description :
- *
- *  Prints the data stored in the struct pingpong_dest.
- *
- * Parameters : 
- *
- *  params  - The parameters of the machine.
- *  element - The element to print.           
- */
-void ctx_print_pingpong_data(struct pingpong_dest *element, 
-							 struct perftest_parameters *params);
-
 /* 
  * Description :
  *
@@ -565,24 +467,5 @@ inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t 
  */
 inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
 							  uint64_t prim_addr,int server_is_ud);
-
-/* ctx_close_connection .
- *
- * Description :
- *
- *  Close the connection between the 2 machines.
- *  It performs an handshake to ensure the 2 sides are there.
- *
- * Parameters : 
- *
- *  params            - The parameters of the machine
- *  my_dest ,rem_dest - The 2 sides that ends the connection.
- *
- * Return Value : 0 upon success. -1 if it fails.
- */
-int ctx_close_connection(struct perftest_parameters  *params,
-				         struct pingpong_dest *my_dest,
-				         struct pingpong_dest *rem_dest);
-
 
 #endif /* PERFTEST_RESOURCES_H */

@@ -50,6 +50,7 @@
 
 #include "get_clock.h"
 #include "perftest_resources.h"
+#include "perftest_communication.h"
 
 #define PINGPONG_RDMA_WRID	3
 #define VERSION 1.3
@@ -74,12 +75,13 @@ struct pingpong_context {
     int                 *ccnt ;
 };
 
-/*
- * 
- */
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int set_up_connection(struct pingpong_context *ctx,
 							 struct perftest_parameters *user_parm,
-							 struct pingpong_dest *my_dest) {
+							 struct pingpong_dest *my_dest,
+							 struct perftest_comm *comm) {
 
 	int i;
 	int use_i = user_parm->gid_index;
@@ -106,36 +108,19 @@ static int set_up_connection(struct pingpong_context *ctx,
 				return -1;
 			}
 		}
+
+		ctx_print_pingpong_data(&my_dest[i],comm,0,
+								(int)user_parm->verb,
+								(int)user_parm->machine,
+								(int)user_parm->duplex,
+								(int)user_parm->use_mcg);
 	}
 	return 0;
 }
 
-/*
- * 
- */
-static int init_connection(struct perftest_parameters *params,
- 						   struct pingpong_dest *my_dest) {
-
-	int i;
-
-	params->side      = LOCAL;
-
-	for (i=0; i < params->num_of_qps; i++) {
-		ctx_print_pingpong_data(&my_dest[i],params);
-	}
-
-	if (params->servername) 
-		params->sockfd = ctx_client_connect(params->servername,params->port);
-	else 
-		params->sockfd = ctx_server_connect(params->port);
-
-	if(params->sockfd < 0) {
-		fprintf(stderr,"Unable to open file descriptor for socket connection");
-		return 1;
-	}
-	return 0;
-}
-
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 											struct perftest_parameters *user_parm) 
 {
@@ -224,6 +209,9 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	return ctx;
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 						  struct pingpong_dest *dest, 
 						  struct perftest_parameters *user_parm, int qpindex)
@@ -305,6 +293,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	return 0;
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static void print_report(struct perftest_parameters *user_param) {
 
 	double cycles_to_units;
@@ -336,6 +327,10 @@ static void print_report(struct perftest_parameters *user_param) {
 	       (unsigned long)user_param->size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
 	       tsize * user_param->iters * user_param->num_of_qps * cycles_to_units /(tcompleted[(user_param->iters* user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param,
 			 struct pingpong_dest *rem_dest)
@@ -440,15 +435,20 @@ int run_iter(struct pingpong_context *ctx,
 	return(0);
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 int main(int argc, char *argv[]) {
 
 	struct ibv_device	       *ib_dev;
 	struct pingpong_context    *ctx;
 	struct pingpong_dest       *my_dest,*rem_dest;
 	struct perftest_parameters user_param;
+	struct perftest_comm		user_comm;
 	int                        i = 0;
 
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
+	memset(&user_comm,0,sizeof(struct perftest_comm));
 
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
@@ -461,6 +461,15 @@ int main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
+	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
+	if (create_comm_struct(&user_comm,
+					 user_param.port,
+					 user_param.gid_index,
+					 user_param.use_rdma_cm,
+					 user_param.servername)) { 
+		fprintf(stderr," Unable to create RDMA_CM resources\n");
+		return 1;
+	}
 
 	if (user_param.all == ON) 	
 		user_param.size = MAX_SIZE;
@@ -482,25 +491,29 @@ int main(int argc, char *argv[]) {
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	// Set up the Connection.
-	if (set_up_connection(ctx,&user_param,my_dest)) {
+	if (set_up_connection(ctx,&user_param,my_dest,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&user_param,my_dest)) {
+	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
 
-	// Shaking hands and gather the other side info.
-	user_param.side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
-		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
+
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1;   
 		}
-		ctx_print_pingpong_data(&rem_dest[i],&user_param);
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm,1,
+								(int)user_param.verb,
+								(int)user_param.machine,
+								(int)user_param.duplex,
+								(int)user_param.use_mcg);
 
 		if (pp_connect_ctx(ctx,my_dest[i].psn,&rem_dest[i],&user_param,i)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
@@ -508,7 +521,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		// An additional handshake is required after moving qp to RTR.
-		if (ctx_hand_shake(&user_param,&my_dest[i],&rem_dest[i])) {
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1; 
 		}
@@ -519,7 +532,7 @@ int main(int argc, char *argv[]) {
 
 	// For half duplex tests, server just waits for client to exit 
 	if (user_param.machine == SERVER && !user_param.duplex) {
-		if (ctx_close_connection(&user_param,&my_dest[0],&rem_dest[0])) {
+		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
@@ -545,7 +558,7 @@ int main(int argc, char *argv[]) {
 	
 
 	// Closing connection.
-	if (ctx_close_connection(&user_param,&my_dest[0],&rem_dest[0])) {
+	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}

@@ -49,6 +49,7 @@
 
 #include "get_clock.h"
 #include "perftest_resources.h"
+#include "perftest_communication.h"
 
 #define VERSION 2.1
 
@@ -75,7 +76,8 @@ struct pingpong_context {
  ******************************************************************************/
 static int set_up_connection(struct pingpong_context *ctx,
 							 struct perftest_parameters *user_parm,
-							 struct pingpong_dest *my_dest) {
+							 struct pingpong_dest *my_dest,
+							 struct perftest_comm *comm) {
 
 	if (user_parm->gid_index != -1) {
 		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
@@ -97,28 +99,13 @@ static int set_up_connection(struct pingpong_context *ctx,
 			return -1;
 		}
 	}
-	return 0;
-}
 
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int init_connection(struct perftest_parameters *params,
- 						   struct pingpong_dest *my_dest) {
+	ctx_print_pingpong_data(my_dest,comm,0,
+							(int)user_parm->verb,
+							(int)user_parm->machine,
+							(int)user_parm->duplex,
+							(int)user_parm->use_mcg);
 
-	params->side = LOCAL;
-
-	ctx_print_pingpong_data(my_dest,params);
-	
-	if (params->machine == CLIENT) 
-		params->sockfd = ctx_client_connect(params->servername,params->port);
-	else 
-		params->sockfd = ctx_server_connect(params->port);
-
-	if(params->sockfd < 0) {
-		fprintf(stderr,"Unable to open file descriptor for socket connection");
-		return 1;
-	}
 	return 0;
 }
 
@@ -448,10 +435,12 @@ int main(int argc, char *argv[]) {
 	struct pingpong_context    *ctx;
 	struct pingpong_dest       my_dest,rem_dest;
 	struct perftest_parameters user_param;
+	struct perftest_comm	   user_comm;
 	
 
 	/* init default values to user's parameters */
 	memset(&user_param , 0 , sizeof(struct perftest_parameters));
+	memset(&user_comm,0,sizeof(struct perftest_comm));
 	memset(&my_dest , 0 ,  sizeof(struct pingpong_dest));
 	memset(&rem_dest , 0 ,  sizeof(struct pingpong_dest));
 
@@ -466,6 +455,15 @@ int main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
+	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
+	if (create_comm_struct(&user_comm,
+					 user_param.port,
+					 user_param.gid_index,
+					 user_param.use_rdma_cm,
+					 user_param.servername)) { 
+		fprintf(stderr," Unable to create RDMA_CM resources\n");
+		return 1;
+	}
 
 	// Done with parameter parsing. Perform setup. 
 	if (user_param.all == ON)
@@ -484,25 +482,29 @@ int main(int argc, char *argv[]) {
 		return 1;
 
 	// Set up the Connection.
-	if (set_up_connection(ctx,&user_param,&my_dest)) {
+	if (set_up_connection(ctx,&user_param,&my_dest,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}	
 
 	// Init the connection and print the local data.
-	if (init_connection(&user_param,&my_dest)) {
+	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
 	}
 
 	// shaking hands and gather the other side info.
-    if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
+    if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
         
     }
-	user_param.side = REMOTE;
-	ctx_print_pingpong_data(&rem_dest,&user_param);
+
+	ctx_print_pingpong_data(&rem_dest,&user_comm,1,
+							(int)user_param.verb,
+							(int)user_param.machine,
+							(int)user_param.duplex,
+							(int)user_param.use_mcg);
 
 	if (pp_connect_ctx(ctx,my_dest.psn,my_dest.out_reads,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
@@ -510,7 +512,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	// An additional handshake is required after moving qp to RTR.
-	if (ctx_hand_shake(&user_param,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
         
@@ -518,7 +520,7 @@ int main(int argc, char *argv[]) {
      
 	// For half duplex tests, server just waits for client to exit 
 	if (user_param.machine == SERVER && !user_param.duplex) {
-		if (ctx_close_connection(&user_param,&my_dest,&rem_dest)) {
+		if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
@@ -559,7 +561,7 @@ int main(int argc, char *argv[]) {
 		print_report(&user_param);
 	}
 
-	if (ctx_close_connection(&user_param,&my_dest,&rem_dest)) {
+	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
