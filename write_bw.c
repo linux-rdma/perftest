@@ -52,7 +52,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 2.4
 
 static int page_size;
 cycles_t	*tposted;

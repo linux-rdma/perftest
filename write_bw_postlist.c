@@ -53,7 +53,7 @@
 #include "perftest_communication.h"
 
 #define PINGPONG_RDMA_WRID	3
-#define VERSION 1.3
+#define VERSION 2.2
 #define ALL 1
 
 static int page_size;
