@@ -100,12 +100,6 @@ static int set_up_connection(struct pingpong_context *ctx,
 		}
 	}
 
-	ctx_print_pingpong_data(my_dest,comm,0,
-							(int)user_parm->verb,
-							(int)user_parm->machine,
-							(int)user_parm->duplex,
-							(int)user_parm->use_mcg);
-
 	return 0;
 }
 
@@ -467,13 +461,13 @@ int main(int argc, char *argv[]) {
 	ctx = pp_init_ctx(ib_dev,&user_param);
 	if (!ctx)
 		return 8;
-
+	
 	// Set up the Connection.
 	if (set_up_connection(ctx,&user_param,&my_dest,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}  
-
+	
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
 	if (create_comm_struct(&user_comm,
 					 user_param.port,
@@ -483,6 +477,9 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
+
+	// Print this machine QP information
+	ctx_print_pingpong_data(&my_dest,&user_comm,0,WRITE,(int)user_param.machine,0,0);
 
 	// Init the connection and print the local data.
 	if (establish_connection(&user_comm)) {
@@ -497,11 +494,8 @@ int main(int argc, char *argv[]) {
         
     }
 
-	ctx_print_pingpong_data(&rem_dest,&user_comm,1,
-							(int)user_param.verb,
-							(int)user_param.machine,
-							(int)user_param.duplex,
-							(int)user_param.use_mcg);
+	// Print remote machine QP information
+	ctx_print_pingpong_data(&rem_dest,&user_comm,1,WRITE,(int)user_param.machine,0,0);
 
 	if (pp_connect_ctx(ctx,my_dest.psn,&rem_dest,&user_param)) {
 		fprintf(stderr," Unable to Connect the HCA's through the link\n");
