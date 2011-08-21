@@ -951,16 +951,6 @@ int main(int argc, char *argv[])
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
-	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,
-					 user_param.port,
-					 user_param.gid_index,
-					 user_param.use_rdma_cm,
-					 user_param.servername)) { 
-		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return 1;
-	}
-
 	// Done with parameter parsing. Perform setup.
 	if (user_param.all == ON) {
 		// since we run all sizes 
@@ -985,6 +975,16 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}	
+
+	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
+	if (create_comm_struct(&user_comm,
+					 user_param.port,
+					 user_param.gid_index,
+					 user_param.use_rdma_cm,
+					 user_param.servername)) { 
+		fprintf(stderr," Unable to create RDMA_CM resources\n");
+		return 1;
+	}
 
 	// Init the connection and print the local data.
 	if (establish_connection(&user_comm)) {

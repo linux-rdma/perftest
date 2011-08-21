@@ -364,7 +364,7 @@ static int rdma_cm_client_connect(struct perftest_comm *comm) {
 	while (1) {
 
 		if (num_of_retry == 0) {
-			fprintf(stderr, "Received %d times ADDR_ERROR - aborting\n",num_of_retry);
+			fprintf(stderr, "Received 10 times ADDR_ERROR - aborting\n");
 			return FAILURE;
 		}
 
