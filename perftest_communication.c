@@ -771,7 +771,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 
 	if (comm->gid_index > -1 || (use_mcg && is_there_mgid)) {
 
-		printf(GID_FMT,gidArray[use_mcg && is_there_mgid],
+		printf(PERF_GID_FMT,gidArray[use_mcg && is_there_mgid],
 				element->gid.raw[0], element->gid.raw[1],
 				element->gid.raw[2], element->gid.raw[3], 
 			    element->gid.raw[4], element->gid.raw[5], 
