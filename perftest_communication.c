@@ -10,7 +10,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <math.h>
 #include <byteswap.h>
 #include "perftest_communication.h"
 

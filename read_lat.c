@@ -44,15 +44,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <malloc.h>
-#include <getopt.h>
-#include <time.h>
-#include <infiniband/verbs.h>
 
 #include "get_clock.h"
 #include "perftest_resources.h"
+#include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.2
+#define VERSION 2.3
 
 static int page_size;
 
@@ -87,7 +85,7 @@ static int set_up_connection(struct pingpong_context *ctx,
 		}
 	}
 	my_dest->lid       = ctx_get_local_lid(ctx->context,user_parm->ib_port);
-	my_dest->out_reads = ctx_set_out_reads(ctx->context,user_parm->out_reads);
+	my_dest->out_reads = user_parm->out_reads;
 	my_dest->qpn       = ctx->qp->qp_num;
 	my_dest->psn       = lrand48() & 0xffffff;
 	my_dest->rkey      = ctx->mr->rkey;
@@ -175,17 +173,19 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+	user_parm->link_type = ctx_set_link_layer(ctx->context,user_parm->ib_port);
 	// Finds the link type and configure the HCA accordingly.
-	if (ctx_set_link_layer(ctx->context,user_parm)) {
+	if (user_parm->link_type == LINK_FAILURE) {
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return NULL;
 	}
 
-	// Configure the Link MTU acoording to the user or the active mtu.
-	if (ctx_set_mtu(ctx->context,user_parm)) {
-		fprintf(stderr, "Couldn't set the link layer\n");
-		return NULL;
+	if (user_parm->link_type == IBV_LINK_LAYER_ETHERNET &&  user_parm->gid_index == -1) {
+			user_parm->gid_index = 0;
 	}
+
+	user_parm->curr_mtu = ctx_set_mtu(ctx->context,user_parm->ib_port,user_parm->mtu);
+	user_parm->out_reads = ctx_set_out_reads(ctx->context,user_parm->out_reads);
 
 	if (user_parm->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
@@ -212,19 +212,28 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 	}
 
 	// Creates the CQ according to ctx_cq_create in perfetst_resources.
-	ctx->cq = ctx_cq_create(ctx->context,ctx->channel,user_parm);
+	ctx->cq = ibv_create_cq(ctx->context,user_parm->cq_size,NULL,ctx->channel,0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return NULL;
 	}
 
-	ctx->qp = ctx_qp_create(ctx->pd,ctx->cq,ctx->cq,user_parm);
+	ctx->qp = ctx_qp_create(ctx->pd,
+							ctx->cq,
+							ctx->cq,
+							user_parm->tx_depth,
+							user_parm->rx_depth,
+							user_parm->inline_size,
+							user_parm->connection_type);
 	if (!ctx->qp)  {
 		fprintf(stderr, "Couldn't create QP\n");
 		return NULL;
 	}
 
-	if (ctx_modify_qp_to_init(ctx->qp,user_parm)) {
+	if (ctx_modify_qp_to_init(ctx->qp,
+							  user_parm->ib_port,
+							  user_parm->connection_type,
+							  (int)user_parm->verb)) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return NULL;
 	}
@@ -465,9 +474,6 @@ int main(int argc, char *argv[]) {
 
 	if (parser(&user_param,argv,argc)) 
 		return 1;
-
-	// Print basic test information.
-	ctx_print_test_info(&user_param);
 	
 	if (user_param.all == ON) 
 		user_param.size = MAX_SIZE; 
@@ -498,6 +504,9 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
+
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 	// Print this machine QP information
 	ctx_print_pingpong_data(&my_dest,&user_comm,0,READ,(int)user_param.machine,0,0);

@@ -57,102 +57,25 @@
 #include <stdint.h>
 #include <math.h>
 
-// Connection types availible.
-#define RC  0
-#define UC  1 
-#define UD  2
-// #define XRC 3 (TBD)
-
-
-// Default Values of perftest parameters
-#define DEF_PORT      (18515)
-#define DEF_IB_PORT   (1)
-#define DEF_SIZE_BW   (65536)
-#define DEF_SIZE_LAT  (2)
-#define DEF_ITERS     (1000)
-#define DEF_ITERS_WB  (5000)
-#define DEF_TX_BW	  (300)
-#define DEF_TX_LAT	  (50)
-#define DEF_QP_TIME   (14)
-#define DEF_SL		  (0)
-#define DEF_GID_INDEX (-1)
-#define DEF_NUM_QPS   (1)
-#define DEF_INLINE_BW (0)
-#define DEF_INLINE_LT (400)
-#define DEF_RX_RDMA   (1)
-#define DEF_RX_SEND   (600)
-#define DEF_CQ_MOD	  (50)
-
-// Max and Min allowed values for perftest parameters.
-#define MIN_IB_PORT   (1)
-#define MAX_IB_PORT   (2) 
-#define MIN_ITER      (5)
-#define MAX_ITER	  (100000000)
-#define MIN_TX 		  (50)
-#define MAX_TX		  (15000)
-#define MIN_SL		  (0)
-#define MAX_SL		  (15)
-#define MIN_GID_IX    (0)
-#define MAX_GID_IX    (64)
-#define MIN_QP_NUM    (1)
-#define MAX_QP_NUM	  (8)
-#define MIN_INLINE 	  (0)
-#define MAX_INLINE 	  (400)
-#define MIN_QP_MCAST  (1)
-#define MAX_QP_MCAST  (56)
-#define MIN_RX		  (1)
-#define MAX_RX		  (15000)
-#define MIN_CQ_MOD	  (1)
-#define MAX_CQ_MOD	  (1000)
-
-#define OFF					(0)
-#define ON 					(1)
-#define SUCCESS				(0)
-#define FAILURE				(1)
 #define CYCLE_BUFFER        (4096)
 #define CACHE_LINE_SIZE     (64)
 #define MAX_SIZE			(8388608)
+#define LINK_FAILURE		(4)
 
 // Outstanding reads for "read" verb only.
-#define MAX_OUT_READ_HERMON 16
-#define MAX_OUT_READ        4
-#define MAX_SEND_SGE        1
-#define MAX_RECV_SGE        1
-#define DEF_WC_SIZE         1
-#define MTU_FIX				7
-#define PL					1
+#define MAX_OUT_READ_HERMON (16)
+#define MAX_OUT_READ        (4)
+#define MAX_SEND_SGE        (1)
+#define MAX_RECV_SGE        (1)
+#define DEF_WC_SIZE         (1)
+#define PL					(1)
 
 // Space for GRH when we scatter the packet in UD.
-#define UD_ADDITION         40
-#define PINGPONG_SEND_WRID  60
-#define PINGPONG_RDMA_WRID	3
-#define PINGPONG_READ_WRID	1
-#define DEF_QKEY            0x11111111
-
-#define RESULT_LINE "------------------------------------------------------------------\n"
-
-// The format of the results
-#define RESULT_FMT     " #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]\n"
-
-#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
-
-// Result print format
-#define REPORT_FMT     " %-7lu   %d           %-7.2f            %-7.2f\n"
-
-// Result print format for latency tests.
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
-
-// Macro for allocating.
-#define ALLOCATE(var,type,size)                                  \
-    { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)     \
-        { fprintf(stderr," Cannot Allocate\n"); exit(1);}}
-
-#define CHECK_VALUE(arg,minv,maxv,name) 						                        \
-	{ arg = strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                  \
-	{ fprintf(stderr," %s should be between %d and %d\n",name,minv,maxv); return 1; }}
-
-#define GET_STRING(orig,temp) 									\
-	{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
+#define UD_ADDITION         (40)
+#define PINGPONG_SEND_WRID  (60)
+#define PINGPONG_RDMA_WRID	(3)
+#define PINGPONG_READ_WRID	(1)
+#define DEFF_QKEY            (0x11111111)
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
@@ -181,21 +104,7 @@
 #define INC(size) ((size > CACHE_LINE_SIZE) ? ((size%CACHE_LINE_SIZE == 0) ?  \
 	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
 
-#define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
-
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
-
-// The Verb of the benchmark.
-typedef enum { SEND , WRITE, READ } VerbType;
-
-// The type of the machine ( server or client actually).
-typedef enum { LAT , BW } TestType;
-
-// The type of the machine ( server or client actually).
-typedef enum { SERVER , CLIENT } MachineType;
-
-// The type of the machine ( server or client actually).
-typedef enum { LOCAL , REMOTE } PrintDataSide;
 
 // The type of the device (Hermon B0/A0 or no)
 typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
@@ -204,69 +113,10 @@ typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
  * Perftest resources Structures and data types.
  ******************************************************************************/
 
-struct perftest_parameters {
-
-	int				port;
-	char			*ib_devname;
-	char			*servername;
-	int				ib_port;
-	int				mtu;
-	enum ibv_mtu	curr_mtu;
-	uint64_t		size;
-	int				iters;
-	int				tx_depth;
-	int				qp_timeout;
-	int				sl;
-	int				gid_index;
-	int				all;
-	int				cpu_freq_f;
-	int				connection_type;
-	int				num_of_qps;
-	int				use_event;
-	int 			inline_size;
-	int				out_reads;
-	int				use_mcg;
-	int 			use_rdma_cm;
-	char			*user_mgid;
-	int				rx_depth;
-	int				duplex;
-	int				noPeak;
-	int				cq_mod;
-	int 			spec;
-	uint8_t 		link_type;
-    MachineType 	machine;
-    PrintDataSide	side;
-	VerbType		verb;
-	TestType		tst;
-	int				sockfd;
-	float			version;
-	struct report_options *r_flag;
-};
-
-struct report_options {
-	int unsorted;
-	int histogram;
-	int cycles;
-};
 
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
-
-/* parser
- *
- * Description : Setting default test parameters and parsing the user choises
- *
- * Parameters :
- *
- *	 user_param  - the parameters element.
- *	 argv & argc - from the user prompt. 
- *
- * Value : 0 upon success. -1 if it fails.
- */
-int parser(struct perftest_parameters *user_param,char *argv[], int argc);
-
-void ctx_print_test_info(struct perftest_parameters *user_param);
 
 /* is_dev_hermon
  *
@@ -279,18 +129,6 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  * Value : HERMON if it is , NOT_HERMON if not and FAILURE in case of error.
  */
 Device is_dev_hermon(struct ibv_context *context);
-
-/* link_layer_str
- *
- * Description : Returns a string of the Link name.
- *
- * Parameters : 
- *
- *	link_layer - the link layer id.
- *
- * Return Value : "IB" , "Ethernet" or "Unknown".
- */
-const char *link_layer_str(uint8_t link_layer);
 
 /* ctx_find_dev
  *
@@ -320,7 +158,7 @@ struct ibv_device* ctx_find_dev(const char *ib_devname);
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params);
+enum ibv_mtu ctx_set_mtu(struct ibv_context *context,int ib_port,int user_mtu);
 
 /* ctx_set_link_layer.
  *
@@ -333,40 +171,7 @@ int ctx_set_mtu(struct ibv_context *context,struct perftest_parameters *params);
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
-
-/* ctx_set_link_layer.
- *
- * Description : Determines the link layer type (IB or ETH).
- *
- * Parameters : 
- *
- *  context - The context of the HCA device.
- *  params  - The perftest parameters of the device.
- *
- * Return Value : 0 upon success. -1 if it fails.
- */
-int ctx_set_link_layer(struct ibv_context *context,struct perftest_parameters *params);
-
-/* ctx_cq_create.
- *
- * Description : 
- *
- *	Creates a QP , according to the attributes given in param.
- *	The relevent attributes are tx_depth,rx_depth,inline_size and connection_type.
- *
- * Parameters :
- *
- *	pd      - The Protection domain , each the qp will be assigned to.
- *	send_cq - The CQ that will produce send CQE.
- *	recv_qp - The CQ that will produce recv CQE.
- *	param   - The parameters for the QP.
- *
- * Return Value : Adress of the new QP.
- */
-struct ibv_cq* ctx_cq_create(struct ibv_context *context, 
-							 struct ibv_comp_channel *channel,
-							 struct perftest_parameters *param);
+uint8_t ctx_set_link_layer(struct ibv_context *context,int ib_port);
 
 /* ctx_qp_create.
  *
@@ -387,7 +192,10 @@ struct ibv_cq* ctx_cq_create(struct ibv_context *context,
 struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
 							 struct ibv_cq *send_cq,
 							 struct ibv_cq *recv_cq,
-							 struct perftest_parameters *param);
+							 int tx_depth,
+							 int rx_depth,
+							 int inline_size,
+							 int connection_type);
 
 /* ctx_modify_qp_to_init.
  *
@@ -404,7 +212,7 @@ struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
  * Return Value : 0 if success , 1 otherwise.
  *
  */
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *param);
+int ctx_modify_qp_to_init(struct ibv_qp *qp,int ib_port,int conn,int verb);
 
 /* ctx_get_local_lid .
  *

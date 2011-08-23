@@ -1,7 +1,7 @@
 Name:           perftest
 Summary:        IB Performance tests
 Version:        1.3.0
-Release:        3.1
+Release:        3.2
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
 Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz

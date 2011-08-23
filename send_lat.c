@@ -44,16 +44,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <malloc.h>
-#include <getopt.h>
-#include <time.h>
-#include <infiniband/verbs.h>
 
 #include "get_clock.h"
+#include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.2
+#define VERSION 2.3
 
 static int page_size;
 cycles_t  *tstamp;
@@ -99,6 +97,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_parm->ib_port;
+	mcg_params->user_mgid = user_parm->user_mgid;
 	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_parm->machine);
 
 	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
@@ -280,24 +279,26 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 		return NULL;
 	}
 
+	user_parm->link_type = ctx_set_link_layer(ctx->context,user_parm->ib_port);
 	// Finds the link type and configure the HCA accordingly.
-	if (ctx_set_link_layer(ctx->context,user_parm)) {
+	if (user_parm->link_type == LINK_FAILURE) {
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return NULL;
 	}
 
-	// Configure the Link MTU acoording to the user or the active mtu.
-	if (ctx_set_mtu(ctx->context,user_parm)) {
-		fprintf(stderr, "Couldn't set the Mtu\n");
-		return NULL;
+	if (user_parm->link_type == IBV_LINK_LAYER_ETHERNET &&  user_parm->gid_index == -1) {
+			user_parm->gid_index = 0;
 	}
+
+	user_parm->curr_mtu = ctx_set_mtu(ctx->context,user_parm->ib_port,user_parm->mtu);
+
+	if (is_dev_hermon(ctx->context) != HERMON && user_parm->inline_size != 0)
+		user_parm->inline_size = 0;
 
 	if (user_parm->connection_type == UD && user_parm->size > MTU_SIZE(user_parm->curr_mtu)) {	 
 		printf(" Max msg size in UD is MTU - %d . changing to MTU\n",MTU_SIZE(user_parm->curr_mtu));
 		user_parm->size = MTU_SIZE(user_parm->curr_mtu);
 	}
-
-	printf(" Inline data is used up to %d bytes message\n", user_parm->inline_size);
 
 	ctx->size = user_parm->size;
 	buff_size = BUFF_SIZE(SIZE(user_parm->connection_type,ctx->size))*(1 + user_parm->num_of_qps);
@@ -347,12 +348,21 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev,
 
 	for (i = 0; i < user_parm->num_of_qps; i++) {
 		
-		ctx->qp[i] = ctx_qp_create(ctx->pd,ctx->scq,ctx->rcq,user_parm);
+		ctx->qp[i] = ctx_qp_create(ctx->pd,
+								   ctx->scq,
+								   ctx->rcq,
+								   user_parm->tx_depth,
+								   user_parm->rx_depth,
+								   user_parm->inline_size,
+								   user_parm->connection_type);
 		if (ctx->qp[i] == NULL) {
 			return NULL;
 		}
 
-		if(ctx_modify_qp_to_init(ctx->qp[i],user_parm)) {
+		if(ctx_modify_qp_to_init(ctx->qp[i],
+								 user_parm->ib_port,
+								 user_parm->connection_type,
+								 (int)user_parm->verb)) {
 			return NULL;
 		}
 	}
@@ -746,9 +756,6 @@ int main(int argc, char *argv[])
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 
-	// Print basic test information.
-	ctx_print_test_info(&user_param);
-
 	if (user_param.all == ON) {
 		user_param.size = MAX_SIZE;
 	}
@@ -781,6 +788,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
+
+	// Print basic test information.
+	ctx_print_test_info(&user_param);
 
 	// Print this machine QP information
 	ctx_print_pingpong_data(&my_dest,&user_comm,0,
