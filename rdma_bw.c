@@ -61,6 +61,7 @@
 #define PINGPONG_RDMA_WRID	3
 
 static int sl = 0;
+static int tos = -1;
 static int page_size;
 static pid_t pid;
 
@@ -176,6 +177,14 @@ retry_addr:
 			goto err1;
 		}
 		rdma_ack_cm_event(event);
+
+        if (tos >= 0) {
+			uint8_t _tos = tos;
+			if (rdma_set_option(data->cm_id, RDMA_OPTION_ID,RDMA_OPTION_ID_TOS, &_tos, sizeof _tos)) {
+				fprintf(stderr, "%d:%s: set TOS option failed: %d\n",pid, __func__, event->event);
+				goto err1;
+			}
+		}
 	
 retry_route:
 		if (rdma_resolve_route(data->cm_id, 2000)) {
@@ -526,7 +535,7 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 {
 	struct pingpong_context *ctx;
 	struct ibv_device *ib_dev;
-	struct rdma_cm_id *cm_id;
+	struct rdma_cm_id *cm_id = NULL;
 
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
@@ -876,6 +885,7 @@ static void usage(const char *argv0)
 	printf("  -t, --tx-depth=<dep>   size of tx queue (default 100)\n");
 	printf("  -n, --iters=<iters>    number of exchanges (at least 2, default 1000)\n");
 	printf("  -S, --sl=<sl>          SL (default 0)\n");
+    printf("  -T, --tos=<tos>        Type Of Service (default 0)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
 	printf("  -c, --cma		 use RDMA CM\n");
 }
@@ -962,12 +972,13 @@ int main(int argc, char *argv[])
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
 			{ .name = "sl",             .has_arg = 1, .val = 'S' },
+            { .name = "tos",            .has_arg = 1, .val = 'T' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "cma", 	    .has_arg = 0, .val = 'c' },
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:n:t:S:bc", long_options, NULL);
+		c = getopt_long(argc, argv, "p:d:i:s:n:t:S:T:bc", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -1012,6 +1023,10 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 
+			break;
+
+        case 'T':
+			tos = strtol(optarg, NULL, 0);
 			break;
 
 		case 'S':
