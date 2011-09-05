@@ -1,41 +1,65 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
+#include <malloc.h>
+#include <getopt.h>
+#include <limits.h>
+#include <errno.h>
 #include "perftest_resources.h"
 
-/* Addin
+/****************************************************************************** 
+ * Begining
+ ******************************************************************************/
+int check_add_port(char **service,int port,
+				   const char *servername,
+				   struct addrinfo *hints,
+				   struct addrinfo **res) {
 
+	int number;
 
+	if (asprintf(service,"%d", port) < 0)
+		return FAILURE;
 
-*/
+	number = getaddrinfo(servername,*service,hints,res);
+
+	if (number < 0) {
+		fprintf(stderr, "%s for %s:%d\n", gai_strerror(number), servername, port);
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
 
 /****************************************************************************** 
  *
  ******************************************************************************/
+int create_rdma_resources(struct pingpong_context *ctx,
+						  struct perftest_parameters *user_param) { 
 
-static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-Device is_dev_hermon(struct ibv_context *context) { 
-
-	Device is_hermon = NOT_HERMON;
-	struct ibv_device_attr attr;
-
-	if (ibv_query_device(context,&attr)) {
-		is_hermon = ERROR;
+	ctx->cm_channel = rdma_create_event_channel();
+	if (ctx->cm_channel == NULL) {
+		fprintf(stderr, " rdma_create_event_channel failed\n");
+		return FAILURE;
 	}
-	// Checks the devide type for setting the max outstanding reads.
-	else if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
-			 attr.vendor_part_id == 25448  || attr.vendor_part_id == 26418  || 
-			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
-			 attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
-			 attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478  ||
-			 attr.vendor_part_id == 4099 ) {
-				is_hermon = HERMON;		
+
+	if (user_param->machine == CLIENT) {
+
+		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id,NULL,RDMA_PS_TCP)) {
+			fprintf(stderr,"rdma_create_id failed\n");
+			return FAILURE;
+		}
+
+	} else {
+
+		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id_control,NULL,RDMA_PS_TCP)) {
+			fprintf(stderr,"rdma_create_id failed\n");
+			return FAILURE;
+		}
+
 	}
-	return is_hermon;
+
+	return SUCCESS;
 }
 
 /****************************************************************************** 
@@ -72,109 +96,181 @@ struct ibv_device* ctx_find_dev(const char *ib_devname) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-enum ibv_mtu ctx_set_mtu(struct ibv_context *context,int ib_port,int user_mtu) {
+int destroy_ctx(struct pingpong_context *ctx,
+				struct perftest_parameters *user_parm)  {
 
-	struct ibv_port_attr port_attr;
-	enum ibv_mtu curr_mtu;
+	int i;
+	int test_result = 0;
 
-	ibv_query_port(context,ib_port,&port_attr);
-
-	// User did not ask for specific mtu.
-	if (user_mtu == 0) 
-		curr_mtu = port_attr.active_mtu;
-
-	else {
-
-		switch (user_mtu) {
-
-			case 256  :	curr_mtu = IBV_MTU_256;	 break;
-			case 512  : curr_mtu = IBV_MTU_512;	 break;
-			case 1024 :	curr_mtu = IBV_MTU_1024; break;
-			case 2048 :	curr_mtu = IBV_MTU_2048; break;
-			case 4096 :	curr_mtu = IBV_MTU_4096; break;
-			default   :	
-				fprintf(stderr," Invalid MTU - %d \n",user_mtu);
-				fprintf(stderr," Please choose mtu form {256,512,1024,2048,4096}\n");
-				fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
-				curr_mtu = port_attr.active_mtu;
+	for (i = 0; i < user_parm->num_of_qps; i++) {
+		if (ibv_destroy_qp(ctx->qp[i])) {
+			fprintf(stderr, "failed to destroy QP\n");
+			test_result = 1;
 		}
-		
-		if (curr_mtu > port_attr.active_mtu) {
-			fprintf(stdout,"Requested mtu is higher than active mtu \n");
-			fprintf(stdout,"Changing to active mtu - %d\n",port_attr.active_mtu);
-			curr_mtu = port_attr.active_mtu;
+	}
+
+	if (ibv_destroy_cq(ctx->cq)) {
+		fprintf(stderr, "failed to destroy CQ\n");
+		test_result = 1;
+	}
+
+	if (ibv_dereg_mr(ctx->mr)) {
+		fprintf(stderr, "failed to deregister MR\n");
+		test_result = 1;
+	}
+
+	if (ibv_dealloc_pd(ctx->pd)) {
+		fprintf(stderr, "failed to deallocate PD\n");
+		test_result = 1;
+	}
+
+	if (ctx->channel) {
+		if (ibv_destroy_comp_channel(ctx->channel)) {
+			test_result = 1;
 		}
-	} 
-	return curr_mtu;
+	}
+
+	if (user_parm->work_rdma_cm == OFF) {
+
+		if (ibv_close_device(ctx->context)) {
+			fprintf(stderr, "failed to close device context\n");
+			test_result = 1;
+		}
+
+	} else {
+
+		rdma_destroy_id(ctx->cm_id);
+		rdma_destroy_event_channel(ctx->cm_channel);
+	}
+
+	free(ctx->buf);
+	free(ctx->qp);
+	free(ctx->scnt);
+	free(ctx->ccnt);
+	return test_result;
 }
 
 /****************************************************************************** 
  *
  ******************************************************************************/
-uint8_t ctx_set_link_layer(struct ibv_context *context,int ib_port) {
+int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	struct ibv_port_attr port_attr;
-	uint8_t curr_link;
+	int i,flags;
+	uint64_t buff_size;
 
-	if (ibv_query_port(context,ib_port,&port_attr)) {
-		fprintf(stderr,"Unable to query port attributes\n");
-		return LINK_FAILURE;
-	}
+	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
+	ALLOCATE(ctx->scnt,int,user_param->num_of_qps);
+	ALLOCATE(ctx->ccnt,int,user_param->num_of_qps);
 
-	if (port_attr.state != IBV_PORT_ACTIVE) {
-		fprintf(stderr," Port number %d state is %s\n"
-					  ,ib_port
-					  ,portStates[port_attr.state]);
-		return LINK_FAILURE;
-	}
+	memset(ctx->scnt, 0, user_param->num_of_qps * sizeof (int));
+	memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (int));
 
-	curr_link = port_attr.link_layer; 
-
-	if (curr_link != IBV_LINK_LAYER_UNSPECIFIED &&
-		curr_link != IBV_LINK_LAYER_INFINIBAND  &&
-		curr_link != IBV_LINK_LAYER_ETHERNET) {
-			fprintf(stderr," Unable to determine link layer \n");
-			return LINK_FAILURE;
-	}
-
-	return curr_link;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
-							 struct ibv_cq *send_cq,
-							 struct ibv_cq *recv_cq,
-							 int tx_depth,
-							 int rx_depth,
-							 int inline_size,
-							 int connection_type) {
+	flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
+	// ctx->size = SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine);
+	ctx->size = user_param->size;
+	buff_size = BUFF_SIZE(ctx->size) * 2 * user_param->num_of_qps;
 	
+	// Allocating the buffer in BUFF_SIZE size to support max performance.
+	ctx->buf = memalign(sysconf(_SC_PAGESIZE),buff_size);
+	if (!ctx->buf) {
+		fprintf(stderr, "Couldn't allocate work buf.\n");
+		return FAILURE;
+	}
+	memset(ctx->buf, 0,buff_size);
+
+	// Allocating an event channel if requested.
+	if (user_param->use_event) {
+		ctx->channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->channel) {
+			fprintf(stderr, "Couldn't create completion channel\n");
+			return FAILURE;
+		}
+	}
+
+	// Allocating the Protection domain.
+	ctx->pd = ibv_alloc_pd(ctx->context);
+	if (!ctx->pd) {
+		fprintf(stderr, "Couldn't allocate PD\n");
+		return FAILURE;
+	}
+
+	if (user_param->verb == READ){
+		flags |= IBV_ACCESS_REMOTE_READ;
+	}
+	
+	// Alocating Memory region and assiging our buffer to it.
+	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,buff_size,flags);
+	if (!ctx->mr) {
+		fprintf(stderr, "Couldn't allocate MR\n");
+		return FAILURE;
+	}
+
+	// Creates the CQ according to ctx_cq_create in perfetst_resources.
+	ctx->cq = ibv_create_cq(ctx->context,user_param->cq_size,NULL,ctx->channel,0);
+	if (!ctx->cq) {
+		fprintf(stderr, "Couldn't create CQ\n");
+		return FAILURE;
+	}
+
+	for (i=0; i < user_param->num_of_qps; i++) {
+
+		ctx->qp[i] = ctx_qp_create(ctx,user_param);
+		if (ctx->qp[i] == NULL) {
+			fprintf(stderr," Unable to create QP.\n");
+			return FAILURE;
+		}
+
+		if (user_param->work_rdma_cm == OFF) {
+
+			if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
+				fprintf(stderr, "Failed to modify QP to INIT\n");
+				return FAILURE;
+			}
+		}
+	}
+
+	return SUCCESS;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
+							 struct perftest_parameters *user_param) {
+
 	struct ibv_qp_init_attr attr;
 	struct ibv_qp* qp = NULL;
-	
+
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
-	attr.send_cq = send_cq;
-	attr.recv_cq = recv_cq; 
-	attr.cap.max_send_wr  = tx_depth;
-	attr.cap.max_recv_wr  = rx_depth;
+	attr.send_cq = ctx->cq;
+	attr.recv_cq = ctx->cq; 
+	attr.cap.max_send_wr  = user_param->tx_depth;
+	attr.cap.max_recv_wr  = user_param->rx_depth;
 	attr.cap.max_send_sge = MAX_SEND_SGE;
 	attr.cap.max_recv_sge = MAX_RECV_SGE;
-	attr.cap.max_inline_data = inline_size;
+	attr.cap.max_inline_data = user_param->inline_size;
+
+	switch (user_param->connection_type) {
 		
-	switch (connection_type) {
-		case 0 : attr.qp_type = IBV_QPT_RC; break;
-		case 1 : attr.qp_type = IBV_QPT_UC; break;
-		case 2 : attr.qp_type = IBV_QPT_UD; break;
+		case RC : attr.qp_type = IBV_QPT_RC; break;
+		case UC : attr.qp_type = IBV_QPT_UC; break;
+		case UD : attr.qp_type = IBV_QPT_UD; break;
 		default:  fprintf(stderr, "Unknown connection type \n");
-				  return NULL;
+			return NULL;
 	}
 
-	qp = ibv_create_qp(pd,&attr);
-	if (!qp)  {
-		fprintf(stderr, "Couldn't create QP\n");
-		return NULL;
+	if (user_param->work_rdma_cm) {
+
+		if (rdma_create_qp(ctx->cm_id,ctx->pd,&attr)) {
+			fprintf(stderr, " Couldn't create rdma QP - %s\n",strerror(errno));
+			return NULL;
+		}
+
+		qp = ctx->cm_id->qp;
+
+	} else {
+
+		qp = ibv_create_qp(ctx->pd,&attr);
 	}
 	return qp;
 }
@@ -182,31 +278,31 @@ struct ibv_qp* ctx_qp_create(struct ibv_pd *pd,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int ctx_modify_qp_to_init(struct ibv_qp *qp,int ib_port,int conn,int verb)  {
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param)  {
 
-    struct ibv_qp_attr attr;
-    int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
-    
-    memset(&attr, 0, sizeof(struct ibv_qp_attr));
-    attr.qp_state        = IBV_QPS_INIT;
-    attr.pkey_index      = 0;
-    attr.port_num        = ib_port;
-    
-    if (conn == 2) {
+	struct ibv_qp_attr attr;
+	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+
+	memset(&attr, 0, sizeof(struct ibv_qp_attr));
+	attr.qp_state        = IBV_QPS_INIT;
+	attr.pkey_index      = 0;
+	attr.port_num        = user_param->ib_port;
+
+	if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
 
 	} else {
-		switch(verb) {
-			case 2  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
-			case 1  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
-			case 0  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE	|
-				 						     IBV_ACCESS_LOCAL_WRITE;
+		switch (user_param->verb) {
+			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
+			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
+			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
+												IBV_ACCESS_LOCAL_WRITE;
 		}
 		flags |= IBV_QP_ACCESS_FLAGS;
-    }
-    
-	if (ibv_modify_qp(qp,&attr,flags))  {
+	}
+
+	if (ibv_modify_qp(qp,&attr,flags)) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return 1;
 	}
@@ -218,34 +314,12 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,int ib_port,int conn,int verb)  {
  ******************************************************************************/
 uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 
-    struct ibv_port_attr attr;
+	struct ibv_port_attr attr;
 
-    if (ibv_query_port(context,port,&attr))
-	return 0;
+	if (ibv_query_port(context,port,&attr))
+		return 0;
 
-    return attr.lid;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
-
-
-	int max_reads;
-
-	max_reads = (is_dev_hermon(context) == HERMON) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
-
-	if (num_user_reads > max_reads) {
-		fprintf(stderr," Number of outstanding reads is above max = %d\n",max_reads);
-		fprintf(stderr," Changing to that max value\n");
-		num_user_reads = max_reads;
-	}
-	else if (num_user_reads <= 0) {
-		num_user_reads = max_reads;
-	}
-
-	return num_user_reads;
+	return attr.lid;
 }
 
 /****************************************************************************** 
@@ -253,8 +327,8 @@ int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
  ******************************************************************************/
 inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel) {
 
-	struct ibv_cq 		*ev_cq;
-	void          		*ev_ctx;
+	struct ibv_cq       *ev_cq;
+	void                *ev_ctx;
 
 	if (ibv_get_cq_event(channel,&ev_cq,&ev_ctx)) {
 		fprintf(stderr, "Failed to get cq_event\n");
@@ -278,15 +352,15 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline void	increase_rem_addr(struct ibv_send_wr *wr,int size,
+inline void increase_rem_addr(struct ibv_send_wr *wr,int size,
 							  int scnt,uint64_t prim_addr) {
 
-	wr->wr.rdma.remote_addr += INC(size);		    
+	wr->wr.rdma.remote_addr += INC(size);           
 
-	if( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0)
+	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0)
 		wr->wr.rdma.remote_addr = prim_addr;
 }
-		     		
+
 /****************************************************************************** 
  *
  ******************************************************************************/
@@ -294,18 +368,21 @@ inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
 							  uint64_t prim_addr,int server_is_ud) {
 
 
-	if (server_is_ud) 
-		sg->addr -= (CACHE_LINE_SIZE - UD_ADDITION);
+	//if (server_is_ud)
+		//sg->addr -= (CACHE_LINE_SIZE - UD_ADDITION);
 
 	sg->addr  += INC(size);
 
-    if( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
 		sg->addr = prim_addr;
 
-    if (server_is_ud) 
-		sg->addr += (CACHE_LINE_SIZE - UD_ADDITION);
+	//if (server_is_ud)
+		//sg->addr += (CACHE_LINE_SIZE - UD_ADDITION);
 }
+
 
 /****************************************************************************** 
  * End
  ******************************************************************************/
+
+

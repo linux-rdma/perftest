@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <errno.h>
 #include <byteswap.h>
 #include "perftest_communication.h"
 
@@ -23,20 +24,23 @@ static const char *gidArray[]   = {"GID"  , "MGID"};
 /****************************************************************************** 
  *
  ******************************************************************************/
-static int check_add_port(char **service,int port,
-						  const char *servername,
-						  struct addrinfo *hints,
-						  struct addrinfo **res) {
+static int post_one_recv_wqe(struct pingpong_context *ctx) {
 
-	int number;
+	struct ibv_recv_wr wr;
+	struct ibv_recv_wr *bad_wr;
+	struct ibv_sge list;
 
-	if (asprintf(service,"%d", port) < 0)
-		return FAILURE;
+	list.addr   = (uintptr_t)ctx->buf;
+	list.length = sizeof(struct pingpong_dest);
+	list.lkey   = ctx->mr->lkey;
 
-	number = getaddrinfo(servername,*service,hints,res);
+	wr.next = NULL;
+	wr.wr_id = SYNC_SPEC_ID;
+	wr.sg_list = &list;
+	wr.num_sge = 1;
 
-	if (number < 0) {
-		fprintf(stderr, "%s for %s:%d\n", gai_strerror(number), servername, port);
+	if (ibv_post_recv(ctx->qp[0],&wr,&bad_wr)) {
+		fprintf(stderr, "Function ibv_post_recv failed for RDMA_CM QP\n");
 		return FAILURE;
 	}
 
@@ -49,15 +53,15 @@ static int check_add_port(char **service,int port,
 static int ethernet_write_keys(struct pingpong_dest *my_dest,
 							   struct perftest_comm *comm) {
 
-    if (comm->gid_index == -1) {
+    if (comm->rdma_params->gid_index == -1) {
 
 		char msg[KEY_MSG_SIZE];
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
-		if (write(comm->sockfd,msg,sizeof msg) != sizeof msg) {
+		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
-			return FAILURE;
+			return 1;
 		}
 
     } else {
@@ -72,13 +76,14 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 				my_dest->gid.raw[10],my_dest->gid.raw[11],
 				my_dest->gid.raw[12],my_dest->gid.raw[13],
 				my_dest->gid.raw[14],my_dest->gid.raw[15]);
-		if (write(comm->sockfd, msg, sizeof msg) != sizeof msg) {
+
+		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
-			return FAILURE;
+			return 1;
 		}	
 	}
-    return SUCCESS;
+    return 0;
 }
 
 /****************************************************************************** 
@@ -87,15 +92,15 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 							  struct perftest_comm *comm)  {
     
-	if (comm->gid_index == -1) {
+	if (comm->rdma_params->gid_index == -1) {
 
         int parsed;
 		char msg[KEY_MSG_SIZE];
 
-		if (read(comm->sockfd, msg, sizeof msg) != sizeof msg) {
+		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
-			return FAILURE;
+			return 1;
 		}
 
 		parsed = sscanf(msg,KEY_PRINT_FMT,&rem_dest->lid,
@@ -104,7 +109,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 
 		if (parsed != 6) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
-			return FAILURE;
+			return 1;
 		}
         
 	} else {
@@ -114,10 +119,10 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		char tmp[20];
 		int i;
 
-		if (read(comm->sockfd, msg, sizeof msg) != sizeof msg) {
+		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
-			return FAILURE;
+			return 1;
 		}
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr);
@@ -165,7 +170,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		strcpy(tmp, pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 	}
-	return SUCCESS;
+	return 0;
 }
 
 /****************************************************************************** 
@@ -180,34 +185,34 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	struct ibv_wc wc;
 	int ne;
 
-	memcpy(comm->my_dest_buff,my_dest,sizeof(struct pingpong_dest));
+	memcpy(comm->rdma_ctx->buf,my_dest,sizeof(struct pingpong_dest));
 
-	list.addr   = (uintptr_t)comm->my_dest_buff;
+	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
 	list.length = sizeof(struct pingpong_dest);
-	list.lkey   = comm->my_cm_mr->lkey;
+	list.lkey   = comm->rdma_ctx->mr->lkey;
 
-	wr.wr_id      = 1;
+	wr.wr_id      = SYNC_SPEC_ID;
 	wr.sg_list    = &list;
 	wr.num_sge    = 1;
 	wr.opcode     = IBV_WR_SEND;
 	wr.send_flags = IBV_SEND_SIGNALED;
 	wr.next       = NULL;
 
-	if (ibv_post_send(comm->cm_qp,&wr,&bad_wr)) {
+	if (ibv_post_send(comm->rdma_ctx->qp[0],&wr,&bad_wr)) {
 		fprintf(stderr, "Function ibv_post_send failed\n");
-		return FAILURE;
+		return 1;
 	}
 
 	do {
-		ne = ibv_poll_cq(comm->cm_cq, 1,&wc);
+		ne = ibv_poll_cq(comm->rdma_ctx->cq, 1,&wc);
 	} while (ne == 0);
 
-	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != 1) {
-		fprintf(stderr, "Bad wc status %d\n",(int)wc.status);
-		return FAILURE;
+	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != SYNC_SPEC_ID) {
+		fprintf(stderr, " Bad wc status %d\n",(int)wc.status);
+		return 1;
 	}
 
-	return SUCCESS;
+	return 0;
 }
 
 /****************************************************************************** 
@@ -216,322 +221,29 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 static int rdma_read_keys(struct pingpong_dest *rem_dest,
 						  struct perftest_comm *comm) {
 
-	struct ibv_recv_wr wr;
-	struct ibv_recv_wr *bad_wr;
-	struct ibv_sge list;
 	struct ibv_wc wc;
 	int ne;
 
 	do {
-		ne = ibv_poll_cq(comm->cm_cq,1,&wc);
+		ne = ibv_poll_cq(comm->rdma_ctx->cq,1,&wc);
 	} while (ne == 0);
 
-	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != 0) {
+	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
 		fprintf(stderr, "Bad wc status -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
-		return FAILURE;
+		return 1;
 	}
 
-	memcpy(rem_dest,comm->rem_dest_buff,sizeof(struct pingpong_dest));
+	memcpy(rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
 
-	list.addr   = (uintptr_t)comm->rem_dest_buff;
-    list.length = sizeof(struct pingpong_dest);
-    list.lkey   = comm->rem_cm_mr->lkey;
-    wr.next = NULL;
-    wr.wr_id = 0;
-    wr.sg_list = &list;
-    wr.num_sge = 1;
-
-    if (ibv_post_recv(comm->cm_qp,&wr,&bad_wr)) {
-        fprintf(stderr, "Function ibv_post_recv failed for RDMA_CM QP\n");
-		return FAILURE;
+	if (post_one_recv_wqe(comm->rdma_ctx)) {
+		fprintf(stderr, "Couldn't post send \n");
+		return 1;
 	}
-	return SUCCESS;
+	
+	return 0;
 }
 
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int comm_rdma_resources(struct perftest_comm *comm) {
-
-	struct ibv_qp_init_attr attr;
-	struct ibv_sge list;
-    struct ibv_recv_wr wr,*bad_wr;
-	struct rdma_cm_id *curr_cm_id = NULL;
-
-	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
-	curr_cm_id = (comm->servername) ? comm->cm_id : comm->child_cm_id;
-	
-	// Create resources - should come from a library.
-	comm->my_dest_buff  = memalign(sysconf(_SC_PAGESIZE),sizeof(struct pingpong_dest));
-	comm->rem_dest_buff = memalign(sysconf(_SC_PAGESIZE),sizeof(struct pingpong_dest));
-
-	if (!comm->my_dest_buff || !comm->rem_dest_buff) {
-		fprintf(stderr, "Couldn't allocate buffers for RDMA_CM communication method\n");
-		return FAILURE;
-	}
-
-	if (!curr_cm_id->verbs) {
-		fprintf(stderr, " Unbound cm_id!! - aborting\n");
-		return FAILURE;
-	}
-
-	comm->cm_pd = ibv_alloc_pd(curr_cm_id->verbs);
-	if (!comm->cm_pd) {
-		fprintf(stderr," Couldn't allocate PD for RDMA_CM communication method\n");
-		return FAILURE;
-	}
-
-	comm->my_cm_mr  = ibv_reg_mr(comm->cm_pd,
-								 comm->my_dest_buff,
-								 sizeof(struct pingpong_dest),
-								 IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
-
-	comm->rem_cm_mr = ibv_reg_mr(comm->cm_pd,
-								 comm->rem_dest_buff,
-								 sizeof(struct pingpong_dest),
-								 IBV_ACCESS_REMOTE_WRITE |IBV_ACCESS_LOCAL_WRITE);
-
-	if (!comm->my_cm_mr || !comm->rem_cm_mr) {
-		fprintf(stderr," Couldn't allocate MRs for RDMA_CM communication method\n");
-		return FAILURE;
-	}
-
-	comm->cm_cq = ibv_create_cq(curr_cm_id->verbs,1,NULL,NULL,0);
-
-	if (!comm->cm_cq) {
-		fprintf(stderr, " Couldn't allocate CQ for RDMA_CM communication method\n");
-		return FAILURE;
-	}
-
-	attr.send_cq = comm->cm_cq;
-	attr.recv_cq = comm->cm_cq;
-	attr.cap.max_send_wr  = 1;
-	attr.cap.max_recv_wr  = 1;
-	attr.cap.max_send_sge = 1;
-	attr.cap.max_recv_sge = 1;
-	attr.cap.max_inline_data = 0;
-	attr.qp_type = IBV_QPT_RC;
-
-	if (rdma_create_qp(curr_cm_id,comm->cm_pd,&attr)) {
-		fprintf(stderr, " rdma_create_qp function failed\n");
-		return FAILURE;
-	}
-
-	comm->cm_qp = curr_cm_id->qp;
-
-	list.addr   = (uintptr_t)comm->rem_dest_buff;
-    list.length = sizeof(struct pingpong_dest);
-    list.lkey   = comm->rem_cm_mr->lkey;
-    wr.next = NULL;
-    wr.wr_id = 0;
-    wr.sg_list = &list;
-    wr.num_sge = 1;
-
-    if (ibv_post_recv(comm->cm_qp, &wr,&bad_wr)) {
-        fprintf(stderr, "Function ibv_post_recv failed for RDMA_CM QP\n");
-		return FAILURE;
-	}
-
-	return SUCCESS;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int rdma_cm_client_connect(struct perftest_comm *comm) {
-
-	char *service;
-	int num_of_retry = 10;
-	struct sockaddr_in sin;
-	struct addrinfo *res;
-	struct rdma_cm_event *event;
-	struct rdma_conn_param conn_param;
-	struct addrinfo hints = {
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-	
-	if (check_add_port(&service,comm->port,comm->servername,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
-		return FAILURE;
-	}
-
-	sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(comm->port);
-
-	while (1) {
-
-		if (num_of_retry == 0) {
-			fprintf(stderr, "Received 10 times ADDR_ERROR - aborting\n");
-			return FAILURE;
-		}
-
-		if (rdma_resolve_addr(comm->cm_id, NULL,(struct sockaddr *)&sin,2000)) {
-			fprintf(stderr, "rdma_resolve_addr failed\n");
-			return FAILURE;
-		}
-
-		if (rdma_get_cm_event(comm->cm_channel,&event)) {
-			fprintf(stderr, "rdma_get_cm_events failed\n"); 
-			return FAILURE; 
-		}
-
-		if (event->event == RDMA_CM_EVENT_ADDR_ERROR) {
-			num_of_retry--;
-			rdma_ack_cm_event(event);
-			continue;
-		}
-
-		if (event->event != RDMA_CM_EVENT_ADDR_RESOLVED) {
-			fprintf(stderr, "unexpected CM event %d\n",event->event);
-			rdma_ack_cm_event(event);
-			return FAILURE;
-		}
-
-		rdma_ack_cm_event(event);
-		break;
-	}
-	
-	while (1) {
-
-		if (num_of_retry <= 0) {
-			fprintf(stderr, "Received %d times ADDR_ERROR - aborting\n",num_of_retry);
-			return FAILURE;
-		}
-
-		if (rdma_resolve_route(comm->cm_id,2000)) {
-			fprintf(stderr, "rdma_resolve_route failed\n");
-			return FAILURE;
-		}
-	
-		if (rdma_get_cm_event(comm->cm_channel,&event)) {
-			fprintf(stderr, "rdma_get_cm_events failed\n"); 
-			return FAILURE; 
-		}
-
-		if (event->event == RDMA_CM_EVENT_ROUTE_ERROR) {
-			num_of_retry--;
-			rdma_ack_cm_event(event);
-			continue;
-		}
-
-		if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
-			fprintf(stderr, "unexpected CM event %d\n",event->event);
-			rdma_ack_cm_event(event);
-			return FAILURE;
-		}
-
-		rdma_ack_cm_event(event);
-		break;
-	}
-
-	if (comm_rdma_resources(comm)) {
-		fprintf(stderr, " Failed to create some of the rdma resources\n");
-		return FAILURE;
-	}
-
-	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.retry_count = 5;
-
-	if (rdma_connect(comm->cm_id, &conn_param)) {
-		fprintf(stderr, "Function rdma_connect failed\n");
-		return FAILURE;
-	}
-
-	if (rdma_get_cm_event(comm->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return FAILURE; 
-	}
-
-	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Unexpected CM event %d\n",event->event);
-		return FAILURE;
-	}
-
-	rdma_ack_cm_event(event);
-	freeaddrinfo(res);
-	return SUCCESS;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int rdma_cm_server_connect(struct perftest_comm *comm) {
-
-	struct addrinfo *res;
-	struct rdma_cm_event *event;
-	struct rdma_conn_param conn_param;
-	struct addrinfo hints = {
-		.ai_flags    = AI_PASSIVE,
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-	char *service;
-	struct sockaddr_in sin;
-
-	if (check_add_port(&service,comm->port,NULL,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
-		return FAILURE;
-	}
-
-	sin.sin_addr.s_addr = 0;
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(comm->port);
-	
-	if (rdma_bind_addr(comm->cm_id,(struct sockaddr *)&sin)) {
-		fprintf(stderr," rdma_bind_addr failed\n");
-		return FAILURE;
-	}
-
-	if (rdma_listen(comm->cm_id,0)) {
-		fprintf(stderr, "rdma_listen failed\n");
-		return FAILURE;
-	}
-	
-	if (rdma_get_cm_event(comm->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return FAILURE; 
-	}
-
-	if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
-		fprintf(stderr, "bad event waiting for connect request %d\n",event->event);
-		return FAILURE;
-	}
-
-	comm->child_cm_id = (struct rdma_cm_id*)event->id;
-
-	if (comm_rdma_resources(comm)) {
-		fprintf(stderr, "Failed to create some of the rdma resources\n");
-		return FAILURE;
-	}
-
-	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.retry_count = 5;
-
-	if (rdma_accept(comm->child_cm_id, &conn_param)) {
-		fprintf(stderr, "Function rdma_accept failed\n");
-		return FAILURE;
-	}
-
-	rdma_ack_cm_event(event);
-
-	if (rdma_get_cm_event(comm->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return FAILURE; 
-	}
-
-	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Bad event waiting for established connection\n");
-		return FAILURE;
-	}
-
-	rdma_ack_cm_event(event);
-	freeaddrinfo(res);
-	return SUCCESS;
-}
-
-/****************************************************************************** 
+ /****************************************************************************** 
  *
  ******************************************************************************/
 static int ethernet_client_connect(struct perftest_comm *comm) {
@@ -544,9 +256,9 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	char *service;
 	int sockfd = -1;
 
-	if (check_add_port(&service,comm->port,comm->servername,&hints,&res)) {
+	if (check_add_port(&service,comm->rdma_params->port,comm->rdma_params->servername,&hints,&res)) {
 		fprintf(stderr, "Problem in resolving basic adress and port\n");
-		return FAILURE;
+		return 1;
 	}
 
 	for (t = res; t; t = t->ai_next) {
@@ -562,11 +274,14 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	freeaddrinfo(res);
 
 	if (sockfd < 0) {
-		fprintf(stderr, "Couldn't connect to %s:%d\n", comm->servername, comm->port);
-		return FAILURE;
+		fprintf(stderr, "Couldn't connect to %s:%d\n", 
+				comm->rdma_params->servername, 
+				comm->rdma_params->port);
+		return 1;
 	}
-	comm->sockfd = sockfd;
-	return SUCCESS;
+
+	comm->rdma_params->sockfd = sockfd;
+	return 0;
 }
 
 /****************************************************************************** 
@@ -583,9 +298,9 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	char *service;
 	int sockfd = -1, connfd,n;
 
-	if (check_add_port(&service,comm->port,NULL,&hints,&res)) {
+	if (check_add_port(&service,comm->rdma_params->port,NULL,&hints,&res)) {
 		fprintf(stderr, "Problem in resolving basic adress and port\n");
-		return FAILURE;
+		return 1;
 	}
 
 	for (t = res; t; t = t->ai_next) {
@@ -605,8 +320,8 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	freeaddrinfo(res);
 
 	if (sockfd < 0) {
-		fprintf(stderr, "Couldn't listen to port %d\n", comm->port);
-		return FAILURE;
+		fprintf(stderr, "Couldn't listen to port %d\n", comm->rdma_params->port);
+		return 1;
 	}
 
 	listen(sockfd, 1);
@@ -615,49 +330,320 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 		perror("server accept");
 		fprintf(stderr, "accept() failed\n");
 		close(sockfd);
-		return FAILURE;
+		return 1;
 	}
 
 	close(sockfd);
-	comm->sockfd = connfd;
+	comm->rdma_params->sockfd = connfd;
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+int set_up_connection(struct pingpong_context *ctx,
+					  struct perftest_parameters *user_parm,
+					  struct pingpong_dest *my_dest) {
+
+	int i;
+	union ibv_gid temp_gid;
+
+	srand48(getpid() * time(NULL));
+
+	if (user_parm->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
+			return -1;
+		}
+	}
+
+	for (i=0; i < user_parm->num_of_qps; i++) {
+
+		my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+		my_dest[i].qpn   = ctx->qp[i]->qp_num;
+		my_dest[i].psn   = lrand48() & 0xffffff;
+		my_dest[i].rkey  = ctx->mr->rkey;
+		// Each qp gives his receive buffer address .
+		my_dest[i].out_reads = user_parm->out_reads;
+		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_parm->num_of_qps + i)*BUFF_SIZE(ctx->size);
+		memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
+
+		// We do not fail test upon lid above RoCE.
+		if (user_parm->gid_index < 0) {
+			if (!my_dest[i].lid) {
+				fprintf(stderr," Local lid 0x0 detected. Is an SM running? \n");
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
+
+/****************************************************************************** 
+ * 
+ ******************************************************************************/
+int rdma_client_connect(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param) {
+
+    char *service;
+    int temp,num_of_retry= NUM_OF_RETRIES;
+    struct sockaddr_in sin;
+    struct addrinfo *res;
+    struct rdma_cm_event *event;
+    struct rdma_conn_param conn_param;
+    struct addrinfo hints = {
+	.ai_family   = AF_UNSPEC,
+	.ai_socktype = SOCK_STREAM
+    };
+
+    if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
+		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		return FAILURE;
+    }
+
+    sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(user_param->port);
+
+   while (1) {
+            
+	if (num_of_retry == 0) {
+	    fprintf(stderr, "Received %d times ADDR_ERROR\n",NUM_OF_RETRIES);
+	    return FAILURE;
+	}
+
+	if (rdma_resolve_addr(ctx->cm_id, NULL,(struct sockaddr *)&sin,2000)) {
+	    fprintf(stderr, "rdma_resolve_addr failed\n");
+	    return FAILURE;
+	}
+
+	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+	    fprintf(stderr, "rdma_get_cm_events failed\n"); 
+	    return FAILURE; 
+	}
+
+	if (event->event == RDMA_CM_EVENT_ADDR_ERROR) {
+	    num_of_retry--;
+	    rdma_ack_cm_event(event);
+	    continue;
+	}
+
+	if (event->event != RDMA_CM_EVENT_ADDR_RESOLVED) {
+	    fprintf(stderr, "unexpected CM event %d\n",event->event);
+	    rdma_ack_cm_event(event);
+	    return FAILURE;
+	}  
+
+	rdma_ack_cm_event(event);
+	break;
+   }
+		
+    while (1) {
+
+	if (num_of_retry <= 0) {
+	    fprintf(stderr, "Received %d times ADDR_ERROR - aborting\n",NUM_OF_RETRIES);
+	    return FAILURE;
+	}
+
+	if (rdma_resolve_route(ctx->cm_id,2000)) {
+	    fprintf(stderr, "rdma_resolve_route failed\n");
+	    return FAILURE;
+	}
+	
+	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+	    fprintf(stderr, "rdma_get_cm_events failed\n"); 
+	    return FAILURE; 
+	}
+
+	if (event->event == RDMA_CM_EVENT_ROUTE_ERROR) {
+	    num_of_retry--;
+	    rdma_ack_cm_event(event);
+	    continue;
+	}	
+
+	if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
+		 fprintf(stderr, "unexpected CM event %d\n",event->event);
+		rdma_ack_cm_event(event);
+		return FAILURE;
+	}
+
+	rdma_ack_cm_event(event);
+	break;
+	}
+
+	ctx->context = ctx->cm_id->verbs;
+	temp = user_param->work_rdma_cm;
+	user_param->work_rdma_cm = ON;
+
+	if (ctx_init(ctx,user_param)) {
+		fprintf(stderr," Unable to create the resources needed by comm struct\n");
+		return FAILURE;
+	}
+
+	memset(&conn_param, 0, sizeof conn_param);
+	conn_param.initiator_depth = 1;
+	conn_param.retry_count = 5;
+	user_param->work_rdma_cm = temp;
+
+	if (rdma_connect(ctx->cm_id,&conn_param)) {
+		fprintf(stderr, "Function rdma_connect failed\n");
+		return FAILURE;
+	}
+
+	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+		fprintf(stderr, "rdma_get_cm_events failed\n"); 
+		return FAILURE; 
+	}
+
+	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
+		fprintf(stderr, "Unexpected CM event %d\n",event->event);
+		return FAILURE;
+	}	
+	rdma_ack_cm_event(event);
+
+	if (user_param->work_rdma_cm == OFF) {
+
+		if (post_one_recv_wqe(ctx)) {
+			fprintf(stderr, "Couldn't post send \n");
+			return 1;
+		}	
+	}
+
 	return SUCCESS;
 }
 
 /****************************************************************************** 
  *
  ******************************************************************************/
-int create_comm_struct(struct perftest_comm *comm,
-					   int port,
-					   int index,
-	 				   int use_rdma,
-					   const char *servername) {
+int rdma_server_connect(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param) {
 
-	comm->port        = port;
-	comm->sockfd      = -1;
-	comm->gid_index   = index;
-	comm->use_rdma_cm = use_rdma;
-	comm->cm_channel  = NULL;
-	comm->cm_id       = NULL;
-	comm->servername  = servername;
-	comm->cm_pd 	  = NULL;
-	comm->my_cm_mr 	  = NULL;
-	comm->rem_cm_mr	  = NULL;
-	comm->cm_cq 	  = NULL;
-	comm->cm_qp		  = NULL;
+	int temp;
+	struct addrinfo *res;
+	struct rdma_cm_event *event;
+	struct rdma_conn_param conn_param;
+	struct addrinfo hints = {
+	.ai_flags    = AI_PASSIVE,
+	.ai_family   = AF_UNSPEC,
+	.ai_socktype = SOCK_STREAM
+	};
+	char *service;
+	struct sockaddr_in sin;
 
-	if (use_rdma) {
+	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
+		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		return FAILURE;
+	}
 
-		comm->cm_channel = rdma_create_event_channel();
-		if (comm->cm_channel == NULL) {
-			fprintf(stderr, "rdma_create_event_channel failed\n");
-			return FAILURE;
-		}
+	sin.sin_addr.s_addr = 0;
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(user_param->port);
 
-		if (rdma_create_id(comm->cm_channel,&comm->cm_id,NULL,RDMA_PS_TCP)) {
-			fprintf(stderr,"rdma_create_id failed\n");
-			return FAILURE;
+	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
+		fprintf(stderr," rdma_bind_addr failed - %s\n",strerror(errno));
+		return 1;
+	}
+
+	if (rdma_listen(ctx->cm_id_control,0)) {
+		fprintf(stderr, "rdma_listen failed\n");
+		return 1;
+	}
+ 
+	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+		fprintf(stderr, "rdma_get_cm_events failed\n"); 
+		return 1; 
+	}
+
+	if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
+		fprintf(stderr, "bad event waiting for connect request %d\n",event->event);
+		return 1;
+	}
+
+	ctx->cm_id = (struct rdma_cm_id*)event->id;
+	ctx->context = ctx->cm_id->verbs;
+	temp = user_param->work_rdma_cm;
+	user_param->work_rdma_cm = ON;
+
+	if (ctx_init(ctx,user_param)) {
+		fprintf(stderr," Unable to create the resources needed by comm struct\n");
+		return FAILURE;
+	}
+
+	memset(&conn_param, 0, sizeof conn_param);
+	conn_param.initiator_depth = 1;
+	// conn_param.retry_count = 5;
+	user_param->work_rdma_cm = temp;
+
+	if (user_param->work_rdma_cm == OFF) {
+
+		if (post_one_recv_wqe(ctx)) {
+			fprintf(stderr, "Couldn't post send \n");
+			return 1;
 		}
 	}
+
+	if (rdma_accept(ctx->cm_id, &conn_param)) {
+		fprintf(stderr, "Function rdma_accept failed - %s\n",strerror(errno));
+		return 1;
+    }
+
+	rdma_ack_cm_event(event);
+
+    if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+		fprintf(stderr, "rdma_get_cm_events failed\n"); 
+		return 1; 
+    }
+
+    if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
+		fprintf(stderr, "Bad event waiting for established connection\n");
+		return 1;
+    }
+
+    rdma_ack_cm_event(event);
+	rdma_destroy_id(ctx->cm_id_control);
+    freeaddrinfo(res);
+    return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+int create_comm_struct(struct perftest_comm *comm,
+					   struct perftest_parameters *user_param) {
+	
+
+	ALLOCATE(comm->rdma_params,struct perftest_parameters,1);
+	memset(comm->rdma_params,0,sizeof(struct perftest_parameters));
+	
+	comm->rdma_params->port		   = user_param->port; 
+	comm->rdma_params->sockfd      = -1;
+	comm->rdma_params->gid_index   = user_param->gid_index;
+	comm->rdma_params->use_rdma_cm = user_param->use_rdma_cm;
+	comm->rdma_params->servername  = user_param->servername;
+	comm->rdma_params->machine 	   = user_param->machine;
+	comm->rdma_params->side		   = LOCAL;
+	comm->rdma_params->verb		   = user_param->verb;
+	comm->rdma_params->use_mcg	   = user_param->use_mcg;
+	comm->rdma_params->duplex	   = user_param->duplex;
+
+	if (user_param->use_rdma_cm) {
+
+		ALLOCATE(comm->rdma_ctx,struct pingpong_context,1);
+		memset(comm->rdma_ctx,0,sizeof(struct pingpong_context));
+
+		comm->rdma_params->tx_depth = 1;
+		comm->rdma_params->rx_depth = 1;
+		comm->rdma_params->cq_size  = 1;
+		comm->rdma_params->connection_type = RC;
+		comm->rdma_params->num_of_qps = 1;
+		comm->rdma_params->size = sizeof(struct pingpong_dest);
+		comm->rdma_ctx->context = NULL;
+
+		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
+			fprintf(stderr," Unable to create the resources needed by comm struct\n");
+			return FAILURE;
+		}
+	}	
+
 	return SUCCESS;
 }
 
@@ -668,27 +654,34 @@ int establish_connection(struct perftest_comm *comm) {
 
 	int (*ptr)(struct perftest_comm*);
 
-	if (comm->use_rdma_cm) {
+	if (comm->rdma_params->use_rdma_cm) {		
 
-		ptr = comm->servername ? &rdma_cm_client_connect : &rdma_cm_server_connect;
+		if (comm->rdma_params->machine == CLIENT) {
 
-		if ((*ptr)(comm)) {
-			rdma_destroy_id(comm->cm_id);
-			rdma_destroy_event_channel(comm->cm_channel);
-			return FAILURE;
+			if (rdma_client_connect(comm->rdma_ctx,comm->rdma_params)) {
+				fprintf(stderr," Unable to perform rdma_client function\n");
+				return 1;
+			}
+
+		} else {
+
+			if (rdma_server_connect(comm->rdma_ctx,comm->rdma_params)) {
+				fprintf(stderr," Unable to perform rdma_client function\n");
+				return 1;
+			}
 		}
 
 	} else {
 
-		ptr = comm->servername ? &ethernet_client_connect : &ethernet_server_connect;
+		ptr = comm->rdma_params->servername ? &ethernet_client_connect : &ethernet_server_connect;
 
 		if ((*ptr)(comm)) {
 			fprintf(stderr,"Unable to open file descriptor for socket connection");
-			return FAILURE;
+			return 1;
 		}
 
 	}
-	return SUCCESS;
+	return 0;
 }
 
 /****************************************************************************** 
@@ -701,7 +694,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
 	int (*read_func_ptr) (struct pingpong_dest*,struct perftest_comm*);
 	int (*write_func_ptr)(struct pingpong_dest*,struct perftest_comm*);
 
-	if (comm->use_rdma_cm) {
+	if (comm->rdma_params->use_rdma_cm || comm->rdma_params->work_rdma_cm) {
 
 		read_func_ptr  = &rdma_read_keys;
 		write_func_ptr = &rdma_write_keys;
@@ -713,64 +706,59 @@ int ctx_hand_shake(struct perftest_comm *comm,
 		
 	}
 
-	if (comm->servername) { 
+	if (comm->rdma_params->servername) {  
 
 		if ((*write_func_ptr)(my_dest,comm)) {
-			fprintf(stderr,"Unable to write on socket/rdam_cm\n");
-			return FAILURE;
+			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			return 1;
 		}
 
 		if ((*read_func_ptr)(rem_dest,comm)) {
-			fprintf(stderr,"Unable to write on the socket\n");
-			return FAILURE;
+			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			return 1;
 		}
 
 	} else {
 
 		if ((*read_func_ptr)(rem_dest,comm)) {
-			fprintf(stderr,"Unable to write on the socket\n");
-			return FAILURE;
+			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			return 1;
 		}
 
 		if ((*write_func_ptr)(my_dest,comm)) {
-			fprintf(stderr,"Unable to write with RDMA_CM QP\n");
-			return FAILURE;
+			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			return 1;
 		}
 	}
 
-    return SUCCESS;
+    return 0;
 }
 
 /****************************************************************************** 
  *
  ******************************************************************************/
 void ctx_print_pingpong_data(struct pingpong_dest *element,
-							 struct perftest_comm *comm,
-							 int side,
-							 int verb,
-							 int machine,
-							 int duplex,
-							 int use_mcg) {
+							 struct perftest_comm *comm) {
 
 	int is_there_mgid,local_mgid,remote_mgid;
 
 	// First of all we print the basic format.
-    printf(BASIC_ADDR_FMT,sideArray[side],element->lid,element->qpn,element->psn);
+    printf(BASIC_ADDR_FMT,sideArray[comm->rdma_params->side],element->lid,element->qpn,element->psn);
 
-	switch (verb) {
+	switch (comm->rdma_params->verb) {
 
 		case 2  : printf(READ_FMT,element->out_reads);
 		case 1  : printf(RDMA_FMT,element->rkey,element->vaddr);
 		default : putchar('\n');
 	}
 
-	local_mgid    = (side == 0)  && (machine == 0);
-	remote_mgid   = (side == 1)  && (machine == 1);
-	is_there_mgid =  duplex || remote_mgid || local_mgid;
+	local_mgid    = (comm->rdma_params->side == 0)  && (comm->rdma_params->machine == 0);
+	remote_mgid   = (comm->rdma_params->side == 1)  && (comm->rdma_params->machine == 1);
+	is_there_mgid =  comm->rdma_params->duplex || remote_mgid || local_mgid;
 
-	if (comm->gid_index > -1 || (use_mcg && is_there_mgid)) {
+	if (comm->rdma_params->gid_index > -1 || (comm->rdma_params->use_mcg && is_there_mgid)) {
 
-		printf(PERF_GID_FMT,gidArray[use_mcg && is_there_mgid],
+		printf(PERF_GID_FMT,gidArray[comm->rdma_params->use_mcg && is_there_mgid],
 				element->gid.raw[0], element->gid.raw[1],
 				element->gid.raw[2], element->gid.raw[3], 
 			    element->gid.raw[4], element->gid.raw[5], 
@@ -791,17 +779,23 @@ int ctx_close_connection(struct perftest_comm *comm,
 
 	// Signal client is finished.
     if (ctx_hand_shake(comm,my_dest,rem_dest)) {
-        return FAILURE;
-        
+        return 1;     
     }
 
-	if (!comm->use_rdma_cm) {
+	if (!comm->rdma_params->use_rdma_cm && !comm->rdma_params->work_rdma_cm) {
 
-		close(comm->sockfd);
-		return SUCCESS;
+		// Close the Socket file descriptor.
+        if (write(comm->rdma_params->sockfd,"done",sizeof "done") != sizeof "done") {
+                perror(" Client write");
+                fprintf(stderr,"Couldn't write to socket\n");
+                return -1;
+        }
+
+		close(comm->rdma_params->sockfd);
+		return 0;
 	}
 
-	return SUCCESS;
+	return 0;
 }
 
 /****************************************************************************** 

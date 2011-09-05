@@ -41,11 +41,11 @@
 
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
+#include "perftest_resources.h"
 
 #define KEY_MSG_SIZE 	 (50)   // Message size without gid.
 #define KEY_MSG_SIZE_GID (98)   // Message size with gid (MGID as well).
-#define SUCCESS			 (0)
-#define FAILURE			 (1)
+#define SYNC_SPEC_ID	 (5)
 
 // The Format of the message we pass through sockets , without passing Gid.
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx"
@@ -76,53 +76,80 @@ struct pingpong_dest {
 };
 
 struct perftest_comm {
-	int                       port;
-	int                       sockfd;
-	int                       gid_index;
-	int                       use_rdma_cm;
-	const char 				  *servername;
-	struct rdma_event_channel *cm_channel;
-	struct rdma_cm_id 		  *cm_id;
-	struct rdma_cm_id 		  *child_cm_id;
-	struct ibv_pd 			  *cm_pd;
-	void 					  *my_dest_buff;
-	void					  *rem_dest_buff;
-	struct ibv_mr			  *my_cm_mr;
-	struct ibv_mr			  *rem_cm_mr;
-	struct ibv_cq			  *cm_cq;
-	struct ibv_qp 			  *cm_qp;
+	struct pingpong_context    *rdma_ctx;
+	struct perftest_parameters *rdma_params;
 };
 
 /* create_comm_struct
  *
- * Description :....
+ * Description : Creating the communication struct for Etherent or rdma_cm options.
  *
- * Parameters : ....
+ * Parameters : 
+ *	comm - An empty Communication struct.
+ *  user_param -  Perftest parameters.
  *
- * Return Value : ....
+ * Return Value : SUCCESS,FAILURE.
  */
-int create_comm_struct(struct perftest_comm *comm,
-					   int port,
-					   int index,
-	 				   int use_rdma,
-					   const char *servername);
+int create_comm_struct (struct perftest_comm *comm,
+						struct perftest_parameters *user_param);
 
-/* init_connection .
+
+/* set_up_connection .
+ *
+ * Description : Fills the my_dest with all of the machine proporties.
+ *  
+ *
+ * Parameters :
+ *  ctx 		- Pingoong context after the ctx_init function.
+ *  user_parm   - Perftest parameters.
+ *  my_dest		- An empty pingpong_dest struct.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int set_up_connection(struct pingpong_context *ctx,
+					  struct perftest_parameters *user_parm,
+					  struct pingpong_dest *my_dest);
+
+/* establish_connection .
  *
  * Description :
  *
  *  Connect the client the a well known server to a requested port.
  *  It assumes the Server is waiting for request on the port.
+ *  It uses Ethernet sockets or rdma_cm as mentioned in use_rdma_cm.
  *
  * Parameters : 
+ *		comm - The communication struct with all the data.
  *
- *  servername - The server name (according to DNS) or IP.
- *  port       - The port that the server is listening to.
- *
- * Return Value : The file descriptor selected in the PDT for the socket.
+ * Return Value : SUCCESS,FAILURE.
  */
 int establish_connection(struct perftest_comm *comm);
 
+/* rdma_client_connect .
+ *
+ * Description : Connects the client to a QP on the other machine with rdma_cm.
+ *
+ * Parameters : 
+ *		ctx - An empty resources struct to fill the resources created for this QP.
+ *		user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int rdma_client_connect(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param);
+
+/* rdma_server_connect .
+ *
+ * Description : Assinging a server to listen on a rdma_cm port and connect to it.
+ *
+ * Parameters : 
+ *		ctx - An empty resources struct to fill the resources created for this QP.
+ *		user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int rdma_server_connect(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param);
 /* ctx_hand_shake .
  *
  * Description :
@@ -157,12 +184,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
  *  element - The element to print.           
  */
 void ctx_print_pingpong_data(struct pingpong_dest *element,
-							 struct perftest_comm *comm,
-							 int side,
-							 int verb,
-							 int machine,
-							 int duplex,
-							 int use_mcg);
+							 struct perftest_comm *comm);
 
 /* ctx_close_connection .
  *

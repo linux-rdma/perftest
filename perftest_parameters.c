@@ -8,6 +8,9 @@
 
 static const char *connStr[] = {"RC","UC","UD"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read"};
+static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
+static const char *qp_state[] = {"OFF","ON"};
+static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 
 /****************************************************************************** 
  *
@@ -27,7 +30,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf(" Use IB device <dev> (default first device found)\n");
 
 	printf("  -R, --rdma_cm ");
-	printf(" Communicate with rdma_cm module to exchange data\n");
+	printf(" Connect QPs with rdma_cm and run test on those QPs\n");
+
+	printf("  -z, --com_rdma_cm ");
+	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
 
 	printf("  -i, --ib-port=<port> ");
 	printf(" Use port <port> of IB device (default %d)\n",DEF_IB_PORT);
@@ -142,6 +148,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->inline_size = user_param->tst == BW ? DEF_INLINE_BW : DEF_INLINE_LT;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
+	user_param->work_rdma_cm = OFF;
 	user_param->rx_depth    = user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
@@ -189,6 +196,7 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
  ******************************************************************************/
 static void force_dependecies(struct perftest_parameters *user_param) {
 
+
 	// Additional configuration and assignments.
 	if (user_param->tx_depth > user_param->iters) {
 		user_param->tx_depth = user_param->iters;
@@ -222,6 +230,13 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	else 
 		user_param->cq_size = user_param->rx_depth*user_param->num_of_qps;
 
+	if (user_param->work_rdma_cm && user_param->use_mcg) {
+
+		printf(RESULT_LINE);
+		printf(" Perftest still doesn't support Multicast with rdam_cm\n");
+		user_param->use_mcg = OFF;
+		user_param->num_of_qps = 1;
+	} 
 
 	if (user_param->use_mcg) {
 
@@ -231,14 +246,159 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		if (user_param->duplex && user_param->tst == BW) {
 			user_param->num_of_qps++;
 
-		} else if (user_param->tst == BW && user_param->machine == CLIENT) {
+		} else if (user_param->tst == BW && user_param->machine == CLIENT) 
 			user_param->num_of_qps = 1;
+	}
+
+	if (user_param->all == ON) 	
+		user_param->size = MAX_SIZE;
+
+	if (user_param->work_rdma_cm == ON) {
+		user_param->use_rdma_cm = ON;
+		if (user_param->num_of_qps > 1) {
+			user_param->num_of_qps = 1;
+			printf(RESULT_LINE);
+			fprintf(stdout," Perftest only supports 1 rmda_cm QP for now\n");
 		}
+	}
+
+	if (user_param->connection_type == UD && user_param->machine == SERVER) {
+		user_param->size += UD_ADDITION;  
 	}
 
 	return;
 }
 
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+const char *link_layer_str(uint8_t link_layer) {
+
+	switch (link_layer) {
+
+        case IBV_LINK_LAYER_UNSPECIFIED:
+        case IBV_LINK_LAYER_INFINIBAND:	
+			return "IB";
+        case IBV_LINK_LAYER_ETHERNET:	
+			return "Ethernet";
+        default:
+		    return "Unknown";
+    }
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static Device is_dev_hermon(struct ibv_context *context) { 
+
+	Device is_hermon = NOT_HERMON;
+	struct ibv_device_attr attr;
+
+	if (ibv_query_device(context,&attr)) {
+		is_hermon = ERROR;
+	}
+	// Checks the devide type for setting the max outstanding reads.
+	else if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
+			 attr.vendor_part_id == 25448  || attr.vendor_part_id == 26418  || 
+			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
+			 attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
+			 attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478  ||
+			 attr.vendor_part_id == 4099 ) {
+				is_hermon = HERMON;		
+	}
+	return is_hermon;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static enum ibv_mtu set_mtu(struct ibv_context *context,int ib_port,int user_mtu) {
+
+	struct ibv_port_attr port_attr;
+	enum ibv_mtu curr_mtu;
+
+	ibv_query_port(context,ib_port,&port_attr);
+
+	// User did not ask for specific mtu.
+	if (user_mtu == 0) 
+		curr_mtu = port_attr.active_mtu;
+
+	else {
+
+		switch (user_mtu) {
+
+			case 256  :	curr_mtu = IBV_MTU_256;	 break;
+			case 512  : curr_mtu = IBV_MTU_512;	 break;
+			case 1024 :	curr_mtu = IBV_MTU_1024; break;
+			case 2048 :	curr_mtu = IBV_MTU_2048; break;
+			case 4096 :	curr_mtu = IBV_MTU_4096; break;
+			default   :	
+				fprintf(stderr," Invalid MTU - %d \n",user_mtu);
+				fprintf(stderr," Please choose mtu form {256,512,1024,2048,4096}\n");
+				fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
+				curr_mtu = port_attr.active_mtu;
+		}
+		
+		if (curr_mtu > port_attr.active_mtu) {
+			fprintf(stdout,"Requested mtu is higher than active mtu \n");
+			fprintf(stdout,"Changing to active mtu - %d\n",port_attr.active_mtu);
+			curr_mtu = port_attr.active_mtu;
+		}
+	} 
+	return curr_mtu;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static int8_t set_link_layer(struct ibv_context *context,int ib_port) {
+
+	struct ibv_port_attr port_attr;
+	uint8_t curr_link;
+
+	if (ibv_query_port(context,ib_port,&port_attr)) {
+		fprintf(stderr," Unable to query port attributes\n");
+		return LINK_FAILURE;
+	}
+
+	if (port_attr.state != IBV_PORT_ACTIVE) {
+		fprintf(stderr," Port number %d state is %s\n"
+					  ,ib_port
+					  ,portStates[port_attr.state]);
+		return LINK_FAILURE;
+	}
+
+	curr_link = port_attr.link_layer; 
+
+	if (!strcmp(link_layer_str(curr_link),"Unknown")) {
+			fprintf(stderr," Unable to determine link layer \n");
+			return LINK_FAILURE;
+	}
+
+	return curr_link;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
+
+
+	int max_reads;
+
+	max_reads = (is_dev_hermon(context) == HERMON) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
+
+	if (num_user_reads > max_reads) {
+		fprintf(stderr," Number of outstanding reads is above max = %d\n",max_reads);
+		fprintf(stderr," Changing to that max value\n");
+		num_user_reads = max_reads;
+	}
+	else if (num_user_reads <= 0) {
+		num_user_reads = max_reads;
+	}
+
+	return num_user_reads;
+}
 
 /****************************************************************************** 
  *
@@ -270,7 +430,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "outs",           .has_arg = 1, .val = 'o' },
 			{ .name = "mcg",            .has_arg = 1, .val = 'g' },
-            { .name = "rdma_cm",        .has_arg = 0, .val = 'R' },
+            { .name = "comm_rdma_cm",   .has_arg = 0, .val = 'z' },
+			{ .name = "rdma_cm",   		.has_arg = 0, .val = 'R' },
 			{ .name = "help",           .has_arg = 0, .val = 'h' },
 			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
 			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
@@ -284,7 +445,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             { 0 }
         };
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:lVaeRhbNFCHU",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:lVaezRhbNFCHU",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -307,7 +468,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'V': printf("Version: %.2f\n",user_param->version); return 1;
 			case 'h': usage(argv[0],user_param->verb,user_param->tst); return 1;
-			case 'R': user_param->use_rdma_cm = ON; break;
+			case 'z': user_param->use_rdma_cm = ON; break;
+			case 'R': user_param->work_rdma_cm = ON; break;
 			case 'q': CHECK_VALUE(user_param->num_of_qps,MIN_QP_NUM,MAX_QP_NUM,"num of Qps"); 
 				if (user_param->verb != WRITE || user_param->tst != BW) {
 					fprintf(stderr," Multiple QPs only availible on ib_write_bw and ib_write_bw_postlist\n");
@@ -408,24 +570,48 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-const char *link_layer_str(uint8_t link_layer) {
+int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param) {
 
-	switch (link_layer) {
 
-        case IBV_LINK_LAYER_UNSPECIFIED:
-        case IBV_LINK_LAYER_INFINIBAND:	
-			return "IB";
-        case IBV_LINK_LAYER_ETHERNET:	
-			return "Ethernet";
-        default:
-		    return "Unknown";
-    }
+	user_param->link_type = set_link_layer(context,user_param->ib_port);
+	
+	if (user_param->link_type == LINK_FAILURE) {
+		fprintf(stderr, " Couldn't set the link layer\n");
+		return FAILURE;
+	}
+
+	if (user_param->link_type == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index == -1) {
+			user_param->gid_index = 0;
+	}
+
+	user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
+
+	if (is_dev_hermon(context) != HERMON && user_param->inline_size != 0)
+		user_param->inline_size = 0;
+
+	if (user_param->verb == READ)
+		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
+
+
+	if (user_param->connection_type == UD && 
+		user_param->size > MTU_SIZE(user_param->curr_mtu)) {
+
+		if (user_param->all == OFF) {
+			fprintf(stderr," Max msg size in UD is MTU %d\n",MTU_SIZE(user_param->curr_mtu));
+			fprintf(stderr," Changing to this MTU\n");
+		}
+		user_param->size = MTU_SIZE(user_param->curr_mtu);
+	}
+
+	return SUCCESS;
 }
 
 /****************************************************************************** 
  *
  ******************************************************************************/
 void ctx_print_test_info(struct perftest_parameters *user_param) {
+
+	int temp = 0;
 
 	printf(RESULT_LINE);
 	printf("                    ");
@@ -457,9 +643,6 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		
 	}
 
-	if (user_param->use_rdma_cm) 
-		printf(" Commucation will use rdma_cm\n");
-
 	if (user_param->use_mcg) 
 		printf(" MultiCast runs on UD!\n");
 
@@ -481,7 +664,9 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	printf(" Mtu             : %dB\n",MTU_SIZE(user_param->curr_mtu));
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
-	printf(" Gid index       : %d\n" ,user_param->gid_index);
+
+	if (user_param->gid_index != DEF_GID_INDEX)
+		printf(" Gid index       : %d\n" ,user_param->gid_index);
 
 	if (user_param->verb != READ) 
 		printf(" Max inline data : %dB\n",user_param->inline_size);
@@ -489,7 +674,24 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	else 
 		printf(" Outstand reads  : %d\n",user_param->out_reads);
 
+
+	printf(" rdma_cm QPs	 : %s\n",qp_state[user_param->work_rdma_cm]);
+
+	if (user_param->use_rdma_cm) 
+		temp = 1;
+
+	printf(" Data ex. method : %s\n",exchange_state[temp]);
+
+	if (user_param->work_rdma_cm && user_param->machine == SERVER) {
+		printf(RESULT_LINE);
+		printf(" Waiting for client rdma_cm QP to connect\n");
+		printf(" Please run the same command with the IB/RoCE interface IP\n");
+	}
+
+	printf(RESULT_LINE);
+
 }
+
 /****************************************************************************** 
  * End
  ******************************************************************************/

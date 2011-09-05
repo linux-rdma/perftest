@@ -374,9 +374,13 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 			fprintf(stderr, "%d:%s: rdma_listen failed\n", pid, __func__);
 			goto err3;
 		}
+
+		printf("asaa2\n");
 	
 		if (rdma_get_cm_event(data->cm_channel, &event)) 
 			goto err3;
+
+		printf("asaa1\n");
 
 		if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
 			fprintf(stderr, "%d:%s: bad event waiting for connect request %d\n", 
@@ -413,6 +417,9 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 		conn_param.initiator_depth = 1;
 		conn_param.private_data = &data->my_dest;
 		conn_param.private_data_len = sizeof(data->my_dest);
+
+		printf("asaa3\n");
+
 		if (rdma_accept(child_cm_id, &conn_param)) {
 			fprintf(stderr, "%d:%s: rdma_accept failed\n", pid, __func__);
 			goto err1;
@@ -887,7 +894,7 @@ static void usage(const char *argv0)
 	printf("  -S, --sl=<sl>          SL (default 0)\n");
     printf("  -T, --tos=<tos>        Type Of Service (default 0)\n");
 	printf("  -b, --bidirectional    measure bidirectional bandwidth (default unidirectional)\n");
-	printf("  -c, --cma		 use RDMA CM\n");
+	printf("  -c, --cma		 		 use RDMA CM\n");
 }
 
 static void print_report(unsigned int iters, unsigned size, int duplex,
