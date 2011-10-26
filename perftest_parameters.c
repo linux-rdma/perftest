@@ -262,10 +262,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
-	if (user_param->connection_type == UD && user_param->machine == SERVER) {
-		user_param->size += UD_ADDITION;  
-	}
-
 	return;
 }
 
