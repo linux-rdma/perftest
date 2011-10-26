@@ -373,7 +373,7 @@ static int set_recv_wqes(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static void set_send_wqe(struct pingpong_context *ctx,
-						 int rem_qpn,
+						 uint32_t rem_qpn,
 						 struct perftest_parameters *user_param,
 						 struct ibv_send_wr *wr,
 						 struct ibv_sge	*list) {
@@ -523,7 +523,7 @@ int run_iter(struct pingpong_context *ctx,
 		    }
 
 			do {
-				
+								
 				ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
@@ -624,6 +624,7 @@ int main(int argc, char *argv[])
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm , 0, sizeof(struct perftest_comm));
 	memset(&mcg_params, 0, sizeof(struct mcast_parameters));
+	memset(&wr,			0, sizeof(struct ibv_send_wr));
 
 	user_param.verb    = SEND;
 	user_param.tst     = LAT;
