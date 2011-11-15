@@ -469,7 +469,7 @@ static void print_report(struct perftest_parameters *user_param) {
 
 	median = get_median(user_param->iters - 1, delta);
 	printf(REPORT_FMT_LAT,(unsigned long)user_param->size,user_param->iters,delta[0] / cycles_to_units / 2,
-	       delta[user_param->iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
+	       delta[user_param->iters - 3] / cycles_to_units / 2,median / cycles_to_units / 2);
 	free(delta);
 }
 
@@ -625,6 +625,9 @@ int main(int argc, char *argv[])
 	memset(&user_comm , 0, sizeof(struct perftest_comm));
 	memset(&mcg_params, 0, sizeof(struct mcast_parameters));
 	memset(&wr,			0, sizeof(struct ibv_send_wr));
+	memset(&my_dest, 0 , sizeof(struct pingpong_dest));
+	memset(&rem_dest, 0 , sizeof(struct pingpong_dest));
+
 
 	user_param.verb    = SEND;
 	user_param.tst     = LAT;
