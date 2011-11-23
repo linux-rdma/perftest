@@ -1,6 +1,6 @@
 RDMACM_TESTS = rdma_lat rdma_bw
 MCAST_TESTS = send_bw send_lat
-TESTS = write_bw_postlist write_lat write_bw read_lat read_bw
+TESTS = write_bw_postlist write_lat write_bw read_lat read_bw atomic_lat atomic_bw
 UTILS = clock_test
 
 all: ${RDMACM_TESTS} ${MCAST_TESTS} ${TESTS} ${UTILS}

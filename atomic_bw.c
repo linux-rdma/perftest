@@ -48,7 +48,7 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 0,1
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
@@ -171,16 +171,24 @@ int run_iter(struct pingpong_context *ctx,
 	list.lkey   = ctx->mr->lkey;
 
 	wr.sg_list             = &list;
-	wr.wr.rdma.remote_addr = rem_dest->vaddr;
-	wr.wr.rdma.rkey        = rem_dest->rkey;
-	wr.wr_id      		   = PINGPONG_READ_WRID;
+	wr.wr.atomic.remote_addr = rem_dest->vaddr;
+	wr.wr.atomic.rkey  	   = rem_dest->rkey;
+	wr.wr_id      		   = PINGPONG_ATOMIC_WRID;
 	wr.num_sge             = MAX_RECV_SGE;
-	wr.opcode              = IBV_WR_RDMA_READ;
 	wr.send_flags          = IBV_SEND_SIGNALED;
 	wr.next                = NULL;
 
+	if (user_param->atomicType == FETCH_AND_ADD) {
+		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		wr.wr.atomic.compare_add = ATOMIC_ADD_VALUE;
+
+	} else {
+		wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
+		wr.wr.atomic.swap = ATOMIC_SWAP_VALUE;
+	}
+
 	my_addr  = list.addr;
-	rem_addr = wr.wr.rdma.remote_addr;
+	rem_addr = wr.wr.atomic.remote_addr;
 	
 	while (scnt < user_param->iters || ccnt < user_param->iters) {
 
@@ -196,7 +204,7 @@ int run_iter(struct pingpong_context *ctx,
 			}
 
 			if (user_param->size <= (CYCLE_BUFFER / 2)) { 
-				increase_rem_addr(&wr,user_param->size,scnt,rem_addr,READ);
+				increase_rem_addr(&wr,user_param->size,scnt,rem_addr,ATOMIC);
 				increase_loc_addr(&list,user_param->size,scnt,my_addr,0);
 			}
 			++scnt;
@@ -248,7 +256,6 @@ int run_iter(struct pingpong_context *ctx,
  ******************************************************************************/
 int main(int argc, char *argv[]) {
 
-	int                        i = 0;
 	struct ibv_device		   *ib_dev = NULL;
 	struct pingpong_context    ctx;
 	struct pingpong_dest       my_dest,rem_dest;
@@ -262,14 +269,14 @@ int main(int argc, char *argv[]) {
 	memset(&my_dest , 0 ,  sizeof(struct pingpong_dest));
 	memset(&rem_dest , 0 ,  sizeof(struct pingpong_dest));
 	
-	user_param.verb    = READ;
+	user_param.verb    = ATOMIC;
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
 	if (parser(&user_param,argv,argc)) 
 		return 1;
 
-	ib_dev =ctx_find_dev(user_param.ib_devname);
+	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev)
 		return 7;
 
@@ -374,7 +381,6 @@ int main(int argc, char *argv[]) {
 
 		printf(RESULT_LINE);
 		return destroy_ctx(&ctx,&user_param);
-
 	} 
 
 	if (user_param.use_event) {
@@ -390,24 +396,10 @@ int main(int argc, char *argv[]) {
 	ALLOCATE(tposted , cycles_t , user_param.iters);
 	ALLOCATE(tcompleted , cycles_t , user_param.iters);
 
-	if (user_param.all == ON) {
-
-		for (i = 1; i < 24 ; ++i) {
-			user_param.size = 1 << i;
-			if(run_iter(&ctx,&user_param,&rem_dest))
-				return 17;
-			print_report(&user_param);
-		}
-
-	} 
-
-	else {
-
-		if(run_iter(&ctx,&user_param,&rem_dest))
-			return 17;
+	if(run_iter(&ctx,&user_param,&rem_dest))
+		return 17;
 		
-		print_report(&user_param);
-	}
+	print_report(&user_param);
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
@@ -415,6 +407,5 @@ int main(int argc, char *argv[]) {
 	}
 	
 	printf(RESULT_LINE);
-
 	return destroy_ctx(&ctx,&user_param);	
 }

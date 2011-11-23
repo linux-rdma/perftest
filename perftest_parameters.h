@@ -90,6 +90,7 @@
 #define DEF_RX_RDMA   (1)
 #define DEF_RX_SEND   (600)
 #define DEF_CQ_MOD    (50)
+#define DEF_SIZE_ATOMIC (8)
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_IB_PORT   (1)
@@ -142,7 +143,7 @@
 #define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
 
 // The Verb of the benchmark.
-typedef enum { SEND , WRITE, READ } VerbType;
+typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
 // The type of the machine ( server or client actually).
 typedef enum { LAT , BW } TestType;
@@ -153,8 +154,11 @@ typedef enum { SERVER , CLIENT } MachineType;
 // The type of the machine ( server or client actually).
 typedef enum { LOCAL , REMOTE } PrintDataSide;
 
+// The atomic test type
+typedef enum {CMP_AND_SWAP, FETCH_AND_ADD} AtomicType;
+
 // The type of the device (Hermon B0/A0 or no)
-typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1 } Device;
+typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1} Device;
 
 struct perftest_parameters {
 
@@ -191,6 +195,7 @@ struct perftest_parameters {
     PrintDataSide	side;
 	VerbType		verb;
 	TestType		tst;
+	AtomicType		atomicType;
 	int				sockfd;
 	int				cq_size;
 	float			version;

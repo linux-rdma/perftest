@@ -75,12 +75,15 @@
 #define MAX_RECV_SGE        (1)
 #define DEF_WC_SIZE         (1)
 #define PL					(1)
+#define ATOMIC_ADD_VALUE    (1)
+#define ATOMIC_SWAP_VALUE   (0)
 
 // Space for GRH when we scatter the packet in UD.
-#define PINGPONG_SEND_WRID  (60)
-#define PINGPONG_RDMA_WRID	(3)
-#define PINGPONG_READ_WRID	(1)
-#define DEFF_QKEY           (0x11111111)
+#define PINGPONG_SEND_WRID   (60)
+#define PINGPONG_RDMA_WRID	 (3)
+#define PINGPONG_READ_WRID	 (1)
+#define PINGPONG_ATOMIC_WRID (22)
+#define DEFF_QKEY            (0x11111111)
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
@@ -290,7 +293,7 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
  *
  * Return Value : SUCCESS, FAILURE.
  */
-inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr);
+inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb);
 
 /* increase_loc_addr.
  *

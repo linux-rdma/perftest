@@ -243,7 +243,7 @@ int run_iter(struct pingpong_context *ctx,
 			// If we can increase the remote address , so the next write will be to other address ,
 			// We do it.
 			if (user_param->size <= (CYCLE_BUFFER / 2)) { 
-				increase_rem_addr(&wr[index],user_param->size,ctx->scnt[index],rem_addr[index]);
+				increase_rem_addr(&wr[index],user_param->size,ctx->scnt[index],rem_addr[index],WRITE);
 				increase_loc_addr(wr[index].sg_list,user_param->size,ctx->scnt[index],my_addr[index],0);
 			}
 
@@ -275,7 +275,7 @@ int run_iter(struct pingpong_context *ctx,
 				}     
 				
 				if (user_param->size <= (CYCLE_BUFFER / 2)) { 
-					increase_rem_addr(&wr[index],user_param->size,ctx->scnt[index],rem_addr[index]);
+					increase_rem_addr(&wr[index],user_param->size,ctx->scnt[index],rem_addr[index],WRITE);
 					increase_loc_addr(wr[index].sg_list,user_param->size,ctx->scnt[index],my_addr[index],0);
 				}
 

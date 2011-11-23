@@ -50,30 +50,34 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 0.1
 cycles_t *tstamp;
 
 /****************************************************************************** 
  *
  ******************************************************************************/
 static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
-						  struct pingpong_dest *dest,int my_reads,
-						  struct perftest_parameters *user_parm)
+						  struct pingpong_dest *dest,
+						  struct perftest_parameters *user_parm,
+						  int my_reads)
 {
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 
-	attr.qp_state               = IBV_QPS_RTR;
-	attr.path_mtu				= user_parm->curr_mtu;
-	attr.dest_qp_num            = dest->qpn;
-	attr.rq_psn                 = dest->psn;
-	attr.ah_attr.dlid           = dest->lid;
-	attr.max_dest_rd_atomic     = my_reads;
-	attr.min_rnr_timer          = 12;
+	attr.qp_state         = IBV_QPS_RTR;
+	attr.path_mtu         = user_parm->curr_mtu;
+	attr.dest_qp_num      = dest->qpn;
+	attr.rq_psn           = dest->psn;
+	attr.ah_attr.dlid     = dest->lid;
+	attr.max_dest_rd_atomic = my_reads;
+	attr.min_rnr_timer = 12;
+
 	if (user_parm->gid_index < 0) {
+
 		attr.ah_attr.is_global      = 0;
 		attr.ah_attr.sl             = user_parm->sl;
 	} else {
+
 		attr.ah_attr.is_global      = 1;
 		attr.ah_attr.grh.dgid       = dest->gid;
 		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
@@ -82,33 +86,36 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	}
 	attr.ah_attr.src_path_bits  = 0;
 	attr.ah_attr.port_num       = user_parm->ib_port;
-	if (ibv_modify_qp(ctx->qp[0], &attr,
-			  IBV_QP_STATE              |
-			  IBV_QP_AV                 |
-			  IBV_QP_PATH_MTU           |
-			  IBV_QP_DEST_QPN           |
-			  IBV_QP_RQ_PSN             |
-			  IBV_QP_MIN_RNR_TIMER      |
-			  IBV_QP_MAX_DEST_RD_ATOMIC)) {
-		fprintf(stderr, "Failed to modify RC QP to RTR\n");
-		return 1;
-	}
-	attr.timeout            = user_parm->qp_timeout;
-	attr.retry_cnt          = 7;
-	attr.rnr_retry          = 7;
-	attr.qp_state           = IBV_QPS_RTS;
-	attr.max_rd_atomic      = dest->out_reads;
-	attr.sq_psn             = my_psn;
 
 	if (ibv_modify_qp(ctx->qp[0], &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_SQ_PSN             |
-				  IBV_QP_TIMEOUT            |
-				  IBV_QP_RETRY_CNT          |
-				  IBV_QP_RNR_RETRY          |
-				  IBV_QP_MAX_QP_RD_ATOMIC)) {
-			fprintf(stderr, "Failed to modify RC QP to RTS\n");
-			return 1;
+			IBV_QP_STATE              |
+			IBV_QP_AV                 |
+			IBV_QP_PATH_MTU           |
+			IBV_QP_DEST_QPN           |
+			IBV_QP_RQ_PSN             |
+			IBV_QP_MIN_RNR_TIMER      |
+			IBV_QP_MAX_DEST_RD_ATOMIC)) {
+				fprintf(stderr, "Failed to modify RC QP to RTR\n");
+				return 1;
+	}
+
+	attr.timeout       = user_parm->qp_timeout;
+	attr.retry_cnt     = 7;
+	attr.rnr_retry     = 7;
+	attr.max_rd_atomic = dest->out_reads;
+	attr.qp_state      = IBV_QPS_RTS;
+	attr.sq_psn        = my_psn;
+
+	
+	if (ibv_modify_qp(ctx->qp[0], &attr,
+			IBV_QP_STATE              |
+			IBV_QP_SQ_PSN             |
+			IBV_QP_TIMEOUT            |
+			IBV_QP_RETRY_CNT          |
+			IBV_QP_RNR_RETRY          |
+			IBV_QP_MAX_QP_RD_ATOMIC)) {
+				fprintf(stderr, "Failed to modify RC QP to RTS\n");
+				return 1;
 	}
 	return 0;
 }
@@ -123,7 +130,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
 	if ((n - 1) % 2)
-		return (delta[n / 2] + delta[n / 2 - 1]) / 2;
+		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
 	else
 		return delta[n / 2];
 }
@@ -195,34 +202,40 @@ static void print_report(struct perftest_parameters *user_param) {
  ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param,
-			 struct pingpong_dest *rem_dest) {
+	         struct pingpong_dest *rem_dest) {
 
-	int scnt = 0;
-	int ne;
-	struct ibv_sge 		list;
-	struct ibv_send_wr 	wr;
-	struct ibv_send_wr  *bad_wr;
-	struct ibv_wc       wc;
-	uint64_t            my_addr,rem_addr;
-
-	memset(&wr,0,sizeof(struct ibv_send_wr));
-
+	int 					scnt = 0;
+	int                     ne;
+	struct ibv_sge     		list;
+	struct ibv_send_wr 		wr;
+	struct ibv_send_wr 		*bad_wr = NULL;
+	struct ibv_wc 			wc;
+	uint64_t            	my_addr,rem_addr;
+	          
 	list.addr   = (uintptr_t)ctx->buf;
 	list.length = user_param->size;
 	list.lkey   = ctx->mr->lkey;
 
 	wr.sg_list             = &list;
-	wr.wr.rdma.remote_addr = rem_dest->vaddr;
-	wr.wr.rdma.rkey        = rem_dest->rkey;
-	wr.wr_id               = PINGPONG_READ_WRID;
+	wr.wr_id      		   = PINGPONG_ATOMIC_WRID;
 	wr.num_sge             = MAX_RECV_SGE;
-	wr.opcode              = IBV_WR_RDMA_READ;
 	wr.send_flags          = IBV_SEND_SIGNALED;
 	wr.next                = NULL;
+	wr.wr.atomic.remote_addr = rem_dest->vaddr;
+	wr.wr.atomic.rkey  = rem_dest->rkey;
 
 	my_addr  = list.addr;
-	rem_addr = wr.wr.rdma.remote_addr;
-	
+	rem_addr = wr.wr.atomic.remote_addr;
+
+	if (user_param->atomicType == FETCH_AND_ADD) {
+		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		wr.wr.atomic.compare_add = ATOMIC_ADD_VALUE;
+
+	} else {
+		wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
+		wr.wr.atomic.swap = ATOMIC_SWAP_VALUE;
+	}	
+
 	while (scnt < user_param->iters) {
 	
 		tstamp[scnt] = get_cycles();
@@ -232,7 +245,7 @@ int run_iter(struct pingpong_context *ctx,
 		}
 
 		if (user_param->size <= (CYCLE_BUFFER / 2)) { 
-			increase_rem_addr(&wr,user_param->size,scnt,rem_addr,READ);
+			increase_rem_addr(&wr,user_param->size,scnt,rem_addr,ATOMIC);
 			increase_loc_addr(&list,user_param->size,scnt,my_addr,0);
 		}
 
@@ -267,22 +280,21 @@ int run_iter(struct pingpong_context *ctx,
  ******************************************************************************/
 int main(int argc, char *argv[]) {
 
-	int                         i = 0;
 	struct report_options       report = {};
 	struct pingpong_context     ctx;
+	struct pingpong_dest        my_dest,rem_dest;
 	struct ibv_device           *ib_dev;
 	struct perftest_parameters  user_param;
-	struct pingpong_dest	    my_dest,rem_dest;
 	struct perftest_comm		user_comm;
-	
+
 	/* init default values to user's parameters */
 	memset(&ctx,0,sizeof(struct pingpong_context));
-	memset(&user_param,0,sizeof(struct perftest_parameters));
+	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
 	memset(&my_dest,0,sizeof(struct pingpong_dest));
 	memset(&rem_dest,0,sizeof(struct pingpong_dest));
 
-	user_param.verb    = READ;
+	user_param.verb    = ATOMIC;
 	user_param.tst     = LAT;
 	user_param.r_flag  = &report;
 	user_param.version = VERSION;
@@ -328,9 +340,9 @@ int main(int argc, char *argv[]) {
 		if (create_rdma_resources(&ctx,&user_param)) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
-		}
+	    }
 
-		if (user_param.machine == CLIENT) {
+		 if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
@@ -366,9 +378,9 @@ int main(int argc, char *argv[]) {
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
-	}	
+	}
 
-	//  shaking hands and gather the other side info.
+	// shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
 		return 1;
@@ -379,7 +391,7 @@ int main(int argc, char *argv[]) {
 
 	if (user_param.work_rdma_cm == OFF) {
 
-		if (pp_connect_ctx(&ctx,my_dest.psn,&rem_dest,my_dest.out_reads,&user_param)) {
+		if (pp_connect_ctx(&ctx,my_dest.psn,&rem_dest,&user_param,my_dest.out_reads)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
@@ -387,11 +399,9 @@ int main(int argc, char *argv[]) {
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
-       fprintf(stderr,"Failed to exchange date between server and clients\n");
-       return 1;
+        fprintf(stderr,"Failed to exchange date between server and clients\n");
+        return 1;
     }
-
-	ALLOCATE(tstamp,cycles_t,user_param.iters);
 
 	// Only Client post read request. 
 	if (user_param.machine == SERVER) {
@@ -401,41 +411,26 @@ int main(int argc, char *argv[]) {
 		 	return 1;
 		}
 		printf(RESULT_LINE);
-		return 0; // destroy_ctx(&ctx,&user_param);
+		return 0;
 
-	} 
-
-	if (user_param.use_event) {
-		if (ibv_req_notify_cq(ctx.cq, 0)) {
-			fprintf(stderr, "Couldn't request CQ notification\n");
-			return 1;
-		} 
 	}
+
+	ALLOCATE(tstamp,cycles_t,user_param.iters);
 
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);
 
-	if (user_param.all == ON) {
-		for (i = 1; i < 24 ; ++i) {
-			user_param.size = 1 << i;
-			if(run_iter(&ctx,&user_param,&rem_dest))
-				return 17;
-	    	
-			print_report(&user_param);
-		}
-	} else {
-		if(run_iter(&ctx,&user_param,&rem_dest))
-			return 18;
-		
-		print_report(&user_param);
-	}
+	if(run_iter(&ctx,&user_param,&rem_dest))
+		return 17;
+
+	print_report(&user_param);
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 	 	fprintf(stderr,"Failed to close connection between server and client\n");
 	 	return 1;
 	}
-
+	
 	printf(RESULT_LINE);
-
-	return 0; // destroy_ctx(&ctx,&user_param);
+	free(tstamp);
+	return 0;
 }

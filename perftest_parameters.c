@@ -7,10 +7,11 @@
 
 
 static const char *connStr[] = {"RC","UC","UD"};
-static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read"};
+static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
+static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
 
 /****************************************************************************** 
  *
@@ -44,11 +45,14 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -m, --mtu=<mtu> ");
 	printf(" Mtu size : 256 - 4096 (default port mtu)\n");
 
-	printf("  -s, --size=<size> ");
-	printf(" Size of message to exchange (default %d)\n",tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
+	if (verb != ATOMIC) {
 
-	printf("  -a, --all ");
-	printf(" Run sizes from 2 till 2^23\n");
+		printf("  -s, --size=<size> ");
+		printf(" Size of message to exchange (default %d)\n",tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
+
+		printf("  -a, --all ");
+		printf(" Run sizes from 2 till 2^23\n");
+	}
 
 	printf("  -n, --iters=<iters> ");
 	printf(" Number of exchanges (at least 2, default %d)\n",DEF_ITERS);
@@ -76,7 +80,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Rx queue size (default %d)\n",DEF_RX_SEND);
 	}
 
-	if (verb != READ) {
+	if (verb != READ || verb != ATOMIC) {
 		printf("  -I, --inline_size=<size> ");
 		printf(" Max size of message to be sent in inline (default %d)\n",tst == LAT ? DEF_INLINE_LT : DEF_INLINE_BW);
 	}
@@ -107,9 +111,14 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" In multicast, uses <multicast_gid> as the group MGID.\n");
 	}
 
-	if (verb == READ) {
+	if (verb == READ || verb == ATOMIC) {
 		printf("  -o, --outs=<num> ");
 		printf(" num of outstanding read/atom(default max of device)\n");
+	}
+
+	if (verb == ATOMIC) {
+		printf("  -A, --atomic_type=<type> ");
+		printf(" type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD} (default FETCH_AND_ADD)\n");
 	}
 
 	if (tst == LAT) {
@@ -153,7 +162,6 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
 	user_param->cq_mod		= DEF_CQ_MOD;
-
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 
 	if (user_param->tst == LAT) {
@@ -161,6 +169,12 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 		user_param->r_flag->histogram = OFF;
 		user_param->r_flag->cycles    = OFF;
 	}
+
+	if (user_param->verb == ATOMIC) {
+		user_param->atomicType = FETCH_AND_ADD;
+		user_param->size = DEF_SIZE_ATOMIC;
+	}
+
 }
 
 /******************************************************************************
@@ -173,8 +187,8 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 
 	else if (strcmp(connStr[1],optarg)==0) { 
 		*cptr = UC;
-		if (verb == READ) { 
-			  fprintf(stderr," UC connection not possible in READ verb\n"); 
+		if (verb == READ || verb == ATOMIC) { 
+			  fprintf(stderr," UC connection not possible in READ/ATOMIC verbs\n"); 
 			  exit(1);
 		}
 
@@ -215,10 +229,10 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			user_param->gid_index = 0;
 	}
 
-	if (user_param->verb == READ) 
+	if (user_param->verb == READ || user_param->verb == ATOMIC) 
 		user_param->inline_size = 0;
 	
-	if (user_param->verb == WRITE || user_param->verb == READ)
+	if (user_param->verb == WRITE || user_param->verb == READ || user_param->verb == ATOMIC)
 		user_param->cq_size = user_param->tx_depth*user_param->num_of_qps;
 
 	else if (user_param->duplex) 		
@@ -260,6 +274,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			printf(RESULT_LINE);
 			fprintf(stdout," Perftest only supports 1 rmda_cm QP for now\n");
 		}
+	}
+
+	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
+		printf(RESULT_LINE);
+		fprintf(stderr," Atomic data size is fixed %dB - not changing size\n",DEF_SIZE_ATOMIC);
+		user_param->size = DEF_SIZE_ATOMIC;
 	}
 
 	return;
@@ -438,10 +458,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             { .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogrm",.has_arg = 0, .val = 'H' },
             { .name = "report-unsorted",.has_arg = 0, .val = 'U' },
+			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
             { 0 }
         };
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:lVaezRhbNFCHU",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:A:lVaezRhbNFCHU",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -452,20 +473,20 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); 			  	  	  break;
 			case 'i': CHECK_VALUE(user_param->ib_port,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); 	  break;
             case 'm': user_param->mtu  = strtol(optarg, NULL, 0); 							  break;
-			case 's': CHECK_VALUE(user_param->size,1,(UINT_MAX / 2),"Message size"); 		  break;
 			case 'n': CHECK_VALUE(user_param->iters,MIN_ITER,MAX_ITER,"Iteration num"); 	  break;
 			case 't': CHECK_VALUE(user_param->tx_depth,MIN_TX,MAX_TX,"Tx depth"); 			  break;
 			case 'u': user_param->qp_timeout = strtol(optarg, NULL, 0); 					  break;
 			case 'S': CHECK_VALUE(user_param->sl,MIN_SL,MAX_SL,"SL num");					  break;
 			case 'x': CHECK_VALUE(user_param->gid_index,MIN_GID_IX,MAX_GID_IX,"Gid index");   break;
 			case 'Q': CHECK_VALUE(user_param->cq_mod,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");  break;
-			case 'a': user_param->all 		 = ON;											  break;
+			case 'a': user_param->all = ON;											  		  break;
 			case 'F': user_param->cpu_freq_f = ON; 											  break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'V': printf("Version: %.2f\n",user_param->version); return 1;
 			case 'h': usage(argv[0],user_param->verb,user_param->tst); return 1;
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
+			case 's': CHECK_VALUE(user_param->size,1,(UINT_MAX / 2),"Message size"); break;
 			case 'q': CHECK_VALUE(user_param->num_of_qps,MIN_QP_NUM,MAX_QP_NUM,"num of Qps"); 
 				if (user_param->verb != WRITE || user_param->tst != BW) {
 					fprintf(stderr," Multiple QPs only availible on ib_write_bw and ib_write_bw_postlist\n");
@@ -485,7 +506,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				} break;
 
             case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
-				if (user_param->verb != READ) {
+				if (user_param->verb != READ && user_param->verb != ATOMIC) {
 					fprintf(stderr," Setting Outstanding reads only availible on READ verb\n");
                     return 1;
                 } break;
@@ -527,6 +548,25 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					return 1;
                 } 
 				user_param->r_flag->cycles = ON; break; 
+
+			case 'A':
+				if (user_param->verb != ATOMIC) {
+					fprintf(stderr," You are not running the atomic_lat/bw test!\n");
+					fprintf(stderr," To change the atomic action type, you must run one of the atomic tests\n");
+					return 1;
+                }
+
+				if (strcmp(atomicTypesStr[0],optarg)==0) 
+					user_param->atomicType = CMP_AND_SWAP;
+
+				else if (strcmp(atomicTypesStr[0],optarg)==1) 
+					user_param->atomicType = FETCH_AND_ADD;
+
+				else {
+					fprintf(stderr," Invalid Atomic type! please choose from {CMP_AND_SWAP,FETCH_AND_ADD}\n"); 
+					exit(1);
+				}
+				break;
 
 			case 'H': 
 				if (user_param->tst != LAT) {
@@ -585,7 +625,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	if (is_dev_hermon(context) != HERMON && user_param->inline_size != 0)
 		user_param->inline_size = 0;
 
-	if (user_param->verb == READ)
+	if (user_param->verb == READ || user_param->verb == ATOMIC)
 		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
 
 
@@ -612,6 +652,10 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	printf(RESULT_LINE);
 	printf("                    ");
 	printf("%s ",testsStr[user_param->verb]);
+
+	if (user_param->verb == ATOMIC) {
+		printf("%s ",atomicTypesStr[user_param->atomicType]);
+	}
 
 	if (user_param->tst == BW) { 
 
@@ -664,7 +708,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->gid_index != DEF_GID_INDEX)
 		printf(" Gid index       : %d\n" ,user_param->gid_index);
 
-	if (user_param->verb != READ) 
+	if (user_param->verb != READ && user_param->verb != ATOMIC) 
 		printf(" Max inline data : %dB\n",user_param->inline_size);
 
 	else 

@@ -194,8 +194,11 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		return FAILURE;
 	}
 
-	if (user_param->verb == READ){
+	if (user_param->verb == READ) {
 		flags |= IBV_ACCESS_REMOTE_READ;
+
+	} else if (user_param->verb == ATOMIC) {
+		flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	}
 	
 	// Alocating Memory region and assiging our buffer to it.
@@ -294,6 +297,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 
 	} else {
 		switch (user_param->verb) {
+			case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
 			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
 			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
 			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
@@ -352,13 +356,26 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline void increase_rem_addr(struct ibv_send_wr *wr,int size,
-							  int scnt,uint64_t prim_addr) {
+inline void increase_rem_addr(struct ibv_send_wr *wr,
+							  int size,
+							  int scnt,
+							  uint64_t prim_addr,
+							  VerbType verb) {
 
-	wr->wr.rdma.remote_addr += INC(size);           
+	if (verb == ATOMIC) 
+		wr->wr.atomic.remote_addr += INC(size);
 
-	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0)
-		wr->wr.rdma.remote_addr = prim_addr;
+	else
+		wr->wr.rdma.remote_addr += INC(size);           
+
+	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0) {
+
+		if (verb == ATOMIC) 
+			wr->wr.atomic.remote_addr = prim_addr;
+
+		else 
+			wr->wr.rdma.remote_addr = prim_addr;
+	}
 }
 
 /****************************************************************************** 
