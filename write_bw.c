@@ -49,7 +49,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.5
+#define VERSION 2.6
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
@@ -291,7 +291,7 @@ int run_iter(struct pingpong_context *ctx,
 		if (totccnt < (user_param->iters * user_param->num_of_qps) ) {
 	    
 			do {
-				ne = ibv_poll_cq(ctx->cq, DEF_WC_SIZE, wc);
+				ne = ibv_poll_cq(ctx->send_cq, DEF_WC_SIZE, wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 

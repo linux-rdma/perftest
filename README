@@ -12,6 +12,7 @@ Table of Contents
 2. Notes on Testing Methodology
 3. Test Descriptions
 4. Running Tests
+5. Known Issues
 
 ===============================================================================
 1. Overview
@@ -22,10 +23,11 @@ HW or SW tuning and/or functional testing.
 
 The collection conatains a set of BW and latency benchmark such as :
 
-	* Read  - ib_read_bw and ib_read_lat.
-	* Write - ib_write_bw and ib_wriet_lat.
-	* Send  - ib_send_bw and ib_send_lat.
-	* RDMA  - rdma_bw and rdma_lat.
+	* Read   - ib_read_bw and ib_read_lat.
+	* Write  - ib_write_bw and ib_wriet_lat.
+	* Send   - ib_send_bw and ib_send_lat.
+	* RDMA   - rdma_bw and rdma_lat.
+	* Atomic - ib_atomic_bw and ib_atomic_lat
 	* In additional :  ib_write_bw_postlist and ib_clock_test.
 
 Please post results/observations to the openib-general mailing list.
@@ -72,7 +74,6 @@ Architectures tested:	i686, x86_64, ia64
 rdma_lat.c 	latency test with RDMA write transactions
 rdma_bw.c 	streaming BW test with RDMA write transactions
 
-
 The following tests are mainly useful for HW/SW benchmarking.
 They are not intended as actual usage examples.
 
@@ -82,6 +83,8 @@ write_lat.c 	latency test with RDMA write transactions
 write_bw.c 	BW test with RDMA write transactions
 read_lat.c 	latency test with RDMA read transactions
 read_bw.c 	BW test with RDMA read transactions
+atomic_lat.c	latency test with atomic transactions
+atomic_bw.c 	BW test atomic transactions
 
 The executable name of each test starts with the general prefix "ib_",
 e.g., ib_write_lat , exept of those of RDMA tests , in their case
@@ -106,6 +109,7 @@ Client:		./<test name> <options> <server IP address>
 
 
 Common Options to all tests:
+----------------------------
   -p, --port=<port>            Listen on/connect to port <port> (default: 18515).
   -m, --mtu=<mtu>              Mtu size (default: 1024).
   -d, --ib-dev=<dev>           Use IB device <dev> (default: first device found).
@@ -138,6 +142,31 @@ Common Options to all tests:
 Example:
 Run "ib_rdma_lat -C" on the server side.
 Then run "ib_rdma_lat -C <server IP address>" on the client.
-
 ib_rdma_lat will exit on both server and client after printing results.
+
+Special feature in tests:
+-------------------------
+
+ 1. Multicast feauture in ib_send_lat and in ib_send_bw.
+    Send tests have built in feature of testing multicast performance, in verbs level.
+    You can use "-g" to specify the number of QPs to attach to this multicast group.
+    "-M" flag allows you to choose the multicast group address.
+
+
+===============================================================================
+5. Known Issues
+===============================================================================
+Up until now, we still have known (unsolved) issues in the package.
+Here is a list of the main issues:
+
+ 1. Multicast feauture in ib_send_lat and in ib_send_bw still have many problems!
+    Will increase the support and bug fixes in this Q, but now the tests may stuck
+    and could produce undefine behaviours.
+
+ 2. Bidirectional feature in ib_send_bw test, when running in UD or UC mode.
+    The algorithm we use for the bidirectional measurement is designed for RC connection type.
+    When running in UC or UD connection types, there is a small probablity the test will be stuck.
+    We are working now to fix it.
+
+
 

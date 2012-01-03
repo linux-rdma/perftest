@@ -50,7 +50,7 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 2.4
 cycles_t *tstamp;
 
 /****************************************************************************** 
@@ -277,7 +277,7 @@ int run_iter(struct pingpong_context *ctx,
 		if (ccnt < user_param->iters) {	
 		
 			do {
-				ne = ibv_poll_cq(ctx->cq, 1, &wc);
+				ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
 			} while (ne == 0);
 
 			if(ne > 0) {

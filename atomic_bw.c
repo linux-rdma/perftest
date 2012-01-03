@@ -48,7 +48,7 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 0,1
+#define VERSION 1.1
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
@@ -216,14 +216,14 @@ int run_iter(struct pingpong_context *ctx,
 		if (ccnt < user_param->iters) {
 
 			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
 					fprintf(stderr, "Couldn't request CQ notification\n");
 					return 1;
 				}
 			}
 
 			do {
-				ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
+				ne = ibv_poll_cq(ctx->send_cq,DEF_WC_SIZE,wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 
@@ -384,7 +384,7 @@ int main(int argc, char *argv[]) {
 	} 
 
 	if (user_param.use_event) {
-		if (ibv_req_notify_cq(ctx.cq, 0)) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
 		} 

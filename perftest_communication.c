@@ -204,7 +204,7 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	}
 
 	do {
-		ne = ibv_poll_cq(comm->rdma_ctx->cq, 1,&wc);
+		ne = ibv_poll_cq(comm->rdma_ctx->send_cq, 1,&wc);
 	} while (ne == 0);
 
 	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != SYNC_SPEC_ID) {
@@ -225,7 +225,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	int ne;
 
 	do {
-		ne = ibv_poll_cq(comm->rdma_ctx->cq,1,&wc);
+		ne = ibv_poll_cq(comm->rdma_ctx->recv_cq,1,&wc);
 	} while (ne == 0);
 
 	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
@@ -439,35 +439,35 @@ int rdma_client_connect(struct pingpong_context *ctx,
 		
     while (1) {
 
-	if (num_of_retry <= 0) {
-	    fprintf(stderr, "Received %d times ADDR_ERROR - aborting\n",NUM_OF_RETRIES);
-	    return FAILURE;
-	}
+		if (num_of_retry <= 0) {
+			fprintf(stderr, "Received %d times ADDR_ERROR - aborting\n",NUM_OF_RETRIES);
+			return FAILURE;
+		}
 
-	if (rdma_resolve_route(ctx->cm_id,2000)) {
-	    fprintf(stderr, "rdma_resolve_route failed\n");
-	    return FAILURE;
-	}
+		if (rdma_resolve_route(ctx->cm_id,2000)) {
+			fprintf(stderr, "rdma_resolve_route failed\n");
+			return FAILURE;
+		}
 	
-	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-	    fprintf(stderr, "rdma_get_cm_events failed\n"); 
-	    return FAILURE; 
-	}
+		if (rdma_get_cm_event(ctx->cm_channel,&event)) {
+			fprintf(stderr, "rdma_get_cm_events failed\n"); 
+			return FAILURE; 
+		}
 
-	if (event->event == RDMA_CM_EVENT_ROUTE_ERROR) {
-	    num_of_retry--;
-	    rdma_ack_cm_event(event);
-	    continue;
-	}	
+		if (event->event == RDMA_CM_EVENT_ROUTE_ERROR) {
+			num_of_retry--;
+			rdma_ack_cm_event(event);
+			continue;
+		}	
 
-	if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
-		 fprintf(stderr, "unexpected CM event %d\n",event->event);
+		if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
+			fprintf(stderr, "unexpected CM event %d\n",event->event);
+			rdma_ack_cm_event(event);
+			return FAILURE;
+		}
+
 		rdma_ack_cm_event(event);
-		return FAILURE;
-	}
-
-	rdma_ack_cm_event(event);
-	break;
+		break;
 	}
 
 	ctx->context = ctx->cm_id->verbs;
@@ -632,9 +632,9 @@ int create_comm_struct(struct perftest_comm *comm,
 
 		comm->rdma_params->tx_depth = 1;
 		comm->rdma_params->rx_depth = 1;
-		comm->rdma_params->cq_size  = 1;
 		comm->rdma_params->connection_type = RC;
 		comm->rdma_params->num_of_qps = 1;
+		comm->rdma_params->verb	= SEND;
 		comm->rdma_params->size = sizeof(struct pingpong_dest);
 		comm->rdma_ctx->context = NULL;
 

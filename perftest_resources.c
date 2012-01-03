@@ -109,9 +109,16 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (ibv_destroy_cq(ctx->cq)) {
+	if (ibv_destroy_cq(ctx->send_cq)) {
 		fprintf(stderr, "failed to destroy CQ\n");
 		test_result = 1;
+	}
+
+	if (user_parm->verb == SEND) {
+		if (ibv_destroy_cq(ctx->recv_cq)) {
+			fprintf(stderr, "failed to destroy CQ\n");
+			test_result = 1;
+		}
 	}
 
 	if (ibv_dereg_mr(ctx->mr)) {
@@ -208,11 +215,18 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		return FAILURE;
 	}
 
-	// Creates the CQ according to ctx_cq_create in perfetst_resources.
-	ctx->cq = ibv_create_cq(ctx->context,user_param->cq_size,NULL,ctx->channel,0);
-	if (!ctx->cq) {
+	ctx->send_cq = ibv_create_cq(ctx->context,user_param->tx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
+	if (!ctx->send_cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
+	}
+
+	if (user_param->verb == SEND) { 
+		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
+		if (!ctx->recv_cq) {
+			fprintf(stderr, "Couldn't create a recevier CQ\n");
+			return FAILURE;
+		}
 	}
 
 	for (i=0; i < user_param->num_of_qps; i++) {
@@ -245,8 +259,8 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	struct ibv_qp* qp = NULL;
 
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
-	attr.send_cq = ctx->cq;
-	attr.recv_cq = ctx->cq; 
+	attr.send_cq = ctx->send_cq;
+	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
 	attr.cap.max_send_wr  = user_param->tx_depth;
 	attr.cap.max_recv_wr  = user_param->rx_depth;
 	attr.cap.max_send_sge = MAX_SEND_SGE;

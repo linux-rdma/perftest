@@ -50,7 +50,7 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 2.4
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
@@ -355,7 +355,7 @@ static int pp_drain_qp(struct pingpong_context *ctx,
 			return 1;
 		}
 
-		while (ibv_poll_cq(ctx->cq,1,&wc));
+		while (ibv_poll_cq(ctx->recv_cq,1,&wc));
    
 		attr.qp_state = IBV_QPS_RESET;
 
@@ -493,56 +493,80 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		if (user_param->use_event) {
 
-			if (ctx_notify_events(ctx->cq,ctx->channel)) {
+			if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
 				return 1;
 			}
 		}
 
 		do {
-			ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,DEF_WC_SIZE,wc);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
 					
 					if (wc[i].status != IBV_WC_SUCCESS)
 						 NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
 
-					if ((int) wc[i].wr_id == PINGPONG_SEND_WRID) {
-						ccnt += user_param->cq_mod;
-						if (ccnt >= user_param->iters - 1) 
-							tcompleted[user_param->iters - 1] = get_cycles();
+					rcnt_for_qp[wc[i].wr_id]++;
+					rcnt++;
 
-						else 
-							tcompleted[ccnt - 1] = get_cycles();
-					}
+					if (rcnt + user_param->rx_depth*user_param->num_of_qps <= user_param->iters*user_param->num_of_qps) {
 
-					else {
-
-						rcnt_for_qp[wc[i].wr_id]++;
-						rcnt++;
-
-						if (rcnt + user_param->rx_depth*user_param->num_of_qps <= user_param->iters*user_param->num_of_qps) {
-
-							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&rwr[wc[i].wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
-								return 15;
-							}
-
-							if (user_param->size <= (CYCLE_BUFFER / 2) && user_param->connection_type != UD)
-								increase_loc_addr(rwr[wc[i].wr_id].sg_list,
-												  user_param->size,
-												  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
-												  my_addr[wc[i].wr_id],user_param->connection_type);	
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&rwr[wc[i].wr_id],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
+							return 15;
 						}
+
+						if (user_param->size <= (CYCLE_BUFFER / 2) && user_param->connection_type != UD)
+							increase_loc_addr(rwr[wc[i].wr_id].sg_list,
+											  user_param->size,
+											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
+											  my_addr[wc[i].wr_id],user_param->connection_type);	
 					}
 				}
 			}
+
 		} while (ne > 0);
 
 		if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
 			return 1;
 		}
+
+		if (user_param->use_event) {
+
+			if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
+				fprintf(stderr,"Failed to notify events to CQ");
+				return 1;
+			}
+		}
+
+		do {
+			ne = ibv_poll_cq(ctx->send_cq,DEF_WC_SIZE,wc);
+			if (ne > 0) {
+				for (i = 0; i < ne; i++) {
+
+					if (wc[i].status != IBV_WC_SUCCESS)
+						 NOTIFY_COMP_ERROR_SEND(wc[i],scnt,ccnt);
+
+					ccnt += user_param->cq_mod;
+					if (ccnt >= user_param->iters - 1) 
+						tcompleted[user_param->iters - 1] = get_cycles();
+
+					else 
+						tcompleted[ccnt - 1] = get_cycles();
+
+
+				}
+			}
+
+		} while (ne > 0);
+
+		if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", ne);
+			return 1;
+		}
+				
 	}
 	
 	if (user_param->size <= user_param->inline_size) 
@@ -575,14 +599,14 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 	while (rcnt < user_param->iters*user_param->num_of_qps) {
 
 		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->cq,ctx->channel)) {
+			if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
 				fprintf(stderr ," Failed to notify events to CQ");
 				return 1;
 			}
 		}
 		
 		do {
-			ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,DEF_WC_SIZE,wc);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
 					
@@ -672,13 +696,13 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 		if (ccnt < user_param->iters) {
 			
 			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
 			} 
 			do {
-				ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
+				ne = ibv_poll_cq(ctx->send_cq,DEF_WC_SIZE,wc);
 				if (ne > 0) {
 					for (i = 0; i < DEF_WC_SIZE; i++) {
 
@@ -861,7 +885,12 @@ int main(int argc, char *argv[]) {
 
     if (user_param.use_event) {
 
-		if (ibv_req_notify_cq(ctx.cq, 0)) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
+			fprintf(stderr, " Couldn't request CQ notification\n");
+            return 1;
+        }
+
+		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
             return 1;
         }

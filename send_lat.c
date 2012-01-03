@@ -51,7 +51,7 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 2.4
 
 cycles_t  *tstamp;
 
@@ -201,11 +201,16 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 	}
 	free(ctx->qp);
 
-	if (ibv_destroy_cq(ctx->cq)) {
+	if (ibv_destroy_cq(ctx->send_cq)) {
 		fprintf(stderr, "failed to destroy CQ\n");
 		test_result = 1;
 	}
-	
+
+	if (ibv_destroy_cq(ctx->recv_cq)) {
+		fprintf(stderr, "failed to destroy CQ\n");
+		test_result = 1;
+	}
+
 	if (ibv_dereg_mr(ctx->mr)) {
 		fprintf(stderr, "failed to deregister MR\n");
 		test_result = 1;
@@ -516,7 +521,7 @@ int run_iter(struct pingpong_context *ctx,
 		  
 			// Server is polling on recieve first .
 		    if (user_param->use_event) {
-				if (ctx_notify_events(ctx->cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
@@ -524,7 +529,7 @@ int run_iter(struct pingpong_context *ctx,
 
 			do {
 								
-				ne = ibv_poll_cq(ctx->cq,DEF_WC_SIZE,wc);
+				ne = ibv_poll_cq(ctx->recv_cq,DEF_WC_SIZE,wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 
@@ -569,14 +574,14 @@ int run_iter(struct pingpong_context *ctx,
 		    int s_ne;
 
 		    if (user_param->use_event) {
-				if (ctx_notify_events(ctx->cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
 		    }
 
 		    do {
-				s_ne = ibv_poll_cq(ctx->cq, 1, &s_wc);
+				s_ne = ibv_poll_cq(ctx->send_cq, 1, &s_wc);
 		    } while (!user_param->use_event && s_ne == 0);
 
 		    if (s_ne < 0) {
@@ -608,6 +613,7 @@ int main(int argc, char *argv[])
 
 	int                        i = 0;
 	int                        size_max_pow = 24;
+	int						   ret_val;
 	struct report_options      report = {};
 	struct pingpong_context    ctx;
 	struct pingpong_dest	   my_dest,rem_dest;
@@ -635,8 +641,10 @@ int main(int argc, char *argv[])
 	user_param.r_flag  = &report;
 
 	// Configure the parameters values according to user arguments or defalut values.
-	if (parser(&user_param,argv,argc)) {
-		fprintf(stderr," Parser function exited with Error\n");
+	ret_val = parser(&user_param,argv,argc);
+	if (ret_val) {
+		if (ret_val != VERSION_EXIT)
+			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
 
@@ -744,7 +752,12 @@ int main(int argc, char *argv[])
 
     if (user_param.use_event) {
 
-		if (ibv_req_notify_cq(ctx.cq, 0)) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
+			fprintf(stderr, "Couldn't request RCQ notification\n");
+			return 1;
+		} 
+
+		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, "Couldn't request RCQ notification\n");
 			return 1;
 		} 

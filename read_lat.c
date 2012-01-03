@@ -50,7 +50,7 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.3
+#define VERSION 2.4
 cycles_t *tstamp;
 
 /****************************************************************************** 
@@ -239,14 +239,14 @@ int run_iter(struct pingpong_context *ctx,
 		scnt++;
 	
 		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->cq,ctx->channel)) {
+			if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
 				fprintf(stderr, "Couldn't request CQ notification\n");
 				return 1;
 			}
 		}
 
 		do {
-			ne = ibv_poll_cq(ctx->cq, 1, &wc);
+			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
 			if(ne > 0) { 
 				if (wc.status != IBV_WC_SUCCESS) 
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
@@ -406,7 +406,7 @@ int main(int argc, char *argv[]) {
 	} 
 
 	if (user_param.use_event) {
-		if (ibv_req_notify_cq(ctx.cq, 0)) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
 		} 

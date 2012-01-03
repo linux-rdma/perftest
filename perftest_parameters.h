@@ -65,6 +65,7 @@
 #define ON 	     (1)
 #define SUCCESS	     (0)
 #define FAILURE	     (1)
+#define VERSION_EXIT (10)
 #define MTU_FIX	     (7)
 #define MAX_SIZE     (8388608)
 #define LINK_FAILURE (4)
@@ -197,7 +198,7 @@ struct perftest_parameters {
 	TestType		tst;
 	AtomicType		atomicType;
 	int				sockfd;
-	int				cq_size;
+	// int				cq_size;
 	float			version;
 	struct report_options  *r_flag;
 };

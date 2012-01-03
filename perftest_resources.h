@@ -123,7 +123,8 @@ struct pingpong_context {
 	struct ibv_comp_channel 	*channel;
 	struct ibv_pd      			*pd;
 	struct ibv_mr      			*mr;
-	struct ibv_cq      			*cq;
+	struct ibv_cq      			*send_cq;
+	struct ibv_cq      			*recv_cq;
 	void               			*buf;
 	struct ibv_ah				*ah;
 	struct ibv_qp      			**qp;
