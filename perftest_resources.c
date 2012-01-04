@@ -343,7 +343,7 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel) {
+inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 
 	struct ibv_cq       *ev_cq;
 	void                *ev_ctx;
@@ -353,14 +353,9 @@ inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel)
 		return 1;
 	}
 
-	if (ev_cq != cq) {
-		fprintf(stderr, "CQ event for unknown CQ %p\n", ev_cq);
-		return 1;
-	}
+	ibv_ack_cq_events(ev_cq,1);
 
-	ibv_ack_cq_events(cq,1);
-
-	if (ibv_req_notify_cq(cq, 0)) {
+	if (ibv_req_notify_cq(ev_cq, 0)) {
 		fprintf(stderr, "Couldn't request CQ notification\n");
 		return 1;
 	}

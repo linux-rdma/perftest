@@ -216,7 +216,7 @@ int run_iter(struct pingpong_context *ctx,
 		if (ccnt < user_param->iters) {
 
 			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr, "Couldn't request CQ notification\n");
 					return 1;
 				}

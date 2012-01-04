@@ -277,8 +277,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	}
 
 	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
-		printf(RESULT_LINE);
-		fprintf(stderr," Atomic data size is fixed %dB - not changing size\n",DEF_SIZE_ATOMIC);
 		user_param->size = DEF_SIZE_ATOMIC;
 	}
 

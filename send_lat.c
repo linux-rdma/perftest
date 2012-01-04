@@ -521,7 +521,7 @@ int run_iter(struct pingpong_context *ctx,
 		  
 			// Server is polling on recieve first .
 		    if (user_param->use_event) {
-				if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
@@ -574,7 +574,7 @@ int run_iter(struct pingpong_context *ctx,
 		    int s_ne;
 
 		    if (user_param->use_event) {
-				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}

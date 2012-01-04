@@ -272,12 +272,11 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
  *	This is the way to work in un interipted mode.  
  * 
  * Parameters : 
- *	cq - The completion queuee (must have been created with the event channel).
  *  channel - (Mandotory) the created event channel.
  *         
  * Return Value : SUCCESS, FAILURE.
  */
-inline int ctx_notify_events(struct ibv_cq *cq,struct ibv_comp_channel *channel);
+inline int ctx_notify_events(struct ibv_comp_channel *channel);
 
 /* increase_rem_addr.
  *

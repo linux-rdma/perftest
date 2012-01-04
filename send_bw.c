@@ -493,7 +493,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		if (user_param->use_event) {
 
-			if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
+			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
 				return 1;
 			}
@@ -531,14 +531,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 		if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
 			return 1;
-		}
-
-		if (user_param->use_event) {
-
-			if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
-				fprintf(stderr,"Failed to notify events to CQ");
-				return 1;
-			}
 		}
 
 		do {
@@ -599,7 +591,7 @@ int run_iter_uni_server(struct pingpong_context *ctx,
 	while (rcnt < user_param->iters*user_param->num_of_qps) {
 
 		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->recv_cq,ctx->channel)) {
+			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr ," Failed to notify events to CQ");
 				return 1;
 			}
@@ -696,7 +688,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 		if (ccnt < user_param->iters) {
 			
 			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->send_cq,ctx->channel)) {
+				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
