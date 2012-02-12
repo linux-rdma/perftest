@@ -41,17 +41,28 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#ifdef _WIN32
+#include "..\..\tools\perftests\user\get_clock.h"
+#else
+#include <unistd.h>
 #include <malloc.h>
-
 #include "get_clock.h"
-#include "perftest_resources.h"
+#endif
+
 #include "perftest_parameters.h"
+#include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.4
+#define VERSION 2.5
 cycles_t *tstamp;
+
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+#else
+#define __cdecl
+#endif
 
 /****************************************************************************** 
  *
@@ -141,6 +152,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	return 0;
 }
 
+#ifndef _WIN32
 /*
  * When there is an
  *	odd number of samples, the median is the middle number.
@@ -168,6 +180,7 @@ static int cycles_compare(const void * aptr, const void * bptr)
 	return 0;
 
 }
+#endif
 
 /****************************************************************************** 
  *
@@ -176,7 +189,7 @@ static void print_report(struct perftest_parameters *user_param) {
 
 	double cycles_to_units;
 	cycles_t median;
-	unsigned int i;
+	int i;
 	const char* units;
 	cycles_t *delta = malloc((user_param->iters - 1) * sizeof *delta);
 
@@ -193,7 +206,12 @@ static void print_report(struct perftest_parameters *user_param) {
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
+
+#ifndef _WIN32
 		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+#else
+		cycles_to_units = get_cpu_mhz()/1000000;
+#endif
 		units = "usec";
 	}
 
@@ -298,10 +316,10 @@ int run_iter(struct pingpong_context *ctx,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int main(int argc, char *argv[]) {
+int __cdecl main(int argc, char *argv[]) {
 
 	int                         i = 0;
-	struct report_options       report = {};
+	struct report_options       report;
 	struct pingpong_context     ctx;
 	struct pingpong_dest        my_dest,rem_dest;
 	struct ibv_device           *ib_dev;
@@ -432,7 +450,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.all == ON) {
 
 		for (i = 1; i < 24 ; ++i) {
-			user_param.size = 1 << i;
+			user_param.size = (uint64_t)1 << i;
 			if(run_iter(&ctx,&user_param,&rem_dest))
 				return 17;
 			print_report(&user_param);
@@ -445,8 +463,6 @@ int main(int argc, char *argv[]) {
 			print_report(&user_param);
 	}
 	
-	
-
 	printf(RESULT_LINE);
 	free(tstamp);
 	return 0;

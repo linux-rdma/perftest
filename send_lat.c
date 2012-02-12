@@ -41,19 +41,28 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#ifdef _WIN32
+#include "..\..\tools\perftests\user\get_clock.h"
+#else
+#include <unistd.h>
 #include <malloc.h>
-
 #include "get_clock.h"
+#endif
+
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.4
-
+#define VERSION 2.5
 cycles_t  *tstamp;
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+#else
+#define __cdecl
+#endif
 
 /****************************************************************************** 
  *
@@ -146,8 +155,8 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->gid = mcg_params->mgid;
 		my_dest->lid = mcg_params->mlid;
 		my_dest->qpn = QPNUM_MCAST;
-	}
-	else {
+
+	} else {
 		if (user_parm->gid_index != -1) {
 			if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
 				return -1;
@@ -157,7 +166,11 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->qpn   	   = ctx->qp[0]->qp_num;
 	}
 
+#ifndef _WIN32
 	my_dest->psn       = lrand48() & 0xffffff;
+#else
+	my_dest->psn       = rand() & 0xffffff;
+#endif
 	
 	// We do not fail test upon lid above RoCE.
 	if (user_parm->gid_index < 0) {
@@ -400,6 +413,7 @@ static void set_send_wqe(struct pingpong_context *ctx,
 	}
 }
 
+#ifndef _WIN32
 /*
  * When there is an
  *	odd number of samples, the median is the middle number.
@@ -429,6 +443,7 @@ static int cycles_compare(const void *aptr, const void *bptr)
 
 }
 
+#endif
 
 /****************************************************************************** 
  *
@@ -437,7 +452,7 @@ static void print_report(struct perftest_parameters *user_param) {
 
 	double cycles_to_units;
 	cycles_t median;
-	unsigned int i;
+	int i;
 	const char* units;
 	cycles_t *delta = malloc((user_param->iters - 1) * sizeof *delta);
 
@@ -453,8 +468,14 @@ static void print_report(struct perftest_parameters *user_param) {
 	if (user_param->r_flag->cycles) {
 		cycles_to_units = 1;
 		units = "cycles";
+
 	} else {
+
+#ifndef _WIN32
 		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+#else
+		cycles_to_units = get_cpu_mhz()/1000000;
+#endif
 		units = "usec";
 	}
 
@@ -505,12 +526,6 @@ int run_iter(struct pingpong_context *ctx,
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
-	// Post recevie recv_wqe's.
-	if (set_recv_wqes(ctx,user_param,rwr,sge_list)) {
-		fprintf(stderr," Failed to post receive recv_wqes\n");
-		return 1;
-	}
-	
 	list->length = user_param->size;
 
 	if (user_param->size <= user_param->inline_size) 
@@ -608,13 +623,12 @@ int run_iter(struct pingpong_context *ctx,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int main(int argc, char *argv[])
-{
+int __cdecl main(int argc, char *argv[]) {
 
 	int                        i = 0;
 	int                        size_max_pow = 24;
 	int						   ret_val;
-	struct report_options      report = {};
+	struct report_options      report;
 	struct pingpong_context    ctx;
 	struct pingpong_dest	   my_dest,rem_dest;
 	struct mcast_parameters	   mcg_params;
@@ -777,20 +791,47 @@ int main(int argc, char *argv[])
 			size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
-			user_param.size = 1 << i;
+			
+			user_param.size = (uint64_t)1 << i;
+			
+			// Post recevie recv_wqes fo current message size
+			if (set_recv_wqes(&ctx,&user_param,rwr,sge_list)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				return 1;
+			}
+			
+			// Sync between the client and server so the client won't send packets 
+			// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
+			if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+				fprintf(stderr,"Failed to exchange date between server and clients\n");
+				return 1;
+			}
+			
 			if(run_iter(&ctx, &user_param, &rem_dest,rwr,sge_list,&wr,&list))
 				return 17;
 
 			print_report(&user_param);
 
-			if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
-				fprintf(stderr,"Failed to exchange date between server and clients\n");
-				return 1;
-			}
 		}
+	
 	} else {
+		
+		// Post recevie recv_wqes fo current message size
+		if (set_recv_wqes(&ctx,&user_param,rwr,sge_list)) {
+			fprintf(stderr," Failed to post receive recv_wqes\n");
+			return 1;
+		}
+					
+		// Sync between the client and server so the client won't send packets 
+		// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
+		if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1;
+		}
+		
 		if(run_iter(&ctx, &user_param, &rem_dest,rwr,sge_list,&wr,&list))
-			return 18;	
+			return 18;
+		
 		print_report(&user_param);
 	}
 

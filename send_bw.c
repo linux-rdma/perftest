@@ -40,20 +40,32 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <malloc.h>
 
+#ifdef _WIN32
+#include "..\..\tools\perftests\user\get_clock.h"
+#else
+#include <unistd.h>
+#include <malloc.h>
 #include "get_clock.h"
+#endif
+
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.4
+#define VERSION 2.5
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
+
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+#else
+#define __cdecl
+#endif
 
 /****************************************************************************** 
  *
@@ -130,7 +142,12 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->lid = ctx_get_local_lid(ctx->context,user_parm->ib_port);
 		my_dest->qpn = ctx->qp[0]->qp_num;
 	}
-	my_dest->psn  = lrand48() & 0xffffff;
+
+#ifndef _WIN32
+	my_dest->psn       = lrand48() & 0xffffff;
+#else
+	my_dest->psn       = rand() & 0xffffff;
+#endif
 
 	// We do not fail test upon lid above RoCE.
 
@@ -152,8 +169,8 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 						  struct perftest_parameters *user_parm)
 {
 	struct ibv_qp_attr attr;
-	memset(&attr, 0, sizeof attr);
 	int i;
+	memset(&attr, 0, sizeof attr);
 
 	attr.qp_state 		= IBV_QPS_RTR;
 	attr.path_mtu       = user_parm->curr_mtu;
@@ -336,59 +353,6 @@ static void set_send_wqe(struct pingpong_context *ctx,int rem_qpn,
 /****************************************************************************** 
  *
  ******************************************************************************/
-static int pp_drain_qp(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param,
-						int psn,struct pingpong_dest *dest,
-						struct mcast_parameters *mcg_params) {
-
-	struct ibv_qp_attr attr;
-	struct ibv_wc      wc;
-	int                i;
-
-	memset(&attr, 0, sizeof attr);
-	attr.qp_state = IBV_QPS_ERR;
-
-	for (i = 0; i <  user_param->num_of_qps; i++) {
-
-		if (ibv_modify_qp(ctx->qp[i],&attr,IBV_QP_STATE)) {
-			fprintf(stderr, "Failed to modify RC QP to ERR\n");
-			return 1;
-		}
-
-		while (ibv_poll_cq(ctx->recv_cq,1,&wc));
-   
-		attr.qp_state = IBV_QPS_RESET;
-
-		if (ibv_modify_qp(ctx->qp[i],&attr,IBV_QP_STATE)) {
-			fprintf(stderr, "Failed to modify RC QP to RESET\n");
-			return 1;
-		}
-
-		if(ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
-			return 1;
-		}
-
-		if (user_param->use_mcg) {
-
-			if ((!user_param->duplex && user_param->machine == SERVER) || (user_param->duplex && i > 0)) {
-				if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-					fprintf(stderr, "Couldn't attach QP to MultiCast group");
-					return 1;
-				}
-			}
-		}
-	}
-
-	if (pp_connect_ctx(ctx,psn,dest,user_param)) {
-		return 1;
-	}
-
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
 static void print_report(struct perftest_parameters *user_param) {
 
 	double cycles_to_units;
@@ -414,7 +378,11 @@ static void print_report(struct perftest_parameters *user_param) {
 			}
 	}
 
+#ifndef _WIN32
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
+#else
+	cycles_to_units = get_cpu_mhz();
+#endif
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
@@ -730,7 +698,7 @@ int run_iter_uni_client(struct pingpong_context *ctx,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int main(int argc, char *argv[]) {
+int __cdecl main(int argc, char *argv[]) {
 
 	struct ibv_device		 	*ib_dev = NULL;
 	struct pingpong_context  	ctx;
@@ -916,7 +884,7 @@ int main(int argc, char *argv[]) {
 		   size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
-			user_param.size = 1 << i;
+			user_param.size = (uint64_t)1 << i;
 
 			if (user_param.machine == SERVER || user_param.duplex) {
 				if (set_recv_wqes(&ctx,&user_param,rwr,sge_list,my_addr)) {
@@ -949,14 +917,6 @@ int main(int argc, char *argv[]) {
 			}
 
 			print_report(&user_param);
-
-			if (user_param.work_rdma_cm == OFF) {
-
-				if (pp_drain_qp(&ctx,&user_param,my_dest.psn,&rem_dest,&mcg_params)) {
-					fprintf(stderr,"Failed to drain Recv queue (performance optimization)\n");
-					return 1;
-				}
-			}
 
 			if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 				fprintf(stderr,"Failed to exchange date between server and clients\n");

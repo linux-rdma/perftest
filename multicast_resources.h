@@ -61,7 +61,12 @@
  
 #include <infiniband/verbs.h>
 #include <infiniband/umad.h>
+
+#ifdef _WIN32
+#include "..\..\tools\perftests\user\get_clock.h"
+#else
 #include "get_clock.h"
+#endif
 
 #define QPNUM_MCAST 				0xffffff
 #define DEF_QKEY     			    0x11111111
@@ -81,11 +86,13 @@
 #define DEF_FLOW_LABLE                 0
 
 // Macro for 64 bit variables to switch to from net 
-#define ntohll(x) (((u_int64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32)))) 
+#ifndef _WIN32
+#define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32))))
 #define htonll(x) ntohll(x)
+#endif
 
 // generate a bit mask S bits width 
-#define MASK32(S)  ( ((u_int32_t) ~0L) >> (32-(S)) )
+#define MASK32(S)  ( ((uint32_t) ~0L) >> (32-(S)) )
 
 // generate a bit mask with bits O+S..O set (assumes 32 bit integer).
 #define BITS32(O,S) ( MASK32(S) << (O) )
@@ -135,7 +142,7 @@ struct mcast_parameters {
 	int					  is_user_mgid;
 	int					  mcast_state;
 	int 				  ib_port;
-	int 				  mlid;
+	uint16_t			  mlid;
 	const char			  *user_mgid;
 	const char			  *ib_devname;
 	uint16_t 			  pkey;
@@ -147,6 +154,21 @@ struct mcast_parameters {
 };
 
 // according to Table 195 in the IB spec 1.2.1 
+
+#ifdef _WIN32
+#include <complib/cl_packon.h>
+struct sa_mad_packet_t {
+        uint8_t                 mad_header_buf[24];
+        uint8_t                 rmpp_header_buf[12];
+        uint64_t                SM_Key;
+        uint16_t                AttributeOffset;
+        uint16_t                Reserved1;
+        uint64_t                ComponentMask;
+        uint8_t                 SubnetAdminData[200];
+} PACK_SUFFIX;
+#include <complib/cl_packoff.h>
+
+#else
 struct sa_mad_packet_t {
 	u_int8_t		mad_header_buf[24];
 	u_int8_t		rmpp_header_buf[12];
@@ -156,6 +178,7 @@ struct sa_mad_packet_t {
 	u_int64_t		ComponentMask;
 	u_int8_t		SubnetAdminData[200];
 }__attribute__((packed));
+#endif
 
 /************************************************************************ 
  *   Multicast resources methods.					    			    *

@@ -41,22 +41,46 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <limits.h>
+#include <arpa/inet.h>
+#include <infiniband/verbs.h>
+
+#ifdef _WIN32
+#include <stdarg.h>
+#include <time.h>
+#include <sys/types.h>
+#include <winsock2.h>
+#include <Winsock2.h>
+#include "rdma_cma.h"
+#include "l2w.h"
+#include "..\..\tools\perftests\user\get_clock.h"
+#include "..\..\etc\user\getopt.c"
+#else
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netdb.h>
 #include <malloc.h>
 #include <getopt.h>
-#include <arpa/inet.h>
 #include <byteswap.h>
 #include <time.h>
-
-#include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
-
 #include "get_clock.h"
+#endif
+
+
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+
+#define __func__	__FUNCTION__
+#else
+#define __cdecl
+#endif
+
+
 
 #define PINGPONG_RDMA_WRID	3
 #define MAX_INLINE 400
@@ -65,7 +89,12 @@ static int inline_size = MAX_INLINE;
 static int sl = 0;
 static int tos = -1;
 static int page_size;
+#ifndef _WIN32
 static pid_t pid;
+#else
+static DWORD pid;
+#endif
+
 
 struct report_options {
 	int unsorted;
@@ -165,7 +194,12 @@ static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest)
 	sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
 			my_dest->psn, my_dest->rkey, my_dest->vaddr);
 
-	if (write(sockfd, msg, sizeof msg) != sizeof msg) {
+#ifndef _WIN32
+	if (write(sockfd, msg, sizeof msg) != sizeof msg)
+#else
+	if (send(sockfd, msg, sizeof msg, 0) != sizeof msg)
+#endif
+	{
 		perror("client write");
 		fprintf(stderr, "Couldn't send local address\n");
 		return -1;
@@ -180,7 +214,13 @@ static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
 	int parsed;
 	char msg[KEY_MSG_SIZE];
 
-	if (read(sockfd, msg, sizeof msg) != sizeof msg) {
+	
+#ifndef _WIN32
+	if (read(sockfd, msg, sizeof msg) != sizeof msg)
+#else
+	if (recv(sockfd, msg, sizeof msg, 0) != sizeof msg)
+#endif
+	{
 		perror("pp_read_keys");
 		fprintf(stderr, "Couldn't read remote address\n");
 		return -1;
@@ -201,20 +241,32 @@ static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
 static struct pingpong_context *pp_client_connect(struct pp_data *data)
 {
 	struct addrinfo *res, *t;
-	struct addrinfo hints = {
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-	char *service;
+	struct addrinfo hints;
 	int n;
+	
+#ifndef _WIN32
+	char *service;
 	int sockfd = -1;
+#else
+	char service[6];
+	SOCKET sockfd = INVALID_SOCKET;
+#endif
+
 	int n_retries = 10;
 	struct rdma_cm_event *event;
 	struct sockaddr_in sin;
 	struct pingpong_context *ctx = NULL;
 	struct rdma_conn_param conn_param;
 
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family   = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+
+#ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
+#else
+	if (sprintf(service, "%d", data->port) < 0)
+#endif
 		goto err4;
 
 	n = getaddrinfo(data->servername, service, &hints, &res);
@@ -290,7 +342,12 @@ retry_route:
 			fprintf(stderr, "%d:%s: pp_init_ctx failed\n", pid, __func__);
 			goto err2;
 		}
+		
+#ifndef _WIN32
 		data->my_dest.psn = lrand48() & 0xffffff;
+#else
+		data->my_dest.psn = rand() & 0xffffff;
+#endif
 		data->my_dest.qpn = 0;
 		data->my_dest.rkey = ctx->mr->rkey;
 		data->my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
@@ -332,14 +389,28 @@ retry_route:
 		for (t = res; t; t = t->ai_next) {
 			sockfd = socket(t->ai_family, t->ai_socktype,
 						 t->ai_protocol);
+#ifndef _WIN32
 			if (sockfd >= 0) {
 				if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
 					break;
 				close(sockfd);
 				sockfd = -1;
 			}
+#else
+			if (sockfd != INVALID_SOCKET) {
+				if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
+					break;
+				closesocket(sockfd);
+				sockfd = INVALID_SOCKET;
+			}
+#endif
 		}
-		if (sockfd < 0) {
+#ifndef _WIN32
+		if (sockfd < 0) 
+#else
+		if (sockfd == INVALID_SOCKET)
+#endif
+		{
 			fprintf(stderr, "%d:%s: Couldn't connect to %s:%d\n", 
 				 pid, __func__, data->servername, data->port);
 			goto err3;
@@ -384,21 +455,31 @@ static int pp_client_exch_dest(struct pp_data *data)
 static struct pingpong_context *pp_server_connect(struct pp_data *data)
 {
 	struct addrinfo *res, *t;
-	struct addrinfo hints = {
-		.ai_flags    = AI_PASSIVE,
-		.ai_family   = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
+	struct addrinfo hints;
+#ifndef _WIN32
 	char *service;
 	int sockfd = -1, connfd;
+#else
+	char service[6];
+	SOCKET sockfd = INVALID_SOCKET, connfd;
+#endif
 	int n;
 	struct rdma_cm_event *event;
 	struct sockaddr_in sin;
 	struct pingpong_context *ctx = NULL;
 	struct rdma_cm_id *child_cm_id;
 	struct rdma_conn_param conn_param;
+	
+	memset(&hints, 0, sizeof hints);
+	hints.ai_flags    = AI_PASSIVE;
+	hints.ai_family   = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
 
+#ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
+#else
+	if (sprintf(service, "%d", data->port) < 0)
+#endif
 		goto err5;
 
 	if ( (n = getaddrinfo(NULL, service, &hints, &res)) < 0 ) {
@@ -449,7 +530,12 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 			free(data->rem_dest);
 			goto err1;
 		}
+		
+#ifndef _WIN32
 		data->my_dest.psn = lrand48() & 0xffffff;
+#else
+		data->my_dest.psn = rand() & 0xffffff;
+#endif
 		data->my_dest.qpn = 0;
 		data->my_dest.rkey = ctx->mr->rkey;
 		data->my_dest.vaddr = (uintptr_t)ctx->buf + ctx->size;
@@ -478,6 +564,8 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 	} else {
 		for (t = res; t; t = t->ai_next) {
 			sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
+
+#ifndef _WIN32
 			if (sockfd >= 0) {
 				n = 1;
 	
@@ -488,9 +576,26 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 				close(sockfd);
 				sockfd = -1;
 			}
-		}
+#else
+			if (sockfd != INVALID_SOCKET) {
+				n = 1;
 	
-		if (sockfd < 0) {
+				setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char*)&n, sizeof n);
+	
+				if (!bind(sockfd, t->ai_addr, t->ai_addrlen))
+					break;
+				closesocket(sockfd);
+				sockfd = INVALID_SOCKET;
+			}
+#endif
+		}
+					
+#ifndef _WIN32
+		if (sockfd < 0) 
+#else
+		if (sockfd == INVALID_SOCKET)
+#endif
+		{
 			fprintf(stderr, "%d:%s: Couldn't listen to port %d\n", pid,
 						__func__, data->port);
 			goto err4;
@@ -498,6 +603,7 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 	
 		listen(sockfd, 1);
 		connfd = accept(sockfd, NULL, 0);
+#ifndef _WIN32
 		if (connfd < 0) {
 			perror("server accept");
 			fprintf(stderr, "%d:%s: accept() failed\n", pid, __func__);
@@ -506,6 +612,16 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 		}
 	
 		close(sockfd);
+#else
+		if (connfd == INVALID_SOCKET) {
+			perror("server accept");
+			fprintf(stderr, "%d:%s: accept() failed\n", pid, __func__);
+			closesocket(sockfd);
+			goto err4;
+		}
+	
+		closesocket(sockfd);
+#endif
 
 		ctx = pp_init_ctx(data->ib_dev, data);
 		if (!ctx)
@@ -549,15 +665,26 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 	struct pingpong_context *ctx;
 	struct ibv_device *ib_dev;
 	struct rdma_cm_id *cm_id = NULL;
+	struct ibv_qp_init_attr attr;
 
+#ifdef _WIN32
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+#endif
+	
 	ctx = malloc(sizeof *ctx);
 	if (!ctx)
 		return NULL;
 
-	ctx->size     = data->size;
+	ctx->size	  = data->size;
 	ctx->tx_depth = data->tx_depth;
-
+	
+#ifndef _WIN32
 	ctx->buf = memalign(page_size, ctx->size * 2);
+#else
+	posix_memalign(&ctx->buf, si.dwPageSize, ctx->size * 2);
+#endif
+
 	if (!ctx->buf) {
 		fprintf(stderr, "%d:%s: Couldn't allocate work buf.\n",
 					 pid, __func__);
@@ -619,21 +746,17 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 		return NULL;
 	}
 
-
-	struct ibv_qp_init_attr attr = {
-		.send_cq = ctx->scq,
-		.recv_cq = ctx->rcq,
-		.cap     = {
-			.max_send_wr  = ctx->tx_depth,
-			/* Work around:  driver doesnt support
-				* recv_wr = 0 */
-			.max_recv_wr  = 1,
-			.max_send_sge = 1,
-			.max_recv_sge = 1,
-			.max_inline_data = inline_size,
-		},
-		.qp_type = IBV_QPT_RC
-	};
+	memset(&attr, 0, sizeof attr);
+	attr.send_cq = ctx->scq;
+	attr.recv_cq = ctx->rcq;
+	attr.cap.max_send_wr  = ctx->tx_depth;
+	/* Work around:  driver doesnt support
+		* recv_wr = 0 */
+	attr.cap.max_recv_wr  = 1;
+	attr.cap.max_send_sge = 1;
+	attr.cap.max_recv_sge = 1;
+	attr.cap.max_inline_data = inline_size;
+	attr.qp_type = IBV_QPT_RC;
 
 	if (data->use_cma) {
 		if (rdma_create_qp(cm_id, ctx->pd, &attr)) {
@@ -673,19 +796,18 @@ static struct pingpong_context *pp_init_ctx(void *ptr, struct pp_data *data)
 
 static int pp_connect_ctx(struct pingpong_context *ctx, struct pp_data *data)			  
 {
-	struct ibv_qp_attr attr = {
-		.qp_state 		= IBV_QPS_RTR,
-		.path_mtu 		= IBV_MTU_256,
-		.dest_qp_num 	= data->rem_dest->qpn,
-		.rq_psn 		= data->rem_dest->psn,
-		.max_dest_rd_atomic = 1,
-		.min_rnr_timer 	= 12,
-		.ah_attr.is_global  = 0,
-		.ah_attr.dlid       = data->rem_dest->lid,
-		.ah_attr.sl         = sl,
-		.ah_attr.src_path_bits = 0,
-		.ah_attr.port_num   = data->ib_port
-	};
+	struct ibv_qp_attr attr;
+	attr.qp_state 		= IBV_QPS_RTR;
+	attr.path_mtu 		= IBV_MTU_256;
+	attr.dest_qp_num 	= data->rem_dest->qpn;
+	attr.rq_psn 		= data->rem_dest->psn;
+	attr.max_dest_rd_atomic = 1;
+	attr.min_rnr_timer 	= 12;
+	attr.ah_attr.is_global  = 0;
+	attr.ah_attr.dlid       = data->rem_dest->lid;
+	attr.ah_attr.sl         = sl;
+	attr.ah_attr.src_path_bits = 0;
+	attr.ah_attr.port_num   = data->ib_port;
 
 	if (ibv_modify_qp(ctx->qp, &attr,
 			  IBV_QP_STATE              |
@@ -728,7 +850,11 @@ static int pp_open_port(struct pingpong_context *ctx, struct pp_data *data )
 
 	data->my_dest.lid = pp_get_local_lid(ctx, data->ib_port);
 	data->my_dest.qpn = ctx->qp->qp_num;
+#ifndef _WIN32
 	data->my_dest.psn = lrand48() & 0xffffff;
+#else
+	data->my_dest.psn = rand() & 0xffffff;
+#endif
 	if (!data->my_dest.lid) {
 		fprintf(stderr, "Local lid 0x0 detected. Is an SM running?\n");
 		return -1;
@@ -764,13 +890,22 @@ static int pp_open_port(struct pingpong_context *ctx, struct pp_data *data )
 			return -1;
 	}
 
-       if (write(data->sockfd, "done", sizeof "done") != sizeof "done"){
-               perror("write");
-               fprintf(stderr, "Couldn't write to socket\n");
-               return 1;
-       }
+#ifndef _WIN32
+    if (write(data->sockfd, "done", sizeof "done") != sizeof "done")
+#else
+	if (send(data->sockfd, "done", sizeof "done", 0) != sizeof "done")
+#endif
+	{
+        perror("write");
+        fprintf(stderr, "Couldn't write to socket\n");
+        return 1;
+    }
 
+#ifndef _WIN32
 	close(data->sockfd);
+#else
+	closesocket(data->sockfd);
+#endif
 	
 	return 0;
 }
@@ -803,7 +938,11 @@ static void pp_wait_for_done(struct pingpong_context *ctx)
 	int ne;
 
 	do {
+#ifndef _WIN32
 		usleep(500);
+#else
+		Sleep(5);
+#endif
 		ne = ibv_poll_cq(ctx->rcq, 1, &wc);
 	} while (ne == 0);
 
@@ -838,7 +977,11 @@ static void pp_send_done(struct pingpong_context *ctx)
 		return;
 	}
 	do {
+#ifndef _WIN32
 		usleep(500);
+#else
+		Sleep(5);
+#endif
 		ne = ibv_poll_cq(ctx->scq, 1, &wc);
 	} while (ne == 0);
 
@@ -859,7 +1002,11 @@ static void pp_wait_for_start(struct pingpong_context *ctx)
 	int ne;
 
 	do {
+#ifndef _WIN32
 		usleep(500);
+#else
+		Sleep(5);
+#endif
 		ne = ibv_poll_cq(ctx->rcq, 1, &wc);
 	} while (ne == 0);
 
@@ -895,7 +1042,11 @@ static void pp_send_start(struct pingpong_context *ctx)
 		return;
 	}
 	do {
+#ifndef _WIN32
 		usleep(500);
+#else
+		Sleep(5);
+#endif
 		ne = ibv_poll_cq(ctx->scq, 1, &wc);
 	} while (ne == 0);
 
@@ -956,6 +1107,8 @@ static void usage(const char *argv0)
 	printf("  -c, --cma              Use the RDMA CMA to setup the RDMA connection\n");
 }
 
+
+#ifndef _WIN32
 /*
  * When there is an
  *	odd number of samples, the median is the middle number.
@@ -979,6 +1132,7 @@ static int cycles_compare(const void * aptr, const void * bptr)
 	if (*a > *b) return 1;
 	return 0;
 }
+#endif
 
 static void print_report(struct report_options * options,
 			 unsigned int iters, cycles_t *tstamp)
@@ -1002,7 +1156,11 @@ static void print_report(struct report_options * options,
 		cycles_to_units = 1;
 		units = "cycles";
 	} else {
+#ifndef _WIN32
 		cycles_to_units = get_cpu_mhz(0);
+#else
+		cycles_to_units = get_cpu_mhz()/1000000;
+#endif
 		units = "usec";
 	}
 
@@ -1029,12 +1187,12 @@ static void print_report(struct report_options * options,
 	free(delta);
 }
 
-int main(int argc, char *argv[])
+int __cdecl main(int argc, char *argv[])
 {
 	const char              *ib_devname = NULL;
 	const char              *servername = NULL;
 	int                      iters = 1000;
-	struct report_options    report = {};
+	struct report_options    report;
 
 	struct pingpong_context *ctx;
 
@@ -1047,39 +1205,57 @@ int main(int argc, char *argv[])
 
 	cycles_t                *tstamp;
 
-	struct pp_data	 	 data = {
-		.port	    = 18515,
-		.ib_port    = 1,
-		.size       = 1,
-		.tx_depth   = 50,
-		.use_cma    = 0,
-		.servername = NULL,
-		.rem_dest   = NULL,
-		.ib_dev     = NULL,
-		.cm_channel = NULL,
-		.cm_id      = NULL		
-	};
+	struct pp_data	 	 data;
+	data.port	    = 18515;
+	data.ib_port    = 1;
+	data.size       = 1;
+	data.tx_depth   = 50;
+	data.use_cma    = 0;
+	data.servername = NULL;
+	data.rem_dest   = NULL;
+	data.ib_dev     = NULL;
+	data.cm_channel = NULL;
+	data.cm_id      = NULL;
 
 	/* Parameter parsing. */
 	while (1) {
 		int c;
 
+#ifndef _WIN32
 		static struct option long_options[] = {
-			{ .name = "port",           .has_arg = 1, .val = 'p' },
-			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
-			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
-			{ .name = "size",           .has_arg = 1, .val = 's' },
-			{ .name = "iters",          .has_arg = 1, .val = 'n' },
-			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
-			{ .name = "sl",             .has_arg = 1, .val = 'S' },
-			{ .name = "tos",            .has_arg = 1, .val = 'T' },
-			{ .name = "inline_size",     .has_arg = 1, .val = 'I' },
-			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
+			{ .name = "port",			.has_arg = 1, .val = 'p' },
+			{ .name = "ib-dev", 		.has_arg = 1, .val = 'd' },
+			{ .name = "ib-port",		.has_arg = 1, .val = 'i' },
+			{ .name = "size",			.has_arg = 1, .val = 's' },
+			{ .name = "iters",			.has_arg = 1, .val = 'n' },
+			{ .name = "tx-depth",		.has_arg = 1, .val = 't' },
+			{ .name = "sl", 			.has_arg = 1, .val = 'S' },
+			{ .name = "tos",			.has_arg = 1, .val = 'T' },
+			{ .name = "inline_size",	 .has_arg = 1, .val = 'I' },
+			{ .name = "report-cycles",	.has_arg = 0, .val = 'C' },
 			{ .name = "report-histogram",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
-			{ .name = "cma", 	    .has_arg = 0, .val = 'c' },
+			{ .name = "cma",		.has_arg = 0, .val = 'c' },
 			{ 0 }
 		};
+#else
+		static struct option long_options[] = {
+			{ "port",			 1, NULL,  'p' },
+			{ "ib-dev", 		 1, NULL,  'd' },
+			{ "ib-port",		 1, NULL,  'i' },
+			{ "size",			 1, NULL,  's' },
+			{ "iters",			 1, NULL,  'n' },
+			{ "tx-depth",		 1, NULL,  't' },
+			{ "sl", 			 1, NULL,  'S' },
+			{ "tos",			 1, NULL,  'T' },
+			{ "inline_size",	 1, NULL,  'I' },
+			{ "report-cycles",	 0, NULL,  'C' },
+			{ "report-histogram",0, NULL,  'H' },
+			{ "report-unsorted", 0, NULL,  'U' },
+			{ "cma",			 0, NULL,  'c' },
+			{ 0 }
+		};
+#endif
 
 		c = getopt_long(argc, argv, "p:d:i:s:n:t:S:T:I:CHUc", long_options, NULL);
 		if (c == -1)
@@ -1095,7 +1271,11 @@ int main(int argc, char *argv[])
 				break;
 
 			case 'd':
+#ifndef _WIN32
 				ib_devname = strdupa(optarg);
+#else
+				ib_devname = _strdup(optarg);
+#endif
 				break;
 
 			case 'i':
@@ -1160,7 +1340,11 @@ int main(int argc, char *argv[])
 	}
 
 	if (optind == argc - 1)
+#ifndef _WIN32
 		data.servername = strdupa(argv[optind]);
+#else
+		data.servername = _strdup(argv[optind]);
+#endif
 	else if (optind < argc) {
 		usage(argv[0]);
 		return 6;
@@ -1169,11 +1353,16 @@ int main(int argc, char *argv[])
 	/*
 	 *  Done with parameter parsing. Perform setup.
 	 */
+#ifndef _WIN32
 	pid = getpid();
+#else
+	pid = GetCurrentProcessId();
+#endif
 
+#ifndef _WIN32
 	srand48(pid * time(NULL));
 	page_size = sysconf(_SC_PAGESIZE);
-
+#endif
 
 	if (data.use_cma) {
 		data.cm_channel = rdma_create_event_channel();

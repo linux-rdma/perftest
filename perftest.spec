@@ -1,6 +1,6 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        1.3.0
+Version:        1.4.0
 Release:        3.2
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
@@ -45,6 +45,10 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sun Feb 02 2012 - idos@mellanox.com
+- Updated to 1.4.0 version (no compability with older version).
+* Sun Feb 02 2012 - idos@mellanox.com
+- Merge perftest code for Linux & Windows
 * Mon Jan 01 2012 - idos@mellanox.com
 - Added atomic benchmarks
 * Sat Apr 18 2009 - hal.rosenstock@gmail.com

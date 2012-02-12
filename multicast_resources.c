@@ -1,31 +1,39 @@
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <limits.h>
-#include <byteswap.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netdb.h>
+#include <time.h>
+#include <limits.h>
+#ifdef _WIN32
+#include <stdarg.h>
+#include <time.h>
+#include <sys/types.h>
+#include <winsock2.h>
+#include <Winsock2.h>
+#include "l2w.h"
+#include "..\..\etc\user\getopt.c"
+#else
+#include <unistd.h>
 #include <malloc.h>
 #include <getopt.h>
-#include <time.h>
 #include <errno.h>
+#include <byteswap.h>
 #include <pthread.h>
-
+#endif
 #include "multicast_resources.h"
 
 /******************************************************************************
  * prepare_mcast_mad
  ******************************************************************************/
-static void prepare_mcast_mad(u_int8_t method,
+static void prepare_mcast_mad(uint8_t method,
 							  struct mcast_parameters *params,
 							  struct sa_mad_packet_t *samad_packet)	 {
 
-	u_int8_t *ptr;
+	uint8_t *ptr;
 	uint64_t comp_mask;	
 
 	memset(samad_packet,0,sizeof(*samad_packet));
@@ -36,16 +44,16 @@ static void prepare_mcast_mad(u_int8_t method,
 	ptr[1]                     = MANAGMENT_CLASS_SUBN_ADM;			/* MgmtClass */
 	ptr[2]                     = 0x02; 					/* ClassVersion */
 	ptr[3]                     = INSERTF(ptr[3], 0, method, 0, 7); 		/* Method */
-	(*(u_int64_t *)(ptr + 8))  = htonll((u_int64_t)DEF_TRANS_ID);		/* TransactionID */
-	(*(u_int16_t *)(ptr + 16)) = htons(SUBN_ADM_ATTR_MC_MEMBER_RECORD);	/* AttributeID */
+	(*(uint64_t *)(ptr + 8))   = htonll((uint64_t)DEF_TRANS_ID);             /* TransactionID */
+	(*(uint16_t *)(ptr + 16))  = htons(SUBN_ADM_ATTR_MC_MEMBER_RECORD);      /* AttributeID */
 
 	ptr = samad_packet->SubnetAdminData;
 
 	memcpy(&ptr[0],params->mgid.raw, 16);		  
 	memcpy(&ptr[16],params->port_gid.raw, 16);
 
-	(*(u_int32_t *)(ptr + 32)) = htonl(DEF_QKEY);
-	(*(u_int16_t *)(ptr + 40)) = htons(params->pkey);
+	(*(uint32_t *)(ptr + 32)) = htonl(DEF_QKEY);
+	(*(uint16_t *)(ptr + 40)) = htons(params->pkey);
 	ptr[39]                    = DEF_TCLASS;
 	ptr[44]                    = INSERTF(ptr[44], 4, DEF_SLL, 0, 4);
 	ptr[44]                    = INSERTF(ptr[44], 0, DEF_FLOW_LABLE, 16, 4);
@@ -65,14 +73,14 @@ static void prepare_mcast_mad(u_int8_t method,
  ******************************************************************************/
 static int check_mad_status(struct sa_mad_packet_t *samad_packet) {
 
-	u_int8_t *ptr;
-	u_int32_t user_trans_id;
-	u_int16_t mad_header_status;
+	uint8_t *ptr;
+	uint32_t user_trans_id;
+	uint16_t mad_header_status;
 
 	ptr = samad_packet->mad_header_buf;
 	
 	// the upper 32 bits of TransactionID were set by the kernel 
-	user_trans_id = ntohl(*(u_int32_t *)(ptr + 12)); 
+    user_trans_id = ntohl(*(uint32_t *)(ptr + 12));
 
 	// check the TransactionID to make sure this is the response 
 	// for the join/leave multicast group request we posted
@@ -98,12 +106,12 @@ static int check_mad_status(struct sa_mad_packet_t *samad_packet) {
 /******************************************************************************
  * get_mlid_from_mad
  ******************************************************************************/
-static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,int *mlid) {
+static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,uint16_t *mlid) {
 
-	u_int8_t *ptr;
+	uint8_t *ptr;
 
 	ptr = samad_packet->SubnetAdminData;
-	*mlid = ntohs(*(u_int16_t *)(ptr + 36));
+	*mlid = ntohs(*(uint16_t *)(ptr + 36));
 }
 
 /******************************************************************************
@@ -121,17 +129,33 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr+1);
 		tmp[term - pstr] = 0;
+
+#ifndef _WIN32
 		mcg_gid[0] = (unsigned char)strtoll(tmp, NULL, 0);
+#else
+		mcg_gid[0] = (unsigned char)strtol(tmp, NULL, 0);
+#endif
+
 		for (i = 1; i < 15; ++i) {
 			pstr += term - pstr + 1;
 			term = strpbrk(pstr, ":");
 			memcpy(tmp, pstr, term - pstr+1);
 			tmp[term - pstr] = 0;
+
+#ifndef _WIN32
 			mcg_gid[i] = (unsigned char)strtoll(tmp, NULL, 0);
+#else
+			mcg_gid[i] = (unsigned char)strtol(tmp, NULL, 0);
+#endif
 		}
 		pstr += term - pstr + 1;
 		strcpy(tmp, pstr);
+
+#ifndef _WIN32
 		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
+#else 	
+		mcg_gid[15] = (unsigned char)strtol(tmp, NULL, 0);
+#endif
 	}
 
 	memcpy(params->mgid.raw,mcg_gid,16);

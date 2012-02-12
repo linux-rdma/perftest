@@ -1,12 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <stdarg.h>
+#include <time.h>
+#include <sys/types.h>
+#include <winsock2.h>
+#include <Winsock2.h>
+#include "l2w.h"
+#else
+#include <unistd.h>
 #include <malloc.h>
 #include <getopt.h>
 #include <limits.h>
 #include <errno.h>
+#endif
 #include "perftest_resources.h"
+
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+#endif
 
 /****************************************************************************** 
  * Begining
@@ -18,8 +33,14 @@ int check_add_port(char **service,int port,
 
 	int number;
 
-	if (asprintf(service,"%d", port) < 0)
+#ifndef _WIN32
+	if (asprintf(service,"%d", port) < 0) { 
+#else
+	*service = (char*)malloc(6*sizeof(char));
+     if (sprintf(*service,"%d", port) < 0) { 
+#endif
 		return FAILURE;
+	 }
 
 	number = getaddrinfo(servername,*service,hints,res);
 
@@ -150,7 +171,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 		rdma_destroy_event_channel(ctx->cm_channel);
 	}
 
-	free(ctx->buf);
+#ifndef _WIN32
+        free(ctx->buf);
+#else
+        posix_memfree(ctx->buf);
+#endif
+
 	free(ctx->qp);
 	free(ctx->scnt);
 	free(ctx->ccnt);
@@ -165,6 +191,11 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	int i,flags;
 	uint64_t buff_size;
 
+#ifdef _WIN32
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+#endif
+
 	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
 	ALLOCATE(ctx->scnt,int,user_param->num_of_qps);
 	ALLOCATE(ctx->ccnt,int,user_param->num_of_qps);
@@ -175,10 +206,14 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	// ctx->size = SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine);
 	ctx->size = user_param->size;
-	buff_size = BUFF_SIZE(ctx->size) * 2 * user_param->num_of_qps;
+	buff_size = SIZE(user_param->connection_type,BUFF_SIZE(ctx->size),1)*2* user_param->num_of_qps;
 	
 	// Allocating the buffer in BUFF_SIZE size to support max performance.
+#ifndef _WIN32
 	ctx->buf = memalign(sysconf(_SC_PAGESIZE),buff_size);
+#else
+	posix_memalign(&(ctx->buf),si.dwPageSize, (int)buff_size);
+#endif
 	if (!ctx->buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		return FAILURE;
@@ -339,74 +374,6 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 
 	return attr.lid;
 }
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-inline int ctx_notify_events(struct ibv_comp_channel *channel) {
-
-	struct ibv_cq       *ev_cq;
-	void                *ev_ctx;
-
-	if (ibv_get_cq_event(channel,&ev_cq,&ev_ctx)) {
-		fprintf(stderr, "Failed to get cq_event\n");
-		return 1;
-	}
-
-	ibv_ack_cq_events(ev_cq,1);
-
-	if (ibv_req_notify_cq(ev_cq, 0)) {
-		fprintf(stderr, "Couldn't request CQ notification\n");
-		return 1;
-	}
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-inline void increase_rem_addr(struct ibv_send_wr *wr,
-							  int size,
-							  int scnt,
-							  uint64_t prim_addr,
-							  VerbType verb) {
-
-	if (verb == ATOMIC) 
-		wr->wr.atomic.remote_addr += INC(size);
-
-	else
-		wr->wr.rdma.remote_addr += INC(size);           
-
-	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0) {
-
-		if (verb == ATOMIC) 
-			wr->wr.atomic.remote_addr = prim_addr;
-
-		else 
-			wr->wr.rdma.remote_addr = prim_addr;
-	}
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
-							  uint64_t prim_addr,int server_is_ud) {
-
-
-	//if (server_is_ud)
-		//sg->addr -= (CACHE_LINE_SIZE - UD_ADDITION);
-
-	sg->addr  += INC(size);
-
-	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
-		sg->addr = prim_addr;
-
-	//if (server_is_ud)
-		//sg->addr += (CACHE_LINE_SIZE - UD_ADDITION);
-}
-
-
 /****************************************************************************** 
  * End
  ******************************************************************************/

@@ -47,9 +47,8 @@
  *  ctx_print_pingpong_data - Prints the data that was passed. 
  *  ctx_close_connection    - Closing the sockets interface.
  */
-
-#ifndef PERFTEST_PARSER_H
-#define PERFTEST_PARSER_H
+#ifndef PERFTEST_PARAMETERS_H
+#define PERFTEST_PARAMETERS_H
 
 // Files included for work.
 #include <infiniband/verbs.h>
@@ -129,8 +128,8 @@
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
 
-#define CHECK_VALUE(arg,minv,maxv,name) 						    					\
-	{ arg = strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                  \
+#define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
+	{ arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
 	{ fprintf(stderr," %s should be between %d and %d\n",name,minv,maxv); return 1; }}
 
 // Macro for allocating.
@@ -141,7 +140,7 @@
 #define GET_STRING(orig,temp) 						                \
 	{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
 
-#define MTU_SIZE(mtu_ind) ((1 << (MTU_FIX + mtu_ind)))
+#define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
@@ -159,21 +158,21 @@ typedef enum { LOCAL , REMOTE } PrintDataSide;
 typedef enum {CMP_AND_SWAP, FETCH_AND_ADD} AtomicType;
 
 // The type of the device (Hermon B0/A0 or no)
-typedef enum { ERROR = -1 , NOT_HERMON = 0 , HERMON = 1} Device;
+typedef enum { DEVICE_ERROR = -1 , NOT_HERMON = 0 , HERMON = 1} Device;
 
 struct perftest_parameters {
 
 	int				port;
 	char			*ib_devname;
 	char			*servername;
-	int				ib_port;
+	uint8_t			ib_port;
 	int				mtu;
 	enum ibv_mtu	curr_mtu;
 	uint64_t		size;
 	int				iters;
 	int				tx_depth;
-	int				qp_timeout;
-	int				sl;
+	uint8_t			qp_timeout;
+	uint8_t			sl;
 	int				gid_index;
 	int				all;
 	int				cpu_freq_f;
@@ -197,9 +196,12 @@ struct perftest_parameters {
 	VerbType		verb;
 	TestType		tst;
 	AtomicType		atomicType;
+#ifndef _WIN32
 	int				sockfd;
-	// int				cq_size;
-	float			version;
+#else
+	SOCKET 			sockfd;
+#endif
+	double			version;
 	struct report_options  *r_flag;
 };
 

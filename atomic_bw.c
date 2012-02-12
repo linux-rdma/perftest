@@ -39,19 +39,30 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#ifdef _WIN32
+#include "..\..\tools\perftests\user\get_clock.h"
+#else
+#include <unistd.h>
 #include <malloc.h>
-
 #include "get_clock.h"
-#include "perftest_resources.h"
+#endif
+
 #include "perftest_parameters.h"
+#include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 1.1
+#define VERSION 1.2
 
 cycles_t	*tposted;
 cycles_t	*tcompleted;
+
+#ifdef _WIN32
+#pragma warning( disable : 4242)
+#pragma warning( disable : 4244)
+#else
+#define __cdecl
+#endif
 
 /****************************************************************************** 
  *
@@ -139,7 +150,12 @@ static void print_report(struct perftest_parameters *user_param) {
 			}
 	}
 
+#ifndef _WIN32
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
+#else
+	cycles_to_units = get_cpu_mhz();
+#endif
+
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
 	
@@ -254,7 +270,7 @@ int run_iter(struct pingpong_context *ctx,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int main(int argc, char *argv[]) {
+int __cdecl main(int argc, char *argv[]) {
 
 	struct ibv_device		   *ib_dev = NULL;
 	struct pingpong_context    ctx;

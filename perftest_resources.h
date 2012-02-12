@@ -54,21 +54,28 @@
 
 // Files included for work.
 #include <infiniband/verbs.h>
+
+#ifndef _WIN32
 #include <rdma/rdma_cma.h>
-#include "perftest_parameters.h"
 #include <stdint.h>
+#include <byteswap.h>
+#else
+#include "rdma_cma.h"
+#include "l2w.h"
+#endif
+
+#include "perftest_parameters.h"
+
 #include <math.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <byteswap.h>
 
 #define CYCLE_BUFFER        (4096)
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
-
 
 // Outstanding reads for "read" verb only.
 #define MAX_SEND_SGE        (1)
@@ -142,6 +149,17 @@ struct pingpong_context {
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
+
+/* link_layer_str
+ *
+ * Description : Determines the link layer type (IB or ETH).
+ *
+ * Parameters :
+ *  link_layer - The link layer
+
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+const char *link_layer_str(uint8_t link_layer);
 
 /* check_add_port
  *
@@ -276,7 +294,24 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
  *         
  * Return Value : SUCCESS, FAILURE.
  */
-inline int ctx_notify_events(struct ibv_comp_channel *channel);
+static __inline int ctx_notify_events(struct ibv_comp_channel *channel) { 
+
+	struct ibv_cq       *ev_cq;
+	void                *ev_ctx;
+
+	if (ibv_get_cq_event(channel,&ev_cq,&ev_ctx)) {
+		fprintf(stderr, "Failed to get cq_event\n");
+		return 1;
+	}
+
+	ibv_ack_cq_events(ev_cq,1);
+
+	if (ibv_req_notify_cq(ev_cq, 0)) {
+		fprintf(stderr, "Couldn't request CQ notification\n");
+		return 1;
+	}
+	return 0;
+}
 
 /* increase_rem_addr.
  *
@@ -293,7 +328,23 @@ inline int ctx_notify_events(struct ibv_comp_channel *channel);
  *
  * Return Value : SUCCESS, FAILURE.
  */
-inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb);
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) { 
+
+	if (verb == ATOMIC) 
+		wr->wr.atomic.remote_addr += INC(size);
+
+	else
+		wr->wr.rdma.remote_addr += INC(size);           
+
+	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0) {
+
+		if (verb == ATOMIC) 
+			wr->wr.atomic.remote_addr = prim_addr;
+
+		else 
+			wr->wr.rdma.remote_addr = prim_addr;
+	}
+}
 
 /* increase_loc_addr.
  *
@@ -309,7 +360,13 @@ inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t 
  *		prim_addr - The address of the original buffer.
  *		server_is_ud - Indication to weather we are in UD mode.
  */
-inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,
-							  uint64_t prim_addr,int server_is_ud);
+static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr,int server_is_ud) { 
+
+	sg->addr  += INC(size);
+
+	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+		sg->addr = prim_addr;
+
+}
 
 #endif /* PERFTEST_RESOURCES_H */

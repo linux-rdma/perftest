@@ -5,13 +5,21 @@
 #include <limits.h>
 #include "perftest_parameters.h"
 
-
 static const char *connStr[] = {"RC","UC","UD"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
+
+#ifdef _WIN32
+// The link layer of the current port.
+typedef enum { 
+	IBV_LINK_LAYER_UNSPECIFIED = 0 , 
+	IBV_LINK_LAYER_INFINIBAND = 1 , 
+	IBV_LINK_LAYER_ETHERNET = 2 
+} LinkType;
+#endif
 
 /****************************************************************************** 
  *
@@ -75,7 +83,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -V, --version ");
 	printf(" Display version number\n");
 
-	if (verb == SEND && tst == BW) {
+	if (verb == SEND) {
 		printf("  -r, --rx-depth=<dep> ");
 		printf(" Rx queue size (default %d)\n",DEF_RX_SEND);
 	}
@@ -231,18 +239,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC) 
 		user_param->inline_size = 0;
-	
-	//if (user_param->verb == WRITE || user_param->verb == READ || user_param->verb == ATOMIC)
-	//	user_param->cq_size = user_param->tx_depth*user_param->num_of_qps;
-
-	//else if (user_param->duplex) 		
-	//	 user_param->cq_size = user_param->tx_depth + user_param->rx_depth*(user_param->num_of_qps);
-
-	//else if (user_param->machine == CLIENT) 
-	//	user_param->cq_size = user_param->tx_depth;
-
-	//else 
-	//	user_param->cq_size = user_param->rx_depth*user_param->num_of_qps;
 
 	if (user_param->work_rdma_cm && user_param->use_mcg) {
 
@@ -309,7 +305,7 @@ static Device is_dev_hermon(struct ibv_context *context) {
 	struct ibv_device_attr attr;
 
 	if (ibv_query_device(context,&attr)) {
-		is_hermon = ERROR;
+		is_hermon = DEVICE_ERROR;
 	}
 	// Checks the devide type for setting the max outstanding reads.
 	else if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
@@ -326,7 +322,7 @@ static Device is_dev_hermon(struct ibv_context *context) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-static enum ibv_mtu set_mtu(struct ibv_context *context,int ib_port,int user_mtu) {
+static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
 
 	struct ibv_port_attr port_attr;
 	enum ibv_mtu curr_mtu;
@@ -365,7 +361,7 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,int ib_port,int user_mtu
 /****************************************************************************** 
  *
  ******************************************************************************/
-static int8_t set_link_layer(struct ibv_context *context,int ib_port) {
+static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
 
 	struct ibv_port_attr port_attr;
 	uint8_t curr_link;
@@ -382,7 +378,11 @@ static int8_t set_link_layer(struct ibv_context *context,int ib_port) {
 		return LINK_FAILURE;
 	}
 
+#ifndef _WIN32
 	curr_link = port_attr.link_layer; 
+#else
+	curr_link = IBV_LINK_LAYER_INFINIBAND;
+#endif
 
 	if (!strcmp(link_layer_str(curr_link),"Unknown")) {
 			fprintf(stderr," Unable to determine link layer \n");
@@ -424,7 +424,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	init_perftest_params(user_param);
 
 	while (1) {
-
+#ifndef _WIN32
 		static const struct option long_options[] = {
 			{ .name = "port",           .has_arg = 1, .val = 'p' },
 			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
@@ -459,6 +459,43 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
             { 0 }
         };
+#else
+
+        static const struct option long_options[] = {
+			{ "port",    		1, NULL, 'p' },
+			{ "ib-dev",         1, NULL, 'd' },
+			{ "ib-port",        1, NULL, 'i' },
+			{ "mtu",            1, NULL, 'm' },
+			{ "size",           1, NULL, 's' },
+			{ "iters",          1, NULL, 'n' },
+			{ "tx-depth",       1, NULL, 't' },
+			{ "qp-timeout", 	1, NULL, 'u' },
+			{ "sl", 			1, NULL, 'S' },
+			{ "gid-index",		1, NULL, 'x' },
+			{ "all",			0, NULL, 'a' },
+			{ "CPU-freq",		0, NULL, 'F' },
+			{ "connection",     1, NULL, 'c' },
+			{ "qp", 			1, NULL, 'q' },
+			{ "events", 		0, NULL, 'e' },
+			{ "inline_size",    1, NULL, 'I' },
+			{ "outs",			1, NULL, 'o' },
+			{ "mcg",			1, NULL, 'g' },
+			{ "comm_rdma_cm",	0, NULL, 'z' },
+			{ "rdma_cm",		0, NULL, 'R' },
+			{ "help",			0, NULL, 'h' },
+			{ "MGID",			1, NULL, 'M' },
+			{ "rx-depth",       1, NULL, 'r' },
+			{ "bidirectional",  0, NULL, 'b' },
+			{ "cq-mod", 		1, NULL, 'Q' },
+			{ "noPeak", 		0, NULL, 'N' },
+			{ "version",        0, NULL, 'V' },
+            { "report-cycles",  0, NULL, 'C' },
+			{ "report-histogrm",0, NULL, 'H' },
+            { "report-unsorted",0, NULL, 'U' },
+			{ "atomic_type"	   ,1, NULL, 'A' },
+			{ 0 }
+		};
+#endif
 
         c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:A:lVaezRhbNFCHU",long_options,NULL);
 
@@ -468,15 +505,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
         switch (c) {
 
 			case 'p': user_param->port = strtol(optarg, NULL, 0);                			  break;
+#ifndef _WIN32
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); 			  	  	  break;
-			case 'i': CHECK_VALUE(user_param->ib_port,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); 	  break;
+#else
+			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); 			  	  	  break;
+#endif
+			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port");break;
             case 'm': user_param->mtu  = strtol(optarg, NULL, 0); 							  break;
-			case 'n': CHECK_VALUE(user_param->iters,MIN_ITER,MAX_ITER,"Iteration num"); 	  break;
-			case 't': CHECK_VALUE(user_param->tx_depth,MIN_TX,MAX_TX,"Tx depth"); 			  break;
-			case 'u': user_param->qp_timeout = strtol(optarg, NULL, 0); 					  break;
-			case 'S': CHECK_VALUE(user_param->sl,MIN_SL,MAX_SL,"SL num");					  break;
-			case 'x': CHECK_VALUE(user_param->gid_index,MIN_GID_IX,MAX_GID_IX,"Gid index");   break;
-			case 'Q': CHECK_VALUE(user_param->cq_mod,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");  break;
+			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num");   break;
+			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); 		  break;
+			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); 			  break;
+			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index");break;
+			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");  break;
 			case 'a': user_param->all = ON;											  		  break;
 			case 'F': user_param->cpu_freq_f = ON; 											  break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
@@ -484,20 +524,24 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'h': usage(argv[0],user_param->verb,user_param->tst); return 1;
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
-			case 's': CHECK_VALUE(user_param->size,1,(UINT_MAX / 2),"Message size"); break;
-			case 'q': CHECK_VALUE(user_param->num_of_qps,MIN_QP_NUM,MAX_QP_NUM,"num of Qps"); 
+			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
+			case 'q': CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps"); 
 				if (user_param->verb != WRITE || user_param->tst != BW) {
 					fprintf(stderr," Multiple QPs only availible on ib_write_bw and ib_write_bw_postlist\n");
                     return 1;
 				} break;
-				
+			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
+				if (user_param->sl > MAX_SL) { 
+					fprintf(stderr," Only 16 Service levels [0-15]\n");
+                    return 1;
+				} break;
 			case 'e': user_param->use_event = ON;
 				if (user_param->verb == WRITE) {
 					fprintf(stderr," Events feature not availible on WRITE verb\n");
                     return 1;
                 } break;
 
-            case 'I': CHECK_VALUE(user_param->inline_size,MIN_INLINE,MAX_INLINE,"Inline size");
+            case 'I': CHECK_VALUE(user_param->inline_size,int,MIN_INLINE,MAX_INLINE,"Inline size");
 				if (user_param->verb == READ) {
 					fprintf(stderr," Inline feature not availible on READ verb\n");
                     return 1;
@@ -510,19 +554,22 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
                 } break;
             
             case 'g': user_param->use_mcg = ON;
-				CHECK_VALUE(user_param->num_of_qps,MIN_QP_MCAST,MAX_QP_MCAST," Num of Mcast QP");
+				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_MCAST,MAX_QP_MCAST," Num of Mcast QP");
 				if (user_param->verb != SEND) {
 					fprintf(stderr," MultiCast feature only availible on SEND verb\n");
 					return 1;
                 } break;
-
+#ifndef _WIN32
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); 
+#else
+			case 'M': GET_STRING(user_param->user_mgid,_strdup(optarg));
+#endif
 			    if (user_param->verb != SEND) {
                     fprintf(stderr," MultiCast feature only availible on SEND verb\n");
 				    return 1;
                 } break;
 
-			case 'r': CHECK_VALUE(user_param->rx_depth,MIN_RX,MAX_RX," Rx depth");
+			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
 				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
 					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					return 1;
@@ -589,8 +636,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
     }
 
     if (optind == argc - 1) {
+#ifndef _WIN32
 		GET_STRING(user_param->servername,strdupa(argv[optind])); 
-
+#else
+		GET_STRING(user_param->servername,_strdup(argv[optind]));
+#endif
 	} else if (optind < argc) {
             fprintf(stderr," Invalid Command line. Please check command rerun \n"); 
             return 1;
@@ -631,7 +681,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		user_param->size > MTU_SIZE(user_param->curr_mtu)) {
 
 		if (user_param->all == OFF) {
-			fprintf(stderr," Max msg size in UD is MTU %d\n",MTU_SIZE(user_param->curr_mtu));
+			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
 			fprintf(stderr," Changing to this MTU\n");
 		}
 		user_param->size = MTU_SIZE(user_param->curr_mtu);
@@ -700,7 +750,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
 	} 
 
-	printf(" Mtu             : %dB\n",MTU_SIZE(user_param->curr_mtu));
+	printf(" Mtu             : %luB\n",MTU_SIZE(user_param->curr_mtu));
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
 
 	if (user_param->gid_index != DEF_GID_INDEX)
