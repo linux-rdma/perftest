@@ -53,8 +53,8 @@
 #include <Winsock2.h>
 #include "rdma_cma.h"
 #include "l2w.h"
-#include "..\..\tools\perftests\user\get_clock.h"
-#include "..\..\etc\user\getopt.c"
+#include "get_clock_win.h"
+#include "getopt_win.c"
 #else
 #include <unistd.h>
 #include <sys/types.h>

@@ -41,7 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WIN32
-#include "..\..\tools\perftests\user\get_clock.h"
+#include "get_clock_win.h"
 #else
 #include <unistd.h>
 #include <malloc.h>

@@ -54,8 +54,8 @@
 #include <Winsock2.h>
 #include "rdma_cma.h"
 #include "l2w.h"
-#include "..\..\tools\perftests\user\get_clock.h"
-#include "..\..\etc\user\getopt.c"
+#include "get_clock_win.h"
+#include "getopt_win.c"
 #else
 #include <unistd.h>
 #include <sys/types.h>
@@ -1216,6 +1216,7 @@ int __cdecl main(int argc, char *argv[])
 	data.ib_dev     = NULL;
 	data.cm_channel = NULL;
 	data.cm_id      = NULL;
+	memset(&report,0,sizeof(struct report_options));
 
 	/* Parameter parsing. */
 	while (1) {

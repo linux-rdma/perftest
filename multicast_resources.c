@@ -15,7 +15,7 @@
 #include <winsock2.h>
 #include <Winsock2.h>
 #include "l2w.h"
-#include "..\..\etc\user\getopt.c"
+#include "getopt_win.c"
 #else
 #include <unistd.h>
 #include <malloc.h>
