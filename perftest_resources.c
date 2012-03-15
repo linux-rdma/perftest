@@ -58,6 +58,8 @@ int check_add_port(char **service,int port,
 int create_rdma_resources(struct pingpong_context *ctx,
 						  struct perftest_parameters *user_param) { 
 
+	enum rdma_port_space port_space = (user_param->connection_type == UD) ? RDMA_PS_UDP : RDMA_PS_TCP;
+
 	ctx->cm_channel = rdma_create_event_channel();
 	if (ctx->cm_channel == NULL) {
 		fprintf(stderr, " rdma_create_event_channel failed\n");
@@ -66,14 +68,14 @@ int create_rdma_resources(struct pingpong_context *ctx,
 
 	if (user_param->machine == CLIENT) {
 
-		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id,NULL,RDMA_PS_TCP)) {
+		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id,NULL,port_space)) {
 			fprintf(stderr,"rdma_create_id failed\n");
 			return FAILURE;
 		}
 
 	} else {
 
-		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id_control,NULL,RDMA_PS_TCP)) {
+		if (rdma_create_id(ctx->cm_channel,&ctx->cm_id_control,NULL,port_space)) {
 			fprintf(stderr,"rdma_create_id failed\n");
 			return FAILURE;
 		}

@@ -190,6 +190,8 @@ struct perftest_parameters {
 	int				noPeak;
 	int				cq_mod;
 	int 			spec;
+	uint32_t        rem_ud_qpn;
+	uint32_t        rem_ud_qkey;
 	uint8_t 		link_type;
     MachineType		machine;
     PrintDataSide	side;

@@ -60,6 +60,106 @@ static int post_one_recv_wqe(struct pingpong_context *ctx) {
 /****************************************************************************** 
  *
  ******************************************************************************/
+static int post_recv_to_get_ah(struct pingpong_context *ctx) {
+
+	struct ibv_recv_wr wr;
+	struct ibv_recv_wr *bad_wr;
+	struct ibv_sge list;
+
+	list.addr   = (uintptr_t)ctx->buf;
+	list.length = UD_ADDITION + sizeof(uint32_t);
+	list.lkey   = ctx->mr->lkey;
+
+	wr.next = NULL;
+	wr.wr_id = 0;
+	wr.sg_list = &list;
+	wr.num_sge = 1;
+
+	if (ibv_post_recv(ctx->qp[0],&wr,&bad_wr)) {
+		fprintf(stderr, "Function ibv_post_recv failed for RDMA_CM QP\n");
+		return FAILURE;
+	}
+
+	return SUCCESS;
+	
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static int send_qp_num_for_ah(struct pingpong_context *ctx,
+							  struct perftest_parameters *user_param) {
+
+	struct ibv_send_wr wr;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_sge list;
+	struct ibv_wc wc;
+	int ne;
+
+	memcpy(ctx->buf,&ctx->qp[0]->qp_num,sizeof(uint32_t));
+
+	list.addr   = (uintptr_t)ctx->buf;
+	list.length = sizeof(uint32_t);
+	list.lkey   = ctx->mr->lkey;
+
+	wr.wr_id      = 0;
+	wr.sg_list    = &list;
+	wr.num_sge    = 1;
+	wr.opcode     = IBV_WR_SEND_WITH_IMM;
+	wr.send_flags = IBV_SEND_SIGNALED;
+	wr.next       = NULL;
+    wr.imm_data   = htonl(ctx->qp[0]->qp_num);
+
+	wr.wr.ud.ah = ctx->ah;
+	wr.wr.ud.remote_qpn  = user_param->rem_ud_qpn;
+	wr.wr.ud.remote_qkey = user_param->rem_ud_qkey;
+
+
+	if (ibv_post_send(ctx->qp[0],&wr,&bad_wr)) {
+		fprintf(stderr, "Function ibv_post_send failed\n");
+		return 1;
+	}
+
+	do { ne = ibv_poll_cq(ctx->send_cq, 1,&wc);} while (ne == 0);
+
+	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != 0) {
+		fprintf(stderr, " Couldn't post send my QP number %d\n",(int)wc.status);
+		return 1;
+	}
+
+	return 0;
+	
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static int create_ah_from_wc_recv(struct pingpong_context *ctx,
+								  struct perftest_parameters *user_parm) {
+
+    struct ibv_qp_attr attr;
+    struct ibv_qp_init_attr init_attr;
+	struct ibv_wc wc;
+	int ne;
+
+	do { ne = ibv_poll_cq(ctx->recv_cq,1,&wc);} while (ne == 0);
+
+	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != 0) {
+		fprintf(stderr, "Bad wc status when trying to create AH -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
+		return 1;
+	}
+
+	ctx->ah = ibv_create_ah_from_wc(ctx->pd,&wc,(struct ibv_grh*)ctx->buf,ctx->cm_id->port_num);
+    user_parm->rem_ud_qpn = ntohl(wc.imm_data);
+	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
+    user_parm->rem_ud_qkey = attr.qkey;
+
+	return 0;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
 static int ethernet_write_keys(struct pingpong_dest *my_dest,
 							   struct perftest_comm *comm) {
 
@@ -506,7 +606,7 @@ int rdma_client_connect(struct pingpong_context *ctx,
     }
 
     sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
-    sin.sin_family = AF_INET;
+    sin.sin_family = PF_INET;
     sin.sin_port = htons((unsigned short)user_param->port);
 
    while (1) {
@@ -585,9 +685,15 @@ int rdma_client_connect(struct pingpong_context *ctx,
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.initiator_depth = 1;
-	conn_param.retry_count = 5;
 	user_param->work_rdma_cm = temp;
+
+	if (user_param->work_rdma_cm == OFF) {
+
+		if (post_one_recv_wqe(ctx)) {
+			fprintf(stderr, "Couldn't post send \n");
+			return 1;
+		}	
+	}
 
 	if (rdma_connect(ctx->cm_id,&conn_param)) {
 		fprintf(stderr, "Function rdma_connect failed\n");
@@ -600,19 +706,32 @@ int rdma_client_connect(struct pingpong_context *ctx,
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Unexpected CM event %d\n",event->event);
+		fprintf(stderr, "Unexpected CM event bl blka %d\n",event->event);
 		return FAILURE;
 	}	
+
+	if (user_param->connection_type == UD) { 
+
+        user_param->rem_ud_qpn  = event->param.ud.qp_num;
+        user_param->rem_ud_qkey = event->param.ud.qkey;
+
+		ctx->ah = ibv_create_ah(ctx->pd,&event->param.ud.ah_attr);
+
+		if (!ctx->ah) {
+			printf(" Unable to create address handler for UD QP\n");
+			return FAILURE;
+        }
+
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
+
+			if (send_qp_num_for_ah(ctx,user_param)) {
+				printf(" Unable to send my QP number\n");
+				return FAILURE;
+			}
+		}
+	} 
+
 	rdma_ack_cm_event(event);
-
-	if (user_param->work_rdma_cm == OFF) {
-
-		if (post_one_recv_wqe(ctx)) {
-			fprintf(stderr, "Couldn't post send \n");
-			return 1;
-		}	
-	}
-
 	return SUCCESS;
 }
 
@@ -641,7 +760,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	sin.sin_addr.s_addr = 0;
-	sin.sin_family = AF_INET;
+	sin.sin_family = PF_INET;
 	sin.sin_port = htons((unsigned short)user_param->port);
 
 	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
@@ -675,8 +794,10 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.initiator_depth = 1;
-	// conn_param.retry_count = 5;
+
+	if (user_param->connection_type == UD)
+		conn_param.qp_num = ctx->qp[0]->qp_num;
+
 	user_param->work_rdma_cm = temp;
 
 	if (user_param->work_rdma_cm == OFF) {
@@ -685,6 +806,16 @@ int rdma_server_connect(struct pingpong_context *ctx,
 			fprintf(stderr, "Couldn't post send \n");
 			return 1;
 		}
+
+	} else if (user_param->connection_type == UD) { 
+
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
+
+			if (post_recv_to_get_ah(ctx)) {
+				fprintf(stderr, "Couldn't post send \n");
+				return 1;
+			}
+		}
 	}
 
 	if (rdma_accept(ctx->cm_id, &conn_param)) {
@@ -692,19 +823,17 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return 1;
     }
 
+	if (user_param->work_rdma_cm && user_param->connection_type == UD) { 
+
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) { 
+			if (create_ah_from_wc_recv(ctx,user_param)) {
+				fprintf(stderr, "Unable to create AH from WC\n");
+				return 1;
+			}
+		}
+	}
+
 	rdma_ack_cm_event(event);
-
-    if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return 1; 
-    }
-
-    if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Bad event waiting for established connection\n");
-		return 1;
-    }
-
-    rdma_ack_cm_event(event);
 	rdma_destroy_id(ctx->cm_id_control);
     freeaddrinfo(res);
     return 0;

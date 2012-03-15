@@ -407,9 +407,17 @@ static void set_send_wqe(struct pingpong_context *ctx,
 	wr->send_flags = 0;
 
 	if (user_param->connection_type == UD) {
-		wr->wr.ud.ah          = ctx->ah;
-		wr->wr.ud.remote_qkey = DEF_QKEY;
-		wr->wr.ud.remote_qpn  = rem_qpn;
+
+		wr->wr.ud.ah = ctx->ah;
+
+		if (user_param->work_rdma_cm) { 
+			wr->wr.ud.remote_qkey = user_param->rem_ud_qkey;
+			wr->wr.ud.remote_qpn  = user_param->rem_ud_qpn;
+
+		} else {
+			wr->wr.ud.remote_qkey = DEF_QKEY;
+			wr->wr.ud.remote_qpn  = rem_qpn;
+		}
 	}
 }
 
