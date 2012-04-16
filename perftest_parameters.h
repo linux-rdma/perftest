@@ -136,9 +136,13 @@
 #define ALLOCATE(var,type,size)                                     \
     { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
         { fprintf(stderr," Cannot Allocate\n"); exit(1);}}
-
-#define GET_STRING(orig,temp) 						                \
-	{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
+#ifndef _WIN32
+	#define GET_STRING(orig,temp) 						            \
+		{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
+#else
+	#define GET_STRING(orig,temp)									\
+		{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy_s(orig, sizeof(char) * (strlen(temp) + 1), temp); }
+#endif
 
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 

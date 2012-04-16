@@ -37,7 +37,7 @@ int check_add_port(char **service,int port,
 	if (asprintf(service,"%d", port) < 0) { 
 #else
 	*service = (char*)malloc(6*sizeof(char));
-     if (sprintf(*service,"%d", port) < 0) { 
+	if (sprintf_s(*service,(6*sizeof(char)), "%d", port) < 0) {
 #endif
 		return FAILURE;
 	 }
@@ -316,7 +316,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	if (user_param->work_rdma_cm) {
 
 		if (rdma_create_qp(ctx->cm_id,ctx->pd,&attr)) {
-			fprintf(stderr, " Couldn't create rdma QP - %s\n",strerror(errno));
+			fprintf(stderr, " Couldn't create rdma QP\n");
 			return NULL;
 		}
 

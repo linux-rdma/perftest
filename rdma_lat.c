@@ -191,12 +191,14 @@ static int pp_write_keys(int sockfd, const struct pingpong_dest *my_dest)
 {
 	char msg[KEY_MSG_SIZE];
 
+#ifndef _WIN32
 	sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
 			my_dest->psn, my_dest->rkey, my_dest->vaddr);
 
-#ifndef _WIN32
 	if (write(sockfd, msg, sizeof msg) != sizeof msg)
 #else
+	sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT, my_dest->lid, my_dest->qpn,
+			my_dest->psn, my_dest->rkey, my_dest->vaddr);
 	if (send(sockfd, msg, sizeof msg, 0) != sizeof msg)
 #endif
 	{
@@ -225,9 +227,12 @@ static int pp_read_keys(int sockfd, const struct pingpong_dest *my_dest,
 		fprintf(stderr, "Couldn't read remote address\n");
 		return -1;
 	}
-
+#ifndef _WIN32
 	parsed = sscanf(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
-			&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
+#else
+	parsed = sscanf_s(msg, KEY_PRINT_FMT, &rem_dest->lid, &rem_dest->qpn,
+#endif
+					&rem_dest->psn, &rem_dest->rkey, &rem_dest->vaddr);
 
 	if (parsed != 5) {
 		fprintf(stderr, "Couldn't parse line <%.*s>\n",
@@ -265,7 +270,7 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 #ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
 #else
-	if (sprintf(service, "%d", data->port) < 0)
+	if (sprintf_s(service, sizeof(service), "%d", data->port) < 0)
 #endif
 		goto err4;
 
@@ -478,7 +483,7 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 #ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
 #else
-	if (sprintf(service, "%d", data->port) < 0)
+	if (sprintf_s(service, sizeof(service), "%d", data->port) < 0)
 #endif
 		goto err5;
 

@@ -173,7 +173,8 @@ static struct pingpong_context *pp_client_connect(struct pp_data *data)
 #ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
 #else
-	if (sprintf(service, "%d", data->port) < 0)
+	if (sprintf_s(service, sizeof(service), "%d", data->port) < 0)
+
 #endif
 		goto err4;
 
@@ -353,12 +354,17 @@ static int pp_client_exch_dest(struct pp_data *data)
 	int parsed;
 	
 	if (!data->use_cma) {
+#ifndef _WIN32
 		sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", data->my_dest.lid, 
 				data->my_dest.qpn, data->my_dest.psn,
 				data->my_dest.rkey, data->my_dest.vaddr);
-#ifndef _WIN32
+
 		if (write(data->sockfd, msg, sizeof msg) != sizeof msg)
 #else
+		sprintf_s(msg, sizeof(msg), "%04x:%06x:%06x:%08x:%016Lx", data->my_dest.lid, 
+				  data->my_dest.qpn, data->my_dest.psn,
+				  data->my_dest.rkey, data->my_dest.vaddr);
+		
 		if (send(data->sockfd, msg, sizeof msg, 0) != sizeof msg)
 #endif
 		{
@@ -385,11 +391,16 @@ static int pp_client_exch_dest(struct pp_data *data)
 		data->rem_dest = malloc(sizeof *data->rem_dest);
 		if (!data->rem_dest)
 			goto err;
-	
+
+#ifndef _WIN32
 		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &data->rem_dest->lid,
-				&data->rem_dest->qpn, &data->rem_dest->psn,
-				&data->rem_dest->rkey, &data->rem_dest->vaddr);
-	
+					    &data->rem_dest->qpn, &data->rem_dest->psn,
+						&data->rem_dest->rkey, &data->rem_dest->vaddr);
+#else
+		parsed = sscanf_s(msg, "%x:%x:%x:%x:%Lx", &data->rem_dest->lid,
+						  &data->rem_dest->qpn, &data->rem_dest->psn,
+						  &data->rem_dest->rkey, &data->rem_dest->vaddr);
+#endif
 		if (parsed != 5) {
 			fprintf(stderr, "%d:%s: Couldn't parse line <%.*s>\n",
 					pid, __func__, (int)sizeof msg, msg);
@@ -428,7 +439,7 @@ static struct pingpong_context *pp_server_connect(struct pp_data *data)
 #ifndef _WIN32
 	if (asprintf(&service, "%d", data->port) < 0)
 #else
-	if (sprintf(service, "%d", data->port) < 0)
+	if (sprintf_s(service, sizeof(service), "%d", data->port) < 0)
 #endif
 		goto err5;
 
@@ -620,19 +631,29 @@ static int pp_server_exch_dest(struct pp_data *data)
 		if (!data->rem_dest)
 			goto err;
 	
+#ifndef _WIN32
 		parsed = sscanf(msg, "%x:%x:%x:%x:%Lx", &data->rem_dest->lid,
 			      &data->rem_dest->qpn, &data->rem_dest->psn,
 			      &data->rem_dest->rkey, &data->rem_dest->vaddr);
+#else
+		parsed = sscanf_s(msg, "%x:%x:%x:%x:%Lx", &data->rem_dest->lid,
+					&data->rem_dest->qpn, &data->rem_dest->psn,
+					&data->rem_dest->rkey, &data->rem_dest->vaddr);
+#endif
 		if (parsed != 5) {
 			fprintf(stderr, "%d:%s: Couldn't parse line <%.*s>\n", pid,
 						 __func__, (int)sizeof msg, msg);
 			free(data->rem_dest);
 			goto err;
 		}
-	
+
+#ifndef _WIN32	
 		sprintf(msg, "%04x:%06x:%06x:%08x:%016Lx", data->my_dest.lid,
-					 data->my_dest.qpn, data->my_dest.psn,
-					 data->my_dest.rkey, data->my_dest.vaddr);
+#else
+		sprintf_s(msg, sizeof(msg), "%04x:%06x:%06x:%08x:%016Lx", data->my_dest.lid,
+#endif
+				data->my_dest.qpn, data->my_dest.psn,
+				data->my_dest.rkey, data->my_dest.vaddr);
 #ifndef _WIN32
 		if (write(data->sockfd, msg, sizeof msg) != sizeof msg) 
 #else

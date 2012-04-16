@@ -166,12 +166,16 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
     if (comm->rdma_params->gid_index == -1) {
 
 		char msg[KEY_MSG_SIZE];
-		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
-				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
+		
+
 
 #ifndef _WIN32
+		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
+				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
 		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
 #else
+		sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
+				  my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
 		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
 #endif
 			perror("client write");
@@ -181,6 +185,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 
     } else {
 		char msg[KEY_MSG_SIZE_GID];
+#ifndef _WIN32
 		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
 				my_dest->gid.raw[0],my_dest->gid.raw[1],
@@ -192,9 +197,19 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 				my_dest->gid.raw[12],my_dest->gid.raw[13],
 				my_dest->gid.raw[14],my_dest->gid.raw[15]);
 
-#ifndef _WIN32
 		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 #else
+		sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
+					my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
+					my_dest->gid.raw[0],my_dest->gid.raw[1],
+					my_dest->gid.raw[2],my_dest->gid.raw[3],
+					my_dest->gid.raw[4],my_dest->gid.raw[5],
+					my_dest->gid.raw[6],my_dest->gid.raw[7],
+					my_dest->gid.raw[8],my_dest->gid.raw[9],
+					my_dest->gid.raw[10],my_dest->gid.raw[11],
+					my_dest->gid.raw[12],my_dest->gid.raw[13],
+					my_dest->gid.raw[14],my_dest->gid.raw[15]);
+		
 		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
 #endif
 			perror("client write");
@@ -225,11 +240,16 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 			fprintf(stderr, "Couldn't read remote address\n");
 			return 1;
 		}
-
+		
+#ifndef _WIN32
 		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
 						&rem_dest->out_reads,&rem_dest->qpn,
 						&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
-
+#else
+		parsed = sscanf_s(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
+		  				&rem_dest->out_reads,&rem_dest->qpn,
+		  				&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
+#endif		
 		if (parsed != 6) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
@@ -306,11 +326,12 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		}
 
 		pstr += term - pstr + 1;
-		strcpy(tmp, pstr);
 
 #ifndef _WIN32
+		strcpy(tmp, pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 #else
+		strcpy_s(tmp, sizeof(tmp), pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtol(tmp, NULL, 16);
 #endif
 
@@ -764,7 +785,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	sin.sin_port = htons((unsigned short)user_param->port);
 
 	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
-		fprintf(stderr," rdma_bind_addr failed - %s\n",strerror(errno));
+		fprintf(stderr," rdma_bind_addr failed\n");
 		return 1;
 	}
 
@@ -819,7 +840,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	if (rdma_accept(ctx->cm_id, &conn_param)) {
-		fprintf(stderr, "Function rdma_accept failed - %s\n",strerror(errno));
+		fprintf(stderr, "Function rdma_accept failed\n");
 		return 1;
     }
 

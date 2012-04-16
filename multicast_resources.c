@@ -149,11 +149,12 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 #endif
 		}
 		pstr += term - pstr + 1;
-		strcpy(tmp, pstr);
 
 #ifndef _WIN32
+		strcpy(tmp, pstr);
 		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
 #else 	
+		strcpy_s(tmp, sizeof(tmp), pstr);
 		mcg_gid[15] = (unsigned char)strtol(tmp, NULL, 0);
 #endif
 	}
