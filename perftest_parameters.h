@@ -52,6 +52,13 @@
 
 // Files included for work.
 #include <infiniband/verbs.h>
+#ifdef _WIN32
+#include "get_clock_win.h"
+#else
+#include <unistd.h>
+#include <malloc.h>
+#include "get_clock.h"
+#endif
 
 // Connection types availible.
 #define RC  (0)
@@ -123,7 +130,7 @@
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 // Result print format
-#define REPORT_FMT     " %-7lu    %d           %-7.2f            %-7.2f\n"
+#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf\n"
 
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
@@ -266,5 +273,20 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
  *
  */
 void ctx_print_test_info(struct perftest_parameters *user_param);
+
+/* print_report_bw
+ *
+ * Description : Print the peak and average throughput of the BW test.
+ *
+ * Parameters :
+ *
+ *	 user_param  - the parameters parameters.
+ *   tposted	 - Posted cycles_t array
+ *	 tcompleted  - Completed cycles_t array
+ *
+ */
+void print_report_bw (struct perftest_parameters *user_param,
+					  cycles_t *tposted,
+					  cycles_t *tcompleted);
 
 #endif /* PERFTEST_RESOURCES_H */

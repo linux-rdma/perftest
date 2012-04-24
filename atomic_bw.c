@@ -40,13 +40,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include "get_clock_win.h"
-#else
-#include <unistd.h>
-#include <malloc.h>
-#include "get_clock.h"
-#endif
 
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
@@ -120,47 +113,6 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,int my_out_rea
 		return 1;
 	}
 	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static void print_report(struct perftest_parameters *user_param) {
-
-	double cycles_to_units;
-	unsigned long tsize;	/* Transferred size, in megabytes */
-	int i, j;
-	int opt_posted = 0, opt_completed = 0;
-	cycles_t opt_delta;
-	cycles_t t;
-
-
-	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
-	
-	if (user_param->noPeak == OFF) {
-		/* Find the peak bandwidth */
-		for (i = 0; i < user_param->iters; ++i)
-			for (j = i; j < user_param->iters; ++j) {
-				t = (tcompleted[j] - tposted[i]) / (j - i + 1);
-				if (t < opt_delta) {
-					opt_delta  = t;
-					opt_posted = i;
-					opt_completed = j;
-				}
-			}
-	}
-
-#ifndef _WIN32
-	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
-#else
-	cycles_to_units = get_cpu_mhz();
-#endif
-
-	tsize = user_param->duplex ? 2 : 1;
-	tsize = tsize * user_param->size;
-	
-	printf(REPORT_FMT,(unsigned long)user_param->size,user_param->iters,!(user_param->noPeak) * tsize * cycles_to_units / opt_delta / 0x100000,
-	       tsize * user_param->iters * cycles_to_units /(tcompleted[user_param->iters - 1] - tposted[0]) / 0x100000);
 }
 
 /****************************************************************************** 
@@ -415,7 +367,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if(run_iter(&ctx,&user_param,&rem_dest))
 		return 17;
 		
-	print_report(&user_param);
+	print_report_bw(&user_param,tposted,tcompleted);
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");

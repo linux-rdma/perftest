@@ -41,14 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include "get_clock_win.h"
-#include "l2w.h"
-#else
-#include <unistd.h>
-#include <malloc.h>
-#include "get_clock.h"
-#endif
+
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "perftest_communication.h"
@@ -148,45 +141,6 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 
 	}
 	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static void print_report(struct perftest_parameters *user_param) {
-
-	double cycles_to_units;
-	unsigned long tsize;	/* Transferred size, in megabytes */
-	int i, j;
-	int opt_posted = 0, opt_completed = 0;
-	cycles_t opt_delta;
-	cycles_t t;
-
-
-	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
-
-	/* Find the peak bandwidth */
-	for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i)
-		for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
-			t = (tcompleted[j] - tposted[i]) / (j - i + 1);
-			if (t < opt_delta) {
-				opt_delta  = t;
-				opt_posted = i;
-				opt_completed = j;
-            }
-	}
-
-#ifndef _WIN32
-	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
-#else
-	cycles_to_units = get_cpu_mhz();
-#endif
-
-	tsize = user_param->duplex ? 2 : 1;
-	tsize = tsize * user_param->size;
-	printf(REPORT_FMT,
-	       (unsigned long)user_param->size,user_param->iters,tsize * cycles_to_units / opt_delta / 0x100000,
-	       tsize * user_param->iters * user_param->num_of_qps * cycles_to_units /(tcompleted[(user_param->iters* user_param->num_of_qps) - 1] - tposted[0]) / 0x100000);
 }
 
 /****************************************************************************** 
@@ -457,14 +411,14 @@ int main(int argc, char *argv[]) {
 			user_param.size = (uint64_t)1 << i;
 			if(run_iter(&ctx,&user_param,rem_dest))
 				return 17;
-			print_report(&user_param);
+			print_report_bw(&user_param,tposted,tcompleted);
 		}
 
 	} else {
 
 		if(run_iter(&ctx,&user_param,rem_dest))
 			return 18;
-		print_report(&user_param);
+		print_report_bw(&user_param,tposted,tcompleted);
 	}
 
 	free(tposted);

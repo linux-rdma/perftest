@@ -781,5 +781,50 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 }
 
 /****************************************************************************** 
+ *
+ ******************************************************************************/
+void print_report_bw (struct perftest_parameters *user_param,
+					  cycles_t *tposted,
+					  cycles_t *tcompleted) {
+
+	double cycles_to_units;
+	int i, j, opt_posted = 0, opt_completed = 0;
+	cycles_t aux_up, t, aux_down, opt_delta, peak_up, peak_down,tsize;
+
+	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
+
+	if (user_param->noPeak == OFF) {
+		/* Find the peak bandwidth unless asked not to in command line*/
+		for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i)
+		  for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
+		    t = (tcompleted[j] - tposted[i]) / (j - i + 1);
+		    if (t < opt_delta) {
+		      opt_delta  = t;
+		      opt_posted = i;
+		      opt_completed = j;
+		    }
+		  }
+	}
+
+#ifndef _WIN32
+	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
+#else
+	cycles_to_units = get_cpu_mhz();
+#endif
+
+	tsize = user_param->duplex ? 2 : 1;
+	tsize = tsize * user_param->size;
+	aux_up = ((cycles_t)tsize*(cycles_t)user_param->iters*(cycles_t)user_param->num_of_qps)*((cycles_t)(cycles_to_units/0x100000));
+	aux_down = ((cycles_t)tcompleted[user_param->iters*user_param->num_of_qps - 1] - (cycles_t)tposted[0]);
+	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
+	peak_down = (cycles_t)opt_delta * 0x100000;
+	printf(REPORT_FMT,
+		   (unsigned long)user_param->size, 
+		   user_param->iters,
+		   (double)peak_up/peak_down,
+	       (double)aux_up/aux_down);
+}
+
+/****************************************************************************** 
  * End
  ******************************************************************************/
