@@ -814,8 +814,10 @@ void print_report_bw (struct perftest_parameters *user_param,
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
-	aux_up = ((cycles_t)tsize*(cycles_t)user_param->iters*(cycles_t)user_param->num_of_qps)*((cycles_t)(cycles_to_units/0x100000));
-	aux_down = ((cycles_t)tcompleted[user_param->iters*user_param->num_of_qps - 1] - (cycles_t)tposted[0]);
+	aux_up = ((cycles_t)tsize*(cycles_t)user_param->iters*(cycles_t)user_param->num_of_qps);
+	aux_up *= (cycles_t)cycles_to_units;
+	aux_down = (tcompleted[user_param->iters*user_param->num_of_qps - 1] - tposted[0]);
+	aux_down *= 0x100000;
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * 0x100000;
 	printf(REPORT_FMT,
