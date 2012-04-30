@@ -787,9 +787,9 @@ void print_report_bw (struct perftest_parameters *user_param,
 					  cycles_t *tposted,
 					  cycles_t *tcompleted) {
 
-	double cycles_to_units;
+	double cycles_to_units,aux_up,aux_down;
 	int i, j, opt_posted = 0, opt_completed = 0;
-	cycles_t aux_up, t, aux_down, opt_delta, peak_up, peak_down,tsize;
+	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
 
@@ -814,17 +814,15 @@ void print_report_bw (struct perftest_parameters *user_param,
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
-	aux_up = ((cycles_t)tsize*(cycles_t)user_param->iters*(cycles_t)user_param->num_of_qps);
-	aux_up *= (cycles_t)cycles_to_units;
-	aux_down = (tcompleted[user_param->iters*user_param->num_of_qps - 1] - tposted[0]);
-	aux_down *= 0x100000;
+	aux_up = (double)tsize*user_param->iters*user_param->num_of_qps;
+	aux_down = (double)(tcompleted[user_param->iters*user_param->num_of_qps - 1] - tposted[0]);
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * 0x100000;
 	printf(REPORT_FMT,
 		   (unsigned long)user_param->size, 
 		   user_param->iters,
 		   (double)peak_up/peak_down,
-	       (double)aux_up/aux_down);
+	       (aux_up*cycles_to_units)/(aux_down*0x100000));
 }
 
 /****************************************************************************** 
