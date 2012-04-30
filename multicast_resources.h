@@ -63,7 +63,7 @@
 #include <infiniband/umad.h>
 
 #ifdef _WIN32
-#include "..\..\tools\perftests\user\get_clock.h"
+#include "get_clock_win.h"
 #else
 #include "get_clock.h"
 #endif
