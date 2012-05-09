@@ -396,7 +396,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	while (ccnt < user_param->iters || rcnt < user_param->iters) {
                 
-		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth / 2) {
+		while (scnt < user_param->iters && (scnt - ccnt) < user_param->tx_depth) {
 
 			if (scnt %  user_param->cq_mod == 0 && user_param->cq_mod > 1)
 				wr->send_flags &= ~IBV_SEND_SIGNALED;

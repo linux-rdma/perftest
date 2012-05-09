@@ -228,8 +228,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->cq_mod = user_param->tx_depth;
 	}
 
-	if (user_param->verb == SEND && user_param->tst == BW &&
-		user_param->rx_depth > user_param->iters) {
+	if (user_param->verb == SEND && user_param->rx_depth > user_param->iters) {
 		user_param->rx_depth = user_param->iters;
 	}
 
