@@ -24,7 +24,7 @@
 #endif
 
 /****************************************************************************** 
- * Begining
+ * Beginning
  ******************************************************************************/
 int check_add_port(char **service,int port,
 				   const char *servername,
@@ -104,8 +104,10 @@ struct ibv_device* ctx_find_dev(const char *ib_devname) {
 
 	if (!ib_devname) {
 		ib_dev = dev_list[0];
-		if (!ib_dev)
+		if (!ib_dev) {
 			fprintf(stderr, "No IB devices found\n");
+			exit (1);
+		}
 	} else {
 		for (; (ib_dev = *dev_list); ++dev_list)
 			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
@@ -245,7 +247,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	}
 	
-	// Alocating Memory region and assiging our buffer to it.
+	// Allocating Memory region and assigning our buffer to it.
 	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,buff_size,flags);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
@@ -261,7 +263,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	if (user_param->verb == SEND) { 
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
 		if (!ctx->recv_cq) {
-			fprintf(stderr, "Couldn't create a recevier CQ\n");
+			fprintf(stderr, "Couldn't create a receiver CQ\n");
 			return FAILURE;
 		}
 	}
@@ -337,10 +339,24 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	struct ibv_qp_attr attr;
 	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
 
+	static int portindex=0;  // for dual-port support
+
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = 0;
+
+
+	if (user_param->dualport==ON) {
+		if (portindex<user_param->num_of_qps/2) {
 	attr.port_num        = user_param->ib_port;
+		} else {
+			attr.port_num = user_param->ib_port2;
+		}
+		portindex++;
+	} else
+	{
+		attr.port_num = user_param->ib_port;
+	}
 
 	if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;

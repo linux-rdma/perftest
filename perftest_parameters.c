@@ -143,6 +143,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	if (verb == WRITE && tst == BW) 
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
 
+	printf("\nLong options only:\n");
+	printf("      --dualport ");
+	printf(" Run test in dual-port mode.\n");
+
 	putchar('\n');
 }
 
@@ -153,6 +157,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 
 	user_param->port       = DEF_PORT;
 	user_param->ib_port    = DEF_IB_PORT;
+	user_param->ib_port2        = DEF_IB_PORT2;
 	user_param->size       = user_param->tst == BW ? DEF_SIZE_BW : DEF_SIZE_LAT;
 	user_param->tx_depth   = user_param->tst == BW ? DEF_TX_BW : DEF_TX_LAT;
 	user_param->qp_timeout = DEF_QP_TIME;
@@ -162,6 +167,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->use_event  = OFF;
 	user_param->num_of_qps = DEF_NUM_QPS;
 	user_param->gid_index  = DEF_GID_INDEX;
+	user_param->gid_index2      = DEF_GID_INDEX;
 	user_param->inline_size = user_param->tst == BW ? DEF_INLINE_BW : DEF_INLINE_LT;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
@@ -171,6 +177,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->noPeak		= OFF;
 	user_param->cq_mod		= DEF_CQ_MOD;
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
+	user_param->dualport        = OFF;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -234,6 +241,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
 			user_param->gid_index = 0;
+
 	}
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC) 
@@ -242,7 +250,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	if (user_param->work_rdma_cm && user_param->use_mcg) {
 
 		printf(RESULT_LINE);
-		printf(" Perftest still doesn't support Multicast with rdam_cm\n");
+		printf(" Perftest still doesn't support Multicast with rdma_cm\n");
 		user_param->use_mcg = OFF;
 		user_param->num_of_qps = 1;
 	} 
@@ -275,6 +283,17 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->size = DEF_SIZE_ATOMIC;
 	}
 
+	if (user_param->dualport==ON) {
+		if (!((user_param->verb == WRITE) && (user_param->tst==BW)))
+		{
+			printf("Test currently doesn't support dual-port mode.\n");
+			exit (1);
+		}
+		if (user_param->work_rdma_cm) {
+			printf("Perftest currently doesn't support dual-port mode with rdma_cm\n");
+			exit (1);
+		}
+	}
 	return;
 }
 
@@ -306,7 +325,7 @@ static Device is_dev_hermon(struct ibv_context *context) {
 	if (ibv_query_device(context,&attr)) {
 		is_hermon = DEVICE_ERROR;
 	}
-	// Checks the devide type for setting the max outstanding reads.
+	// Checks the device type for setting the max outstanding reads.
 	else if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
 			 attr.vendor_part_id == 25448  || attr.vendor_part_id == 26418  || 
 			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
@@ -343,7 +362,7 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user
 			case 4096 :	curr_mtu = IBV_MTU_4096; break;
 			default   :	
 				fprintf(stderr," Invalid MTU - %d \n",user_mtu);
-				fprintf(stderr," Please choose mtu form {256,512,1024,2048,4096}\n");
+				fprintf(stderr," Please choose mtu from {256,512,1024,2048,4096}\n");
 				fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
 				curr_mtu = port_attr.active_mtu;
 		}
@@ -387,8 +406,9 @@ static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
 			fprintf(stderr," Unable to determine link layer \n");
 			return LINK_FAILURE;
 	}
-
-	return curr_link;
+	//return curr_link;
+	//printf("link_layer: %d\n",port_attr.link_layer);
+	return port_attr.link_layer;
 }
 
 /****************************************************************************** 
@@ -421,6 +441,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	int c;
 
 	init_perftest_params(user_param);
+	static int dualport_flag=0;
 
 	while (1) {
 #ifndef _WIN32
@@ -456,6 +477,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "report-histogrm",.has_arg = 0, .val = 'H' },
             { .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
+			{ .name = "dualport",       .has_arg = 0, .flag = &dualport_flag, .val = 1 },
             { 0 }
         };
 #else
@@ -492,11 +514,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ "report-histogrm",0, NULL, 'H' },
             { "report-unsorted",0, NULL, 'U' },
 			{ "atomic_type"	   ,1, NULL, 'A' },
+			{ "dualport"      ,0, &dualport_flag, 1 },
 			{ 0 }
 		};
 #endif
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:A:lVaezRhbNFCHU",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:A:lVaezRhbNFCHUA",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -524,11 +547,17 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
 			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
-			case 'q': CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps"); 
+			case 'q':
 				if (user_param->verb != WRITE || user_param->tst != BW) {
-					fprintf(stderr," Multiple QPs only availible on ib_write_bw and ib_write_bw_postlist\n");
+					fprintf(stderr," Multiple QPs only available on ib_write_bw and ib_write_bw_postlist\n");
                     return 1;
-				} break;
+				}
+				if (user_param->dualport) {
+				    printf("Perftest currently doesn't support dual-port with customized num_of_qps\n");
+				    exit (1);
+				}
+				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
+				break;
 			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
 				if (user_param->sl > MAX_SL) { 
 					fprintf(stderr," Only 16 Service levels [0-15]\n");
@@ -625,6 +654,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					return 1;
                 } 
 				user_param->r_flag->unsorted = ON; break;
+            case 0: break; // required for long options to work
+
 
 			default: 
 				fprintf(stderr," Invalid Command or flag.\n"); 
@@ -644,7 +675,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
             fprintf(stderr," Invalid Command line. Please check command rerun \n"); 
             return 1;
     }
-
+    if (dualport_flag) {
+    	if (user_param->num_of_qps>DEF_NUM_QPS) {
+    		printf("Perftest currently doesn't support dual-port with customized num_of_qps.\n");
+    		exit (1);
+    	}
+    	user_param->ib_port  = DEF_IB_PORT;
+    	user_param->ib_port2 = DEF_IB_PORT2;
+    	user_param->dualport = ON;
+    	user_param->num_of_qps *= 2;
+    }
 	user_param->machine = user_param->servername ? CLIENT : SERVER;
 	force_dependecies(user_param);
     return 0;
@@ -655,9 +695,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
  ******************************************************************************/
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param) {
 
-
 	user_param->link_type = set_link_layer(context,user_param->ib_port);
-	
 	if (user_param->link_type == LINK_FAILURE) {
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return FAILURE;
@@ -668,6 +706,25 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	}
 
 	user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
+	//printf("port1: user_param->curr_mt :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
+
+	// in case of dual-port mode
+		if (user_param->dualport==ON)
+		{
+				user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
+
+				if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
+						user_param->gid_index2 = 1;
+				}
+
+				if (user_param->link_type2 == LINK_FAILURE) {
+						fprintf(stderr, " Couldn't set the link layer\n");
+						return FAILURE;
+				}
+			//	printf("before: user_param->curr_mtu :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
+			//	user_param->curr_mtu = set_mtu(context,user_param->ib_port2,user_param->mtu);
+			//	printf("after: user_param->curr_mtu :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
+		}
 
 	if (is_dev_hermon(context) != HERMON && user_param->inline_size != 0)
 		user_param->inline_size = 0;
@@ -733,6 +790,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->use_mcg) 
 		printf(" MultiCast runs on UD!\n");
 
+	printf(" Dual-port       : %s\n", user_param->dualport ? "ON" : "OFF");
 	printf(" Number of qps   : %d\n",user_param->num_of_qps);
 	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
 	
@@ -754,6 +812,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	if (user_param->gid_index != DEF_GID_INDEX)
 		printf(" Gid index       : %d\n" ,user_param->gid_index);
+	if ((user_param->dualport==ON) && (user_param->gid_index2 != DEF_GID_INDEX))
+		printf(" Gid index2      : %d\n" ,user_param->gid_index2);
 
 	if (user_param->verb != READ && user_param->verb != ATOMIC) 
 		printf(" Max inline data : %dB\n",user_param->inline_size);
@@ -821,7 +881,8 @@ void print_report_bw (struct perftest_parameters *user_param,
 		   (unsigned long)user_param->size, 
 		   user_param->iters,
 		   (double)peak_up/peak_down,
-	       (aux_up*cycles_to_units)/(aux_down*0x100000));
+	       (aux_up*cycles_to_units)/(aux_down*0x100000),
+	       ((aux_up*cycles_to_units)/aux_down)/((unsigned long)user_param->size)/1000000);
 }
 
 /****************************************************************************** 

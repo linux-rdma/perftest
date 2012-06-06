@@ -82,6 +82,7 @@
 // Default Values of perftest parameters
 #define DEF_PORT      (18515)
 #define DEF_IB_PORT   (1)
+#define DEF_IB_PORT2  (2)
 #define DEF_SIZE_BW   (65536)
 #define DEF_SIZE_LAT  (2)
 #define DEF_ITERS     (1000)
@@ -101,7 +102,7 @@
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_IB_PORT   (1)
-#define MAX_IB_PORT   (2) 
+#define MAX_IB_PORT   (3)  //was 2
 #define MIN_ITER      (5)
 #define MAX_ITER      (100000000)
 #define MIN_TX 	      (50)
@@ -122,15 +123,15 @@
 #define MAX_CQ_MOD    (1000)
 
 
-#define RESULT_LINE "------------------------------------------------------------------\n"
+#define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
 // The format of the results
-#define RESULT_FMT     " #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]\n"
+#define RESULT_FMT     " #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 // Result print format
-#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf\n"
+#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf\n"
 
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
@@ -177,6 +178,7 @@ struct perftest_parameters {
 	char			*ib_devname;
 	char			*servername;
 	uint8_t			ib_port;
+	uint8_t			ib_port2;
 	int				mtu;
 	enum ibv_mtu	curr_mtu;
 	uint64_t		size;
@@ -185,6 +187,7 @@ struct perftest_parameters {
 	uint8_t			qp_timeout;
 	uint8_t			sl;
 	int				gid_index;
+	int				gid_index2;
 	int				all;
 	int				cpu_freq_f;
 	int				connection_type;
@@ -201,9 +204,11 @@ struct perftest_parameters {
 	int				noPeak;
 	int				cq_mod;
 	int 			spec;
+	int 			dualport;
 	uint32_t        rem_ud_qpn;
 	uint32_t        rem_ud_qkey;
 	uint8_t 		link_type;
+	uint8_t 		link_type2;
     MachineType		machine;
     PrintDataSide	side;
 	VerbType		verb;

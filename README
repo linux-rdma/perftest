@@ -128,7 +128,12 @@ Common Options to all tests:
 			       	On Bw tests default is  1,latency tests is 400.
   -u, --qp-timeout=<timeout>   	QP timeout, timeout value is 4 usec*2 ^(timeout).
 			       	Default is 14.
-  -S, --sl=<sl>                	SL (default 0).
+  -S, --sl=<sl>                	SL (default 0)
+
+long options parameters:
+------------------------
+
+   --dualport			Run test in dual-port mode.
 
 Options for latency tests:
 --------------------------
@@ -178,6 +183,8 @@ Here is a list of the main issues:
     We are working now to fix it.
 
  3. RDMA_CM feature in read tests still doesn't work.
+
+ 4. Dual-port support currently works only with ib_write_bw.
 
 
 

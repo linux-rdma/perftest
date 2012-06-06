@@ -34,6 +34,8 @@ static const char *gidArray[]   = {"GID"  , "MGID"};
 /****************************************************************************** 
  *
  ******************************************************************************/
+
+
 static int post_one_recv_wqe(struct pingpong_context *ctx) {
 
 	struct ibv_recv_wr wr;
@@ -172,10 +174,12 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 #ifndef _WIN32
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
+
 		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
 #else
 		sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				  my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
+		printf("\nethernet_write_keys msg is: %s\n\n",msg);
 		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
 #endif
 			perror("client write");
@@ -216,7 +220,9 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 			fprintf(stderr, "Couldn't send local address\n");
 			return 1;
 		}	
+
 	}
+
     return 0;
 }
 
@@ -226,7 +232,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 							  struct perftest_comm *comm)  {
     
-	if (comm->rdma_params->gid_index == -1) {
+if (comm->rdma_params->gid_index == -1){
 
         int parsed;
 		char msg[KEY_MSG_SIZE];
@@ -429,7 +435,7 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,comm->rdma_params->port,comm->rdma_params->servername,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		fprintf(stderr, "Problem in resolving basic address and port\n");
 		return 1;
 	}
 
@@ -560,25 +566,41 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
  *
  ******************************************************************************/
 int set_up_connection(struct pingpong_context *ctx,
-					  struct perftest_parameters *user_parm,
+					  struct perftest_parameters *user_param,
 					  struct pingpong_dest *my_dest) {
 
 	int i;
 	union ibv_gid temp_gid;
+	union ibv_gid temp_gid2;
 
 #ifndef _WIN32
 	srand48(getpid() * time(NULL));
 #endif
 
-	if (user_parm->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
+		if (user_param->gid_index != -1) {
+			if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
 			return -1;
 		}
 	}
-
-	for (i=0; i < user_parm->num_of_qps; i++) {
-
-		my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+	if (user_param->dualport==ON) { //dual port case
+		if (user_param->gid_index2 != -1) {
+				if (ibv_query_gid(ctx->context,user_param->ib_port2,user_param->gid_index,&temp_gid2)) {
+					return -1;
+				}
+			}
+	}
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (user_param->dualport == ON) {
+			if (i < user_param->num_of_qps / 2) { // first half of qps are for ib_port and second half are for ib_port2
+				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
+			} else
+			{
+				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port2);
+			}
+		} else // single-port case
+		{
+			my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
+		}
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 
 #ifndef _WIN32
@@ -588,12 +610,22 @@ int set_up_connection(struct pingpong_context *ctx,
 #endif
 		my_dest[i].rkey  = ctx->mr->rkey;
 		// Each qp gives his receive buffer address .
-		my_dest[i].out_reads = user_parm->out_reads;
-		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_parm->num_of_qps + i)*BUFF_SIZE(ctx->size);
+		my_dest[i].out_reads = user_param->out_reads;
+		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
+		//memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
+		if (user_param->dualport==ON) {
+			if (i < user_param->num_of_qps / 2)
+				memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
+			else
+			{
+				memcpy(my_dest[i].gid.raw,temp_gid2.raw ,16);
+			}
+
+		} else
 		memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
 		// We do not fail test upon lid above RoCE.
-		if (user_parm->gid_index < 0) {
+		if ( (user_param->gid_index < 0) ||  ((user_param->gid_index2 < 0) && (user_param->dualport == ON))  ){
 			if (!my_dest[i].lid) {
 				fprintf(stderr," Local lid 0x0 detected. Is an SM running? \n");
 				return -1;
@@ -951,19 +983,16 @@ int ctx_hand_shake(struct perftest_comm *comm,
 	int (*write_func_ptr)(struct pingpong_dest*,struct perftest_comm*);
 
 	if (comm->rdma_params->use_rdma_cm || comm->rdma_params->work_rdma_cm) {
-
 		read_func_ptr  = &rdma_read_keys;
 		write_func_ptr = &rdma_write_keys;
 
 	} else {
-
 		read_func_ptr  = &ethernet_read_keys;
 		write_func_ptr = &ethernet_write_keys;
 		
 	}
 
 	if (comm->rdma_params->servername) {  
-
 		if ((*write_func_ptr)(my_dest,comm)) {
 			fprintf(stderr," Unable to write to socket/rdam_cm\n");
 			return 1;
@@ -990,6 +1019,9 @@ int ctx_hand_shake(struct perftest_comm *comm,
     return 0;
 }
 
+
+
+
 /****************************************************************************** 
  *
  ******************************************************************************/
@@ -1002,7 +1034,6 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
     printf(BASIC_ADDR_FMT,sideArray[comm->rdma_params->side],element->lid,element->qpn,element->psn);
 
 	switch (comm->rdma_params->verb) {
-
 		case 2  : printf(READ_FMT,element->out_reads);
 		case 1  : printf(RDMA_FMT,element->rkey,element->vaddr);
 		default : putchar('\n');

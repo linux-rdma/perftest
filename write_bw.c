@@ -68,19 +68,12 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof attr);
 
-	attr.qp_state 		= IBV_QPS_RTR;
-	attr.path_mtu       = user_parm->curr_mtu;
-	attr.dest_qp_num 	= dest->qpn;
-	attr.rq_psn 		= dest->psn;
-	attr.ah_attr.dlid   = dest->lid;
-	if (user_parm->connection_type==RC) {
-		attr.max_dest_rd_atomic     = 1;
-		attr.min_rnr_timer          = 12;
-	}
 	if (user_parm->gid_index<0) {
 		attr.ah_attr.is_global  = 0;
 		attr.ah_attr.sl         = user_parm->sl;
+
 	} else {
+
 		attr.ah_attr.is_global  = 1;
 		attr.ah_attr.grh.dgid   = dest->gid;
 		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
@@ -88,8 +81,25 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 		attr.ah_attr.sl         = 0;
 	}
 	attr.ah_attr.src_path_bits = 0;
+
+		if ((user_parm->dualport == OFF) || ((user_parm->dualport==ON && (qpindex<user_parm->num_of_qps/2)))) //lower half of num_of_qps is related to ib_port
 	attr.ah_attr.port_num   = user_parm->ib_port;
+		else
+			attr.ah_attr.port_num   = user_parm->ib_port2;
+
+	attr.qp_state 		= IBV_QPS_RTR;
+	attr.path_mtu       = user_parm->curr_mtu;
+	attr.dest_qp_num 	= dest->qpn;
+	attr.rq_psn 		= dest->psn;
+	attr.ah_attr.dlid   = dest->lid;
+	if (user_parm->connection_type==RC) {
+			attr.max_dest_rd_atomic     = 1;
+			attr.min_rnr_timer          = 12;
+	}
+
+
 	if (user_parm->connection_type == RC) {
+
 		if (ibv_modify_qp(ctx->qp[qpindex], &attr,
 				  IBV_QP_STATE              |
 				  IBV_QP_AV                 |
@@ -98,6 +108,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
 				  IBV_QP_RQ_PSN             |
 				  IBV_QP_MIN_RNR_TIMER      |
 				  IBV_QP_MAX_DEST_RD_ATOMIC)) {
+
 			fprintf(stderr, "Failed to modify RC QP to RTR\n");
 			return 1;
 		}
@@ -170,7 +181,7 @@ int run_iter(struct pingpong_context *ctx,
 
 
 	// Each QP has its own wr and sge , that holds the qp addresses and attr.
-	// We write in cycles on the buffer to exploid the "Nahalem" system.
+	// We write in cycles on the buffer to exploit the "Nahalem" system.
 	for (index = 0 ; index < user_param->num_of_qps ; index++) {
 
 		sge_list[index].addr   = (uintptr_t)ctx->buf + (index*BUFF_SIZE(ctx->size));
@@ -234,7 +245,6 @@ int run_iter(struct pingpong_context *ctx,
 
 				if (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
 					wr[index].send_flags &= ~IBV_SEND_SIGNALED;
-
 				tposted[totscnt] = get_cycles();
 				if (ibv_post_send(ctx->qp[index],&wr[index],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
@@ -259,11 +269,17 @@ int run_iter(struct pingpong_context *ctx,
 	    
 			do {
 				ne = ibv_poll_cq(ctx->send_cq, DEF_WC_SIZE, wc);
+				//printf("user_param->gid_index=%d   user_param->gid_index2=%d\n",user_param->gid_index,user_param->gid_index2);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
-
-						if (wc[i].status != IBV_WC_SUCCESS) 
+						//printf("user_param->link_type: %d    user_param->link_type2: %d",user_param->link_type, user_param->link_type2);
+						if (wc[i].status != IBV_WC_SUCCESS) {
+							//printf("wc[%d].status=%d",i,wc[i].status);
+							//i=0 and wc[0].status=IBV_WC_RETRY_EXC_ERR=12  why???
+							printf("user_param->gid_index: %d   user_param->gid_index2: %d\n",user_param->gid_index,user_param->gid_index2);
+							printf("user_param->link_type: %d    user_param->link_type2: %d\n",user_param->link_type, user_param->link_type2);
 							NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
+						}
 
 						ctx->ccnt[(int)wc[i].wr_id] += user_param->cq_mod;
 						totccnt += user_param->cq_mod;
@@ -283,7 +299,8 @@ int run_iter(struct pingpong_context *ctx,
 			}
 		}
 	}
-
+	//printf("user_param->link_type: %d    user_param->link_type2: %d",user_param->link_type, user_param->link_type2);
+	//printf("user_param->gid_index=%d   user_param->gid_index2=%d\n",user_param->gid_index,user_param->gid_index2);
 	free(wr);
 	free(sge_list);
 	free(my_addr);
@@ -293,7 +310,6 @@ int run_iter(struct pingpong_context *ctx,
 }
 
 /****************************************************************************** 
- *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
@@ -313,13 +329,13 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
-	// Configure the parameters values according to user arguments or defalut values.
+	// Configure the parameters values according to user arguments or default values.
 	if (parser(&user_param,argv,argc)) {
 		fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
 
-	// Finding the IB device selected (or defalut if no selected).
+	// Finding the IB device selected (or default if none is selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
@@ -347,13 +363,13 @@ int __cdecl main(int argc, char *argv[]) {
 	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
-	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
+	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
 	if (create_comm_struct(&user_comm,&user_param)) { 
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
 
-	// Create (if nessacery) the rdma_cm ids and channel.
+	// Create (if necessary) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
 
 	    if (create_rdma_resources(&ctx,&user_param)) {
@@ -379,7 +395,7 @@ int __cdecl main(int argc, char *argv[]) {
 	} else {
     
 	    // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
-	    if (ctx_init(&ctx,&user_param)) {
+	    if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
 	    }
@@ -395,7 +411,7 @@ int __cdecl main(int argc, char *argv[]) {
 	for (i=0; i < user_param.num_of_qps; i++) 
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
-	// Init the connection and print the local data.
+	// Initialize the connection and print the local data.
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return FAILURE;
@@ -414,7 +430,6 @@ int __cdecl main(int argc, char *argv[]) {
 			ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 
 			if (user_param.work_rdma_cm == OFF) {
-
 				if (pp_connect_ctx(&ctx,my_dest[i].psn,&rem_dest[i],&user_param,i)) {
 					fprintf(stderr," Unable to Connect the HCA's through the link\n");
 					return FAILURE;
@@ -442,12 +457,12 @@ int __cdecl main(int argc, char *argv[]) {
 		return destroy_ctx(&ctx,&user_param);
 	}
 
-	ALLOCATE(tposted,cycles_t,user_param.iters*user_param.num_of_qps);
-	ALLOCATE(tcompleted,cycles_t,user_param.iters*user_param.num_of_qps);
+	ALLOCATE(tposted,cycles_t,user_param.iters * user_param.num_of_qps);
+	ALLOCATE(tcompleted,cycles_t,user_param.iters * user_param.num_of_qps);
 
 	if (user_param.all == ON) {
 
-		for (i = 1; i < 24 ; ++i) {
+		for (i = 1; i < 24 ; ++i){ //up to 16MB = 2^24
 			user_param.size = (uint64_t)1 << i;
 			if(run_iter(&ctx,&user_param,rem_dest))
 				return 17;
@@ -456,7 +471,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	} else {
 
-		if(run_iter(&ctx,&user_param,rem_dest))
+		if(run_iter(&ctx,&user_param,rem_dest)) //run with only one message size
 			return 18;
 		print_report_bw(&user_param,tposted,tcompleted);
 	}
@@ -475,3 +490,4 @@ int __cdecl main(int argc, char *argv[]) {
 	printf(RESULT_LINE);
 	return destroy_ctx(&ctx,&user_param);
 }
+
