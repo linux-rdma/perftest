@@ -12,8 +12,6 @@ BuildRequires:  libibverbs-devel librdmacm-devel
 %description
 gen2 uverbs microbenchmarks
 
-
-
 %prep
 %setup -q
 
@@ -23,8 +21,6 @@ export CFLAGS="$RPM_OPT_FLAGS"
 chmod -x runme
 
 %install
-install -D -m 0755 rdma_lat $RPM_BUILD_ROOT%{_bindir}/rdma_lat
-install -D -m 0755 rdma_bw $RPM_BUILD_ROOT%{_bindir}/rdma_bw
 install -D -m 0755 ib_write_lat $RPM_BUILD_ROOT%{_bindir}/ib_write_lat
 install -D -m 0755 ib_write_bw $RPM_BUILD_ROOT%{_bindir}/ib_write_bw
 install -D -m 0755 ib_send_lat $RPM_BUILD_ROOT%{_bindir}/ib_send_lat
@@ -45,6 +41,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sun May 14 2012 - idos@mellanox.com
+- Removed (deprecated) rdma_bw and rdma_lat tests
 * Sun Feb 02 2012 - idos@mellanox.com
 - Updated to 1.4.0 version (no compability with older version).
 * Sun Feb 02 2012 - idos@mellanox.com

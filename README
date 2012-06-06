@@ -1,7 +1,7 @@
 	     Open Fabrics Enterprise Distribution (OFED)
-                Performance Tests README for OFED 1.5
+                Performance Tests README for OFED 2.0
 		  
-			  December 2009
+			  May 2012
 
 
 
@@ -26,7 +26,6 @@ The collection conatains a set of BW and latency benchmark such as :
 	* Read   - ib_read_bw and ib_read_lat.
 	* Write  - ib_write_bw and ib_wriet_lat.
 	* Send   - ib_send_bw and ib_send_lat.
-	* RDMA   - rdma_bw and rdma_lat.
 	* Atomic - ib_atomic_bw and ib_atomic_lat
 	* In additional :  ib_write_bw_postlist and ib_clock_test.
 
@@ -71,9 +70,6 @@ Architectures tested:	i686, x86_64, ia64
 4. Test Descriptions
 ===============================================================================
 
-rdma_lat.c 	latency test with RDMA write transactions
-rdma_bw.c 	streaming BW test with RDMA write transactions
-
 The following tests are mainly useful for HW/SW benchmarking.
 They are not intended as actual usage examples.
 
@@ -87,16 +83,18 @@ atomic_lat.c	latency test with atomic transactions
 atomic_bw.c 	BW test atomic transactions
 
 The executable name of each test starts with the general prefix "ib_",
-e.g., ib_write_lat , exept of those of RDMA tests , in their case
-their excutable have the same name except of the .c.
+e.g., ib_write_lat.
 
 Running Tests
 -------------
 
 Prerequisites: 
 	kernel 2.6
-	ib_uverbs (kernel module) matches libibverbs
-		("match" means binary compatible, but ideally of the same SVN rev)
+	(kernel module) matches libibverbs
+	(kernel module) matches librdmacm
+	(kernel module) matches libibumad
+	(kernel module) matches libmath (lm).
+	
 
 Server:		./<test name> <options>
 Client:		./<test name> <options> <server IP address>
@@ -106,48 +104,59 @@ Client:		./<test name> <options> <server IP address>
 		o  --help lists the available <options>
 
   *** IMPORTANT NOTE: The SAME OPTIONS must be passed to both server and client.
-
+  *** IMPORTANT NOTE: You need to be running a Subnet Manager on the switch or on one of the nodes in your fabric, in case you are in IB fabric.
 
 Common Options to all tests:
 ----------------------------
-  -p, --port=<port>            Listen on/connect to port <port> (default: 18515).
-  -m, --mtu=<mtu>              Mtu size (default: 1024).
-  -d, --ib-dev=<dev>           Use IB device <dev> (default: first device found).
-  -i, --ib-port=<port>         Use port <port> of IB device (default: 1).
-  -s, --size=<size>            Size of message to exchange (default: 1).
-  -a, --all                    Run sizes from 2 till 2^23.
-  -t, --tx-depth=<dep>         Size of tx queue (default: 50).
-  -r, --rx-depth=<dep>         Make rx queue bigger than tx (default 600).
-  -n, --iters=<iters>          Number of exchanges (at least 100, default: 1000).
-  -I, --inline_size=<size>     Max size of message to be sent in inline mode.
-			       On Bw tests default is  1,latency tests is 400.
-  -C, --report-cycles          Report times in cpu cycle units.
-  -u, --qp-timeout=<timeout>   QP timeout, timeout value is 4 usec*2 ^(timeout).
-			       Default is 14.
-  -S, --sl=<sl>                SL (default 0).
-  -H, --report-histogram       Print out all results (Default: summary only).
-			       Only on Latnecy tests.
-  -x, --gid-index=<index>      Test uses GID with GID index taken from command
-			       Line (for RDMAoE index should be 0). 
-  -b, --bidirectional          Measure bidirectional bandwidth (default uni).
-  			       On BW tests only (Implicit on latency tests).	
-  -V, --version                Display version number.
-  -e, --events                 Sleep on CQ events (default poll).
-  -N, --no peak-bw             Cancel peak-bw calculation (default with peak-bw)
-  -F, --CPU-freq               Do not fail even if cpufreq_ondemand module.
+  -p, --port=<port>            	Listen on/connect to port <port> (default: 18515).
+  -R, --rdma_cm  	       	Connect QPs with rdma_cm and run test on those QPs
+  -z, --com_rdma_cm  	       	Communicate with rdma_cm module to exchange data - use regular QPs
+  -m, --mtu=<mtu>              	Mtu size (default: 1024).
+  -c, --connection=<RC/UC/UD>  	Connection type RC/UC/UD (default RC)
+  -d, --ib-dev=<dev>           	Use IB device <dev> (default: first device found).
+  -i, --ib-port=<port>         	Use port <port> of IB device (default: 1).
+  -s, --size=<size>            	Size of message to exchange (default: 1).
+  -a, --all                    	Run sizes from 2 till 2^23.
+  -t, --tx-depth=<dep>         	Size of tx queue (default: 50).
+  -r, --rx-depth=<dep>         	Make rx queue bigger than tx (default 600).
+  -n, --iters=<iters>          	Number of exchanges (at least 100, default: 1000).
+  -x, --gid-index=<index>       Test uses GID with GID index taken from command
+  -V, --version                 Display version number.
+  -e, --events                  Sleep on CQ events (default poll).
+  -F, --CPU-freq                Do not fail even if cpufreq_ondemand module.
+  -I, --inline_size=<size>     	Max size of message to be sent in inline mode.
+			       	On Bw tests default is  1,latency tests is 400.
+  -u, --qp-timeout=<timeout>   	QP timeout, timeout value is 4 usec*2 ^(timeout).
+			       	Default is 14.
+  -S, --sl=<sl>                	SL (default 0).
+
+Options for latency tests:
+--------------------------
+
+  -C, --report-cycles           Report times in cpu cycle units.
+  -H, --report-histogram        Print out all results (Default: summary only).
+  -U, --report-unsorted  	Print out unsorted results (default sorted).
+
+Options for BW tests:
+---------------------
+
+  -b, --bidirectional           Measure bidirectional bandwidth (default uni).  
+  -N, --no peak-bw             	Cancel peak-bw calculation (default with peak-bw)
+  -Q, --cq-mod  		Generate Cqe only after <cq-mod> completion
 
   *** IMPORTANT NOTE: You need to be running a Subnet Manager on the switch or
 		      on one of the nodes in your fabric.
 
-Example:
-Run "ib_rdma_lat -C" on the server side.
-Then run "ib_rdma_lat -C <server IP address>" on the client.
-ib_rdma_lat will exit on both server and client after printing results.
-
 Special feature in tests:
 -------------------------
 
- 1. Multicast feauture in ib_send_lat and in ib_send_bw.
+  1. RDMA_CM feature.
+     You can add to all tests the "-R" flag to connect the QPs from each side with the rdma_cm library.
+     In this case, the library will connect the QPs and will use the IPoIB interface for doing it.
+     It helps when you don't have Ethernet connection between the 2 nodes.
+     You must supply the IPoIB interface as the server IP. 
+
+  2. Multicast feauture in ib_send_lat and in ib_send_bw.
     Send tests have built in feature of testing multicast performance, in verbs level.
     You can use "-g" to specify the number of QPs to attach to this multicast group.
     "-M" flag allows you to choose the multicast group address.
@@ -167,6 +176,8 @@ Here is a list of the main issues:
     The algorithm we use for the bidirectional measurement is designed for RC connection type.
     When running in UC or UD connection types, there is a small probablity the test will be stuck.
     We are working now to fix it.
+
+ 3. RDMA_CM feature in read tests still doesn't work.
 
 
 
