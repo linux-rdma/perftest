@@ -665,7 +665,7 @@ int __cdecl main(int argc, char *argv[]) {
 	// Configure the parameters values according to user arguments or defalut values.
 	ret_val = parser(&user_param,argv,argc);
 	if (ret_val) {
-		if (ret_val != VERSION_EXIT)
+		if (ret_val != VERSION_EXIT && ret_val != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}

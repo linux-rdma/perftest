@@ -72,6 +72,7 @@
 #define SUCCESS	     (0)
 #define FAILURE	     (1)
 #define VERSION_EXIT (10)
+#define HELP_EXIT	 (11)
 #define MTU_FIX	     (7)
 #define MAX_SIZE     (8388608)
 #define LINK_FAILURE (4)

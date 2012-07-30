@@ -224,6 +224,7 @@ int run_iter(struct pingpong_context *ctx,
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
+	int ret_parser;
 	struct ibv_device		   *ib_dev = NULL;
 	struct pingpong_context    ctx;
 	struct pingpong_dest       my_dest,rem_dest;
@@ -241,8 +242,12 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
-	if (parser(&user_param,argv,argc)) 
+	ret_parser = parser(&user_param,argv,argc);
+	if (ret_parser) { 
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
+			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
+	}
 
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev)

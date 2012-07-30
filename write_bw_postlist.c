@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
 	struct pingpong_dest       *my_dest,*rem_dest;
 	struct perftest_parameters user_param;
 	struct perftest_comm	   user_comm;
-	int                        i = 0;
+	int                        ret_parser,i = 0;
 
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
@@ -274,8 +274,10 @@ int main(int argc, char *argv[]) {
 	user_param.version = VERSION;
 
 	// Configure the parameters values according to user arguments or defalut values.
-	if (parser(&user_param,argv,argc)) {
-		fprintf(stderr," Parser function exited with Error\n");
+	ret_parser = parser(&user_param,argv,argc);
+	if (ret_parser) {
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
+			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
 

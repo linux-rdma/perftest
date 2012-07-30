@@ -318,7 +318,7 @@ int run_iter(struct pingpong_context *ctx,
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
-	int                         i = 0;
+	int                         ret_parser,i = 0;
 	struct report_options       report;
 	struct pingpong_context     ctx;
 	struct pingpong_dest        my_dest,rem_dest;
@@ -339,8 +339,10 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.version = VERSION;
 
 	// Configure the parameters values according to user arguments or defalut values.
-	if (parser(&user_param,argv,argc)) {
-		fprintf(stderr," Parser function exited with Error\n");
+	ret_parser = parser(&user_param,argv,argc);
+	if (ret_parser) {
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
+			fprintf(stderr," Parser function exited with Error\n");
 		return FAILURE;
 	}
 

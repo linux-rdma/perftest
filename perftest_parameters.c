@@ -543,7 +543,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'F': user_param->cpu_freq_f = ON; 											  break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
-			case 'h': usage(argv[0],user_param->verb,user_param->tst); return 1;
+			case 'h': usage(argv[0],user_param->verb,user_param->tst); return HELP_EXIT;
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
 			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;

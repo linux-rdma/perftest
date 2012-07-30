@@ -667,7 +667,7 @@ int __cdecl main(int argc, char *argv[]) {
 	struct ibv_send_wr      	wr;
     struct ibv_sge              *sge_list = NULL;
 	struct ibv_recv_wr      	*rwr = NULL;
-	int                      	i = 0;
+	int                      	ret_parser,i = 0;
 	int                      	size_max_pow = 24;
 	int							size_of_arr;
     uint64_t                    *my_addr = NULL;
@@ -685,8 +685,10 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.version = VERSION;
 
 	// Configure the parameters values according to user arguments or defalut values.
-	if (parser(&user_param,argv,argc)) {
-		fprintf(stderr," Parser function exited with Error\n");
+	ret_parser = parser(&user_param,argv,argc);
+	if (ret_parser) {
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
+			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
 
