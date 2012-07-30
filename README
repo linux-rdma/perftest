@@ -186,5 +186,6 @@ Here is a list of the main issues:
 
  4. Dual-port support currently works only with ib_write_bw.
 
-
+ 5. Compabilty issues may occur between different versions of perftest.
+    Please make sure you work with the same version on both sides to ensure consistency of the test.
 
