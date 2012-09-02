@@ -331,7 +331,7 @@ static Device is_dev_hermon(struct ibv_context *context) {
 			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
 			 attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
 			 attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478  ||
-			 attr.vendor_part_id == 4099 ) {
+			 attr.vendor_part_id == 4099   || attr.vendor_part_id == 4199) {
 				is_hermon = HERMON;		
 	}
 	return is_hermon;
