@@ -1,7 +1,7 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        1.4.0
-Release:        3.2
+Version:        2.0
+Release:        4.0
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
 Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz
@@ -41,6 +41,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sat Oct 20 2012 - idos@mellanox.com
+- Version 2.0 is underway
 * Sun May 14 2012 - idos@mellanox.com
 - Removed (deprecated) rdma_bw and rdma_lat tests
 * Sun Feb 02 2012 - idos@mellanox.com
