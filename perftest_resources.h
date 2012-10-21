@@ -126,25 +126,40 @@
  ******************************************************************************/
 
 struct pingpong_context {
-	struct ibv_context 			*context;
-	struct ibv_comp_channel 	*channel;
-	struct ibv_pd      			*pd;
-	struct ibv_mr      			*mr;
-	struct ibv_cq      			*send_cq;
-	struct ibv_cq      			*recv_cq;
-	void               			*buf;
-	struct ibv_ah				*ah;
-	struct ibv_qp      			**qp;
-	uint64_t           			size;
-	int                			tx_depth;
-    int                			*scnt;
-    int                			*ccnt;
-	struct rdma_event_channel 	*cm_channel;
-	struct rdma_cm_id 		  	*cm_id_control;
-	struct rdma_cm_id 		  	*cm_id;
+	struct rdma_event_channel	*cm_channel;
+	struct rdma_cm_id			*cm_id_control;
+	struct rdma_cm_id			*cm_id;
+	struct ibv_context			*context;
+	struct ibv_comp_channel		*channel;
+	struct ibv_pd				*pd;
+	struct ibv_mr				*mr;
+	struct ibv_cq				*send_cq;
+	struct ibv_cq				*recv_cq;
+	void						*buf;
+	struct ibv_ah				**ah;
+	struct ibv_qp				**qp;
+	struct ibv_sge				*sge_list;
+	struct ibv_sge				*recv_sge_list;
+	struct ibv_send_wr			*wr;
+	struct ibv_recv_wr			*rwr;
+	uint64_t					size;
+	uint64_t					*my_addr;
+	uint64_t					*rem_addr;
+	uint64_t 					buff_size;
+	int 						tx_depth;
+	int 			 			*scnt;
+	int 						*ccnt;
 };
 
-
+ struct pingpong_dest {
+ 	int 				lid;
+ 	int 				out_reads;
+ 	int 				qpn;
+ 	int 				psn;  
+ 	unsigned			rkey;
+ 	unsigned long long	vaddr;
+ 	union ibv_gid		gid;
+ };
 
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
@@ -204,6 +219,15 @@ struct ibv_device* ctx_find_dev(const char *ib_devname);
 int create_rdma_resources(struct pingpong_context *ctx,
                           struct perftest_parameters *user_param);
 
+/* alloc_ctx
+ *
+ * Description : allocate all perftest resources.
+ *
+ * Parameters : 
+ *	ctx - Resources sructure.
+ * 	user_param - the perftest parameters.
+ */
+void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
 /* destroy_ctx
  *
@@ -267,6 +291,86 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  *
  */
 int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param);
+
+/* ctx_connect.
+ *
+ * Description :
+ *
+ *	Modifies the given QP to RTR and then RTS states, given it's transport type and feature. 
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *  dest    - pingpong_dest struct of the remote side.
+ *	user_parm  - user_parameters struct for this test.
+ *  my_dest - pingpong_dest struct of this side.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int ctx_connect(struct pingpong_context *ctx,
+				struct pingpong_dest *dest, 
+				struct perftest_parameters *user_parm,
+				struct pingpong_dest *my_dest);
+
+/* ctx_set_send_wqes.
+ *
+ * Description :
+ *
+ *	Prepare the send work request templates for all QPs
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *  rem_dest   - pingpong_dest struct of the remote side.
+ *
+ */
+void ctx_set_send_wqes(struct pingpong_context *ctx,
+					   struct perftest_parameters *user_param,
+					   struct pingpong_dest *rem_dest);
+
+/* ctx_set_recv_wqes.
+ *
+ * Description :
+ *
+ *	Prepare the receives work request templates for all QPs in SEND receive test.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_bw.
+ *
+ * Description :
+ *
+ *	The main testing method in BW tests.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_bw_server.
+ *
+ * Description :
+ *
+ *	The main testing method for Receiver in SEND test.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
 
 /* ctx_get_local_lid .
  *
@@ -364,9 +468,13 @@ static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint
 
 	sg->addr  += INC(size);
 
-	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) 
 		sg->addr = prim_addr;
 
 }
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+void catch_alarm(int sig);
 
 #endif /* PERFTEST_RESOURCES_H */

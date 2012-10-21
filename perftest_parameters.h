@@ -88,8 +88,8 @@
 #define DEF_SIZE_LAT  (2)
 #define DEF_ITERS     (1000)
 #define DEF_ITERS_WB  (5000)
-#define DEF_TX_BW     (300)
-#define DEF_TX_LAT    (50)
+#define DEF_TX_BW     (128)
+#define DEF_TX_LAT    (1)
 #define DEF_QP_TIME   (14)
 #define DEF_SL	      (0)
 #define DEF_GID_INDEX (-1)
@@ -97,32 +97,34 @@
 #define DEF_INLINE_BW (0)
 #define DEF_INLINE_LT (400)
 #define DEF_RX_RDMA   (1)
-#define DEF_RX_SEND   (600)
-#define DEF_CQ_MOD    (50)
+#define DEF_RX_SEND   (512)
+#define DEF_CQ_MOD    (100)
 #define DEF_SIZE_ATOMIC (8)
+#define DEF_QKEY      0x11111111
+#define DEF_DURATION  (10)
+#define	DEF_MARGIN    (2)
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (3)  //was 2
 #define MIN_ITER      (5)
 #define MAX_ITER      (100000000)
-#define MIN_TX 	      (50)
+#define MIN_TX 	      (1)
 #define MAX_TX	      (15000)
 #define MIN_SL	      (0)
 #define MAX_SL	      (15)
 #define MIN_GID_IX    (0)
 #define MAX_GID_IX    (64)
 #define MIN_QP_NUM    (1)
-#define MAX_QP_NUM    (8)
+#define MAX_QP_NUM    (16384)
 #define MIN_INLINE    (0)
 #define MAX_INLINE    (400)
 #define MIN_QP_MCAST  (1)
 #define MAX_QP_MCAST  (56)
 #define MIN_RX	      (1)
-#define MAX_RX	      (15000)
+#define MAX_RX	      (16384)
 #define MIN_CQ_MOD    (1)
-#define MAX_CQ_MOD    (1000)
-
+#define MAX_CQ_MOD    (1024)
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
@@ -173,6 +175,12 @@ typedef enum {CMP_AND_SWAP, FETCH_AND_ADD} AtomicType;
 // The type of the device (Hermon B0/A0 or no)
 typedef enum { DEVICE_ERROR = -1 , NOT_HERMON = 0 , HERMON = 1} Device;
 
+// Type of test method.
+typedef enum { ITERATIONS , DURATION } TestMethod;
+
+//for duration calculation
+typedef enum { START_STATE, SAMPLE_STATE, STOP_SAMPLE_STATE, END_STATE} DurationStates;
+
 struct perftest_parameters {
 
 	int				port;
@@ -196,18 +204,17 @@ struct perftest_parameters {
 	int				use_event;
 	int 			inline_size;
 	int				out_reads;
-	int				use_mcg;
-	int 			use_rdma_cm;
-    int				work_rdma_cm;
-	char			*user_mgid;
 	int				rx_depth;
 	int				duplex;
 	int				noPeak;
 	int				cq_mod;
 	int 			spec;
 	int 			dualport;
-	uint32_t        rem_ud_qpn;
-	uint32_t        rem_ud_qkey;
+	int 			post_list;
+	int				duration;
+	int				margin;
+	uint32_t		rem_ud_qpn;
+	uint32_t		rem_ud_qkey;
 	uint8_t 		link_type;
 	uint8_t 		link_type2;
     MachineType		machine;
@@ -215,6 +222,8 @@ struct perftest_parameters {
 	VerbType		verb;
 	TestType		tst;
 	AtomicType		atomicType;
+	TestMethod		test_type;
+	DurationStates	state;
 #ifndef _WIN32
 	int				sockfd;
 #else
@@ -222,6 +231,12 @@ struct perftest_parameters {
 #endif
 	double			version;
 	struct report_options  *r_flag;
+	cycles_t 		*tposted;
+	cycles_t 		*tcompleted;
+	int				use_mcg;
+	int 			use_rdma_cm;
+    int				work_rdma_cm;
+	char			*user_mgid;
 };
 
 struct report_options {
@@ -291,8 +306,6 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  *	 tcompleted  - Completed cycles_t array
  *
  */
-void print_report_bw (struct perftest_parameters *user_param,
-					  cycles_t *tposted,
-					  cycles_t *tcompleted);
+void print_report_bw (struct perftest_parameters *user_param);
 
 #endif /* PERFTEST_RESOURCES_H */

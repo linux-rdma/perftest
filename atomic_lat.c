@@ -54,7 +54,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 1.3
+#define VERSION 4.0
 cycles_t *tstamp;
 
 #ifdef _WIN32
@@ -63,73 +63,6 @@ cycles_t *tstamp;
 #else
 #define __cdecl
 #endif
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
-						  struct pingpong_dest *dest,
-						  struct perftest_parameters *user_parm,
-						  int my_reads)
-{
-	struct ibv_qp_attr attr;
-	memset(&attr, 0, sizeof(struct ibv_qp_attr));
-
-	attr.qp_state         = IBV_QPS_RTR;
-	attr.path_mtu         = user_parm->curr_mtu;
-	attr.dest_qp_num      = dest->qpn;
-	attr.rq_psn           = dest->psn;
-	attr.ah_attr.dlid     = dest->lid;
-	attr.max_dest_rd_atomic = my_reads;
-	attr.min_rnr_timer = 12;
-
-	if (user_parm->gid_index < 0) {
-
-		attr.ah_attr.is_global      = 0;
-		attr.ah_attr.sl             = user_parm->sl;
-	} else {
-
-		attr.ah_attr.is_global      = 1;
-		attr.ah_attr.grh.dgid       = dest->gid;
-		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
-		attr.ah_attr.grh.hop_limit  = 1;
-		attr.ah_attr.sl             = 0;
-	}
-	attr.ah_attr.src_path_bits  = 0;
-	attr.ah_attr.port_num       = user_parm->ib_port;
-
-	if (ibv_modify_qp(ctx->qp[0], &attr,
-			IBV_QP_STATE              |
-			IBV_QP_AV                 |
-			IBV_QP_PATH_MTU           |
-			IBV_QP_DEST_QPN           |
-			IBV_QP_RQ_PSN             |
-			IBV_QP_MIN_RNR_TIMER      |
-			IBV_QP_MAX_DEST_RD_ATOMIC)) {
-				fprintf(stderr, "Failed to modify RC QP to RTR\n");
-				return 1;
-	}
-
-	attr.timeout       = user_parm->qp_timeout;
-	attr.retry_cnt     = 7;
-	attr.rnr_retry     = 7;
-	attr.max_rd_atomic = dest->out_reads;
-	attr.qp_state      = IBV_QPS_RTS;
-	attr.sq_psn        = my_psn;
-
-	
-	if (ibv_modify_qp(ctx->qp[0], &attr,
-			IBV_QP_STATE              |
-			IBV_QP_SQ_PSN             |
-			IBV_QP_TIMEOUT            |
-			IBV_QP_RETRY_CNT          |
-			IBV_QP_RNR_RETRY          |
-			IBV_QP_MAX_QP_RD_ATOMIC)) {
-				fprintf(stderr, "Failed to modify RC QP to RTS\n");
-				return 1;
-	}
-	return 0;
-}
 
 #ifndef _WIN32
 /*
@@ -218,52 +151,19 @@ static void print_report(struct perftest_parameters *user_param) {
  *
  ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, 
-			 struct perftest_parameters *user_param,
-	         struct pingpong_dest *rem_dest) {
+			 struct perftest_parameters *user_param) {
 
 	int 					scnt = 0;
 	int                     ne;
-	struct ibv_sge     		list;
-	struct ibv_send_wr 		wr;
 	struct ibv_send_wr 		*bad_wr = NULL;
 	struct ibv_wc 			wc;
-	uint64_t            	my_addr,rem_addr;
-	          
-	list.addr   = (uintptr_t)ctx->buf;
-	list.length = user_param->size;
-	list.lkey   = ctx->mr->lkey;
-
-	wr.sg_list             = &list;
-	wr.wr_id      		   = PINGPONG_ATOMIC_WRID;
-	wr.num_sge             = MAX_RECV_SGE;
-	wr.send_flags          = IBV_SEND_SIGNALED;
-	wr.next                = NULL;
-	wr.wr.atomic.remote_addr = rem_dest->vaddr;
-	wr.wr.atomic.rkey  = rem_dest->rkey;
-
-	my_addr  = list.addr;
-	rem_addr = wr.wr.atomic.remote_addr;
-
-	if (user_param->atomicType == FETCH_AND_ADD) {
-		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
-		wr.wr.atomic.compare_add = ATOMIC_ADD_VALUE;
-
-	} else {
-		wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
-		wr.wr.atomic.swap = ATOMIC_SWAP_VALUE;
-	}	
 
 	while (scnt < user_param->iters) {
 	
 		tstamp[scnt] = get_cycles();
-		if (ibv_post_send(ctx->qp[0],&wr,&bad_wr)) {
+		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 			return 11;
-		}
-
-		if (user_param->size <= (CYCLE_BUFFER / 2)) { 
-			increase_rem_addr(&wr,user_param->size,scnt,rem_addr,ATOMIC);
-			increase_loc_addr(&list,user_param->size,scnt,my_addr,0);
 		}
 
 		scnt++;
@@ -347,6 +247,9 @@ int __cdecl main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
+	// Allocating arrays needed for the test.
+	alloc_ctx(&ctx,&user_param);
+
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
 	if (create_comm_struct(&user_comm,&user_param)) { 
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
@@ -410,7 +313,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	if (user_param.work_rdma_cm == OFF) {
 
-		if (pp_connect_ctx(&ctx,my_dest.psn,&rem_dest,&user_param,my_dest.out_reads)) {
+		if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
@@ -442,11 +345,11 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	ALLOCATE(tstamp,cycles_t,user_param.iters);
-
+	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);
 
-	if(run_iter(&ctx,&user_param,&rem_dest))
+	if(run_iter(&ctx,&user_param))
 		return 17;
 
 	print_report(&user_param);

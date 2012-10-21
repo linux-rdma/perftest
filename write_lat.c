@@ -54,7 +54,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 2.5
+#define VERSION 4.0
 cycles_t *tstamp;
 
 #ifdef _WIN32
@@ -63,94 +63,6 @@ cycles_t *tstamp;
 #else
 #define __cdecl
 #endif
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int pp_connect_ctx(struct pingpong_context *ctx,int my_psn,
-						  struct pingpong_dest *dest,
-						  struct perftest_parameters *user_parm)
-{
-	struct ibv_qp_attr attr;
-	memset(&attr, 0, sizeof(struct ibv_qp_attr));
-
-	attr.qp_state         = IBV_QPS_RTR;
-	attr.path_mtu         = user_parm->curr_mtu;
-	attr.dest_qp_num      = dest->qpn;
-	attr.rq_psn           = dest->psn;
-	attr.ah_attr.dlid     = dest->lid;
-
-	if (user_parm->connection_type == RC) {
-		attr.max_dest_rd_atomic     = 1;
-		attr.min_rnr_timer          = 12;
-	}
-
-	if (user_parm->gid_index < 0) {
-		attr.ah_attr.is_global      = 0;
-		attr.ah_attr.sl             = user_parm->sl;
-	} else {
-		attr.ah_attr.is_global      = 1;
-		attr.ah_attr.grh.dgid       = dest->gid;
-		attr.ah_attr.grh.sgid_index = user_parm->gid_index;
-		attr.ah_attr.grh.hop_limit  = 1;
-		attr.ah_attr.sl             = 0;
-	}
-	attr.ah_attr.src_path_bits  = 0;
-	attr.ah_attr.port_num       = user_parm->ib_port;
-
-	if (user_parm->connection_type == RC) {
-		if (ibv_modify_qp(ctx->qp[0], &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_AV                 |
-				  IBV_QP_PATH_MTU           |
-				  IBV_QP_DEST_QPN           |
-				  IBV_QP_RQ_PSN             |
-				  IBV_QP_MIN_RNR_TIMER      |
-				  IBV_QP_MAX_DEST_RD_ATOMIC)) {
-			fprintf(stderr, "Failed to modify RC QP to RTR\n");
-			return 1;
-		}
-		attr.timeout            = user_parm->qp_timeout;
-		attr.retry_cnt          = 7;
-		attr.rnr_retry          = 7;
-	} else {
-		if (ibv_modify_qp(ctx->qp[0], &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_AV                 |
-				  IBV_QP_PATH_MTU           |
-				  IBV_QP_DEST_QPN           |
-				  IBV_QP_RQ_PSN)) {
-			fprintf(stderr, "Failed to modify UC QP to RTR\n");
-			return 1;
-		}
-
-	}
-	attr.qp_state             = IBV_QPS_RTS;
-	attr.sq_psn       = my_psn;
-
-	if (user_parm->connection_type == RC) {
-		attr.max_rd_atomic  = 1;
-		if (ibv_modify_qp(ctx->qp[0], &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_SQ_PSN             |
-				  IBV_QP_TIMEOUT            |
-				  IBV_QP_RETRY_CNT          |
-				  IBV_QP_RNR_RETRY          |
-				  IBV_QP_MAX_QP_RD_ATOMIC)) {
-			fprintf(stderr, "Failed to modify RC QP to RTS\n");
-			return 1;
-		}
-	} else {
-		if (ibv_modify_qp(ctx->qp[0], &attr,
-				  IBV_QP_STATE              |
-				  IBV_QP_SQ_PSN)) {
-			fprintf(stderr, "Failed to modify UC QP to RTS\n");
-			return 1;
-		}
-
-	}
-	return 0;
-}
 
 #ifndef _WIN32
 /*
@@ -249,26 +161,14 @@ int run_iter(struct pingpong_context *ctx,
 	int                     ne;
 	volatile char           *poll_buf = NULL; 
 	volatile char           *post_buf = NULL;
-	struct ibv_sge     		list;
-	struct ibv_send_wr 		wr;
 	struct ibv_send_wr 		*bad_wr = NULL;
 	struct ibv_wc 			wc;
-	          
-	list.addr   = (uintptr_t)ctx->buf;
-	list.length = user_param->size;
-	list.lkey   = ctx->mr->lkey;
 
-	wr.sg_list             = &list;
-	wr.wr.rdma.remote_addr = rem_dest->vaddr;
-	wr.wr.rdma.rkey        = rem_dest->rkey;
-	wr.wr_id      		   = PINGPONG_READ_WRID;
-	wr.num_sge             = MAX_RECV_SGE;
-	wr.opcode              = IBV_WR_RDMA_WRITE;
-	wr.send_flags          = IBV_SEND_SIGNALED;
-	wr.next                = NULL;
+	ctx->wr[0].sg_list->length = user_param->size;
+	ctx->wr[0].send_flags 	   = IBV_SEND_SIGNALED; 
 
-	if (user_param->size <= user_param->inline_size)
-		wr.send_flags |= IBV_SEND_INLINE;
+	if (user_param->size <= user_param->inline_size) 
+		ctx->wr[0].send_flags |= IBV_SEND_INLINE; 
 
 	post_buf = (char*)ctx->buf + user_param->size - 1;
 	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
@@ -285,7 +185,7 @@ int run_iter(struct pingpong_context *ctx,
 
 			tstamp[scnt] = get_cycles();
 			*post_buf = (char)++scnt;
-			if (ibv_post_send(ctx->qp[0],&wr,&bad_wr)) {
+			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return 11;
 			}
@@ -369,6 +269,9 @@ int __cdecl main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
+	// Allocating arrays needed for the test.
+	alloc_ctx(&ctx,&user_param);
+
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
 	if (create_comm_struct(&user_comm,&user_param)) { 
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
@@ -432,7 +335,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	if (user_param.work_rdma_cm == OFF) {
 
-		if (pp_connect_ctx(&ctx,my_dest.psn,&rem_dest,&user_param)) {
+		if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
@@ -445,6 +348,7 @@ int __cdecl main(int argc, char *argv[]) {
     }
 
 	ALLOCATE(tstamp,cycles_t,user_param.iters);
+	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);

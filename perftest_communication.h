@@ -77,16 +77,6 @@
 // The print format of a global address or a multicast address.
 #define PERF_GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
 
-struct pingpong_dest {
-	int 			   lid;
-	int 			   out_reads;
-	int 			   qpn;
-	int 			   psn;  
-	unsigned           rkey;
-	unsigned long long vaddr;
-	union ibv_gid      gid;
-};
-
 struct perftest_comm {
 	struct pingpong_context    *rdma_ctx;
 	struct perftest_parameters *rdma_params;

@@ -1,5 +1,5 @@
 MCAST_TESTS = send_bw send_lat
-TESTS = write_bw_postlist write_lat write_bw read_lat read_bw atomic_lat atomic_bw
+TESTS = write_lat write_bw read_lat read_bw atomic_lat atomic_bw
 UTILS = clock_test
 
 all: ${MCAST_TESTS} ${TESTS} ${UTILS}

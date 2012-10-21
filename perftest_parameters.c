@@ -32,6 +32,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("\n");
 	printf("Options:\n");
 
+	printf("  -h, --help ");
+	printf(" Show this help screen.\n");
+
 	printf("  -p, --port=<port> ");
 	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
 
@@ -65,8 +68,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -n, --iters=<iters> ");
 	printf(" Number of exchanges (at least 2, default %d)\n",DEF_ITERS);
 
-	printf("  -t, --tx-depth=<dep> ");
-	printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
+	if (tst == BW) {
+		printf("  -t, --tx-depth=<dep> ");
+		printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
+	}
 
 	printf("  -u, --qp-timeout=<timeout> ");
 	printf(" QP timeout, timeout value is 4 usec * 2 ^(timeout), default %d\n",DEF_QP_TIME);
@@ -94,11 +99,24 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	}
 
 	if (tst == BW) {
+
 		printf("  -b, --bidirectional ");
 		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
 		
 		printf("  -Q, --cq-mod ");
 		printf(" Generate Cqe only after <--cq-mod> completion\n");
+
+		printf("  -O, --dualport ");
+		printf(" Run test in dual-port mode.\n");
+
+		printf("  -D, --duration ");
+		printf(" Run test for a customized period of seconds.\n");
+	
+		printf("  -f, --margin ");
+		printf(" measure results within margins. (default=2sec)\n");
+
+		printf("  -l, --post_list=<list size>");
+		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
 	}
 
 	if (verb != WRITE) {
@@ -140,12 +158,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" (implies -H) print out unsorted results (default sorted)\n");
 	}
 
-	if (verb == WRITE && tst == BW) 
+	if (tst == BW) 
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
-
-	printf("\nLong options only:\n");
-	printf("      --dualport ");
-	printf(" Run test in dual-port mode.\n");
 
 	putchar('\n');
 }
@@ -177,7 +191,12 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->noPeak		= OFF;
 	user_param->cq_mod		= DEF_CQ_MOD;
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
-	user_param->dualport        = OFF;
+	user_param->dualport	= OFF;
+	user_param->post_list	= 1;
+	user_param->duration	= DEF_DURATION;
+	user_param->margin		= DEF_MARGIN;
+	user_param->test_type	= ITERATIONS;
+	user_param->state		= START_STATE;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -239,20 +258,83 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->rx_depth = user_param->iters;
 	}
 
-	if (user_param->use_mcg &&  user_param->gid_index == -1) {
-			user_param->gid_index = 0;
-
-	}
-
 	if (user_param->verb == READ || user_param->verb == ATOMIC) 
 		user_param->inline_size = 0;
 
-	if (user_param->work_rdma_cm && user_param->use_mcg) {
+	if (user_param->all == ON) 	
+		user_param->size = MAX_SIZE;
 
+	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
+		user_param->size = DEF_SIZE_ATOMIC;
+	}
+
+	if (user_param->dualport==ON) {
+
+		user_param->num_of_qps *= 2;
+		if (!user_param->tst==BW) {
+
+			printf(" Dual-port mode only supports BW tests.\n");
+			exit (1);
+		}
+	}
+
+	if (user_param->post_list > 1) { 
+		user_param->cq_mod = user_param->post_list;
 		printf(RESULT_LINE);
-		printf(" Perftest still doesn't support Multicast with rdma_cm\n");
-		user_param->use_mcg = OFF;
-		user_param->num_of_qps = 1;
+		printf("Post List requested - CQ moderation will be the size of the post list\n");
+
+		if (user_param->num_of_qps > 1) { 
+			user_param->tx_depth = 128;
+			printf(RESULT_LINE);
+			printf(" Reducing TX depth to 128 to diaphragm time between post sends of each time\n");
+		}
+	}
+
+	if (user_param->test_type==DURATION) {
+
+		// When working with Duration, iters=0 helps us to satisfy loop cond. in run_iter_bw.
+		// We also use it for "global" counter of packets.
+		user_param->iters = 0;
+		user_param->noPeak = ON;
+
+		if (user_param->use_event) {
+			printf(RESULT_LINE);
+		    fprintf(stderr,"Duration mode doesn't work with events.\n");
+			exit(1);
+		}
+		if (user_param->tst == LAT) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Duration mode currently doesn't support latency tests.\n");
+			exit(1); 
+		}
+	}
+
+	if (user_param->use_mcg &&  user_param->gid_index == -1) {
+			user_param->gid_index = 0;
+			if (user_param->dualport==ON)
+				user_param->gid_index2 = 0;
+	}
+
+	if (user_param->work_rdma_cm) {
+
+		if (user_param->use_mcg) { 
+			printf(RESULT_LINE);
+			printf(" Perftest still doesn't support Multicast with rdma_cm\n");
+			exit(1);
+		}
+
+		if (user_param->dualport) {
+			printf(RESULT_LINE);
+			printf(" Perftest still doesn't support Dual Port with rdma_cm\n");
+			exit(1);
+		}
+
+		if (user_param->num_of_qps > 1) {
+			printf(RESULT_LINE);
+			fprintf(stdout," Perftest only supports 1 rmda_cm QP for now\n");
+			exit(1);
+		}
+		user_param->use_rdma_cm = ON;
 	} 
 
 	if (user_param->use_mcg) {
@@ -267,33 +349,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			user_param->num_of_qps = 1;
 	}
 
-	if (user_param->all == ON) 	
-		user_param->size = MAX_SIZE;
-
-	if (user_param->work_rdma_cm == ON) {
-		user_param->use_rdma_cm = ON;
-		if (user_param->num_of_qps > 1) {
-			user_param->num_of_qps = 1;
-			printf(RESULT_LINE);
-			fprintf(stdout," Perftest only supports 1 rmda_cm QP for now\n");
-		}
-	}
-
-	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
-		user_param->size = DEF_SIZE_ATOMIC;
-	}
-
-	if (user_param->dualport==ON) {
-		if (!((user_param->verb == WRITE) && (user_param->tst==BW)))
-		{
-			printf("Test currently doesn't support dual-port mode.\n");
-			exit (1);
-		}
-		if (user_param->work_rdma_cm) {
-			printf("Perftest currently doesn't support dual-port mode with rdma_cm\n");
-			exit (1);
-		}
-	}
+	if (user_param->verb == SEND && user_param->machine == SERVER && !user_param->duplex)
+		user_param->noPeak = ON;
 	return;
 }
 
@@ -331,7 +388,7 @@ static Device is_dev_hermon(struct ibv_context *context) {
 			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
 			 attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
 			 attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478  ||
-			 attr.vendor_part_id == 4099   || attr.vendor_part_id == 4199) {
+			 attr.vendor_part_id == 4099   || attr.vendor_part_id == 4113) {
 				is_hermon = HERMON;		
 	}
 	return is_hermon;
@@ -441,15 +498,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	int c;
 
 	init_perftest_params(user_param);
-	static int dualport_flag=0;
 
 	while (1) {
 #ifndef _WIN32
 		static const struct option long_options[] = {
 			{ .name = "port",           .has_arg = 1, .val = 'p' },
 			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
-            { .name = "ib-port",        .has_arg = 1, .val = 'i' },
-            { .name = "mtu",            .has_arg = 1, .val = 'm' },
+			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
+			{ .name = "mtu",            .has_arg = 1, .val = 'm' },
 			{ .name = "size",           .has_arg = 1, .val = 's' },
 			{ .name = "iters",          .has_arg = 1, .val = 'n' },
 			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
@@ -463,8 +519,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "events",         .has_arg = 0, .val = 'e' },
 			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
 			{ .name = "outs",           .has_arg = 1, .val = 'o' },
-			{ .name = "mcg",            .has_arg = 1, .val = 'g' },
-            { .name = "comm_rdma_cm",   .has_arg = 0, .val = 'z' },
+			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
+			{ .name = "comm_rdma_cm",   .has_arg = 0, .val = 'z' },
 			{ .name = "rdma_cm",   		.has_arg = 0, .val = 'R' },
 			{ .name = "help",           .has_arg = 0, .val = 'h' },
 			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
@@ -472,162 +528,118 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
 			{ .name = "cq-mod",  		.has_arg = 1, .val = 'Q' },
 			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
-            { .name = "version",        .has_arg = 0, .val = 'V' },
-            { .name = "report-cycles",  .has_arg = 0, .val = 'C' },
+			{ .name = "version",        .has_arg = 0, .val = 'V' },
+			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogrm",.has_arg = 0, .val = 'H' },
-            { .name = "report-unsorted",.has_arg = 0, .val = 'U' },
+			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
 			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
-			{ .name = "dualport",       .has_arg = 0, .flag = &dualport_flag, .val = 1 },
+			{ .name = "dualport",       .has_arg = 0, .val = 'O' },
+			{ .name = "post_list",      .has_arg = 1, .val = 'l' },
+			{ .name = "duration",       .has_arg = 1, .val = 'D' },
+			{ .name = "margin",         .has_arg = 1, .val = 'f' },
             { 0 }
         };
 #else
 
         static const struct option long_options[] = {
-			{ "port",    		1, NULL, 'p' },
-			{ "ib-dev",         1, NULL, 'd' },
-			{ "ib-port",        1, NULL, 'i' },
-			{ "mtu",            1, NULL, 'm' },
-			{ "size",           1, NULL, 's' },
-			{ "iters",          1, NULL, 'n' },
-			{ "tx-depth",       1, NULL, 't' },
+			{ "port",			1, NULL, 'p' },
+			{ "ib-dev",			1, NULL, 'd' },
+			{ "ib-port",		1, NULL, 'i' },
+			{ "mtu",			1, NULL, 'm' },
+			{ "size",			1, NULL, 's' },
+			{ "iters",			1, NULL, 'n' },
+			{ "tx-depth",		1, NULL, 't' },
 			{ "qp-timeout", 	1, NULL, 'u' },
 			{ "sl", 			1, NULL, 'S' },
 			{ "gid-index",		1, NULL, 'x' },
 			{ "all",			0, NULL, 'a' },
 			{ "CPU-freq",		0, NULL, 'F' },
-			{ "connection",     1, NULL, 'c' },
+			{ "connection",		1, NULL, 'c' },
 			{ "qp", 			1, NULL, 'q' },
 			{ "events", 		0, NULL, 'e' },
-			{ "inline_size",    1, NULL, 'I' },
+			{ "inline_size",	1, NULL, 'I' },
 			{ "outs",			1, NULL, 'o' },
-			{ "mcg",			1, NULL, 'g' },
+			{ "mcg",			0, NULL, 'g' },
 			{ "comm_rdma_cm",	0, NULL, 'z' },
 			{ "rdma_cm",		0, NULL, 'R' },
 			{ "help",			0, NULL, 'h' },
 			{ "MGID",			1, NULL, 'M' },
-			{ "rx-depth",       1, NULL, 'r' },
-			{ "bidirectional",  0, NULL, 'b' },
+			{ "rx-depth",		1, NULL, 'r' },
+			{ "bidirectional",	0, NULL, 'b' },
 			{ "cq-mod", 		1, NULL, 'Q' },
 			{ "noPeak", 		0, NULL, 'N' },
-			{ "version",        0, NULL, 'V' },
-            { "report-cycles",  0, NULL, 'C' },
-			{ "report-histogrm",0, NULL, 'H' },
-            { "report-unsorted",0, NULL, 'U' },
-			{ "atomic_type"	   ,1, NULL, 'A' },
-			{ "dualport"      ,0, &dualport_flag, 1 },
+			{ "version",		0, NULL, 'V' },
+            { "report-cycles",	0, NULL, 'C' },
+			{ "report-histogrm"	,0, NULL, 'H' },
+            { "report-unsorted"	,0, NULL, 'U' },
+			{ "atomic_type"		,1, NULL, 'A' },
+			{ "dualport"		,0, NULL, 'O' },
+			{ "post_list"		,1, NULL, 'l' },
+			{ "duration"		,1, NULL, 'D' },
+			{ "margin"			,1, NULL, 'f' },
 			{ 0 }
 		};
 #endif
 
-        c = getopt_long(argc,argv,"p:d:i:m:o:c:s:g:n:t:I:r:u:q:S:x:M:Q:A:lVaezRhbNFCHUA",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:aFegzRhbNVCHUO",long_options,NULL);
 
         if (c == -1)
 			break;
 
         switch (c) {
 
-			case 'p': user_param->port = strtol(optarg, NULL, 0);                			  break;
+			case 'p': user_param->port = strtol(optarg, NULL, 0); break;
 #ifndef _WIN32
-			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); 			  	  	  break;
+			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
 #else
-			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); 			  	  	  break;
+			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); break;
 #endif
-			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port");break;
-            case 'm': user_param->mtu  = strtol(optarg, NULL, 0); 							  break;
-			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num");   break;
-			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); 		  break;
-			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); 			  break;
-			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index");break;
-			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");  break;
-			case 'a': user_param->all = ON;											  		  break;
-			case 'F': user_param->cpu_freq_f = ON; 											  break;
+			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); break;
+            case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
+			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
+			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
+			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
+			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
+				if (user_param->sl > MAX_SL) { 
+					fprintf(stderr," Only %d Service levels\n",MAX_SL);
+					return 1;
+				} break;
+			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
-			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
-			case 'h': usage(argv[0],user_param->verb,user_param->tst); return HELP_EXIT;
-			case 'z': user_param->use_rdma_cm = ON; break;
-			case 'R': user_param->work_rdma_cm = ON; break;
-			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
 			case 'q':
-				if (user_param->verb != WRITE || user_param->tst != BW) {
-					fprintf(stderr," Multiple QPs only available on ib_write_bw and ib_write_bw_postlist\n");
-                    return 1;
-				}
-				if (user_param->dualport) {
-				    printf("Perftest currently doesn't support dual-port with customized num_of_qps\n");
-				    exit (1);
+				if (user_param->tst != BW) {
+					fprintf(stderr," Multiple QPs only available on bw tests\n");
+					return 1;
 				}
 				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
 				break;
-			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
-				if (user_param->sl > MAX_SL) { 
-					fprintf(stderr," Only 16 Service levels [0-15]\n");
-                    return 1;
-				} break;
-			case 'e': user_param->use_event = ON;
-				if (user_param->verb == WRITE) {
-					fprintf(stderr," Events feature not availible on WRITE verb\n");
-                    return 1;
-                } break;
-
-            case 'I': CHECK_VALUE(user_param->inline_size,int,MIN_INLINE,MAX_INLINE,"Inline size");
-				if (user_param->verb == READ) {
+			case 'I': CHECK_VALUE(user_param->inline_size,int,MIN_INLINE,MAX_INLINE,"Inline size");
+				if (user_param->verb == READ || user_param->verb ==ATOMIC) {
 					fprintf(stderr," Inline feature not availible on READ verb\n");
-                    return 1;
+					return 1;
 				} break;
-
-            case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
+			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
 				if (user_param->verb != READ && user_param->verb != ATOMIC) {
 					fprintf(stderr," Setting Outstanding reads only availible on READ verb\n");
-                    return 1;
-                } break;
-            
-            case 'g': user_param->use_mcg = ON;
-				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_MCAST,MAX_QP_MCAST," Num of Mcast QP");
-				if (user_param->verb != SEND) {
-					fprintf(stderr," MultiCast feature only availible on SEND verb\n");
 					return 1;
-                } break;
+				} break;
 #ifndef _WIN32
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); 
 #else
 			case 'M': GET_STRING(user_param->user_mgid,_strdup(optarg));
 #endif
-			    if (user_param->verb != SEND) {
-                    fprintf(stderr," MultiCast feature only availible on SEND verb\n");
-				    return 1;
-                } break;
-
 			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
 				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
 					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					return 1;
-                } break;
-
-			case 'b': user_param->duplex = ON;
-				if (user_param->tst == LAT) {
-					fprintf(stderr," Bidirectional is only availible in BW test\n");
-					return 1;
-                } break;
-
-			 case 'N': user_param->noPeak = ON; 
-				if (user_param->tst == LAT) {
-					fprintf(stderr," NoPeak only valid for BW tests\n");
-					return 1;
-                } break;               
-         
-			case 'C': 
-				if (user_param->tst != LAT) {
-					fprintf(stderr," Availible only on Latency tests\n");
-					return 1;
-                } 
-				user_param->r_flag->cycles = ON; break; 
-
+				} break;
+			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation"); break;
 			case 'A':
 				if (user_param->verb != ATOMIC) {
 					fprintf(stderr," You are not running the atomic_lat/bw test!\n");
 					fprintf(stderr," To change the atomic action type, you must run one of the atomic tests\n");
 					return 1;
-                }
+				}
 
 				if (strcmp(atomicTypesStr[0],optarg)==0) 
 					user_param->atomicType = CMP_AND_SWAP;
@@ -640,30 +652,79 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					exit(1);
 				}
 				break;
-
+			case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
+			case 'D': user_param->duration = strtol(optarg, NULL, 0);
+				if (user_param->duration <= 0) {
+						fprintf(stderr," Duration period must be greater than 0\n");
+						return 1;
+				}
+ 				user_param->test_type = DURATION; 
+				break;
+			case 'f': user_param->margin = strtol(optarg, NULL, 0);
+ 				if (user_param->margin <= 0) {
+					fprintf(stderr," margin must be greater than 0.\n");
+					return 1;
+				} break;
+			case 'O':
+				user_param->ib_port  = DEF_IB_PORT;
+				user_param->ib_port2 = DEF_IB_PORT2;
+				user_param->dualport = ON;
+				break;
+			case 'a': user_param->all = ON; break;
+			case 'F': user_param->cpu_freq_f = ON; break;
+			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
+			case 'h': usage(argv[0],user_param->verb,user_param->tst); return HELP_EXIT;
+			case 'z': user_param->use_rdma_cm = ON; break;
+			case 'R': user_param->work_rdma_cm = ON; break;
+			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
+			case 'e': user_param->use_event = ON;
+				if (user_param->verb == WRITE) {
+					fprintf(stderr," Events feature not availible on WRITE verb\n");
+					return 1;
+				} break;
+			case 'b': user_param->duplex = ON;
+				if (user_param->tst == LAT) {
+					fprintf(stderr," Bidirectional is only availible in BW test\n");
+					return 1;
+				} break;
+			case 'N': user_param->noPeak = ON; 
+				if (user_param->tst == LAT) {
+					fprintf(stderr," NoPeak only valid for BW tests\n");
+					return 1;
+				} break;               
+			case 'C': 
+				if (user_param->tst != LAT) {
+					fprintf(stderr," Availible only on Latency tests\n");
+					return 1;
+				} 
+				user_param->r_flag->cycles = ON; 
+				break; 
+			case 'g': user_param->use_mcg = ON;
+				if (user_param->verb != SEND) {
+					fprintf(stderr," MultiCast feature only availible on SEND verb\n");
+					return 1;
+				} break;
 			case 'H': 
 				if (user_param->tst != LAT) {
 					fprintf(stderr," Availible only on Latency tests\n");
 					return 1;
-                }
-				user_param->r_flag->histogram = ON;	break;
-	
+				}
+				user_param->r_flag->histogram = ON;	
+				break;
             case 'U': 
 				if (user_param->tst != LAT) {
 					fprintf(stderr," Availible only on Latency tests\n");
 					return 1;
-                } 
-				user_param->r_flag->unsorted = ON; break;
-            case 0: break; // required for long options to work
-
-
+				} 
+				user_param->r_flag->unsorted = ON; 
+				break;
 			default: 
 				fprintf(stderr," Invalid Command or flag.\n"); 
 				fprintf(stderr," Please check command line and run again.\n\n");
 				usage(argv[0],user_param->verb,user_param->tst);
 				return 1;
-        }
-    }
+		 }
+	}
 
     if (optind == argc - 1) {
 #ifndef _WIN32
@@ -674,16 +735,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	} else if (optind < argc) {
             fprintf(stderr," Invalid Command line. Please check command rerun \n"); 
             return 1;
-    }
-    if (dualport_flag) {
-    	if (user_param->num_of_qps>DEF_NUM_QPS) {
-    		printf("Perftest currently doesn't support dual-port with customized num_of_qps.\n");
-    		exit (1);
-    	}
-    	user_param->ib_port  = DEF_IB_PORT;
-    	user_param->ib_port2 = DEF_IB_PORT2;
-    	user_param->dualport = ON;
-    	user_param->num_of_qps *= 2;
     }
 	user_param->machine = user_param->servername ? CLIENT : SERVER;
 	force_dependecies(user_param);
@@ -706,25 +757,19 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	}
 
 	user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
-	//printf("port1: user_param->curr_mt :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
 
 	// in case of dual-port mode
-		if (user_param->dualport==ON)
-		{
-				user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
+	if (user_param->dualport==ON) {
 
-				if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
-						user_param->gid_index2 = 1;
-				}
-
-				if (user_param->link_type2 == LINK_FAILURE) {
-						fprintf(stderr, " Couldn't set the link layer\n");
-						return FAILURE;
-				}
-			//	printf("before: user_param->curr_mtu :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
-			//	user_param->curr_mtu = set_mtu(context,user_param->ib_port2,user_param->mtu);
-			//	printf("after: user_param->curr_mtu :%lu user_param->mtu : %lu \n",MTU_SIZE(user_param->curr_mtu),MTU_SIZE(user_param->mtu));
+		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
+		if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
+			user_param->gid_index2 = 1;
 		}
+		if (user_param->link_type2 == LINK_FAILURE) {
+			fprintf(stderr, " Couldn't set the link layer\n");
+			return FAILURE;
+		}
+	}
 
 	if (is_dev_hermon(context) != HERMON && user_param->inline_size != 0)
 		user_param->inline_size = 0;
@@ -732,9 +777,11 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
 		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
 
+	else
+		user_param->out_reads = 1;
 
-	if (user_param->connection_type == UD && 
-		user_param->size > MTU_SIZE(user_param->curr_mtu)) {
+
+	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
 
 		if (user_param->all == OFF) {
 			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
@@ -767,7 +814,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 			printf("Bidirectional ");
 		}
 
-		if (user_param->spec) {
+		if (user_param->post_list > 1) {
 			printf("Post List ");
 		}
 
@@ -796,14 +843,16 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
+	}
 
-	} 
+	if (user_param->post_list > 1) 
+		printf(" Post List       : %d\n",user_param->post_list);
 
 	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) { 
 		printf(" RX depth        : %d\n",user_param->rx_depth);
 	}
 
-	if (user_param->tst == BW || user_param->verb == SEND) {
+	if (user_param->tst == BW) {
 		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
 	} 
 
@@ -820,7 +869,6 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	else 
 		printf(" Outstand reads  : %d\n",user_param->out_reads);
-
 
 	printf(" rdma_cm QPs	 : %s\n",qp_state[user_param->work_rdma_cm]);
 
@@ -842,27 +890,26 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-void print_report_bw (struct perftest_parameters *user_param,
-					  cycles_t *tposted,
-					  cycles_t *tcompleted) {
+void print_report_bw (struct perftest_parameters *user_param) {
 
 	double cycles_to_units,aux_up,aux_down;
-	int i, j, opt_posted = 0, opt_completed = 0;
+	int location_arr, i, j, opt_posted = 0, opt_completed = 0;
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
-	opt_delta = tcompleted[opt_posted] - tposted[opt_completed];
+	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
 
 	if (user_param->noPeak == OFF) {
 		/* Find the peak bandwidth unless asked not to in command line*/
-		for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i)
-		  for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
-		    t = (tcompleted[j] - tposted[i]) / (j - i + 1);
-		    if (t < opt_delta) {
-		      opt_delta  = t;
-		      opt_posted = i;
-		      opt_completed = j;
-		    }
-		  }
+		for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i) {
+			for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
+				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
+				if (t < opt_delta) {
+					opt_delta  = t;
+					opt_posted = i;
+					opt_completed = j;
+				}
+			}
+		}
 	}
 
 #ifndef _WIN32
@@ -873,18 +920,19 @@ void print_report_bw (struct perftest_parameters *user_param,
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
-	aux_up = (double)tsize*user_param->iters*user_param->num_of_qps;
-	aux_down = (double)(tcompleted[user_param->iters*user_param->num_of_qps - 1] - tposted[0]);
+	aux_up = (double)tsize*user_param->iters;
+	aux_up *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
+	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
+	aux_down = (double)(user_param->tcompleted[location_arr] - user_param->tposted[0]);
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * 0x100000;
 	printf(REPORT_FMT,
-		   (unsigned long)user_param->size, 
-		   user_param->iters,
-		   (double)peak_up/peak_down,
-	       (aux_up*cycles_to_units)/(aux_down*0x100000),
-	       ((aux_up*cycles_to_units)/aux_down)/((unsigned long)user_param->size)/1000000);
+		(unsigned long)user_param->size, 
+		user_param->iters,
+		(double)peak_up/peak_down,
+	    (aux_up*cycles_to_units)/(aux_down*0x100000),
+	    ((aux_up*cycles_to_units)/aux_down)/((unsigned long)user_param->size)/1000000);
 }
-
 /****************************************************************************** 
  * End
  ******************************************************************************/

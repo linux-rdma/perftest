@@ -35,7 +35,6 @@ static const char *gidArray[]   = {"GID"  , "MGID"};
  *
  ******************************************************************************/
 
-
 static int post_one_recv_wqe(struct pingpong_context *ctx) {
 
 	struct ibv_recv_wr wr;
@@ -112,7 +111,7 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
 	wr.next       = NULL;
     wr.imm_data   = htonl(ctx->qp[0]->qp_num);
 
-	wr.wr.ud.ah = ctx->ah;
+	wr.wr.ud.ah = ctx->ah[0];
 	wr.wr.ud.remote_qpn  = user_param->rem_ud_qpn;
 	wr.wr.ud.remote_qkey = user_param->rem_ud_qkey;
 
@@ -151,7 +150,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 		return 1;
 	}
 
-	ctx->ah = ibv_create_ah_from_wc(ctx->pd,&wc,(struct ibv_grh*)ctx->buf,ctx->cm_id->port_num);
+	ctx->ah[0] = ibv_create_ah_from_wc(ctx->pd,&wc,(struct ibv_grh*)ctx->buf,ctx->cm_id->port_num);
     user_parm->rem_ud_qpn = ntohl(wc.imm_data);
 	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
     user_parm->rem_ud_qkey = attr.qkey;
@@ -577,11 +576,12 @@ int set_up_connection(struct pingpong_context *ctx,
 	srand48(getpid() * time(NULL));
 #endif
 
-		if (user_param->gid_index != -1) {
-			if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
+	if (user_param->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
 			return -1;
 		}
 	}
+
 	if (user_param->dualport==ON) { //dual port case
 		if (user_param->gid_index2 != -1) {
 				if (ibv_query_gid(ctx->context,user_param->ib_port2,user_param->gid_index,&temp_gid2)) {
@@ -589,18 +589,22 @@ int set_up_connection(struct pingpong_context *ctx,
 				}
 			}
 	}
+
 	for (i = 0; i < user_param->num_of_qps; i++) {
+
 		if (user_param->dualport == ON) {
-			if (i < user_param->num_of_qps / 2) { // first half of qps are for ib_port and second half are for ib_port2
+			// first half of qps are for ib_port and second half are for ib_port2
+			if (i < user_param->num_of_qps / 2) { 
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
-			} else
-			{
+
+			} else {
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port2);
 			}
-		} else // single-port case
-		{
+		// single-port case
+		} else {
 			my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
 		}
+
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 
 #ifndef _WIN32
@@ -609,20 +613,22 @@ int set_up_connection(struct pingpong_context *ctx,
 		my_dest[i].psn   = rand() & 0xffffff;
 #endif
 		my_dest[i].rkey  = ctx->mr->rkey;
+
 		// Each qp gives his receive buffer address .
 		my_dest[i].out_reads = user_param->out_reads;
 		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
-		//memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
+
 		if (user_param->dualport==ON) {
+
 			if (i < user_param->num_of_qps / 2)
 				memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
-			else
-			{
+
+			else {
 				memcpy(my_dest[i].gid.raw,temp_gid2.raw ,16);
 			}
 
 		} else
-		memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
+			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
 		// We do not fail test upon lid above RoCE.
 		if ( (user_param->gid_index < 0) ||  ((user_param->gid_index2 < 0) && (user_param->dualport == ON))  ){
@@ -632,14 +638,14 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		}
 	}
+
 	return 0;
 }
 
 /****************************************************************************** 
  * 
  ******************************************************************************/
-int rdma_client_connect(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param) {
+int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
     char *service;
     int temp,num_of_retry= NUM_OF_RETRIES;
@@ -768,7 +774,7 @@ int rdma_client_connect(struct pingpong_context *ctx,
         user_param->rem_ud_qpn  = event->param.ud.qp_num;
         user_param->rem_ud_qkey = event->param.ud.qkey;
 
-		ctx->ah = ibv_create_ah(ctx->pd,&event->param.ud.ah_attr);
+		ctx->ah[0] = ibv_create_ah(ctx->pd,&event->param.ud.ah_attr);
 
 		if (!ctx->ah) {
 			printf(" Unable to create address handler for UD QP\n");
@@ -838,6 +844,10 @@ int rdma_server_connect(struct pingpong_context *ctx,
 
 	ctx->cm_id = (struct rdma_cm_id*)event->id;
 	ctx->context = ctx->cm_id->verbs;
+
+	if (user_param->work_rdma_cm == ON)
+		alloc_ctx(ctx,user_param);
+
 	temp = user_param->work_rdma_cm;
 	user_param->work_rdma_cm = ON;
 
@@ -925,6 +935,9 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_params->verb	= SEND;
 		comm->rdma_params->size = sizeof(struct pingpong_dest);
 		comm->rdma_ctx->context = NULL;
+
+		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
+		comm->rdma_ctx->buff_size = CYCLE_BUFFER;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
 			fprintf(stderr," Unable to create the resources needed by comm struct\n");
