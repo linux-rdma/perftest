@@ -29,7 +29,6 @@ install -D -m 0755 ib_read_lat $RPM_BUILD_ROOT%{_bindir}/ib_read_lat
 install -D -m 0755 ib_read_bw $RPM_BUILD_ROOT%{_bindir}/ib_read_bw
 install -D -m 0755 ib_atomic_lat $RPM_BUILD_ROOT%{_bindir}/ib_atomic_lat
 install -D -m 0755 ib_atomic_bw $RPM_BUILD_ROOT%{_bindir}/ib_atomic_bw
-install -D -m 0755 ib_write_bw_postlist $RPM_BUILD_ROOT%{_bindir}/ib_write_bw_postlist
 install -D -m 0755 ib_clock_test $RPM_BUILD_ROOT%{_bindir}/ib_clock_test
 
 %clean
@@ -41,6 +40,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sat Oct 21 2012 - idos@mellanox.com
+- Removed write_bw_postlist (feature contained in all BW tests)
 * Sat Oct 20 2012 - idos@mellanox.com
 - Version 2.0 is underway
 * Sun May 14 2012 - idos@mellanox.com
