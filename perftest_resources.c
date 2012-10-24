@@ -731,7 +731,7 @@ static int perform_warm_up(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc wc;
 	struct ibv_wc *wc_for_cleaning = NULL;
 
-	warmupsession = (user_param->post_list == 1) ? 32 : user_param->post_list;
+	warmupsession = (user_param->post_list == 1) ? user_param->tx_depth : user_param->post_list;
 	ALLOCATE(wc_for_cleaning,struct ibv_wc,user_param->tx_depth);
 
 	// Clean up the pipe
