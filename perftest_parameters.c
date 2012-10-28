@@ -790,6 +790,9 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		user_param->size = MTU_SIZE(user_param->curr_mtu);
 	}
 
+	if (!user_param->ib_devname)
+		GET_STRING(user_param->ib_devname,ibv_get_device_name(context->device))
+
 	return SUCCESS;
 }
 
@@ -837,6 +840,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->use_mcg) 
 		printf(" MultiCast runs on UD!\n");
 
+	printf(" Device          : %s\n",user_param->ib_devname);
 	printf(" Dual-port       : %s\n", user_param->dualport ? "ON" : "OFF");
 	printf(" Number of qps   : %d\n",user_param->num_of_qps);
 	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
