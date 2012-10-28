@@ -118,7 +118,7 @@
 #define MIN_QP_NUM    (1)
 #define MAX_QP_NUM    (16384)
 #define MIN_INLINE    (0)
-#define MAX_INLINE    (400)
+#define MAX_INLINE    (800)
 #define MIN_QP_MCAST  (1)
 #define MAX_QP_MCAST  (56)
 #define MIN_RX	      (1)
