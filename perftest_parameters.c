@@ -841,8 +841,12 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		printf(" MultiCast runs on UD!\n");
 
 	printf(" Device          : %s\n",user_param->ib_devname);
-	printf(" Dual-port       : %s\n", user_param->dualport ? "ON" : "OFF");
-	printf(" Number of qps   : %d\n",user_param->num_of_qps);
+
+	if (user_param->tst == BW) {
+		printf(" Dual-port       : %s\n", user_param->dualport ? "ON" : "OFF");
+		printf(" Number of qps   : %d\n",user_param->num_of_qps);
+	}
+	
 	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
 	
 	if (user_param->machine == CLIENT || user_param->duplex) {
