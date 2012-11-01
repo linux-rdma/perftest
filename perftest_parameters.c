@@ -644,7 +644,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if (strcmp(atomicTypesStr[0],optarg)==0) 
 					user_param->atomicType = CMP_AND_SWAP;
 
-				else if (strcmp(atomicTypesStr[0],optarg)==1) 
+				else if (strcmp(atomicTypesStr[1],optarg)==0) 
 					user_param->atomicType = FETCH_AND_ADD;
 
 				else {
