@@ -1016,18 +1016,19 @@ int ctx_hand_shake(struct perftest_comm *comm,
 			return 1;
 		}
 
+	// Server side will wait for the client side to reach the write function.
 	} else {
 
 		if ((*read_func_ptr)(rem_dest,comm)) {
-			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			fprintf(stderr," Unable to read to socket/rdam_cm\n");
 			return 1;
 		}
 
 		if ((*write_func_ptr)(my_dest,comm)) {
-			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			fprintf(stderr," Unable to write from socket/rdam_cm\n");
 			return 1;
 		}
-	}
+	} 
 
     return 0;
 }
