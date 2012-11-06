@@ -94,8 +94,6 @@
 #define DEF_SL	      (0)
 #define DEF_GID_INDEX (-1)
 #define DEF_NUM_QPS   (1)
-#define DEF_INLINE_BW (0)
-#define DEF_INLINE_LT (400)
 #define DEF_RX_RDMA   (1)
 #define DEF_RX_SEND   (512)
 #define DEF_CQ_MOD    (100)
@@ -103,6 +101,12 @@
 #define DEF_QKEY      0x11111111
 #define DEF_DURATION  (10)
 #define	DEF_MARGIN    (2)
+#define DEF_INLINE	  (-1)
+
+// Optimal Values for Inline
+#define DEF_INLINE_WRITE (220)
+#define DEF_INLINE_SEND_RC_UC (236)
+#define DEF_INLINE_SEND_UD (188)
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_IB_PORT   (1)
@@ -117,14 +121,13 @@
 #define MAX_GID_IX    (64)
 #define MIN_QP_NUM    (1)
 #define MAX_QP_NUM    (16384)
-#define MIN_INLINE    (0)
-#define MAX_INLINE    (800)
 #define MIN_QP_MCAST  (1)
 #define MAX_QP_MCAST  (56)
 #define MIN_RX	      (1)
 #define MAX_RX	      (16384)
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
+#define MAX_INLINE    (912)
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
@@ -173,7 +176,7 @@ typedef enum { LOCAL , REMOTE } PrintDataSide;
 typedef enum {CMP_AND_SWAP, FETCH_AND_ADD} AtomicType;
 
 // The type of the device (Hermon B0/A0 or no)
-typedef enum { DEVICE_ERROR = -1 , NOT_HERMON = 0 , HERMON = 1} Device;
+typedef enum { DEVICE_ERROR = -1 ,UNKNOWN = 0 ,CONNECTX = 1,CONNECTX2 = 2, CONNECTX3 = 3, CONNECTIB = 4, LEGACY = 5} Device;
 
 // Type of test method.
 typedef enum { ITERATIONS , DURATION } TestMethod;

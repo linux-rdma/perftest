@@ -95,7 +95,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 	if (verb != READ || verb != ATOMIC) {
 		printf("  -I, --inline_size=<size> ");
-		printf(" Max size of message to be sent in inline (default %d)\n",tst == LAT ? DEF_INLINE_LT : DEF_INLINE_BW);
+		printf(" Max size of message to be sent in inline\n");
 	}
 
 	if (tst == BW) {
@@ -182,7 +182,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->num_of_qps = DEF_NUM_QPS;
 	user_param->gid_index  = DEF_GID_INDEX;
 	user_param->gid_index2      = DEF_GID_INDEX;
-	user_param->inline_size = user_param->tst == BW ? DEF_INLINE_BW : DEF_INLINE_LT;
+	user_param->inline_size = DEF_INLINE;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
 	user_param->work_rdma_cm = OFF;
@@ -374,24 +374,36 @@ const char *link_layer_str(uint8_t link_layer) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-static Device is_dev_hermon(struct ibv_context *context) { 
+static Device ib_dev_name(struct ibv_context *context) { 
 
-	Device is_hermon = NOT_HERMON;
+	Device dev_fname = UNKNOWN;
 	struct ibv_device_attr attr;
 
 	if (ibv_query_device(context,&attr)) {
-		is_hermon = DEVICE_ERROR;
+		dev_fname = DEVICE_ERROR;
 	}
-	// Checks the device type for setting the max outstanding reads.
-	else if (attr.vendor_part_id == 25408  || attr.vendor_part_id == 25418  ||
-			 attr.vendor_part_id == 25448  || attr.vendor_part_id == 26418  || 
-			 attr.vendor_part_id == 26428  || attr.vendor_part_id == 26438  ||
-			 attr.vendor_part_id == 26448  || attr.vendor_part_id == 26458  ||
-			 attr.vendor_part_id == 26468  || attr.vendor_part_id == 26478  ||
-			 attr.vendor_part_id == 4099   || attr.vendor_part_id == 4113) {
-				is_hermon = HERMON;		
+
+	else { 
+
+		switch (attr.vendor_part_id) { 
+			case 4113  : dev_fname = CONNECTIB; break;
+			case 4099  : dev_fname = CONNECTX3; break;
+			case 26418 : dev_fname = CONNECTX2; break;
+			case 26428 : dev_fname = CONNECTX2; break;
+			case 26438 : dev_fname = CONNECTX2; break;
+			case 26448 : dev_fname = CONNECTX2; break;
+			case 26458 : dev_fname = CONNECTX2; break;
+			case 26468 : dev_fname = CONNECTX2; break;
+			case 26478 : dev_fname = CONNECTX2; break;
+			case 25408 : dev_fname = CONNECTX;  break;
+			case 25418 : dev_fname = CONNECTX;  break;
+			case 25428 : dev_fname = CONNECTX;  break;
+			case 25448 : dev_fname = CONNECTX;  break;
+			default	   : dev_fname = UNKNOWN;
+		}
 	}
-	return is_hermon;
+
+	return dev_fname;
 }
 
 /****************************************************************************** 
@@ -476,9 +488,19 @@ static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 
 	int max_reads;
 
-	max_reads = (is_dev_hermon(context) == HERMON) ? MAX_OUT_READ_HERMON : MAX_OUT_READ;
+	Device ib_fdev = ib_dev_name(context);
+
+	switch (ib_fdev) { 
+		case CONNECTIB : ;
+		case CONNECTX3 : ;
+		case CONNECTX2 : ;
+		case CONNECTX : max_reads = MAX_OUT_READ_HERMON; break;
+		case LEGACY : max_reads = MAX_OUT_READ; break;
+		default : max_reads = 0;
+	}
 
 	if (num_user_reads > max_reads) {
+		printf(RESULT_LINE);
 		fprintf(stderr," Number of outstanding reads is above max = %d\n",max_reads);
 		fprintf(stderr," Changing to that max value\n");
 		num_user_reads = max_reads;
@@ -488,6 +510,43 @@ static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 	}
 
 	return num_user_reads;
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+static void ctx_set_max_inline(struct ibv_context *context,struct perftest_parameters *user_param) { 
+
+
+	Device current_dev = ib_dev_name(context);
+
+	if (current_dev == UNKNOWN || current_dev == DEVICE_ERROR) { 
+
+		if (user_param->inline_size != DEF_INLINE) { 
+			printf(RESULT_LINE);
+			fprintf(stderr,"Device not recognized to implement inline feature. Disabling it\n");
+		}
+		user_param->inline_size = 0;
+		return;
+	}
+
+	if (user_param->inline_size == DEF_INLINE) { 
+
+		if (user_param->tst ==LAT || current_dev == CONNECTIB) { 
+
+			switch(user_param->verb) {
+
+				case WRITE: user_param->inline_size = DEF_INLINE_WRITE; break;
+				case SEND : user_param->inline_size = (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :DEF_INLINE_SEND_RC_UC ; break;
+				default   : user_param->inline_size = 0;
+			}
+
+		} else { 
+			user_param->inline_size = 0;
+		}
+	}
+
+	return;
 }
 
 /****************************************************************************** 
@@ -613,9 +672,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				}
 				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
 				break;
-			case 'I': CHECK_VALUE(user_param->inline_size,int,MIN_INLINE,MAX_INLINE,"Inline size");
+			case 'I': CHECK_VALUE(user_param->inline_size,int,0,MAX_INLINE,"Max inline");
 				if (user_param->verb == READ || user_param->verb ==ATOMIC) {
-					fprintf(stderr," Inline feature not availible on READ verb\n");
+					fprintf(stderr," Inline feature not availible on READ/Atomic verbs\n");
 					return 1;
 				} break;
 			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
@@ -771,9 +830,9 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		}
 	}
 
-	if (is_dev_hermon(context) != HERMON && user_param->inline_size != 0)
-		user_param->inline_size = 0;
-
+	// Compute Max inline size with pre found statistics values
+	ctx_set_max_inline(context,user_param);
+	
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
 		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
 
