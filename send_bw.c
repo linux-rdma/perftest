@@ -216,7 +216,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
 			if (ne > 0) {
-
 				for (i = 0; i < ne; i++) {
 					
 					if (wc[i].status != IBV_WC_SUCCESS)
@@ -253,11 +252,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
 
-					if (wc[i].status != IBV_WC_SUCCESS)
-						 NOTIFY_COMP_ERROR_SEND(wc[i],(int)totscnt,(int)totccnt);
+					if (wc_tx[i].status != IBV_WC_SUCCESS)
+						 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
 
 					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)wc[i].wr_id] += user_param->cq_mod;
+					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
 
 					if (user_param->noPeak == OFF) {
 
