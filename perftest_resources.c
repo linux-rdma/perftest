@@ -35,6 +35,56 @@ struct perftest_parameters* duration_param;
 /****************************************************************************** 
  * Beginning
  ******************************************************************************/
+static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
+{
+       unsigned long sum = 0;
+       const uint16_t *ip1;
+        ip1 = buf;
+        while (hdr_len > 1)
+        {
+                 sum += *ip1++;
+                if (sum & 0x80000000)
+                         sum = (sum & 0xFFFF) + (sum >> 16);
+                 hdr_len -= 2;
+        }
+        while (sum >> 16)
+                sum = (sum & 0xFFFF) + (sum >> 16);
+        return(~sum);
+ }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+/*uint16_t udp_checksum	( void * buff,size_t len,in_addr_t src_addr,in_addr_t dest_addr)
+ {
+         const uint16_t *buf=buff;
+         uint16_t *ip_src=(void *)&src_addr, *ip_dst=(void *)&dest_addr;
+         uint32_t sum;
+         size_t length=len;
+         sum = 0;
+         while (len > 1)
+         {
+                 sum += *buf++;
+                 if (sum & 0x80000000)
+                         sum = (sum & 0xFFFF) + (sum >> 16);
+                 len -= 2;
+         }
+         if ( len & 1 )
+                 sum += *((uint8_t *)buf);
+         sum += *(ip_src++);
+         sum += *ip_src;
+         sum += *(ip_dst++);
+         sum += *ip_dst;
+         sum += htons(UDP_PROTOCOL);
+         sum += htons(length);
+         while (sum >> 16)
+                 sum = (sum & 0xFFFF) + (sum >> 16);
+         return ( (uint16_t)(~sum)  );
+ }*/
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 int check_add_port(char **service,int port,
 				   const char *servername,
 				   struct addrinfo *hints,
@@ -166,7 +216,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
 		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
 
-		if (user_param->verb == SEND && user_param->connection_type == UD) { 
+		if ((user_param->verb == SEND && user_param->connection_type == UD) || (user_param->verb == SEND && user_param->connection_type == RawEth)) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
 	}
@@ -383,6 +433,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
 		case UD : attr.qp_type = IBV_QPT_UD; break;
+		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 		default:  fprintf(stderr, "Unknown connection type \n");
 			return NULL;
 	}
@@ -395,13 +446,90 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		}
 		qp = ctx->cm_id->qp;
 
-	} else
+	} else {
 		qp = ibv_create_qp(ctx->pd,&attr);
-
+	}
 	return qp;
 }
-
+ 
 /****************************************************************************** 
+ *
+ ******************************************************************************/
+void mac_from_gid(uint8_t   *mac, uint8_t *gid ){
+	memcpy(mac, gid + 8, 3);
+	memcpy(mac + 3, gid + 13, 3);
+	mac[0] ^= 2;
+}
+
+void mac_from_user(uint8_t   *mac, uint8_t *gid,int size )
+{
+	memcpy(mac,gid,size);
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void dump_buffer(unsigned char *bufptr, int len) {
+	int i;
+
+	for (i = 0; i < len; i++) {
+		printf("%02x:", *bufptr);
+		bufptr++;
+	}
+	printf("\n");
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type) {
+	memcpy(eth_header->src_mac, src_mac, 6);
+	memcpy(eth_header->dst_mac, dst_mac, 6);
+	eth_header->eth_type = htons(eth_type);
+
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt) {
+
+	IP_V4_header ip_header;
+	//uint16_t data_size = (protocol == UDP_PROTOCOL ? sizeof(UDP_header) :0);
+
+	memset(&ip_header,0,sizeof(struct IP_V4_header));
+
+	ip_header.version = 4;
+	ip_header.ihl = 5;
+	ip_header.tos = 0;
+	ip_header.tot_len = htons(sizePkt);
+	ip_header.id = htons(0);
+	ip_header.frag_off = htons(0);
+	ip_header.ttl = DEFAULT_TTL;
+	ip_header.protocol = protocol;
+	ip_header.saddr = *saddr;
+	ip_header.daddr = *daddr;
+	ip_header.check = ip_checksum((void*)&ip_header,sizeof(IP_V4_header));//htons(0x36CA);//natali -need to calculate that value?
+
+	memcpy(ip_header_buffer, &ip_header, sizeof(IP_V4_header));
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt) {
+
+	UDP_header udp_header;
+
+	memset(&udp_header,0,sizeof(UDP_header));
+
+	udp_header.uh_sport = htons(*sPort);
+	udp_header.uh_dport = htons(*dPort);
+	udp_header.uh_ulen = htons(sizePkt - sizeof(IP_V4_header));
+	udp_header.uh_sum = 0;
+
+	memcpy(UDP_header_buffer, &udp_header, sizeof(UDP_header));
+
+
+}
+ /******************************************************************************
  *
  ******************************************************************************/
 int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param)  {
@@ -429,7 +557,10 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		attr.port_num = user_param->ib_port;
 	}
 
-	if (user_param->connection_type == UD) {
+	if (user_param->connection_type == RawEth) {
+		flags = IBV_QP_STATE | IBV_QP_PORT;
+
+	} else if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
 
@@ -601,7 +732,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 		
 		for (j = 0; j < user_param->post_list; j++) { 
 
-			ctx->sge_list[i*user_param->post_list + j].length = user_param->size;
+			ctx->sge_list[i*user_param->post_list + j].length =  (user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr->lkey;
 
 			if (j > 0) { 
@@ -904,17 +1035,20 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int                 *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
+	bool firstRx = true;
 
 	ALLOCATE(wc ,struct ibv_wc ,user_param->rx_depth*user_param->num_of_qps);
 
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
-	if (user_param->test_type == DURATION) {
-		duration_param=user_param;
-		duration_param->state = START_STATE;
-		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
+	if(user_param->connection_type != RawEth){
+		if (user_param->test_type == DURATION) {
+			duration_param=user_param;
+			duration_param->state = START_STATE;
+			signal(SIGALRM, catch_alarm);
+			alarm(user_param->margin);
+		}
 	}
 
 	if (user_param->test_type == ITERATIONS)
@@ -935,6 +1069,17 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
 
 			if (ne > 0) {
+				if(user_param->connection_type == RawEth){
+					if (firstRx && user_param->test_type == DURATION) {
+						firstRx = false;
+						duration_param=user_param;
+						user_param->iters=0;
+						duration_param->state = START_STATE;
+						signal(SIGALRM, catch_alarm);
+						alarm(user_param->margin);
+					}
+				}
+
 				for (i = 0; i < ne; i++) {
 					
 					if (wc[i].status != IBV_WC_SUCCESS) {
@@ -981,7 +1126,172 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_bi(struct pingpong_context *ctx,
+				struct perftest_parameters *user_param)  {
+
+	uint64_t				totscnt    = 0;
+	uint64_t				totccnt    = 0;
+	uint64_t				totrcnt    = 0;
+	int 					i,index      = 0;
+	int 					ne = 0;
+	int						*rcnt_for_qp = NULL;
+	int 					tot_iters = 0;
+	int 					iters = 0;
+	struct ibv_wc 			*wc          = NULL;
+	struct ibv_wc 			*wc_tx		 = NULL;
+	struct ibv_recv_wr      *bad_wr_recv = NULL;
+	struct ibv_send_wr 		*bad_wr      = NULL;
+	bool  					firstRx = true;
+
+	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
+	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
+
+	tot_iters = user_param->iters*user_param->num_of_qps;
+	iters=user_param->iters;
+
+	if (user_param->noPeak == ON)
+		user_param->tposted[0] = get_cycles();
+	if((user_param->test_type == DURATION )&& ((user_param->connection_type != RawEth) || (user_param->machine == CLIENT && firstRx && user_param->test_type)))
+	{
+			firstRx = false;
+			duration_param=user_param;
+			user_param->iters=0;
+			duration_param->state = START_STATE;
+			signal(SIGALRM, catch_alarm);
+			alarm(user_param->margin);
+	}
+	while ((user_param->test_type == ITERATIONS && ( totccnt < tot_iters || totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+		for (index=0; index < user_param->num_of_qps; index++) {
+
+			while ((user_param->test_type == ITERATIONS && (ctx->scnt[index] < iters)) || ((user_param->test_type == DURATION && user_param->state != END_STATE)&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth))) {
+
+				if (user_param->state == END_STATE) break;
+
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
+					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+
+				if (user_param->noPeak == OFF)
+					user_param->tposted[totscnt] = get_cycles();
+
+				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
+					return 1;
+				}
+
+				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2))
+					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+
+				ctx->scnt[index] += user_param->post_list;
+				totscnt += user_param->post_list;
+
+				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1)))
+					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+			}
+		}
+
+		if (user_param->use_event) {
+
+			if (ctx_notify_events(ctx->channel)) {
+				fprintf(stderr,"Failed to notify events to CQ");
+				return 1;
+			}
+		}
+
+		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
+			if (ne > 0) {
+				if(user_param->connection_type == RawEth)
+				{
+					if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
+						firstRx = false;
+						duration_param=user_param;
+						user_param->iters=0;
+						duration_param->state = START_STATE;
+						signal(SIGALRM, catch_alarm);
+						alarm(user_param->margin);
+					}
+				}
+				for (i = 0; i < ne; i++) {
+
+					if (wc[i].status != IBV_WC_SUCCESS)
+						NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
+
+					rcnt_for_qp[wc[i].wr_id]++;
+					totrcnt++;
+
+					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+						user_param->iters++;
+
+					if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= iters) {
+
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
+							return 15;
+						}
+
+						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2) && user_param->connection_type != RawEth)
+							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
+											  user_param->size,
+											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
+											  ctx->my_addr[wc[i].wr_id],
+											  user_param->connection_type);
+						//print_pkt((ETH_header*)rwr[wc[i].wr_id].sg_list->addr);
+					}
+				}
+
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return 1;
+			}
+		}
+
+		if ((user_param->test_type == ITERATIONS && (totccnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc_tx);
+			if (ne > 0) {
+				for (i = 0; i < ne; i++) {
+
+					if (wc_tx[i].status != IBV_WC_SUCCESS)
+						 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
+
+					totccnt += user_param->cq_mod;
+					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
+
+					if (user_param->noPeak == OFF) {
+
+						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+							user_param->tcompleted[tot_iters - 1] = get_cycles();
+						else
+							user_param->tcompleted[totccnt-1] = get_cycles();
+					}
+
+					if (user_param->test_type == DURATION && user_param->state == SAMPLE_STATE)
+						user_param->iters += user_param->cq_mod;
+				}
+
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return 1;
+			}
+		}
+	}
+
+	if (user_param->noPeak == ON)
+		user_param->tcompleted[0] = get_cycles();
+
+	free(rcnt_for_qp);
+	free(wc);
+	free(wc_tx);
+	return 0;
+}
+/******************************************************************************
  *
  ******************************************************************************/
 uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {

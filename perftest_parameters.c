@@ -3,9 +3,13 @@
 #include <string.h>
 #include <getopt.h>
 #include <limits.h>
+#include <arpa/inet.h>
 #include "perftest_parameters.h"
 
-static const char *connStr[] = {"RC","UC","UD"};
+#define MAC_LEN (17)
+#define MAC_ARR_LEN (6)
+#define HEX_BASE (16)
+static const char *connStr[] = {"RC","UC","UD","RawEth"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
@@ -21,7 +25,90 @@ typedef enum {
 } LinkType;
 #endif
 
+/******************************************************************************
+ * parse_mac_from_str.
+ *
+ * Description : parse string by format of"XX:XX:XX:XX:XX:XX" to uint8_t array in size 6 for MAC adderes
+ *
+ *  Parameters :
+ *		mac - char*.
+ *		*addr - pointer to output array
+ *
+ * Return Value : SUCCESS, FAILURE.
+******************************************************************************/
+static int parse_mac_from_str(char *mac, u_int8_t *addr)
+{
+	char tmpMac[MAC_LEN+1];
+	char *tmpField;
+	int fieldNum = 0;
+
+	if (strlen(mac) != MAC_LEN)
+	{
+		fprintf(stderr, "invalid MAC length\n");
+		return FAILURE;
+	}
+	if (addr == NULL)
+	{
+		fprintf(stderr, "invalid  output addr array\n");
+		return FAILURE;
+	}
+
+	strcpy(tmpMac, mac);
+	tmpField = strtok(tmpMac, ":");
+	while (tmpField != NULL && fieldNum < MAC_ARR_LEN)
+	{
+	  char *chk;
+	  int tmpVal;
+	  tmpVal = strtoul(tmpField, &chk, HEX_BASE);
+	  if (tmpVal > 0xff)
+	  {
+		fprintf(stderr, "field %d value %X out of range\n", fieldNum, tmpVal);
+		return FAILURE;
+	  }
+	  if (*chk != 0)
+	  {
+		fprintf(stderr, "Non-digit character %c (%0x) detected in field %d\n", *chk, *chk, fieldNum);
+		return FAILURE;
+	  }
+	  addr[fieldNum++] = (u_int8_t) tmpVal;
+	  tmpField = strtok(NULL, ":");
+	}
+	if (tmpField != NULL || fieldNum != MAC_ARR_LEN)
+	{
+		fprintf(stderr, "MAC address longer than six fields\n");
+		return FAILURE;
+	}
+	return SUCCESS;
+}
+
 /****************************************************************************** 
+  parse_ip_from_str.
+ *
+ * Description : Convert from presentation format of an Internet number in buffer
+   starting at CP to the binary network format and store result for
+   interface type AF in buffer starting at BUF.
+ *
+ *  Parameters :
+ *		*ip - char* ip string.
+ *		*addr - pointer to output array
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ ******************************************************************************/
+int parse_ip_from_str(char *ip, u_int32_t *addr)
+{
+	return inet_pton(AF_INET, ip, addr);
+}
+
+/******************************************************************************
+  check_valid_udp_port.
+ ******************************************************************************/
+bool check_if_valid_udp_port(int udp_port)
+{
+	return true;
+}/****************************************************************************** 
+
+/******************************************************************************
  *
  ******************************************************************************/
 static void usage(const char *argv0,VerbType verb,TestType tst)	{
@@ -197,6 +284,12 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->margin		= DEF_MARGIN;
 	user_param->test_type	= ITERATIONS;
 	user_param->state		= START_STATE;
+	user_param->is_source_mac = false;
+	user_param->is_dest_mac = false;
+	user_param->is_server_ip = false;
+	user_param->is_client_ip = false;
+	user_param->is_server_port  = false;
+	user_param->is_client_port  = false;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -232,13 +325,32 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 			fprintf(stderr," UD connection only possible in SEND verb\n"); 
 			exit(1);
 		}
+	} else if(strcmp(connStr[3],optarg)==0) {
+		*cptr = RawEth;
 
 	} else { 
 		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n"); 
 		exit(1); 
 	}
 }
+/******************************************************************************
+  *
+  ******************************************************************************/
+static int set_eth_mtu(struct perftest_parameters *user_param) {
 
+	if (user_param->mtu == 0) {
+		user_param->mtu = 1500;
+	}
+	switch (user_param->mtu) {
+				case 1500  :	user_param->curr_mtu = 1500;	 break;
+				case 9600  : 	user_param->curr_mtu = 9600;	 break;
+				default   :
+					fprintf(stderr," Invalid MTU - %d \n",user_param->mtu);
+					fprintf(stderr," Please choose mtu form {1500, 9600}\n");
+					return -1;
+			}
+	return 0;
+}
 /******************************************************************************
  *
  ******************************************************************************/
@@ -351,6 +463,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->verb == SEND && user_param->machine == SERVER && !user_param->duplex)
 		user_param->noPeak = ON;
+
 	return;
 }
 
@@ -803,6 +916,258 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 /****************************************************************************** 
  *
  ******************************************************************************/
+int raw_eth_parser(struct perftest_parameters *user_param,char *argv[], int argc) {
+	int c;
+	init_perftest_params(user_param);
+	user_param->machine = UNCHOSEN;
+	while (1) {
+#ifndef _WIN32
+		static const struct option long_options[] = {
+			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
+			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
+			{ .name = "mtu",            .has_arg = 1, .val = 'm' },
+			{ .name = "size",           .has_arg = 1, .val = 's' },
+			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
+			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
+			{ .name = "sl",             .has_arg = 1, .val = 'S' },
+			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
+			{ .name = "all",            .has_arg = 0, .val = 'a' },
+			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
+			{ .name = "qp",             .has_arg = 1, .val = 'q' },
+			{ .name = "events",         .has_arg = 0, .val = 'e' },
+			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
+			{ .name = "outs",           .has_arg = 1, .val = 'o' },
+			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
+			{ .name = "help",           .has_arg = 0, .val = 'h' },
+			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
+			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
+			{ .name = "cq-mod",  		.has_arg = 1, .val = 'Q' },
+			{ .name = "version",        .has_arg = 0, .val = 'V' },
+			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
+			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
+			{ .name = "post_list",      .has_arg = 1, .val = 'l' },
+			{ .name = "duration",       .has_arg = 1, .val = 'D' },
+			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
+			{ .name = "margin",         .has_arg = 1, .val = 'f' },
+			{ .name = "source_mac",     .has_arg = 1, .val = 'B' },
+			{ .name = "dest_mac",       .has_arg = 1, .val = 'E' },
+			{ .name = "server_ip",      .has_arg = 1, .val = 'J' },
+			{ .name = "client_ip",      .has_arg = 1, .val = 'c' },
+			{ .name = "server_port",    .has_arg = 1, .val = 'p' },
+			{ .name = "client_port",    .has_arg = 1, .val = 'P' },
+			{ .name = "server",         .has_arg = 0, .val = 'Z' },
+			{ .name = "client",         .has_arg = 0, .val = 'z' },
+            { 0 }
+        };
+#else
+        static const struct option long_options[] = {
+			{ "ib-dev",			1, NULL, 'd' },
+			{ "ib-port",		1, NULL, 'i' },
+			{ "mtu",			1, NULL, 'm' }, //check mtu 9000
+			{ "size",			1, NULL, 's' },
+			{ "tx-depth",		1, NULL, 't' },
+			{ "qp-timeout", 	1, NULL, 'u' },  //?
+			{ "sl", 			1, NULL, 'S' },
+			{ "gid-index",		1, NULL, 'x' }, //?
+			{ "all",            0, NULL, 'a' },
+			{ "CPU-freq",		0, NULL, 'F' }, //?
+			{ "qp", 			1, NULL, 'q' }, //add support to more then one qp
+			{ "events", 		0, NULL, 'e' }, //add support
+			{ "inline_size",	1, NULL, 'I' },
+			{ "outs",			1, NULL, 'o' },
+			{ "mcg",			0, NULL, 'g' }, //add support
+			{ "help",			0, NULL, 'h' },
+			{ "MGID",			1, NULL, 'M' },  //?
+			{ "rx-depth",		1, NULL, 'r' },
+			{ "cq-mod", 		1, NULL, 'Q' },
+			{ "version",		0, NULL, 'V' },
+            { "report-cycles",	0, NULL, 'C' },
+            { "report-unsorted"	,0, NULL, 'U' }, // remove and add samples
+			{ "post_list"		,1, NULL, 'l' }, // add support
+			{ "bidirectional"   ,0, NULL, 'b' },
+			{ "duration"		,1, NULL, 'D' },
+			{ "margin"			,1, NULL, 'f' },
+			{ "source_mac"      ,1, NULL, 'B' },
+			{ "dest_mac"        ,1, NULL, 'E' },
+			{ "server_ip"       ,1, NULL, 'J' },
+			{ "client_ip"       ,1, NULL, 'c' },
+			{ "server_port"     ,1, NULL, 'p' },
+			{ "client_port"     ,1, NULL, 'P' },
+			{ "server"          ,0, NULL, 'Z' },
+			{ "client"          ,0, NULL, 'z' },
+			{ 0 }
+		};
+#endif
+        c = getopt_long(argc,argv,"d:i:m:s:t:u:S:x:q:I:o:M:r:Q:l:D:f:B:E:J:c:p:P:FaeghVCUbzZ",long_options,NULL);
+        if (c == -1)
+			break;
+        switch (c) {
+#ifndef _WIN32
+			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
+#else
+			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); break;
+#endif
+			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); break;
+            case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
+			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
+			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
+			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
+			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
+				if (user_param->sl > MAX_SL) { 
+					fprintf(stderr," Only %d Service levels\n",MAX_SL);
+					return FAILURE;
+				} break;
+			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); break;
+			case 'a': user_param->all = ON; break;
+			case 'F': user_param->cpu_freq_f = ON; break;
+			case 'q':
+				if (user_param->tst != BW) {
+					fprintf(stderr," Multiple QPs only available on bw tests\n");
+					return FAILURE;
+				}
+				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
+				break;
+			case 'e': user_param->use_event = ON;
+				if (user_param->verb == WRITE) {
+					fprintf(stderr," Events feature not availible on WRITE verb\n");
+					return FAILURE;
+				} break;
+			case 'I': CHECK_VALUE(user_param->inline_size,int,0,MAX_INLINE,"Max inline");
+				if (user_param->verb == READ || user_param->verb ==ATOMIC) {
+					fprintf(stderr," Inline feature not availible on READ/Atomic verbs\n");
+					return 1;
+				} break;
+			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
+				if (user_param->verb != READ && user_param->verb != ATOMIC) {
+					fprintf(stderr," Setting Outstanding reads only availible on READ verb\n");
+					return FAILURE;
+				} break;
+			case 'g': user_param->use_mcg = ON;
+				if (user_param->verb != SEND) {
+					fprintf(stderr," MultiCast feature only availible on SEND verb\n");
+					return FAILURE;
+				} break;
+			case 'h': usage(argv[0],user_param->verb,user_param->tst); return HELP_EXIT;
+#ifndef _WIN32
+			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
+#else
+			case 'M': GET_STRING(user_param->user_mgid,_strdup(optarg));break;
+#endif
+			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
+				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
+					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
+					return FAILURE;
+				} break;
+			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation"); break;
+			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
+			case 'C':
+				if (user_param->tst != LAT) {
+					fprintf(stderr," Availible only on Latency tests\n");
+					return FAILURE;
+				}
+				user_param->r_flag->cycles = ON;
+				break;
+            case 'U':
+				if (user_param->tst != LAT) {
+					fprintf(stderr," Availible only on Latency tests\n");
+					return FAILURE;
+				}
+				user_param->r_flag->unsorted = ON;
+				break;
+            case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
+			case 'b': user_param->duplex = ON;
+				if (user_param->tst == LAT) {
+					fprintf(stderr," Bidirectional is only availible in BW test\n");
+					return 1;
+				} break;
+			case 'D': user_param->duration = strtol(optarg, NULL, 0);
+				if (user_param->duration <= 0) {
+						fprintf(stderr," Duration period must be greater than 0\n");
+						return FAILURE;
+				}
+ 				user_param->test_type = DURATION;
+				break;
+			case 'f': user_param->margin = strtol(optarg, NULL, 0);
+ 				if (user_param->margin <= 0) {
+					fprintf(stderr," margin must be greater than 0.\n");
+					return FAILURE;
+				} break;
+			case 'B':
+				user_param->is_source_mac = true;
+				if(parse_mac_from_str(optarg, user_param->source_mac))
+					return FAILURE;
+				break;
+			case 'E':
+				user_param->is_dest_mac = true;
+				if(parse_mac_from_str(optarg, user_param->dest_mac))
+					return FAILURE;
+				break;
+			case 'J':
+				user_param->is_server_ip = true;
+				if(1 != parse_ip_from_str(optarg, &(user_param->server_ip)))
+				{
+					fprintf(stderr," Invalid server IP address\n");
+					return FAILURE;
+				}
+				break;
+			case 'c':
+				user_param->is_client_ip = true;
+				if(1 != parse_ip_from_str(optarg, &(user_param->client_ip)))
+				{
+					fprintf(stderr," Invalid client IP address\n");
+					return FAILURE;
+				}
+				break;
+			case 'p':
+				user_param->is_server_port = true;
+				user_param->server_port = strtol(optarg, NULL, 0);
+				if(false == check_if_valid_udp_port(user_param->server_port))
+				{
+					fprintf(stderr," Invalid server UDP port\n");
+					return FAILURE;
+				}
+				break;
+			case 'P':
+				user_param->is_client_port = true;
+				user_param->client_port = strtol(optarg, NULL, 0);
+				if(false == check_if_valid_udp_port(user_param->client_port))
+				{
+					fprintf(stderr," Invalid client UDP port\n");
+					return FAILURE;
+				}
+				break;
+			case 'z': user_param->machine = CLIENT; break;
+			case 'Z': user_param->machine = SERVER; break;
+			default: 
+				fprintf(stderr," Invalid Command or flag.\n"); 
+				fprintf(stderr," Please check command line and run again.\n\n");
+				usage(argv[0],user_param->verb,user_param->tst);
+				return FAILURE;
+		 }
+	}
+    if(user_param->machine == UNCHOSEN)
+    {
+    	 fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
+    	 return FAILURE;
+    }
+    if(user_param->machine == CLIENT && user_param->is_dest_mac == false)
+    {
+    	 fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
+    	 return FAILURE;
+    }
+    if((user_param->is_server_ip == true && user_param->is_client_ip == false) || (user_param->is_server_ip == false && user_param->is_client_ip == true))
+    {
+    	 fprintf(stderr," Invalid Command line.\n if you would like to send ip header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
+    	 return FAILURE;
+    }
+    if((user_param->is_server_port == true && user_param->is_client_port == false) || (user_param->is_server_port == false && user_param->is_client_port == true))
+    {
+    	 fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
+    	 return FAILURE;
+    }
+	force_dependecies(user_param);
+    return SUCCESS;
+}
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param) {
 
 	user_param->link_type = set_link_layer(context,user_param->ib_port);
@@ -815,8 +1180,12 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 			user_param->gid_index = 0;
 	}
 
+	if (user_param->connection_type == RawEth) {
+		if (set_eth_mtu(user_param) != 0)
+			fprintf(stderr, " Couldn't set Eth MTU\n");
+	} else {
 	user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
-
+	}
 	// in case of dual-port mode
 	if (user_param->dualport==ON) {
 
@@ -849,6 +1218,16 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		user_param->size = MTU_SIZE(user_param->curr_mtu);
 	}
 
+	if (user_param->connection_type == RawEth){
+		if (user_param->size > user_param->curr_mtu) {
+			fprintf(stderr," Max msg size in RawEth is MTU %d\n",user_param->curr_mtu);
+			fprintf(stderr," Changing to this MTU\n");
+			user_param->size = user_param->curr_mtu;
+		} else if (user_param->size < RAWETH_MIN_MSG_SIZE) {
+			printf(" Min msg size for RawEth is 64B - changing msg size to 64 \n");
+			user_param->size = RAWETH_MIN_MSG_SIZE;
+		}
+	}
 	if (!user_param->ib_devname)
 		GET_STRING(user_param->ib_devname,ibv_get_device_name(context->device))
 

@@ -64,6 +64,7 @@
 #define RC  (0)
 #define UC  (1) 
 #define UD  (2)
+#define RawEth  (3)
 // #define XRC 3 (TBD)
 
 // Genral control definitions
@@ -79,6 +80,8 @@
 #define MAX_OUT_READ_HERMON (16)
 #define MAX_OUT_READ        (4)
 #define UD_ADDITION         (40)
+#define RAWETH_ADDITTION    (18)
+#define HW_CRC_ADDITION    (4)
 
 // Default Values of perftest parameters
 #define DEF_PORT      (18515)
@@ -128,6 +131,7 @@
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
+#define RAWETH_MIN_MSG_SIZE    (64)
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
@@ -160,6 +164,7 @@
 
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
+typedef enum { false, true } bool;
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
@@ -167,7 +172,7 @@ typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 typedef enum { LAT , BW } TestType;
 
 // The type of the machine ( server or client actually).
-typedef enum { SERVER , CLIENT } MachineType;
+typedef enum { SERVER , CLIENT , UNCHOSEN} MachineType;
 
 // The type of the machine ( server or client actually).
 typedef enum { LOCAL , REMOTE } PrintDataSide;
@@ -200,6 +205,18 @@ struct perftest_parameters {
 	uint8_t			sl;
 	int				gid_index;
 	int				gid_index2;
+	uint8_t			source_mac[6];
+	uint8_t			dest_mac[6];
+	bool			is_source_mac;
+	bool			is_dest_mac;
+	uint32_t		server_ip;
+	uint32_t		client_ip;
+	bool			is_server_ip;
+	bool			is_client_ip;
+	int				server_port;
+	int				client_port;
+	bool			is_server_port;
+	bool			is_client_port;
 	int				all;
 	int				cpu_freq_f;
 	int				connection_type;
@@ -218,10 +235,10 @@ struct perftest_parameters {
 	int				margin;
 	uint32_t		rem_ud_qpn;
 	uint32_t		rem_ud_qkey;
-	uint8_t 		link_type;
-	uint8_t 		link_type2;
-    MachineType		machine;
-    PrintDataSide	side;
+	uint8_t			link_type;
+	uint8_t			link_type2;
+	MachineType		machine;
+	PrintDataSide	side;
 	VerbType		verb;
 	TestType		tst;
 	AtomicType		atomicType;
@@ -234,11 +251,11 @@ struct perftest_parameters {
 #endif
 	double			version;
 	struct report_options  *r_flag;
-	cycles_t 		*tposted;
-	cycles_t 		*tcompleted;
+	cycles_t		*tposted;
+	cycles_t		*tcompleted;
 	int				use_mcg;
 	int 			use_rdma_cm;
-    int				work_rdma_cm;
+	int				work_rdma_cm;
 	char			*user_mgid;
 };
 
@@ -274,6 +291,7 @@ const char *link_layer_str(uint8_t link_layer);
  */
 int parser(struct perftest_parameters *user_param,char *argv[], int argc);
 
+int raw_eth_parser(struct perftest_parameters *user_param,char *argv[], int argc);
 /* check_link_and_mtu
  *
  * Description : Configures test MTU,inline and link layer of the test.
@@ -311,4 +329,27 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  */
 void print_report_bw (struct perftest_parameters *user_param);
 
+/* mac_from_gid
+ *
+ * Description : Exract Mac for Gid.
+ *
+ * Parameters :
+ *
+ *	mac - pointer to Mac returned.
+ *	gid - GID of the requested port.
+ *
+ */
+void mac_from_gid(uint8_t   *mac, uint8_t *gid );
+
+/* mac_from_user
+ *
+ * Description : Copy user Mac to a MAC array.
+ *
+ * Parameters :
+ *
+ *	mac - pointer to Mac returned.
+ *	user_mac - GID of the requested port.
+ *	size - size of arrays.
+ */
+void mac_from_user(uint8_t   *mac, uint8_t *user_mac,int size );
 #endif /* PERFTEST_RESOURCES_H */

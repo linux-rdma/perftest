@@ -154,8 +154,8 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 /****************************************************************************** 
  * 														  
  ******************************************************************************/
-int run_iter_bi(struct pingpong_context *ctx, 
-				struct perftest_parameters *user_param)  {
+int send_run_iter_bi(struct pingpong_context *ctx, 
+					 struct perftest_parameters *user_param)  {
 
 	uint64_t				totscnt    = 0;
 	uint64_t				totccnt    = 0;
@@ -482,7 +482,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 			if (user_param.duplex) {
 
-				if(run_iter_bi(&ctx,&user_param))
+				if(send_run_iter_bi(&ctx,&user_param))
 					return 17;
 
 			} else if (user_param.machine == CLIENT) {
@@ -526,7 +526,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 		if (user_param.duplex) {
 
-			if(run_iter_bi(&ctx,&user_param))
+			if(send_run_iter_bi(&ctx,&user_param))
 				return 17;
 
 		} else if (user_param.machine == CLIENT) {

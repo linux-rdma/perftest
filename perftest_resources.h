@@ -72,7 +72,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-
+#include <fcntl.h>
 #define CYCLE_BUFFER        (4096)
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
@@ -91,6 +91,8 @@
 #define PINGPONG_READ_WRID	 (1)
 #define PINGPONG_ATOMIC_WRID (22)
 #define DEFF_QKEY            (0x11111111)
+
+#define PERF_MAC_FMT " %02X:%02X:%02X:%02X:%02X:%02X"
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
@@ -120,10 +122,45 @@
 	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
 
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
+#define UDP_PROTOCOL (0x11)
+#define IP_HEADER_LEN (20)
+#define DEFAULT_TTL (128)
 
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
+struct ETH_header {
+	uint8_t dst_mac[6];
+	uint8_t src_mac[6];
+	uint16_t eth_type;
+}__attribute__((packed));
+
+typedef struct ETH_header ETH_header;
+
+struct IP_V4_header{
+	uint8_t ihl:4;
+	uint8_t version:4;
+    uint8_t tos;
+    uint16_t tot_len;
+    uint16_t id;
+    uint16_t frag_off;
+    uint8_t ttl;
+    uint8_t protocol;
+    uint16_t check;
+    uint32_t saddr;
+    uint32_t daddr;
+}__attribute__((packed));
+
+typedef struct IP_V4_header IP_V4_header;
+
+struct UDP_header {
+	u_short	uh_sport;		/* source port */
+	u_short	uh_dport;		/* destination port */
+	u_short	uh_ulen;		/* udp length */
+	u_short	uh_sum;			/* udp checksum */
+}__attribute__((packed));
+
+typedef struct UDP_header UDP_header;
 
 struct pingpong_context {
 	struct rdma_event_channel	*cm_channel;
@@ -159,6 +196,9 @@ struct pingpong_context {
  	unsigned			rkey;
  	unsigned long long	vaddr;
  	union ibv_gid		gid;
+ 	uint8_t mac[6];
+ 	uint32_t ip;
+ 	int port;
  };
 
 /****************************************************************************** 
@@ -371,7 +411,19 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  *
  */
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
-
+/* run_iter_bi.
+ *
+ * Description :
+ *
+ *	The main testing method for bidirrectional.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 /* ctx_get_local_lid .
  *
  * Description :
@@ -386,6 +438,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  *
  * Return Value : The Lid itself. (No error values).
  */
+
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
 
 /* ctx_notify_events
@@ -416,7 +469,40 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 	}
 	return 0;
 }
+/* gen_eth_header .
+ * Description :
+ *
 
+ * Parameters :
+
+ *  source_mac
+ *  destenation mac
+ *  eth_type- if size < 1500 - size of data . if size > 1500 - eth type.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
+/* gen_ip_header .
+
+ * Description :
+ *
+
+ * Parameters :
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t protocol,int sizePkt);
+/* gen_udp_header .
+
+ * Description :
+ *
+
+ * Parameters :
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+
+void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadder,uint32_t dadder,int sizePkt);
 /* increase_rem_addr.
  *
  * Description : 
