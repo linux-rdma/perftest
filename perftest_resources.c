@@ -216,7 +216,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
 		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
 
-		if ((user_param->verb == SEND && user_param->connection_type == UD) || (user_param->verb == SEND && user_param->connection_type == RawEth)) {
+		if ((user_param->verb == SEND && user_param->connection_type == UD)) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
 	}
@@ -491,8 +491,7 @@ void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_
  ******************************************************************************/
 void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt) {
 
-	IP_V4_header ip_header;
-	//uint16_t data_size = (protocol == UDP_PROTOCOL ? sizeof(UDP_header) :0);
+	struct IP_V4_header ip_header;
 
 	memset(&ip_header,0,sizeof(struct IP_V4_header));
 
@@ -506,9 +505,9 @@ void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uin
 	ip_header.protocol = protocol;
 	ip_header.saddr = *saddr;
 	ip_header.daddr = *daddr;
-	ip_header.check = ip_checksum((void*)&ip_header,sizeof(IP_V4_header));//htons(0x36CA);//natali -need to calculate that value?
+	ip_header.check = ip_checksum((void*)&ip_header,sizeof(struct IP_V4_header));
 
-	memcpy(ip_header_buffer, &ip_header, sizeof(IP_V4_header));
+	memcpy(ip_header_buffer, &ip_header, sizeof(struct IP_V4_header));
 }
 
 /******************************************************************************
@@ -516,16 +515,16 @@ void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uin
  ******************************************************************************/
 void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt) {
 
-	UDP_header udp_header;
+	struct UDP_header udp_header;
 
-	memset(&udp_header,0,sizeof(UDP_header));
+	memset(&udp_header,0,sizeof(struct UDP_header));
 
 	udp_header.uh_sport = htons(*sPort);
 	udp_header.uh_dport = htons(*dPort);
-	udp_header.uh_ulen = htons(sizePkt - sizeof(IP_V4_header));
+	udp_header.uh_ulen = htons(sizePkt - sizeof(struct IP_V4_header));
 	udp_header.uh_sum = 0;
 
-	memcpy(UDP_header_buffer, &udp_header, sizeof(UDP_header));
+	memcpy(UDP_header_buffer, &udp_header, sizeof(struct UDP_header));
 
 
 }
@@ -622,6 +621,11 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 
 		flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
 
+		if(user_parm->connection_type == RawEth)
+		{
+			flags = IBV_QP_STATE;
+		}
+
 		if (user_parm->connection_type == RC) { 
 
 			attr->max_dest_rd_atomic = my_reads;
@@ -657,6 +661,10 @@ static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 
 		flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
 
+	}
+	if (user_parm->connection_type == RawEth) {
+
+			flags = IBV_QP_STATE;
 	}
 
 	return ibv_modify_qp(qp,attr,flags);		
@@ -904,7 +912,7 @@ static int perform_warm_up(struct pingpong_context *ctx,struct perftest_paramete
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
     int                totscnt = 0;
-    int 	       totccnt = 0;
+    int 	       	   totccnt = 0;
     int                i = 0;
     int                index,ne,tot_iters;
     struct ibv_send_wr *bad_wr = NULL;
@@ -1156,7 +1164,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
-	if((user_param->test_type == DURATION )&& ((user_param->connection_type != RawEth) || (user_param->machine == CLIENT && firstRx && user_param->test_type)))
+	if((user_param->test_type == DURATION )&& ((user_param->connection_type != RawEth) || (user_param->machine == CLIENT && firstRx)))
 	{
 			firstRx = false;
 			duration_param=user_param;
@@ -1165,11 +1173,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 			signal(SIGALRM, catch_alarm);
 			alarm(user_param->margin);
 	}
-	while ((user_param->test_type == ITERATIONS && ( totccnt < tot_iters || totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+	while (( totccnt < tot_iters || totrcnt < tot_iters)|| (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 		for (index=0; index < user_param->num_of_qps; index++) {
 
-			while ((user_param->test_type == ITERATIONS && (ctx->scnt[index] < iters)) || ((user_param->test_type == DURATION && user_param->state != END_STATE)&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth))) {
+			while ((ctx->scnt[index] < iters) || ((user_param->test_type == DURATION && user_param->state != END_STATE && firstRx == false)&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth))) {
 
 				if (user_param->state == END_STATE) break;
 
@@ -1203,10 +1211,12 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+		if ((totrcnt < tot_iters)|| (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
 			if (ne > 0) {
+				//printf("recv ne = %d\n",ne);
+
 				if(user_param->connection_type == RawEth)
 				{
 					if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
@@ -1242,7 +1252,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
 											  ctx->my_addr[wc[i].wr_id],
 											  user_param->connection_type);
-						//print_pkt((ETH_header*)rwr[wc[i].wr_id].sg_list->addr);
 					}
 				}
 

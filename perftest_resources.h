@@ -196,11 +196,14 @@ struct pingpong_context {
  	unsigned			rkey;
  	unsigned long long	vaddr;
  	union ibv_gid		gid;
+ };
+
+
+ struct raw_ethernet_info {
  	uint8_t mac[6];
  	uint32_t ip;
  	int port;
  };
-
 /****************************************************************************** 
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
@@ -469,40 +472,45 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 	}
 	return 0;
 }
+
 /* gen_eth_header .
- * Description :
+ * Description :create raw Ethernet header on buffer
  *
-
  * Parameters :
-
- *  source_mac
- *  destenation mac
- *  eth_type- if size < 1500 - size of data . if size > 1500 - eth type.
+ *	 	eth_header - Pointer to output
+ *	 	src_mac - source MAC address of the packet
+ *	 	dst_mac - destination MAC address of the packet
+ *	 	eth_type - IP/or size of ptk
  *
- * Return Value : 0 upon success. -1 if it fails.
  */
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
+
 /* gen_ip_header .
 
- * Description :
+ * Description :create IP header on buffer
  *
-
  * Parameters :
- *
- * Return Value : 0 upon success. -1 if it fails.
+ * 		ip_header_buff - Pointer to output
+ * 		saddr - source IP address of the packet(network order)
+ * 		daddr - destination IP address of the packet(network order)
+ * 		sizePkt - size of the packet
  */
 void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t protocol,int sizePkt);
+
 /* gen_udp_header .
 
- * Description :
+ * Description :create UDP header on buffer
  *
-
  * Parameters :
- *
- * Return Value : 0 upon success. -1 if it fails.
+ * 		UDP_header_buffer - Pointer to output
+ *		sPort - source UDP port of the packet
+ *		dPort -destination UDP port of the packet
+ *		sadder -source IP address of the packet(using for UPD checksum)(network order)
+ *		dadder - source IP address of the packet(using for UPD checksum)(network order)
+ *		sizePkt - size of the packet
  */
 
-void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadder,uint32_t dadder,int sizePkt);
+void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
 /* increase_rem_addr.
  *
  * Description : 
