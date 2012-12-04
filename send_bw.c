@@ -99,10 +99,14 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 								  struct mcast_parameters *mcg_params,
 								  struct perftest_comm *comm) {
 
-	int i = (user_parm->duplex) ? 1 : 0;
+	if (set_up_connection(ctx,user_parm,my_dest)) {
+		fprintf(stderr," Unable to set up my IB connection parameters\n");
+		return FAILURE;
+	}
 
 	if (user_parm->use_mcg && (user_parm->duplex || user_parm->machine == SERVER)) {
 
+		int i = (user_parm->duplex) ? 1 : 0;
 		mcg_params->user_mgid = user_parm->user_mgid;
 		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_parm->machine);
 		if (set_mcast_group(ctx,user_parm,mcg_params)) {
@@ -121,32 +125,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->gid = mcg_params->mgid;
 		my_dest->lid = mcg_params->mlid;
 		my_dest->qpn = QPNUM_MCAST;
-
-	} else {
-		if (user_parm->gid_index != -1) {
-			if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
-				return -1;
-			}
-		}
-		my_dest->lid = ctx_get_local_lid(ctx->context,user_parm->ib_port);
-		my_dest->qpn = ctx->qp[0]->qp_num;
 	}
-
-#ifndef _WIN32
-	my_dest->psn       = lrand48() & 0xffffff;
-#else
-	my_dest->psn       = rand() & 0xffffff;
-#endif
-
-	// We do not fail test upon lid above RoCE.
-
-	if (user_parm->gid_index < 0) {
-		if (!my_dest->lid) {
-			fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
-			return -1;
-		}
-	}
-
 	return 0;
 }
 
