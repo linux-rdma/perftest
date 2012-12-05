@@ -128,140 +128,6 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	}
 	return 0;
 }
-
-
-/****************************************************************************** 
- * 														  
- ******************************************************************************/
-int send_run_iter_bi(struct pingpong_context *ctx, 
-					 struct perftest_parameters *user_param)  {
-
-	uint64_t				totscnt    = 0;
-	uint64_t				totccnt    = 0;
-	uint64_t				totrcnt    = 0;
-	int 					i,index      = 0;
-	int 					ne = 0;
-	int						*rcnt_for_qp = NULL;
-	struct ibv_wc 			*wc          = NULL;
-	struct ibv_wc 			*wc_tx		 = NULL;
-	struct ibv_recv_wr      *bad_wr_recv = NULL;
-	struct ibv_send_wr 		*bad_wr      = NULL;
-
-	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
-	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
-
-	if (user_param->noPeak == ON)
-		user_param->tposted[0] = get_cycles();
-
-	while (totccnt < user_param->iters*user_param->num_of_qps || totrcnt < user_param->iters*user_param->num_of_qps) {
-
-		for (index=0; index < user_param->num_of_qps; index++) { 
-
-			while (ctx->scnt[index] < user_param->iters && ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
-
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
-					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
-
-				if (user_param->noPeak == OFF) 
-					user_param->tposted[totscnt] = get_cycles();
-
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
-					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
-					return 1;
-				}
-
-				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2))
-					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
-
-				ctx->scnt[index] += user_param->post_list;
-				totscnt += user_param->post_list;
-
-				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || ctx->scnt[index] == user_param->iters-1))
-					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
-			}
-		}
-
-		if (user_param->use_event) {
-
-			if (ctx_notify_events(ctx->channel)) {
-				fprintf(stderr,"Failed to notify events to CQ");
-				return 1;
-			}
-		}
-
-		if (totrcnt < user_param->iters*user_param->num_of_qps) { 
-
-			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
-			if (ne > 0) {
-				for (i = 0; i < ne; i++) {
-					
-					if (wc[i].status != IBV_WC_SUCCESS)
-						NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
-
-					rcnt_for_qp[wc[i].wr_id]++;
-					totrcnt++;
-
-					if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
-
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
-							return 15;
-						}
-
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2))
-							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
-											  user_param->size,
-											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
-											  ctx->my_addr[wc[i].wr_id],
-											  user_param->connection_type);	
-					}
-				}
-
-			} else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
-			}
-		} 
-
-		if (totccnt < user_param->iters*user_param->num_of_qps) { 
-
-			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc_tx);
-			if (ne > 0) {
-				for (i = 0; i < ne; i++) {
-
-					if (wc_tx[i].status != IBV_WC_SUCCESS)
-						 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
-
-					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
-
-					if (user_param->noPeak == OFF) {
-
-						if (totccnt >= user_param->iters*user_param->num_of_qps - 1)
-							user_param->tcompleted[user_param->iters*user_param->num_of_qps - 1] = get_cycles();
-						else 
-							user_param->tcompleted[totccnt-1] = get_cycles();
-					}
-				}
-
-			} else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
-			}
-		}			
-	}
-
-	if (user_param->noPeak == ON)
-		user_param->tcompleted[0] = get_cycles();
-	
-	free(rcnt_for_qp);
-	free(wc);
-	free(wc_tx);
-	return 0;
-}
-
 /****************************************************************************** 
  *
  ******************************************************************************/
@@ -461,7 +327,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 			if (user_param.duplex) {
 
-				if(send_run_iter_bi(&ctx,&user_param))
+				if(run_iter_bi(&ctx,&user_param))
 					return 17;
 
 			} else if (user_param.machine == CLIENT) {
@@ -505,7 +371,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 		if (user_param.duplex) {
 
-			if(send_run_iter_bi(&ctx,&user_param))
+			if(run_iter_bi(&ctx,&user_param))
 				return 17;
 
 		} else if (user_param.machine == CLIENT) {

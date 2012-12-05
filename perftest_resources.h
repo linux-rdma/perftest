@@ -181,6 +181,7 @@ struct pingpong_context {
 	struct ibv_recv_wr			*rwr;
 	uint64_t					size;
 	uint64_t					*my_addr;
+	uint64_t					*rx_buffer_addr;
 	uint64_t					*rem_addr;
 	uint64_t 					buff_size;
 	int 						tx_depth;

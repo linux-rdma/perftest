@@ -1057,7 +1057,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	remote_mgid   = (comm->rdma_params->side == 1)  && (comm->rdma_params->machine == 1);
 	is_there_mgid =  comm->rdma_params->duplex || remote_mgid || local_mgid;
 
-	if (comm->rdma_params->gid_index > -1 || (comm->rdma_params->use_mcg && is_there_mgid)) {
+	if ((comm->rdma_params->gid_index > -1 || (comm->rdma_params->use_mcg && is_there_mgid)) && comm->rdma_params->connection_type != RawEth) {
 
 		printf(PERF_GID_FMT,gidArray[comm->rdma_params->use_mcg && is_there_mgid],
 				element->gid.raw[0], element->gid.raw[1],

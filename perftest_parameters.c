@@ -493,6 +493,39 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			user_param->num_of_qps = 1;
 	}
 
+	if (user_param->connection_type == RawEth) { 
+
+		if (user_param->num_of_qps > 1) { 
+			printf(RESULT_LINE);
+			fprintf(stdout," Raw Ethernet test supports only 1 QP for now\n");
+			exit(1);
+		}
+
+		if(user_param->machine == UNCHOSEN) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
+			exit(1);
+		}
+
+		if(user_param->machine == CLIENT && user_param->is_dest_mac == false) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
+			exit(1);
+		}
+
+		if((user_param->is_server_ip == true && user_param->is_client_ip == false) || (user_param->is_server_ip == false && user_param->is_client_ip == true)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
+			exit(1);
+		}
+
+		if((user_param->is_server_port == true && user_param->is_client_port == false) || (user_param->is_server_port == false && user_param->is_client_port == true)) { 
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
+			exit(1);
+		}
+	}
+
 	if (user_param->verb == SEND && user_param->machine == SERVER && !user_param->duplex)
 		user_param->noPeak = ON;
 
@@ -1100,31 +1133,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		 }
 	}
 
-	if(user_param->connection_type == RawEth)
-	{
-		if(user_param->machine == UNCHOSEN)
-		{
-			 fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
-			 return FAILURE;
-		}
-		if(user_param->machine == CLIENT && user_param->is_dest_mac == false)
-		{
-			 fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
-			 return FAILURE;
-		}
-		if((user_param->is_server_ip == true && user_param->is_client_ip == false) || (user_param->is_server_ip == false && user_param->is_client_ip == true))
-		{
-			 fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
-			 return FAILURE;
-		}
-		if((user_param->is_server_port == true && user_param->is_client_port == false) || (user_param->is_server_port == false && user_param->is_client_port == true))
-		{
-			 fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
-			 return FAILURE;
-		}
-
-	} else {
-
+	if(user_param->connection_type != RawEth) {
+		
 		if (optind == argc - 1) {
 #ifndef _WIN32
 			GET_STRING(user_param->servername,strdupa(argv[optind]));
@@ -1158,6 +1168,12 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	}
 
 	if (user_param->connection_type == RawEth) {
+
+		if (user_param->link_type != IBV_LINK_LAYER_ETHERNET) { 
+			fprintf(stderr, " Raw Etherent test can only run on Ethernet link! exiting ...\n");
+			return FAILURE;
+		}
+
 		if (set_eth_mtu(user_param) != 0)
 			fprintf(stderr, " Couldn't set Eth MTU\n");
 	} else {
@@ -1274,7 +1290,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
 	} 
 
-	printf(" Mtu             : %luB\n",MTU_SIZE(user_param->curr_mtu));
+	printf(" Mtu             : %luB\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
 
 	if (user_param->gid_index != DEF_GID_INDEX)

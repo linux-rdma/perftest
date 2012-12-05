@@ -76,17 +76,6 @@
 #define IP_ETHER_TYPE (0x800)
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
-#define SEC_TO_WAIT_FOR_PACKET (100)
-
-cycles_t	*tposted;
-cycles_t	*tcompleted;
-volatile cycles_t		start_traffic = 0;
-volatile cycles_t		end_traffic = 0;
-volatile cycles_t		start_sample = 0;
-volatile cycles_t		end_sample = 0;
-struct perftest_parameters user_param;
-//uint8_t 			raweth_mac[6] = { 0, 2, 201, 1, 1, 1}; //to this mac we send the RawEth trafic the first 0 stands for unicast this is the default 								       // for multicast use { 1, 2, 201, 1, 1, 1}
-//uint64_t rcnt = 0, scnt = 0, ccnt = 0, global_cnt = 0;
 
 /******************************************************************************
  *
@@ -94,8 +83,8 @@ struct perftest_parameters user_param;
 
 void print_spec(struct ibv_flow_spec* spec)
 {
-	char str_ip_s[INET_ADDRSTRLEN];
-	char str_ip_d[INET_ADDRSTRLEN];
+	char str_ip_s[INET_ADDRSTRLEN] = {0};
+	char str_ip_d[INET_ADDRSTRLEN] = {0};
 	if(spec == NULL)
 	{
 		printf("error : spec is NULL\n");
@@ -148,7 +137,7 @@ void print_ethernet_header(ETH_header* p_ethernet_header)
 			p_ethernet_header->src_mac[5]);
 	printf("|");
 	char* eth_type = (ntohs(p_ethernet_header->eth_type) ==  IP_ETHER_TYPE ? "IP" : "DEFAULT");
-	printf("%s(%-18X)|\n",eth_type,p_ethernet_header->eth_type);
+	printf("%-22s|\n",eth_type);
 	printf("|------------------------------------------------------------|\n\n");
 
 }
@@ -204,7 +193,7 @@ void print_udp_header(UDP_header* udp_header)
  *
  ******************************************************************************/
 
-void print_pkt(void* pkt)
+void print_pkt(void* pkt,struct perftest_parameters *user_param)
 {
 
 	if(NULL == pkt)
@@ -213,12 +202,12 @@ void print_pkt(void* pkt)
 		return;
 	}
 	print_ethernet_header((ETH_header*)pkt);
-	if(user_param.is_client_ip && user_param.is_server_ip)
+	if(user_param->is_client_ip && user_param->is_server_ip)
 	{
 		pkt = (void*)pkt + sizeof(ETH_header);
 		print_ip_header((IP_V4_header*)pkt);
 	}
-	if(user_param.is_client_port && user_param.is_server_port)
+	if(user_param->is_client_port && user_param->is_server_port)
 	{
 		pkt = pkt + sizeof(IP_V4_header);
 		print_udp_header((UDP_header*)pkt);
@@ -231,6 +220,7 @@ void print_pkt(void* pkt)
 void bulid_ptk_on_buffer(ETH_header* eth_header,
 						 struct raw_ethernet_info *my_dest_info,
 						 struct raw_ethernet_info *rem_dest_info,
+						 struct perftest_parameters *user_param,
 						 uint16_t eth_type,
 						 uint16_t ip_next_protocol,
 						 int print_flag,
@@ -238,12 +228,12 @@ void bulid_ptk_on_buffer(ETH_header* eth_header,
 {
 	void* header_buff = NULL;
 	gen_eth_header(eth_header,my_dest_info->mac,rem_dest_info->mac,eth_type);
-	if(user_param.is_client_ip && user_param.is_server_ip)
+	if(user_param->is_client_ip && user_param->is_server_ip)
 	{
 		header_buff = (void*)eth_header + sizeof(ETH_header);
 		gen_ip_header(header_buff,&my_dest_info->ip,&rem_dest_info->ip,ip_next_protocol,sizePkt);
 	}
-	if(user_param.is_client_port && user_param.is_server_port)
+	if(user_param->is_client_port && user_param->is_server_port)
 	{
 		header_buff = header_buff + sizeof(IP_V4_header);
 		gen_udp_header(header_buff,&my_dest_info->port,&rem_dest_info->port,my_dest_info->ip,rem_dest_info->ip,sizePkt);
@@ -251,59 +241,39 @@ void bulid_ptk_on_buffer(ETH_header* eth_header,
 
 	if(print_flag == PRINT_ON)
 	{
-		print_pkt((void*)eth_header);
+		print_pkt((void*)eth_header,user_param);
 	}
 }
 /******************************************************************************
  *create_raw_eth_pkt - build raw Ethernet packet by user arguments
  *
  ******************************************************************************/
-void create_raw_eth_pkt( struct pingpong_context *ctx ,  struct raw_ethernet_info	 *my_dest_info ,struct raw_ethernet_info	 *rem_dest_info) {
+void create_raw_eth_pkt( struct perftest_parameters *user_param,
+						 struct pingpong_context 	*ctx ,
+						 struct raw_ethernet_info	*my_dest_info,
+						 struct raw_ethernet_info	*rem_dest_info) {
 	int offset = 0;
 	ETH_header* eth_header;
-    uint16_t eth_type = (user_param.is_client_ip && user_param.is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITTION));
-    uint16_t ip_next_protocol = (user_param.is_client_port && user_param.is_server_port ? UDP_PROTOCOL : 0);
+    uint16_t eth_type = (user_param->is_client_ip && user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITTION));
+    uint16_t ip_next_protocol = (user_param->is_client_port && user_param->is_server_port ? UDP_PROTOCOL : 0);
     DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
     eth_header = (void*)ctx->buf;
 
     //build single packet on ctx buffer
-	bulid_ptk_on_buffer(eth_header,my_dest_info,rem_dest_info,eth_type,ip_next_protocol,PRINT_ON,ctx->size-RAWETH_ADDITTION);
+	bulid_ptk_on_buffer(eth_header,my_dest_info,rem_dest_info,user_param,eth_type,ip_next_protocol,PRINT_ON,ctx->size-RAWETH_ADDITTION);
 
 	//fill ctx buffer with same packets
 	if (ctx->size <= (CYCLE_BUFFER / 2)) {
 		while (offset < CYCLE_BUFFER-INC(ctx->size)) {
 			offset += INC(ctx->size);
 			eth_header = (void*)ctx->buf+offset;
-			bulid_ptk_on_buffer(eth_header,my_dest_info,rem_dest_info,eth_type,ip_next_protocol,PRINT_OFF,ctx->size-RAWETH_ADDITTION);
+			bulid_ptk_on_buffer(eth_header,my_dest_info,rem_dest_info,user_param,eth_type,ip_next_protocol,PRINT_OFF,ctx->size-RAWETH_ADDITTION);
 		}
 	}
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 }
-/******************************************************************************
- *
- ******************************************************************************/
-void catch_alarm_eth(int sig) {
-	switch (user_param.state) {
-		case START_STATE:
-			user_param.state = SAMPLE_STATE;
-			user_param.tposted[0] = get_cycles();
-			start_sample = user_param.tposted[0];
-			alarm(user_param.duration - 2*(user_param.margin));
-			break;
-		case SAMPLE_STATE:
-			user_param.state = STOP_SAMPLE_STATE;
-			user_param.tcompleted[0] = get_cycles();
-			end_sample = user_param.tcompleted[0];
-			alarm(user_param.margin);
-			break;
-		case STOP_SAMPLE_STATE:
-			user_param.state = END_STATE;
-			break;
-		default:
-			fprintf(stderr,"unknown state\n");
-	}
-}
+
 /******************************************************************************
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
@@ -324,7 +294,6 @@ static int send_set_up_connection(struct ibv_flow_spec* pspec,
 		}
 	}
 	// We do not fail test upon lid above RoCE.
-
 	if (user_parm->gid_index < 0)
 	{
 		if (!my_dest->lid) {
@@ -342,7 +311,7 @@ static int send_set_up_connection(struct ibv_flow_spec* pspec,
 		pspec->l2_id.eth.vlan_present = 0;
 		pspec->type = IBV_FLOW_ETH;
 		pspec->l4_protocol = IBV_FLOW_L4_NONE;
-		pspec->l2_id.eth.port = user_param.ib_port;
+		pspec->l2_id.eth.port = user_parm->ib_port;
 
 		if(user_parm->is_server_ip && user_parm->is_client_ip)
 		{
@@ -432,197 +401,6 @@ static int send_set_up_connection(struct ibv_flow_spec* pspec,
 /******************************************************************************
  *
  ******************************************************************************/
-int run_iter_bi_eth(struct pingpong_context *ctx,
-				struct perftest_parameters *user_param)  {
-
-	uint64_t				totscnt    = 0;
-	uint64_t				totccnt    = 0;
-	uint64_t				totrcnt    = 0;
-	int 					i,index      = 0;
-	int 					ne = 0;
-	int						*rcnt_for_qp = NULL;
-	int 					tot_iters = 0;
-	int 					iters = 0;
-	struct ibv_wc 			*wc          = NULL;
-	struct ibv_wc 			*wc_tx		 = NULL;
-	struct ibv_recv_wr      *bad_wr_recv = NULL;
-	struct ibv_send_wr 		*bad_wr      = NULL;
-	bool  					firstRx = true;
-
-	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
-	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
-
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
-
-	tot_iters = user_param->iters*user_param->num_of_qps;
-	iters=user_param->iters;
-
-	if (user_param->noPeak == ON)
-		user_param->tposted[0] = get_cycles();
-
-
-	//if (ibv_req_notify_cq(ctx->recv_cq, 0)) {
-	//	fprintf(stderr, " Couldn't request CQ notification\n");
-	//	return FAILURE;
-	//}
-
-	if((user_param->test_type == DURATION )&& (user_param->connection_type != RawEth || (user_param->machine == CLIENT && firstRx)))
-	{
-			firstRx = false;
-			//duration_param=user_param;
-			user_param->iters=0;
-			user_param->state = START_STATE;
-			signal(SIGALRM, catch_alarm_eth);
-			alarm(user_param->margin);
-	}
-	while ( totccnt < tot_iters || totrcnt < tot_iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
-		for (index=0; index < user_param->num_of_qps; index++) {
-
-			while (((ctx->scnt[index] < iters) || ((firstRx == false) && (user_param->test_type == DURATION)))&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
-
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
-					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
-
-				if (user_param->noPeak == OFF)
-					user_param->tposted[totscnt] = get_cycles();
-
-				if (user_param->test_type == DURATION && user_param->state == END_STATE)
-					break;
-
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
-					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
-					return 1;
-				}
-
-				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2))
-					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
-
-				//print_pkt((ETH_header*)ctx->wr[index].sg_list->addr);
-
-				ctx->scnt[index] += user_param->post_list;
-				totscnt += user_param->post_list;
-
-				//if (user_param->test_type == DURATION && user_param->state == SAMPLE_STATE)
-				//	user_param->iters ++ ;//user_param->iters += user_param->cq_mod;
-
-				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1)))
-					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
-			}
-		}
-
-		if (user_param->use_event) {
-
-			if (ctx_notify_events(ctx->channel)) {
-				fprintf(stderr,"Failed to notify events to CQ");
-				return 1;
-			}
-		}
-
-		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			//printf("Rx_def = %d",user_param->rx_depth);
-			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
-			//printf("ne recv: %d\n",ne);
-			if (ne > 0) {
-				if(user_param->connection_type == RawEth)
-				{
-					if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
-						firstRx = false;
-						//duration_param=user_param;
-						user_param->iters=0;
-						user_param->state = START_STATE;
-						signal(SIGALRM, catch_alarm_eth);
-						alarm(user_param->margin);
-					}
-				}
-
-				//if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-				//	user_param->iters += user_param->cq_mod;
-
-				for (i = 0; i < ne; i++) {
-					if (user_param->state == END_STATE) break;
-					if (wc[i].status != IBV_WC_SUCCESS)
-						NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
-
-					rcnt_for_qp[wc[i].wr_id]++;
-					totrcnt++;
-
-					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-										user_param->iters++;
-
-					if (user_param->test_type == DURATION ||(rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= iters)) {
-						//ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)
-
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
-							return 15;
-						}
-
-						if ((SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine)) <= (CYCLE_BUFFER / 2)){
-
-							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
-											  user_param->size,
-											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth-1,
-											  ctx->my_addr[wc[i].wr_id],
-											  user_param->connection_type);
-							//printf("increase_loc_addr: %d\n",i);
-						}
-					}
-					//printf("wc[i].wr_id = %d\n",wc[i].wr_id);
-					print_pkt((ETH_header*)ctx->rwr[wc[i].wr_id].sg_list->addr);
-				}
-				//printf("wc[i].wr_id = %d\n",wc[i].wr_id);
-			} else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
-			}
-		}
-
-		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
-			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc_tx);
-			//printf("ne send: %d\n",ne);
-			if (ne > 0) {
-				for (i = 0; i < ne; i++) {
-					//printf("ne send: %d\n",ne);
-					if (wc_tx[i].status != IBV_WC_SUCCESS)
-						 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
-
-					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
-
-					if (user_param->noPeak == OFF) {
-
-						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
-							user_param->tcompleted[tot_iters - 1] = get_cycles();
-						else
-							user_param->tcompleted[totccnt-1] = get_cycles();
-					}
-
-					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-						user_param->iters += user_param->cq_mod;
-				}
-
-			} else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
-			}
-		}
-	}
-
-	if (user_param->noPeak == ON)
-		user_param->tcompleted[0] = get_cycles();
-
-	free(rcnt_for_qp);
-	free(wc);
-	free(wc_tx);
-	return 0;
-}
-
-/******************************************************************************
- *
- ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
 	struct ibv_device		    *ib_dev = NULL;
@@ -632,6 +410,7 @@ int __cdecl main(int argc, char *argv[]) {
 	struct perftest_comm		user_comm;
 	struct ibv_flow_spec 		spec;
 	int							ret_parser;
+	struct perftest_parameters user_param;
 
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
@@ -685,6 +464,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
+
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
@@ -708,17 +488,15 @@ int __cdecl main(int argc, char *argv[]) {
 
 	//attaching the qp to the spec
 	if(user_param.machine == SERVER || user_param.duplex){
-		if (ibv_attach_flow(ctx.qp[0], &spec, 0))
-		{
+		if (ibv_attach_flow(ctx.qp[0], &spec, 0)){
 			perror("error");
 			fprintf(stderr, "Couldn't attach QP\n");
 			return FAILURE;
 		}
 	}
 	//build raw Ethernet packets on ctx buffer
-	if(user_param.machine == CLIENT || user_param.duplex)
-	{
-		create_raw_eth_pkt(&ctx, &my_dest_info , &rem_dest_info);
+	if(user_param.machine == CLIENT || user_param.duplex){
+		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 	}
 
 	printf(RESULT_LINE);//change the printing of the test
@@ -743,7 +521,7 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 	}
 	if (user_param.duplex) {
-		if(run_iter_bi_eth(&ctx,&user_param))
+		if(run_iter_bi(&ctx,&user_param))
 				return 17;
 			}else if (user_param.machine == CLIENT) {
 				if(run_iter_bw(&ctx,&user_param)) {

@@ -5,7 +5,7 @@ UTILS = clock_test
 
 all: ${MCAST_TESTS} ${RAW_ETH_TESTS} ${TESTS} ${UTILS}
 
-CFLAGS += -Wall -g -D_GNU_SOURCE -O0
+CFLAGS += -Wall -g -D_GNU_SOURCE -O2
 BASIC_FILES = get_clock.c
 EXTRA_FILES = perftest_resources.c perftest_communication.c perftest_parameters.c
 MCAST_FILES = multicast_resources.c

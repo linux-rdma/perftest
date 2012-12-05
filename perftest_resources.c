@@ -197,6 +197,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 		ALLOCATE(ctx->my_addr,uint64_t,user_param->num_of_qps);
 		ALLOCATE(ctx->rem_addr,uint64_t,user_param->num_of_qps);
+		
 
 		ALLOCATE(ctx->scnt,int,user_param->num_of_qps);
 		ALLOCATE(ctx->ccnt,int,user_param->num_of_qps);
@@ -225,6 +226,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 		ALLOCATE(ctx->recv_sge_list,struct ibv_sge,user_param->num_of_qps);
 		ALLOCATE(ctx->rwr,struct ibv_recv_wr,user_param->num_of_qps);
+		ALLOCATE(ctx->rx_buffer_addr,uint64_t,user_param->num_of_qps);
 	}
 
 	ctx->size = user_param->size;
@@ -296,6 +298,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	free(ctx->qp);
 
 	if (user_parm->tst == BW && (user_parm->machine == CLIENT || user_parm->duplex)) {
+
 		free(user_parm->tposted);
 		free(user_parm->tcompleted);
 		free(ctx->my_addr);
@@ -303,13 +306,22 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->scnt);
 		free(ctx->ccnt);
 	}
+	else if (user_parm->tst == BW && user_parm->verb == SEND && user_parm->machine == SERVER) {
+
+		free(user_parm->tposted);
+		free(user_parm->tcompleted);
+		free(ctx->my_addr);
+	}
 
 	if (user_parm->machine == CLIENT || user_parm->tst == LAT || user_parm->duplex) {
+
 		free(ctx->sge_list);
 		free(ctx->wr);
 	}
 
 	if (user_parm->verb == SEND && (user_parm->tst == LAT || user_parm->machine == SERVER || user_parm->duplex)) {
+
+		free(ctx->rx_buffer_addr);
 		free(ctx->recv_sge_list);
 		free(ctx->rwr);
 	}
@@ -838,7 +850,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->rwr[i].num_sge	= MAX_RECV_SGE;
 
 		if (user_param->tst == BW)
-			ctx->my_addr[i] = ctx->recv_sge_list[i].addr;
+			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 		
 		for (j = 0; j < user_param->rx_depth; ++j) {
 
@@ -852,7 +864,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				increase_loc_addr(&ctx->recv_sge_list[i],
 								  user_param->size,
 								  j,
-								  ctx->my_addr[i],
+								  ctx->rx_buffer_addr[i],
 								  user_param->connection_type);
 			}
 		}
@@ -1112,7 +1124,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
 											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
-											  ctx->my_addr[wc[i].wr_id],user_param->connection_type);
+											  ctx->rx_buffer_addr[wc[i].wr_id],
+											  user_param->connection_type);
 						}
 					}
 				}
@@ -1133,7 +1146,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	free(rcnt_for_qp);
 	return 0;
 }
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1157,6 +1169,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
 	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
+
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
 	tot_iters = user_param->iters*user_param->num_of_qps;
@@ -1164,7 +1177,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
-	if((user_param->test_type == DURATION )&& ((user_param->connection_type != RawEth) || (user_param->machine == CLIENT && firstRx)))
+
+	if((user_param->test_type == DURATION )&& (user_param->connection_type != RawEth || (user_param->machine == CLIENT && firstRx)))
 	{
 			firstRx = false;
 			duration_param=user_param;
@@ -1173,19 +1187,20 @@ int run_iter_bi(struct pingpong_context *ctx,
 			signal(SIGALRM, catch_alarm);
 			alarm(user_param->margin);
 	}
-	while (( totccnt < tot_iters || totrcnt < tot_iters)|| (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+	while ( (user_param->test_type == DURATION && user_param->state != END_STATE) || totccnt < tot_iters || totrcnt < tot_iters) {
 
 		for (index=0; index < user_param->num_of_qps; index++) {
 
-			while ((ctx->scnt[index] < iters) || ((user_param->test_type == DURATION && user_param->state != END_STATE && firstRx == false)&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth))) {
-
-				if (user_param->state == END_STATE) break;
+			while (((ctx->scnt[index] < iters) || ((firstRx == false) && (user_param->test_type == DURATION)))&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
 				if (user_param->noPeak == OFF)
 					user_param->tposted[totscnt] = get_cycles();
+
+				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
+					break;
 
 				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
@@ -1211,12 +1226,9 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		if ((totrcnt < tot_iters)|| (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
+		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
 			if (ne > 0) {
-				//printf("recv ne = %d\n",ne);
-
 				if(user_param->connection_type == RawEth)
 				{
 					if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
@@ -1228,10 +1240,12 @@ int run_iter_bi(struct pingpong_context *ctx,
 						alarm(user_param->margin);
 					}
 				}
-				for (i = 0; i < ne; i++) {
 
-					if (wc[i].status != IBV_WC_SUCCESS)
+				for (i = 0; i < ne; i++) {
+					if (wc[i].status != IBV_WC_SUCCESS) {
+
 						NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
+					}
 
 					rcnt_for_qp[wc[i].wr_id]++;
 					totrcnt++;
@@ -1239,34 +1253,32 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters++;
 
-					if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= iters) {
+					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
 
 						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id , rcnt_for_qp[wc[i].wr_id]);
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 							return 15;
 						}
 
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2) && user_param->connection_type != RawEth)
+						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
-											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth - 1,
-											  ctx->my_addr[wc[i].wr_id],
-											  user_param->connection_type);
+											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth -1,
+											  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
+						}
 					}
 				}
-
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
 			}
 		}
 
-		if ((user_param->test_type == ITERATIONS && (totccnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc_tx);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-
 					if (wc_tx[i].status != IBV_WC_SUCCESS)
 						 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
 
@@ -1281,7 +1293,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 							user_param->tcompleted[totccnt-1] = get_cycles();
 					}
 
-					if (user_param->test_type == DURATION && user_param->state == SAMPLE_STATE)
+					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters += user_param->cq_mod;
 				}
 
