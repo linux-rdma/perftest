@@ -30,6 +30,7 @@ install -D -m 0755 ib_read_bw $RPM_BUILD_ROOT%{_bindir}/ib_read_bw
 install -D -m 0755 ib_atomic_lat $RPM_BUILD_ROOT%{_bindir}/ib_atomic_lat
 install -D -m 0755 ib_atomic_bw $RPM_BUILD_ROOT%{_bindir}/ib_atomic_bw
 install -D -m 0755 ib_clock_test $RPM_BUILD_ROOT%{_bindir}/ib_clock_test
+install -D -m 0755 raw_ethernet_bw $RPM_BUILD_ROOT%{_bindir}/raw_ethernet_bw
 
 %clean
 rm -rf ${RPM_BUILD_ROOT}
@@ -40,6 +41,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %_bindir/*
 
 %changelog
+* Sun Dec 30 2012 - idos@mellanox.com
+- Added raw_ethernet_bw to install script.
 * Sat Oct 21 2012 - idos@mellanox.com
 - Removed write_bw_postlist (feature contained in all BW tests)
 * Sat Oct 20 2012 - idos@mellanox.com
