@@ -157,6 +157,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf(" Number of exchanges (at least 2, default %d)\n",DEF_ITERS);
 
 	if (tst == BW) {
+
 		printf("  -t, --tx-depth=<dep> ");
 		printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
 	}
@@ -205,6 +206,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 		printf("  -l, --post_list=<list size>");
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
+
+		if (verb == READ || verb == WRITE) { 
+			printf(" --run_infinitely ");
+			printf(" Run test forever, print results every 5 seconds\n");
+		}
 	}
 
 	if (verb != WRITE) {
@@ -245,8 +251,6 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("  -U, --report-unsorted ");
 		printf(" (implies -H) print out unsorted results (default sorted)\n");
 	}
-
-
 
 
 	if (tst == BW) 
@@ -294,13 +298,13 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->size       = user_param->tst == BW ? DEF_SIZE_BW : DEF_SIZE_LAT;
 	user_param->tx_depth   = user_param->tst == BW ? DEF_TX_BW : DEF_TX_LAT;
 	user_param->qp_timeout = DEF_QP_TIME;
-	user_param->all		   = OFF;
+	user_param->test_method = RUN_REGULAR;
 	user_param->cpu_freq_f = OFF;
 	user_param->connection_type = (user_param->connection_type == RawEth) ? RawEth : RC;
 	user_param->use_event  = OFF;
 	user_param->num_of_qps = DEF_NUM_QPS;
 	user_param->gid_index  = DEF_GID_INDEX;
-	user_param->gid_index2      = DEF_GID_INDEX;
+	user_param->gid_index2  = DEF_GID_INDEX;
 	user_param->inline_size = DEF_INLINE;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
@@ -405,7 +409,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	if (user_param->verb == READ || user_param->verb == ATOMIC) 
 		user_param->inline_size = 0;
 
-	if (user_param->all == ON) 	
+	if (user_param->test_method == RUN_ALL) 	
 		user_param->size = MAX_SIZE;
 
 	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
@@ -446,10 +450,18 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		    fprintf(stderr,"Duration mode doesn't work with events.\n");
 			exit(1);
 		}
+
 		if (user_param->tst == LAT) {
 			printf(RESULT_LINE);
 			fprintf(stderr, "Duration mode currently doesn't support latency tests.\n");
 			exit(1); 
+		}
+
+		if (user_param->test_method == RUN_ALL) { 
+			printf(RESULT_LINE);
+			fprintf(stderr, "Duration mode currently doesn't support running on all sizes.\n");
+			fprintf(stderr, "Please choose a fixed message size to run with, in duration mode.\n");
+			exit(1);
 		}
 	}
 
@@ -528,6 +540,28 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->verb == SEND && user_param->machine == SERVER && !user_param->duplex)
 		user_param->noPeak = ON;
+
+	// Run infinitely dependencies
+	if (user_param->test_method == RUN_INFINITELY) { 
+		user_param->noPeak = ON;
+
+		if (user_param->use_event) { 
+			printf(RESULT_LINE);
+			fprintf(stderr," run_infinitely does not support events feature yet.\n");
+			exit(1);
+		}
+
+		if (user_param->tst == LAT) { 
+			printf(RESULT_LINE);
+			fprintf(stderr," run_infinitely exists only in BW tests for now.\n");
+			exit(1);
+
+		} else if (user_param->verb != READ && user_param->verb != WRITE) { 
+			printf(RESULT_LINE);
+			fprintf(stderr," run_infinitely support only READ and WRITE BW tests for now.\n");
+			exit(1);
+		}
+	}
 
 	return;
 }
@@ -830,6 +864,7 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	int c;
+	static int run_inf_flag = 0;
 
 	init_perftest_params(user_param);
 	if(user_param->connection_type == RawEth)
@@ -883,6 +918,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "client_port",    .has_arg = 1, .val = 'k' },
 			{ .name = "server",         .has_arg = 0, .val = 'Z' },
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
+			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
             { 0 }
         };
 #else
@@ -931,6 +967,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ "client_port"     ,1, NULL, 'k' },
 			{ "server"          ,0, NULL, 'Z' },
 			{ "client"          ,0, NULL, 'P' },
+            { "dualport"        ,0, &run_inf_flag, 1 },
 			{ 0 }
 		};
 #endif
@@ -1023,7 +1060,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				user_param->ib_port2 = DEF_IB_PORT2;
 				user_param->dualport = ON;
 				break;
-			case 'a': user_param->all = ON; break;
+			case 'a': user_param->test_method = RUN_ALL; break;
 			case 'F': user_param->cpu_freq_f = ON; break;
 			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
 			case 'h': usage(argv[0],user_param->verb,user_param->tst);
@@ -1122,6 +1159,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				break;
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
+			case 0: break; // required for long options to work.
 			default: 
 				fprintf(stderr," Invalid Command or flag.\n");
 				fprintf(stderr," Please check command line and run again.\n\n");
@@ -1130,7 +1168,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					usage_raw_ethernet();
 				}
 				return 1;
+
 		 }
+	}
+
+	if (run_inf_flag) { 
+		printf("Ido debug messages\n");
+		user_param->test_method = RUN_INFINITELY;
 	}
 
 	if(user_param->connection_type != RawEth) {
@@ -1204,7 +1248,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 
 	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
 
-		if (user_param->all == OFF) {
+		if (user_param->test_method == RUN_ALL) {
 			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
 			fprintf(stderr," Changing to this MTU\n");
 		}

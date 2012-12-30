@@ -55,7 +55,7 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.0
+#define VERSION 4.1
 cycles_t  *tstamp;
 #ifdef _WIN32
 #pragma warning( disable : 4242)
@@ -615,7 +615,7 @@ int __cdecl main(int argc, char *argv[]) {
 	ALLOCATE(tstamp,cycles_t,user_param.iters);
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
     
-	if (user_param.all == ON) {
+	if (user_param.test_method == RUN_ALL) {
 
 		if (user_param.connection_type == UD)  
 			size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;

@@ -46,7 +46,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.0
+#define VERSION 4.1
 
 #ifdef _WIN32
 #pragma warning( disable : 4242)
@@ -207,7 +207,7 @@ int __cdecl main(int argc, char *argv[]) {
 		return destroy_ctx(&ctx,&user_param);
 	}
 
-	if (user_param.all == ON) {
+	if (user_param.test_method == RUN_ALL) {
 
 		for (i = 1; i < 24 ; ++i) {
 
@@ -222,7 +222,7 @@ int __cdecl main(int argc, char *argv[]) {
 			print_report_bw(&user_param);
 		}
 
-	} else {
+	} else if (user_param.test_method == RUN_REGULAR) { 
 
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
@@ -232,6 +232,15 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 
 		print_report_bw(&user_param);	
+
+	} else if (user_param.test_method == RUN_INFINITELY) { 
+
+		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
+		if(run_iter_bw_infinitely(&ctx,&user_param)) { 
+			fprintf(stderr," Error occured while running! aborting ...\n");
+			return 1;
+		}
 	}
 
 	// Closing connection.

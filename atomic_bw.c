@@ -45,7 +45,7 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.0
+#define VERSION 4.1
 
 #ifdef _WIN32
 #pragma warning( disable : 4242)

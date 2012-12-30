@@ -1146,6 +1146,66 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	free(rcnt_for_qp);
 	return 0;
 }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+    int i = 0;
+    int index = 0,ne;
+    struct ibv_send_wr *bad_wr = NULL;
+    struct ibv_wc *wc = NULL;
+
+	ALLOCATE(wc ,struct ibv_wc ,user_param->tx_depth*user_param->num_of_qps);
+	
+	duration_param=user_param;
+	signal(SIGALRM,catch_alarm_infintely);
+	alarm(5);
+	user_param->iters = 0;
+	
+	for (i=0; i < user_param->num_of_qps; i++)
+		ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+	
+	user_param->tposted[0] = get_cycles();
+
+	// main loop for posting 
+	while (1) {
+
+		// main loop to run over all the qps and post each time n messages 
+		for (index =0 ; index < user_param->num_of_qps ; index++) {
+
+			while (ctx->scnt[index] < user_param->tx_depth) {
+
+				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
+					return 1;
+				}     
+				
+				ctx->scnt[index] += user_param->post_list;
+			}
+		}
+
+	
+		ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc);
+
+		if (ne > 0) {
+
+			for (i = 0; i < ne; i++) {	
+				if (wc[i].status != IBV_WC_SUCCESS) 
+					NOTIFY_COMP_ERROR_SEND(wc[i],ctx->scnt[(int)wc[i].wr_id],ctx->scnt[(int)wc[i].wr_id]);
+
+				ctx->scnt[(int)wc[i].wr_id]--;
+				user_param->iters++;
+			}
+
+		} else if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n",ne);
+			return 1;
+		}
+	}
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1346,6 +1406,18 @@ void catch_alarm(int sig) {
 		default:
 			fprintf(stderr,"unknown state\n");
 	} 
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+void catch_alarm_infintely(int sig) 
+{
+	duration_param->tcompleted[0] = get_cycles();
+	print_report_bw(duration_param);
+	duration_param->iters = 0;
+	alarm(5);
+	duration_param->tposted[0] = get_cycles();
 }
 
 /****************************************************************************** 

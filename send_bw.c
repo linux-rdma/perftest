@@ -47,7 +47,7 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.0
+#define VERSION 4.1
 
 #ifdef _WIN32
 #pragma warning( disable : 4242)
@@ -301,7 +301,7 @@ int __cdecl main(int argc, char *argv[]) {
 	printf(RESULT_FMT);
 
 
-	if (user_param.all == ON) {
+	if (user_param.test_method == RUN_ALL) {
 
 		if (user_param.connection_type == UD) 
 		   size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;

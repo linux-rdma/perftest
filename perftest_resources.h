@@ -402,6 +402,20 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
  */
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+/* run_iter_bw_infinitely
+ *
+ * Description :
+ *
+ *	Infinite BW method, that prints BW every 5 seconds and never stops.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
 /* run_iter_bw_server.
  *
  * Description :
@@ -567,9 +581,29 @@ static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint
 		sg->addr = prim_addr;
 
 }
+
+/* catch_alarm.
+ *
+ * Description :
+ * 	Signal catcher for duration feature.
+ *  run_iter_bw in start will set it to triger at MARGIN (parameter), it will then start counting packets
+ *  and triger it back to SAMPLE TIME, in that time the test will count packets and completion and 
+ *  will calculate BW accordingley.
+ *
+ */
+void catch_alarm(int sig);
+
+/* catch_alarm.
+ *
+ * Description :
+ * 	Signal catcher for run_infinitely feature. 
+ *  Will be triggered every 5 sec and measure BW in this time frame.
+ *
+ */
+void catch_alarm_infintely(int sig) ;
+
 /****************************************************************************** 
  *
  ******************************************************************************/
-void catch_alarm(int sig);
 
 #endif /* PERFTEST_RESOURCES_H */

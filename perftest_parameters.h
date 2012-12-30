@@ -189,6 +189,9 @@ typedef enum { ITERATIONS , DURATION } TestMethod;
 //for duration calculation
 typedef enum { START_STATE, SAMPLE_STATE, STOP_SAMPLE_STATE, END_STATE} DurationStates;
 
+// Test method
+enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY}; 
+
 struct perftest_parameters {
 
 	int				port;
@@ -217,7 +220,6 @@ struct perftest_parameters {
 	int				client_port;
 	bool			is_server_port;
 	bool			is_client_port;
-	int				all;
 	int				cpu_freq_f;
 	int				connection_type;
 	int				num_of_qps;
@@ -257,6 +259,8 @@ struct perftest_parameters {
 	int 			use_rdma_cm;
 	int				work_rdma_cm;
 	char			*user_mgid;
+	// New test params format pilot. will be used in all flags soon,.
+	enum ctx_test_method test_method;
 };
 
 struct report_options {

@@ -54,7 +54,7 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.0
+#define VERSION 4.1
 cycles_t *tstamp;
 
 #ifdef _WIN32
@@ -357,7 +357,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 
-	if (user_param.all == ON) {
+	if (user_param.test_method == RUN_ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
 			if(run_iter(&ctx,&user_param,&rem_dest))
