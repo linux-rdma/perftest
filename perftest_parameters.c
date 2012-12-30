@@ -1173,7 +1173,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	}
 
 	if (run_inf_flag) { 
-		printf("Ido debug messages\n");
 		user_param->test_method = RUN_INFINITELY;
 	}
 
