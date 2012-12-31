@@ -216,10 +216,22 @@ int __cdecl main(int argc, char *argv[]) {
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-	if(run_iter_bw(&ctx,&user_param))
-		return 17;
+	if (user_param.test_method == RUN_REGULAR) {
+
+		if(run_iter_bw(&ctx,&user_param)) { 
+			fprintf(stderr," Error occured in run_iter function\n");
+			return 1;
+		}
 		
-	print_report_bw(&user_param);
+		print_report_bw(&user_param);
+
+	} else if (user_param.test_method == RUN_INFINITELY) {
+
+		if(run_iter_bw_infinitely(&ctx,&user_param)) { 
+			fprintf(stderr," Error occured while running infinitely! aborting ...\n");
+			return 1;
+		}
+	}
 
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");

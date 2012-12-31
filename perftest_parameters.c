@@ -206,11 +206,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 		printf("  -l, --post_list=<list size>");
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
-
-		if (verb == READ || verb == WRITE) { 
-			printf(" --run_infinitely ");
-			printf(" Run test forever, print results every 5 seconds\n");
-		}
+ 
+		printf("  --run_infinitely ");
+		printf(" Run test forever, print results every 5 seconds\n");
 	}
 
 	if (verb != WRITE) {
@@ -544,7 +542,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	// Run infinitely dependencies
 	if (user_param->test_method == RUN_INFINITELY) { 
 		user_param->noPeak = ON;
-
 		if (user_param->use_event) { 
 			printf(RESULT_LINE);
 			fprintf(stderr," run_infinitely does not support events feature yet.\n");
@@ -556,9 +553,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			fprintf(stderr," run_infinitely exists only in BW tests for now.\n");
 			exit(1);
 
-		} else if (user_param->verb != READ && user_param->verb != WRITE) { 
+		} 
+
+		if (user_param->duplex && user_param->verb == SEND) { 
 			printf(RESULT_LINE);
-			fprintf(stderr," run_infinitely support only READ and WRITE BW tests for now.\n");
+			fprintf(stderr," run_infinitely not supported in SEND Bidirectional BW test\n");
 			exit(1);
 		}
 	}

@@ -416,6 +416,20 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  */
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+/* run_iter_bw_infinitely_server
+ *
+ * Description :
+ *
+ *	Infinite on SEND server BW method, will not print anything and will post receive wqes for each incoming packet.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ *
+ */
+int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
 /* run_iter_bw_server.
  *
  * Description :

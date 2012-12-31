@@ -1152,7 +1152,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  ******************************************************************************/
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-    int i = 0;
+    int i,j = 0;
     int index = 0,ne;
     struct ibv_send_wr *bad_wr = NULL;
     struct ibv_wc *wc = NULL;
@@ -1165,7 +1165,8 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	user_param->iters = 0;
 	
 	for (i=0; i < user_param->num_of_qps; i++)
-		ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+		for (j=0 ; j < user_param->post_list; j++)
+			ctx->wr[i*user_param->post_list +j].send_flags |= IBV_SEND_SIGNALED;
 	
 	user_param->tposted[0] = get_cycles();
 
@@ -1201,6 +1202,43 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n",ne);
+			return 1;
+		}
+	}
+}
+
+/****************************************************************************** 
+ *
+ ******************************************************************************/
+int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
+
+	int 				i,ne;
+	struct ibv_wc 		*wc          = NULL;
+	struct ibv_recv_wr  *bad_wr_recv = NULL;
+
+	ALLOCATE(wc ,struct ibv_wc ,user_param->rx_depth*user_param->num_of_qps);
+
+	while (1) {
+
+		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
+
+		if (ne > 0) {
+
+			for (i = 0; i < ne; i++) {
+					
+				if (wc[i].status != IBV_WC_SUCCESS) {
+					fprintf(stderr,"A completion with Error in run_infinitely_bw_server function");
+					return 1;
+				}
+
+				if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+					fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
+					return 1;
+				}
+			}
+
+		} else if (ne < 0) {
+			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
 			return 1;
 		}
 	}
