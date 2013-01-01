@@ -1055,7 +1055,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int                 *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
-	bool firstRx = true;
+	int firstRx = 1;
 
 	ALLOCATE(wc ,struct ibv_wc ,user_param->rx_depth*user_param->num_of_qps);
 
@@ -1091,7 +1091,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			if (ne > 0) {
 				if(user_param->connection_type == RawEth){
 					if (firstRx && user_param->test_type == DURATION) {
-						firstRx = false;
+						firstRx = 0;
 						duration_param=user_param;
 						user_param->iters=0;
 						duration_param->state = START_STATE;
@@ -1262,7 +1262,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	struct ibv_wc 			*wc_tx		 = NULL;
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
 	struct ibv_send_wr 		*bad_wr      = NULL;
-	bool  					firstRx = true;
+	int  					firstRx = 1;
 
 	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
 	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
@@ -1278,7 +1278,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if((user_param->test_type == DURATION )&& (user_param->connection_type != RawEth || (user_param->machine == CLIENT && firstRx)))
 	{
-			firstRx = false;
+			firstRx = OFF;
 			duration_param=user_param;
 			user_param->iters=0;
 			duration_param->state = START_STATE;
@@ -1289,7 +1289,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		for (index=0; index < user_param->num_of_qps; index++) {
 
-			while (((ctx->scnt[index] < iters) || ((firstRx == false) && (user_param->test_type == DURATION)))&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
+			while (((ctx->scnt[index] < iters) || ((firstRx == OFF) && (user_param->test_type == DURATION)))&& ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
@@ -1330,7 +1330,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if(user_param->connection_type == RawEth)
 				{
 					if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
-						firstRx = false;
+						firstRx = 0;
 						duration_param=user_param;
 						user_param->iters=0;
 						duration_param->state = START_STATE;

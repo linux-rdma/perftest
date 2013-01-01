@@ -164,7 +164,6 @@
 
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
-typedef enum { false, true } bool;
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
@@ -210,16 +209,16 @@ struct perftest_parameters {
 	int				gid_index2;
 	uint8_t			source_mac[6];
 	uint8_t			dest_mac[6];
-	bool			is_source_mac;
-	bool			is_dest_mac;
+	int				is_source_mac;
+	int				is_dest_mac;
 	uint32_t		server_ip;
 	uint32_t		client_ip;
-	bool			is_server_ip;
-	bool			is_client_ip;
+	int				is_server_ip;
+	int				is_client_ip;
 	int				server_port;
 	int				client_port;
-	bool			is_server_port;
-	bool			is_client_port;
+	int				is_server_port;
+	int				is_client_port;
 	int				cpu_freq_f;
 	int				connection_type;
 	int				num_of_qps;

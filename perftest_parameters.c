@@ -104,9 +104,9 @@ int parse_ip_from_str(char *ip, u_int32_t *addr)
 /******************************************************************************
   check_valid_udp_port.
  ******************************************************************************/
-bool check_if_valid_udp_port(int udp_port)
+int check_if_valid_udp_port(int udp_port)
 {
-	return true;
+	return ON;
 }
 
 /******************************************************************************
@@ -318,12 +318,6 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->margin		= DEF_MARGIN;
 	user_param->test_type	= ITERATIONS;
 	user_param->state		= START_STATE;
-	user_param->is_source_mac = false;
-	user_param->is_dest_mac = false;
-	user_param->is_server_ip = false;
-	user_param->is_client_ip = false;
-	user_param->is_server_port  = false;
-	user_param->is_client_port  = false;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -517,19 +511,19 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		if(user_param->machine == CLIENT && user_param->is_dest_mac == false) {
+		if(user_param->machine == CLIENT && user_param->is_dest_mac == OFF) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
 			exit(1);
 		}
 
-		if((user_param->is_server_ip == true && user_param->is_client_ip == false) || (user_param->is_server_ip == false && user_param->is_client_ip == true)) {
+		if((user_param->is_server_ip == ON && user_param->is_client_ip == OFF) || (user_param->is_server_ip == OFF && user_param->is_client_ip == ON)) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
 			exit(1);
 		}
 
-		if((user_param->is_server_port == true && user_param->is_client_port == false) || (user_param->is_server_port == false && user_param->is_client_port == true)) { 
+		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) { 
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
 			exit(1);
@@ -806,17 +800,17 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 			break;
 	switch (c) {
 	case 'B':
-		user_param->is_source_mac = true;
+		user_param->is_source_mac = ON;
 		if(parse_mac_from_str(optarg, user_param->source_mac))
 			return FAILURE;
 		break;
 	case 'E':
-		user_param->is_dest_mac = true;
+		user_param->is_dest_mac = ON;
 		if(parse_mac_from_str(optarg, user_param->dest_mac))
 			return FAILURE;
 		break;
 	case 'J':
-		user_param->is_server_ip = true;
+		user_param->is_server_ip = ON;
 		if(1 != parse_ip_from_str(optarg, &(user_param->server_ip)))
 		{
 			fprintf(stderr," Invalid server IP address\n");
@@ -824,7 +818,7 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 		}
 		break;
 	case 'j':
-		user_param->is_client_ip = true;
+		user_param->is_client_ip = ON;
 		if(1 != parse_ip_from_str(optarg, &(user_param->client_ip)))
 		{
 			fprintf(stderr," Invalid client IP address\n");
@@ -832,18 +826,18 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 		}
 		break;
 	case 'K':
-		user_param->is_server_port = true;
+		user_param->is_server_port = ON;
 		user_param->server_port = strtol(optarg, NULL, 0);
-		if(false == check_if_valid_udp_port(user_param->server_port))
+		if(OFF == check_if_valid_udp_port(user_param->server_port))
 		{
 			fprintf(stderr," Invalid server UDP port\n");
 			return FAILURE;
 		}
 		break;
 	case 'k':
-		user_param->is_client_port = true;
+		user_param->is_client_port = ON;
 		user_param->client_port = strtol(optarg, NULL, 0);
-		if(false == check_if_valid_udp_port(user_param->client_port))
+		if(OFF == check_if_valid_udp_port(user_param->client_port))
 		{
 			fprintf(stderr," Invalid client UDP port\n");
 			return FAILURE;
@@ -1113,17 +1107,17 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				user_param->r_flag->unsorted = ON; 
 				break;
 			case 'B':
-				user_param->is_source_mac = true;
+				user_param->is_source_mac = ON;
 				if(parse_mac_from_str(optarg, user_param->source_mac))
 					return FAILURE;
 				break;
 			case 'E':
-				user_param->is_dest_mac = true;
+				user_param->is_dest_mac = ON;
 				if(parse_mac_from_str(optarg, user_param->dest_mac))
 					return FAILURE;
 				break;
 			case 'J':
-				user_param->is_server_ip = true;
+				user_param->is_server_ip = ON;
 				if(1 != parse_ip_from_str(optarg, &(user_param->server_ip)))
 				{
 					fprintf(stderr," Invalid server IP address\n");
@@ -1131,7 +1125,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				}
 				break;
 			case 'j':
-				user_param->is_client_ip = true;
+				user_param->is_client_ip = ON;
 				if(1 != parse_ip_from_str(optarg, &(user_param->client_ip)))
 				{
 					fprintf(stderr," Invalid client IP address\n");
@@ -1139,18 +1133,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				}
 				break;
 			case 'K':
-				user_param->is_server_port = true;
+				user_param->is_server_port = ON;
 				user_param->server_port = strtol(optarg, NULL, 0);
-				if(false == check_if_valid_udp_port(user_param->server_port))
+				if(OFF == check_if_valid_udp_port(user_param->server_port))
 				{
 					fprintf(stderr," Invalid server UDP port\n");
 					return FAILURE;
 				}
 				break;
 			case 'k':
-				user_param->is_client_port = true;
+				user_param->is_client_port = ON;
 				user_param->client_port = strtol(optarg, NULL, 0);
-				if(false == check_if_valid_udp_port(user_param->client_port))
+				if(OFF == check_if_valid_udp_port(user_param->client_port))
 				{
 					fprintf(stderr," Invalid client UDP port\n");
 					return FAILURE;
