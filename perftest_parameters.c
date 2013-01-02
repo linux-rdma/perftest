@@ -737,7 +737,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 
 	if (user_param->inline_size == DEF_INLINE) { 
 
-		if (user_param->tst ==LAT || current_dev == CONNECTIB) { 
+		if (user_param->tst ==LAT) { 
 
 			switch(user_param->verb) {
 
