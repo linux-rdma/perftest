@@ -1,7 +1,7 @@
 	     Open Fabrics Enterprise Distribution (OFED)
                 Performance Tests README for OFED 2.0
 		  
-			  May 2012
+			  January 2013
 
 
 
@@ -27,12 +27,11 @@ The collection conatains a set of BW and latency benchmark such as :
 	* Write  - ib_write_bw and ib_wriet_lat.
 	* Send   - ib_send_bw and ib_send_lat.
 	* Atomic - ib_atomic_bw and ib_atomic_lat
-	* In additional :  ib_write_bw_postlist and ib_clock_test.
+	* Raw Etherent (when working with MOFED2) - raw_ethernet_bw. 
 
 Please post results/observations to the openib-general mailing list.
 See "Contact Us" at http://openib.org/mailman/listinfo/openib-general and
 http://www.openib.org.
-
 
 ===============================================================================
 2. Notes on Testing Methodology
@@ -41,15 +40,16 @@ http://www.openib.org.
   switch.  Some CPU architectures (e.g., Intel's 80486 or older PPC) do NOT
   have such capability.
 
-- The benchmark measures round-trip time but reports half of that as one-way
+- The latency benchmarks measures round-trip time but reports half of that as one-way
   latency. This means that it may not be sufficiently accurate for asymmetrical
   configurations.
 
 - On Bw benchmarks , We calculate the BW on send side only, as he calculates
   the Bw after collecting completion from the receive side.
-  In case we use the bidirectional flag , BW is calculated on both sides 
+  In case we use the bidirectional flag , BW is calculated on both sides.
+  in ib_send_bw, server side also calculate the received throughput. 
 
-- Min/Median/Max result is reported.
+- Min/Median/Max result is reported in latency tests. 
   The median (vs average) is less sensitive to extreme scores.
   Typically, the "Max" value is the first value measured.
 
@@ -57,9 +57,15 @@ http://www.openib.org.
   Note that an array of cycles_t (typically unsigned long) is allocated
   once to collect samples and again to store the difference between them.
   Really big sample sizes (e.g., 1 million) might expose other problems
-  with the program.
+  with the program. In this case you can use -N flag (No Peak) to instruct 
+  the test sample only 2 times (begining and end). 
 
-- The "-H" option will dump the histogram for additional statistical analysis.
+- All throughput tests now have duration feature as well (-D <seconds to run>) 
+  to instruct the test to run for <seconds to run>.
+  Another feature added is --run_infinitely, which instruct the test to run 
+  all te time and print throughput every 5 seconds. 
+
+- The "-H" option (latency) will dump the histogram for additional statistical analysis.
   See xgraph, ygraph, r-base (http://www.r-project.org/), pspp, or other 
   statistical math programs.
 
@@ -81,9 +87,10 @@ read_lat.c 	latency test with RDMA read transactions
 read_bw.c 	BW test with RDMA read transactions
 atomic_lat.c	latency test with atomic transactions
 atomic_bw.c 	BW test atomic transactions
+raw_ethernet_send_bw.c BW test with Raw Etherent client and receiver. 
 
-The executable name of each test starts with the general prefix "ib_",
-e.g., ib_write_lat.
+The executable name of each test starts with the general prefix "ib_",e.g., ib_write_lat.
+Except of raw_ethernet_send_bw.c case, which the binary called raw_ethernet_bw.
 
 Running Tests
 -------------
@@ -108,32 +115,26 @@ Client:		./<test name> <options> <server IP address>
 
 Common Options to all tests:
 ----------------------------
-  -p, --port=<port>            	Listen on/connect to port <port> (default: 18515).
-  -R, --rdma_cm  	       	Connect QPs with rdma_cm and run test on those QPs
-  -z, --com_rdma_cm  	       	Communicate with rdma_cm module to exchange data - use regular QPs
-  -m, --mtu=<mtu>              	Mtu size (default: 1024).
+  -h, --help			Display this help message screen. 		
+  -p, --port=<port>            	Listen on/connect to port <port> (default: 18515) when exchaning data.
+  -R, --rdma_cm  	       	Connect QPs with rdma_cm and run test on those QPs.
+  -z, --com_rdma_cm  	       	Communicate with rdma_cm module to exchange data - use regular QPs.
+  -m, --mtu=<mtu>              	QP Mtu size (default: active_mtu from ibv_devinfo).
   -c, --connection=<RC/UC/UD>  	Connection type RC/UC/UD (default RC)
   -d, --ib-dev=<dev>           	Use IB device <dev> (default: first device found).
   -i, --ib-port=<port>         	Use port <port> of IB device (default: 1).
   -s, --size=<size>            	Size of message to exchange (default: 1).
   -a, --all                    	Run sizes from 2 till 2^23.
-  -t, --tx-depth=<dep>         	Size of tx queue (default: 50).
-  -r, --rx-depth=<dep>         	Make rx queue bigger than tx (default 600).
   -n, --iters=<iters>          	Number of exchanges (at least 100, default: 1000).
   -x, --gid-index=<index>       Test uses GID with GID index taken from command
   -V, --version                 Display version number.
   -e, --events                  Sleep on CQ events (default poll).
   -F, --CPU-freq                Do not fail even if cpufreq_ondemand module.
   -I, --inline_size=<size>     	Max size of message to be sent in inline mode.
-			       	On Bw tests default is  1,latency tests is 400.
-  -u, --qp-timeout=<timeout>   	QP timeout, timeout value is 4 usec*2 ^(timeout).
-			       	Default is 14.
-  -S, --sl=<sl>                	SL (default 0)
+  -u, --qp-timeout=<timeout>   	QP timeout, timeout value is 4 usec*2 ^timeout (default: 14).
+  -S, --sl=<sl>                	SL - Service Level (default 0)
 
-long options parameters:
-------------------------
-
-   --dualport			Run test in dual-port mode.
+   -r, --rx-depth=<dep>          Make rx queue bigger than tx (default 600).
 
 Options for latency tests:
 --------------------------
@@ -148,23 +149,62 @@ Options for BW tests:
   -b, --bidirectional           Measure bidirectional bandwidth (default uni).  
   -N, --no peak-bw             	Cancel peak-bw calculation (default with peak-bw)
   -Q, --cq-mod  		Generate Cqe only after <cq-mod> completion
+  -t, --tx-depth=<dep>          Size of tx queue (default: 128).
+  -O, --dualport		Run test in dual-port mode (2 QPs). both ports must be active (default OFF).
+  -D, --duration=<sec> 		Run test for <sec> period of seconds.
+  -f, --margin=<sec> 		When in Duration, measure results within margins (default: 2)
+  -l, --post_list=<list size>   Post list of WQEs of <list size> size (instead of single post).
+  -q, --qp=<num of qp's>	Num of QPs running in the process (default: 1).
+      --run_infinitely		Run test forever, print results every 5 seconds.
 
-  *** IMPORTANT NOTE: You need to be running a Subnet Manager on the switch or
-		      on one of the nodes in your fabric.
+SEND tests (ib_send_lat or ib_send_bw) flags: 
+---------------------------------------------
 
-Special feature in tests:
--------------------------
+  -r, --rx-depth=<dep>          Size of RX queue (default: 512 in BW test).
+  -g, --mcg=<num_of_qps> 	Send messages to multicast group with <num_of_qps> qps attached to it.
+  -M, --MGID=<multicast_gid>    In multicast, uses <multicast_gid> as the group MGID.
 
-  1. RDMA_CM feature.
+ATOMIC tests (ib_atomic_lat or ib_atomic_bw) flags: 
+---------------------------------------------------
+
+  -A, --atomic_type=<type>	type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD}. 
+  -o, --outs=<num>		Number of outstanding read/atomic requests - also on READ tests.
+
+Options for Raw Ethernet BW test:
+---------------------------------
+  -B, --source_mac              source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID).
+  -E, --dest_mac                destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered.
+  -J, --server_ip               server ip address by this format X.X.X.X (using to send packets with IP header).
+  -j, --client_ip               client ip address by this format X.X.X.X (using to send packets with IP header).
+  -K, --server_port             server udp port number (using to send packets with UPD header).
+  -k, --client_port             client udp port number (using to send packets with UDP header).
+  -Z, --server                  choose server side for the current machine (--server/--client must be selected ).
+  -P, --client                  choose client side for the current machine (--server/--client must be selected).
+
+----------------------------------------------
+Special feature detailed explination in tests:
+----------------------------------------------
+
+  1. Usage of post_list feature (-l, --post_list=<list size>). 
+     In this case, each QP will prepare <list size> ibv_send_wr (instead of 1), and will chain them to each other.
+     In Chaning we mean allocating <list_size> array, and setting 'next' pointer of each ibv_send_wr in the array
+     to point to the following element in the array. the last ibv_send_wr in the array will point to NULL.
+     In this case, when post sending the first ibv_send_wr in the list, will instruct the HW to post all of those WQEs.
+     Which means each post_send will post <list_size> messages. 
+     This feature is good we want to know the maximum message rate of QPs in a single process. 
+     Since we are limited to SW post_send (~ 10 Mpps, since we have ~ 500 ns between each SW post_send), we can see 
+     the true HW message rate when setting <list_size> of 64 (for example) since it's not depended on SW limitations. 
+
+  2. RDMA_CM feature.
      You can add to all tests the "-R" flag to connect the QPs from each side with the rdma_cm library.
      In this case, the library will connect the QPs and will use the IPoIB interface for doing it.
      It helps when you don't have Ethernet connection between the 2 nodes.
      You must supply the IPoIB interface as the server IP. 
 
-  2. Multicast feauture in ib_send_lat and in ib_send_bw.
-    Send tests have built in feature of testing multicast performance, in verbs level.
-    You can use "-g" to specify the number of QPs to attach to this multicast group.
-    "-M" flag allows you to choose the multicast group address.
+  3. Multicast feauture in ib_send_lat and in ib_send_bw.
+     Send tests have built in feature of testing multicast performance, in verbs level.
+     You can use "-g" to specify the number of QPs to attach to this multicast group.
+     "-M" flag allows you to choose the multicast group address.
 
 
 ===============================================================================
