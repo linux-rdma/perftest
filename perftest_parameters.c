@@ -1000,12 +1000,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				break;
 			case 'I': CHECK_VALUE(user_param->inline_size,int,0,MAX_INLINE,"Max inline");
 				if (user_param->verb == READ || user_param->verb ==ATOMIC) {
-					fprintf(stderr," Inline feature not availible on READ/Atomic verbs\n");
+					fprintf(stderr," Inline feature not available on READ/Atomic verbs\n");
 					return 1;
 				} break;
 			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
 				if (user_param->verb != READ && user_param->verb != ATOMIC) {
-					fprintf(stderr," Setting Outstanding reads only availible on READ verb\n");
+					fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
 					return 1;
 				} break;
 #ifndef _WIN32
@@ -1069,12 +1069,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
 			case 'e': user_param->use_event = ON;
 				if (user_param->verb == WRITE) {
-					fprintf(stderr," Events feature not availible on WRITE verb\n");
+					fprintf(stderr," Events feature not available on WRITE verb\n");
 					return 1;
 				} break;
 			case 'b': user_param->duplex = ON;
 				if (user_param->tst == LAT) {
-					fprintf(stderr," Bidirectional is only availible in BW test\n");
+					fprintf(stderr," Bidirectional is only available in BW test\n");
 					return 1;
 				} break;
 			case 'N': user_param->noPeak = ON; 
@@ -1091,7 +1091,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				break; 
 			case 'g': user_param->use_mcg = ON;
 				if (user_param->verb != SEND) {
-					fprintf(stderr," MultiCast feature only availible on SEND verb\n");
+					fprintf(stderr," MultiCast feature only available on SEND verb\n");
 					return 1;
 				} break;
 			case 'H': 

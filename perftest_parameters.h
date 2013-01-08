@@ -60,7 +60,7 @@
 #include "get_clock.h"
 #endif
 
-// Connection types availible.
+// Connection types available.
 #define RC  (0)
 #define UC  (1) 
 #define UD  (2)
