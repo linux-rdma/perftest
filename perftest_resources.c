@@ -957,7 +957,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		return 1;
 	}	
 
-	if (user_param->noPeak == ON)
+	if (user_param->test_type == ITERATIONS && user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
 
 	// main loop for posting 
@@ -1068,6 +1068,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			duration_param->state = START_STATE;
 			signal(SIGALRM, catch_alarm);
 			alarm(user_param->margin);
+			user_param->iters = 0;
 		}
 	}
 

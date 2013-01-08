@@ -386,16 +386,19 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 
 	// Additional configuration and assignments.
-	if (user_param->tx_depth > user_param->iters) {
-		user_param->tx_depth = user_param->iters;
+	if (user_param->test_type == ITERATIONS) {
+
+		if (user_param->tx_depth > user_param->iters) {
+			user_param->tx_depth = user_param->iters;
+		}
+
+		if (user_param->verb == SEND && user_param->rx_depth > user_param->iters) {
+			user_param->rx_depth = user_param->iters;
+		}
 	}
 
 	if (user_param->cq_mod > user_param->tx_depth) {
 		user_param->cq_mod = user_param->tx_depth;
-	}
-
-	if (user_param->verb == SEND && user_param->rx_depth > user_param->iters) {
-		user_param->rx_depth = user_param->iters;
 	}
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC) 
@@ -452,7 +455,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		if (user_param->test_method == RUN_ALL) { 
 			printf(RESULT_LINE);
 			fprintf(stderr, "Duration mode currently doesn't support running on all sizes.\n");
-			fprintf(stderr, "Please choose a fixed message size to run with, in duration mode.\n");
 			exit(1);
 		}
 	}
