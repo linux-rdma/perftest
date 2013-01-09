@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2006 Mellanox Technologies Ltd.  All rights reserved.
+ * Copyright (c) 2005 Mellanox Technologies Ltd.  All rights reserved.
  * Copyright (c) 2009 HNR Consulting.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -33,6 +33,7 @@
  *
  * $Id$
  */
+
 #if HAVE_CONFIG_H
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -45,8 +46,6 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.1
-
 #ifdef _WIN32
 #pragma warning( disable : 4242)
 #pragma warning( disable : 4244)
@@ -56,37 +55,39 @@
 
 
 /****************************************************************************** 
- *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
-	int ret_parser,i;
-	struct ibv_device		   *ib_dev = NULL;
-	struct pingpong_context    ctx;
-	struct pingpong_dest       *my_dest = NULL;
-	struct pingpong_dest	   *rem_dest = NULL;
-	struct perftest_parameters user_param;
-	struct perftest_comm	   user_comm;
-	
+	int							ret_parser,i = 0;
+	struct ibv_device			*ib_dev = NULL;
+	struct pingpong_context		ctx;
+	struct pingpong_dest		*my_dest,*rem_dest;
+	struct perftest_parameters	user_param;
+	struct perftest_comm		user_comm;
+
 	/* init default values to user's parameters */
-	memset(&ctx,0,sizeof(struct pingpong_context));
-	memset(&user_param , 0 , sizeof(struct perftest_parameters));
+	memset(&user_param,0,sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
+	memset(&ctx,0,sizeof(struct pingpong_context));
 	
-	user_param.verb    = ATOMIC;
+	user_param.verb    = WRITE;
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
+	// Configure the parameters values according to user arguments or default values.
 	ret_parser = parser(&user_param,argv,argc);
-	if (ret_parser) { 
+	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
 
+	// Finding the IB device selected (or default if none is selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
-	if (!ib_dev)
-		return 7;
+	if (!ib_dev) {
+		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
+		return 1;
+	}
 
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
@@ -112,13 +113,13 @@ int __cdecl main(int argc, char *argv[]) {
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
 
-	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
+	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
 	if (create_comm_struct(&user_comm,&user_param)) { 
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
 
-	// Create (if nessacery) the rdma_cm ids and channel.
+	// Create (if necessary) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
 
 	    if (create_rdma_resources(&ctx,&user_param)) {
@@ -140,11 +141,11 @@ int __cdecl main(int argc, char *argv[]) {
 				return FAILURE;
 			}
 		}
-
+					
 	} else {
-
-		// create all the basic IB resources.
-	    if (ctx_init(&ctx,&user_param)) {
+    
+	    // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
+	    if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
 	    }
@@ -160,72 +161,79 @@ int __cdecl main(int argc, char *argv[]) {
 	for (i=0; i < user_param.num_of_qps; i++) 
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
-	// Init the connection and print the local data.
+	// Initialize the connection and print the local data.
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
-		return 1;
+		return FAILURE;
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-	
-	for (i=0; i < user_param.num_of_qps; i++) { 
-		
-		// shaking hands and gather the other side info.
+	for (i=0; i < user_param.num_of_qps; i++) {
+
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
-			return 1;
+			fprintf(stderr," Failed to exchange date between server and clients\n");
+			return 1;   
 		}
+
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
-
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-        fprintf(stderr,"Failed to exchange date between server and clients\n");
-        return 1;    
-    }
-     
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		return FAILURE; 
+	}	
+
+	printf(RESULT_LINE);
+	printf(RESULT_FMT);
+
 	// For half duplex tests, server just waits for client to exit 
 	if (user_param.machine == SERVER && !user_param.duplex) {
-
+		
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
 		}
-
 		printf(RESULT_LINE);
 		return destroy_ctx(&ctx,&user_param);
-	} 
-
-	if (user_param.use_event) {
-		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
-			fprintf(stderr, "Couldn't request CQ notification\n");
-			return 1;
-		} 
 	}
-    
-	printf(RESULT_LINE);
-	printf(RESULT_FMT);
 
-	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+	if (user_param.test_method == RUN_ALL) {
 
-	if (user_param.test_method == RUN_REGULAR) {
+		for (i = 1; i < 24 ; ++i) {
+
+			user_param.size = (uint64_t)1 << i;
+			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
+			if(run_iter_bw(&ctx,&user_param)) { 
+				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
+				return 1;
+			}
+
+			print_report_bw(&user_param);
+		}
+
+	} else if (user_param.test_method == RUN_REGULAR) { 
+
+		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if(run_iter_bw(&ctx,&user_param)) { 
-			fprintf(stderr," Error occured in run_iter function\n");
+			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 			return 1;
 		}
-		
-		print_report_bw(&user_param);
 
-	} else if (user_param.test_method == RUN_INFINITELY) {
+		print_report_bw(&user_param);	
+
+	} else if (user_param.test_method == RUN_INFINITELY) { 
+
+		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if(run_iter_bw_infinitely(&ctx,&user_param)) { 
 			fprintf(stderr," Error occured while running infinitely! aborting ...\n");
@@ -233,11 +241,15 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 	}
 
+	// Closing connection.
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
-		fprintf(stderr,"Failed to close connection between server and client\n");
+	 	fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
-	
+
+	free(my_dest);
+	free(rem_dest);
 	printf(RESULT_LINE);
-	return destroy_ctx(&ctx,&user_param);	
+	return destroy_ctx(&ctx,&user_param);
 }
+

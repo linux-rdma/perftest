@@ -45,8 +45,6 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.1
-
 #ifdef _WIN32
 #pragma warning( disable : 4242)
 #pragma warning( disable : 4244)

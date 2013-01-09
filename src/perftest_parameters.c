@@ -1057,7 +1057,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				break;
 			case 'a': user_param->test_method = RUN_ALL; break;
 			case 'F': user_param->cpu_freq_f = ON; break;
-			case 'V': printf("Version: %.2f\n",user_param->version); return VERSION_EXIT;
+			case 'V': printf("Version: %s\n",user_param->version); return VERSION_EXIT;
 			case 'h': usage(argv[0],user_param->verb,user_param->tst);
 					  if(user_param->connection_type == RawEth)
 					  {

@@ -54,7 +54,6 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.1
 cycles_t *tstamp;
 
 #ifdef _WIN32

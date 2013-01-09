@@ -50,11 +50,10 @@
 #include "get_clock.h"
 #endif
 
-#include "perftest_parameters.h"
 #include "perftest_resources.h"
+#include "perftest_parameters.h"
 #include "perftest_communication.h"
 
-#define VERSION 4.1
 cycles_t *tstamp;
 
 #ifdef _WIN32
@@ -75,7 +74,7 @@ cycles_t *tstamp;
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
 	if ((n - 1) % 2)
-		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
+		return (delta[n / 2] + delta[n / 2 - 1]) / 2;
 	else
 		return delta[n / 2];
 }
@@ -130,7 +129,7 @@ static void print_report(struct perftest_parameters *user_param) {
 	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units );
 	}
 
 	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
@@ -138,12 +137,12 @@ static void print_report(struct perftest_parameters *user_param) {
 	if (user_param->r_flag->histogram) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / 2);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units );
 	}
 
 	median = get_median(user_param->iters - 1, delta);
-	printf(REPORT_FMT_LAT,(unsigned long)user_param->size,user_param->iters,delta[0] / cycles_to_units / 2,
-	       delta[user_param->iters - 2] / cycles_to_units / 2,median / cycles_to_units / 2);
+	printf(REPORT_FMT_LAT,(unsigned long)user_param->size,user_param->iters,delta[0] / cycles_to_units ,
+	       delta[user_param->iters - 2] / cycles_to_units ,median / cycles_to_units );
 
 	free(delta);
 }
@@ -153,62 +152,46 @@ static void print_report(struct perftest_parameters *user_param) {
  ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param,
-	         struct pingpong_dest *rem_dest) {
+			 struct pingpong_dest *rem_dest) {
 
-	int 					scnt = 0;
-	int 					ccnt = 0;
-	int 					rcnt = 0;
-	int                     ne;
-	volatile char           *poll_buf = NULL; 
-	volatile char           *post_buf = NULL;
-	struct ibv_send_wr 		*bad_wr = NULL;
-	struct ibv_wc 			wc;
+	int scnt = 0;
+	int ne;
+	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_wc wc;
 
 	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags 	   = IBV_SEND_SIGNALED; 
-
-	if (user_param->size <= user_param->inline_size) 
-		ctx->wr[0].send_flags |= IBV_SEND_INLINE; 
-
-	post_buf = (char*)ctx->buf + user_param->size - 1;
-	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
-
-	/* Done with setup. Start the test. */
-	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters) {
-
-		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == SERVER)) {
-			rcnt++;
-			while (*poll_buf != (char)rcnt);
+	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
+	
+	while (scnt < user_param->iters) {
+	
+		tstamp[scnt] = get_cycles();
+		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
+			return 11;
 		}
 
-		if (scnt < user_param->iters) {
-
-			tstamp[scnt] = get_cycles();
-			*post_buf = (char)++scnt;
-			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
-				return 11;
+		scnt++;
+	
+		if (user_param->use_event) {
+			if (ctx_notify_events(ctx->channel)) {
+				fprintf(stderr, "Couldn't request CQ notification\n");
+				return 1;
 			}
-
 		}
 
-		if (ccnt < user_param->iters) {	
-		
-			do {
-				ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
-			} while (ne == 0);
-
-			if(ne > 0) {
+		do {
+			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
+			if(ne > 0) { 
 				if (wc.status != IBV_WC_SUCCESS) 
-					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
-				ccnt++;
+					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
 			}
+		} while (!user_param->use_event && ne == 0);
 
-			else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 12;
-			}		
+		if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", ne);
+			return 12;
 		}
+		
 	}
 	return 0;
 }
@@ -221,19 +204,19 @@ int __cdecl main(int argc, char *argv[]) {
 	int                         ret_parser,i = 0;
 	struct report_options       report;
 	struct pingpong_context     ctx;
-	struct pingpong_dest        my_dest,rem_dest;
 	struct ibv_device           *ib_dev;
 	struct perftest_parameters  user_param;
+	struct pingpong_dest	    my_dest,rem_dest;
 	struct perftest_comm		user_comm;
-
+	
 	/* init default values to user's parameters */
 	memset(&ctx,0,sizeof(struct pingpong_context));
-	memset(&user_param, 0, sizeof(struct perftest_parameters));
+	memset(&user_param,0,sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
 	memset(&my_dest,0,sizeof(struct pingpong_dest));
 	memset(&rem_dest,0,sizeof(struct pingpong_dest));
 
-	user_param.verb    = WRITE;
+	user_param.verb    = READ;
 	user_param.tst     = LAT;
 	user_param.r_flag  = &report;
 	user_param.version = VERSION;
@@ -269,7 +252,7 @@ int __cdecl main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
-	// Allocating arrays needed for the test.
+	// Allocate arrays
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
@@ -284,9 +267,9 @@ int __cdecl main(int argc, char *argv[]) {
 		if (create_rdma_resources(&ctx,&user_param)) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
-	    }
+		}
 
-		 if (user_param.machine == CLIENT) {
+		if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
@@ -322,9 +305,9 @@ int __cdecl main(int argc, char *argv[]) {
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
-	}
+	}	
 
-	// shaking hands and gather the other side info.
+	//  shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
 		return 1;
@@ -343,33 +326,57 @@ int __cdecl main(int argc, char *argv[]) {
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
-        fprintf(stderr,"Failed to exchange date between server and clients\n");
-        return 1;
+       fprintf(stderr,"Failed to exchange date between server and clients\n");
+       return 1;
     }
 
 	ALLOCATE(tstamp,cycles_t,user_param.iters);
-	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
+
+	// Only Client post read request. 
+	if (user_param.machine == SERVER) {
+
+		if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
+		 	fprintf(stderr,"Failed to close connection between server and client\n");
+		 	return 1;
+		}
+		printf(RESULT_LINE);
+		return 0; // destroy_ctx(&ctx,&user_param);
+
+	} 
+
+	if (user_param.use_event) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
+			fprintf(stderr, "Couldn't request CQ notification\n");
+			return 1;
+		} 
+	}
 
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);
 
-	if (user_param.test_method == RUN_ALL) {
+	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 
+	if (user_param.test_method == RUN_ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
 			if(run_iter(&ctx,&user_param,&rem_dest))
 				return 17;
+	    	
 			print_report(&user_param);
 		}
-
 	} else {
-
 		if(run_iter(&ctx,&user_param,&rem_dest))
-				return 17;
-			print_report(&user_param);
+			return 18;
+		
+		print_report(&user_param);
 	}
-	
+
+	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
+	 	fprintf(stderr,"Failed to close connection between server and client\n");
+	 	return 1;
+	}
+
 	printf(RESULT_LINE);
-	free(tstamp);
-	return 0;
+
+	return 0; // destroy_ctx(&ctx,&user_param);
 }

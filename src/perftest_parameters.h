@@ -250,7 +250,7 @@ struct perftest_parameters {
 #else
 	SOCKET 			sockfd;
 #endif
-	double			version;
+	const char		*version;
 	struct report_options  *r_flag;
 	cycles_t		*tposted;
 	cycles_t		*tcompleted;
