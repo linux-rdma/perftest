@@ -50,13 +50,6 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-
-
-#define VERSION 1.0
-
-//#define DEBUG//if u want debug prints need to define that
-
-
 #define INFO "INFO"
 #define TRACE "TRACE"
 

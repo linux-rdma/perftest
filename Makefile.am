@@ -12,7 +12,7 @@
 #
 
 noinst_LTLIBRARIES = libperftest.la
-bin_PROGRAMS     = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
+bin_PROGRAMS     = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw raw_ethernet_bw
 ACLOCAL_AMFLAGS=-I m4
 
 INCLUDES := -I$(top_srcdir) -I$(top_srcdir)/..
@@ -48,6 +48,10 @@ ib_atomic_lat_CFLAGS = $(AM_CFLAGS)
 ib_atomic_bw_SOURCES = src/atomic_bw.c
 ib_atomic_bw_LDADD = libperftest.la
 ib_atomic_bw_CFLAGS = $(AM_CFLAGS)
+
+raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
+raw_ethernet_bw_LDADD = libperftest.la 
+raw_ethernet_bw_CFLAGS = $(AM_CFLAGS)
 	
 noinst_HEADERS = \
 				 src/get_clock.h \
@@ -71,4 +75,5 @@ libperftest_la_SOURCES = \
 						 src/send_bw.c \
 						 src/send_lat.c \
 						 src/write_bw.c \
+						 src/raw_ethernet_send_bw.c \
 						 src/write_lat.c 
