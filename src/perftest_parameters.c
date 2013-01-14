@@ -693,17 +693,11 @@ static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
 static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 
 
-	int max_reads;
+	int max_reads = 0;
+	struct ibv_device_attr attr;
 
-	Device ib_fdev = ib_dev_name(context);
-
-	switch (ib_fdev) { 
-		case CONNECTIB : ;
-		case CONNECTX3 : ;
-		case CONNECTX2 : ;
-		case CONNECTX : max_reads = MAX_OUT_READ_HERMON; break;
-		case LEGACY : max_reads = MAX_OUT_READ; break;
-		default : max_reads = 0;
+	if (!ibv_query_device(context,&attr)) {
+		max_reads = attr.max_qp_rd_atom;
 	}
 
 	if (num_user_reads > max_reads) {
