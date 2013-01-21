@@ -51,6 +51,9 @@
 #define KEY_MSG_SIZE_GID (98)   // Message size with gid (MGID as well).
 #define SYNC_SPEC_ID	 (5)
 
+#define RDMA_MAX_RESP_RES      (0xff)
+#define RDMA_MAX_INIT_DEPTH    (0xff)
+
 // The Format of the message we pass through sockets , without passing Gid.
 #ifdef _WIN32
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%I64x"
