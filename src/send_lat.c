@@ -346,18 +346,17 @@ int run_iter(struct pingpong_context *ctx,
 			 struct perftest_parameters *user_param) {
 
 	int                     i    = 0;
-	int						scnt = 0;
-	int						rcnt = 0;
-	int						poll = 0;
-	int						ne;
-	int 					qp_counter = 0;
-	struct ibv_wc 			*wc;
-	int 					*rcnt_for_qp = NULL;
+	int			scnt = 0;
+	int			rcnt = 0;
+	int			poll = 0;
+	int			ne;
+	int 			qp_counter = 0;
+	struct ibv_wc 		wc;
+	int 			*rcnt_for_qp = NULL;
 	struct ibv_recv_wr      *bad_wr_recv;
-	struct ibv_send_wr 		*bad_wr;
+	struct ibv_send_wr 	*bad_wr;
 
 
-	ALLOCATE(wc,struct ibv_wc,DEF_WC_SIZE);
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
@@ -371,30 +370,28 @@ int run_iter(struct pingpong_context *ctx,
 		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == CLIENT)) {
 		  
 			// Server is polling on recieve first .
-		    if (user_param->use_event) {
+			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
-		    }
+			}	
 
 			do {
 								
-				ne = ibv_poll_cq(ctx->recv_cq,DEF_WC_SIZE,wc);
+				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
 				if (ne > 0) {
-					for (i = 0; i < ne; i++) {
 
-						if (wc[i].status != IBV_WC_SUCCESS) 
-							NOTIFY_COMP_ERROR_RECV(wc[i],rcnt);
+					if (wc.status != IBV_WC_SUCCESS) 
+						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
 							
-						rcnt_for_qp[wc[i].wr_id]++;
-						qp_counter++;
+					rcnt_for_qp[wc.wr_id]++;
+					qp_counter++;
 						
-						if (rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth  <= user_param->iters) {
-							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id], &bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
-								return 15;
-							}
+					if (rcnt_for_qp[wc.wr_id] + user_param->rx_depth  <= user_param->iters) {
+						if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id], &bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
+							return 15;
 						}
 					}
 				}
@@ -440,15 +437,14 @@ int run_iter(struct pingpong_context *ctx,
 				return 12;
 		    }
 
-			if (s_wc.status != IBV_WC_SUCCESS) 
-				NOTIFY_COMP_ERROR_SEND(wc[i],scnt,scnt)
+		    if (s_wc.status != IBV_WC_SUCCESS) 
+			    NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
 				
 			poll = 0;
 			ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
 		}
 	}
 
-	free(wc);
 	free(rcnt_for_qp);
 	return 0;
 }

@@ -932,7 +932,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
     struct ibv_send_wr *bad_wr = NULL;
     struct ibv_wc 	   *wc = NULL;
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->tx_depth*user_param->num_of_qps);
+	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
@@ -1010,7 +1010,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			}
 
-			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc);
+			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
 
 			if (ne > 0) {
 
@@ -1059,7 +1059,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
 	int firstRx = 1;
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->rx_depth*user_param->num_of_qps);
+	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
@@ -1089,7 +1089,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 		}
 		
 		do {
-			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 
 			if (ne > 0) {
 				if(user_param->connection_type == RawEth){
@@ -1160,7 +1160,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
     struct ibv_send_wr *bad_wr = NULL;
     struct ibv_wc *wc = NULL;
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->tx_depth*user_param->num_of_qps);
+	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	
 	duration_param=user_param;
 	signal(SIGALRM,catch_alarm_infintely);
@@ -1191,7 +1191,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		}
 
 	
-		ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc);
+		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
 
 		if (ne > 0) {
 
@@ -1215,15 +1215,15 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
  ******************************************************************************/
 int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
 
-	int 				i,ne;
+	int 			i,ne;
 	struct ibv_wc 		*wc          = NULL;
-	struct ibv_recv_wr  *bad_wr_recv = NULL;
+	struct ibv_recv_wr  	*bad_wr_recv = NULL;
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->rx_depth*user_param->num_of_qps);
+	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
 	while (1) {
 
-		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
+		ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 
 		if (ne > 0) {
 
@@ -1253,22 +1253,22 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 int run_iter_bi(struct pingpong_context *ctx,
 				struct perftest_parameters *user_param)  {
 
-	uint64_t				totscnt    = 0;
-	uint64_t				totccnt    = 0;
-	uint64_t				totrcnt    = 0;
-	int 					i,index      = 0;
-	int 					ne = 0;
-	int						*rcnt_for_qp = NULL;
-	int 					tot_iters = 0;
-	int 					iters = 0;
-	struct ibv_wc 			*wc          = NULL;
-	struct ibv_wc 			*wc_tx		 = NULL;
+	uint64_t		totscnt    = 0;
+	uint64_t		totccnt    = 0;
+	uint64_t		totrcnt    = 0;
+	int 			i,index      = 0;
+	int 			ne = 0;
+	int			*rcnt_for_qp = NULL;
+	int 			tot_iters = 0;
+	int 			iters = 0;
+	struct ibv_wc 		*wc          = NULL;
+	struct ibv_wc 		*wc_tx		 = NULL;
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
-	struct ibv_send_wr 		*bad_wr      = NULL;
-	int  					firstRx = 1;
+	struct ibv_send_wr 	*bad_wr      = NULL;
+	int  			firstRx = 1;
 
-	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth*user_param->num_of_qps);
-	ALLOCATE(wc_tx,struct ibv_wc,user_param->tx_depth*user_param->num_of_qps);
+	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
+	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
@@ -1328,7 +1328,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 
 		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth*user_param->num_of_qps,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 			if (ne > 0) {
 				if(user_param->connection_type == RawEth)
 				{
@@ -1377,7 +1377,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
-			ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth*user_param->num_of_qps,wc_tx);
+			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
 					if (wc_tx[i].status != IBV_WC_SUCCESS)

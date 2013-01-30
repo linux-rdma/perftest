@@ -152,10 +152,10 @@ static void print_report(struct perftest_parameters *user_param) {
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param) {
 
-	int 					scnt = 0;
+	int 			scnt = 0;
 	int                     ne;
-	struct ibv_send_wr 		*bad_wr = NULL;
-	struct ibv_wc 			wc;
+	struct ibv_send_wr 	*bad_wr = NULL;
+	struct ibv_wc 		wc;
 
 	while (scnt < user_param->iters) {
 	
