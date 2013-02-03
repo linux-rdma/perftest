@@ -342,7 +342,6 @@ static void print_report(struct perftest_parameters *user_param) {
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param) {
 
-	int                     i    = 0;
 	int			scnt = 0;
 	int			rcnt = 0;
 	int			poll = 0;
