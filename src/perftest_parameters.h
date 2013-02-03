@@ -60,6 +60,10 @@
 #include "get_clock.h"
 #endif
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 // Connection types available.
 #define RC  (0)
 #define UC  (1) 
