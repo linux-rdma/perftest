@@ -135,7 +135,12 @@
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
-#define RAWETH_MIN_MSG_SIZE    (64)
+
+// Raw etherent defines 
+#define RAWETH_MIN_MSG_SIZE	(64)
+#define MIN_MTU_RAW_ETERNET	(64)
+#define MAX_MTU_RAW_ETERNET	(9600)
+
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 

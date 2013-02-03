@@ -367,16 +367,19 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 static int set_eth_mtu(struct perftest_parameters *user_param) {
 
 	if (user_param->mtu == 0) {
-		user_param->mtu = 1500;
+		user_param->mtu = 1518;//1500
 	}
-	switch (user_param->mtu) {
-				case 1500  :	user_param->curr_mtu = 1500;	 break;
-				case 9600  : 	user_param->curr_mtu = 9600;	 break;
-				default   :
-					fprintf(stderr," Invalid MTU - %d \n",user_param->mtu);
-					fprintf(stderr," Please choose mtu form {1500, 9600}\n");
-					return -1;
-			}
+
+	if(user_param->mtu >= MIN_MTU_RAW_ETERNET && user_param->mtu <= MAX_MTU_RAW_ETERNET) { 
+		user_param->curr_mtu = user_param->mtu;
+	
+	} else { 
+
+		fprintf(stderr," Invalid MTU - %d \n",user_param->mtu);
+		fprintf(stderr," Please choose mtu form {64, 9600}\n");
+		return -1;
+	}
+
 	return 0;
 }
 /******************************************************************************
@@ -1206,8 +1209,10 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 			return FAILURE;
 		}
 
-		if (set_eth_mtu(user_param) != 0)
+		if (set_eth_mtu(user_param) != 0 ) {
 			fprintf(stderr, " Couldn't set Eth MTU\n");
+			return FAILURE;
+		}
 	} else {
 		user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
 	}
