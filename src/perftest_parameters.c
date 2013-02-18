@@ -132,6 +132,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -R, --rdma_cm ");
 	printf(" Connect QPs with rdma_cm and run test on those QPs\n");
 
+	printf("  -T, --tos=<tos value> ");
+	printf(" Set <tos_value> to RDMA-CM QPs. availible only with -R flag. values 0-256 (default off)\n");
+
 	printf("  -z, --com_rdma_cm ");
 	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
 
@@ -290,34 +293,35 @@ void usage_raw_ethernet(){
  ******************************************************************************/
 static void init_perftest_params(struct perftest_parameters *user_param) {
 
-	user_param->port       = DEF_PORT;
-	user_param->ib_port    = DEF_IB_PORT;
-	user_param->ib_port2        = DEF_IB_PORT2;
-	user_param->size       = user_param->tst == BW ? DEF_SIZE_BW : DEF_SIZE_LAT;
-	user_param->tx_depth   = user_param->tst == BW ? DEF_TX_BW : DEF_TX_LAT;
-	user_param->qp_timeout = DEF_QP_TIME;
+	user_param->port       	= DEF_PORT;
+	user_param->ib_port    	= DEF_IB_PORT;
+	user_param->ib_port2	= DEF_IB_PORT2;
+	user_param->size       	= user_param->tst == BW ? DEF_SIZE_BW : DEF_SIZE_LAT;
+	user_param->tx_depth   	= user_param->tst == BW ? DEF_TX_BW : DEF_TX_LAT;
+	user_param->qp_timeout 	= DEF_QP_TIME;
 	user_param->test_method = RUN_REGULAR;
-	user_param->cpu_freq_f = OFF;
+	user_param->cpu_freq_f 	= OFF;
 	user_param->connection_type = (user_param->connection_type == RawEth) ? RawEth : RC;
-	user_param->use_event  = OFF;
-	user_param->num_of_qps = DEF_NUM_QPS;
-	user_param->gid_index  = DEF_GID_INDEX;
+	user_param->use_event  	= OFF;
+	user_param->num_of_qps 	= DEF_NUM_QPS;
+	user_param->gid_index  	= DEF_GID_INDEX;
 	user_param->gid_index2  = DEF_GID_INDEX;
 	user_param->inline_size = DEF_INLINE;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
 	user_param->work_rdma_cm = OFF;
 	user_param->rx_depth    = user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
-	user_param->duplex		= OFF;
-	user_param->noPeak		= OFF;
-	user_param->cq_mod		= DEF_CQ_MOD;
+	user_param->duplex	= OFF;
+	user_param->noPeak	= OFF;
+	user_param->cq_mod	= DEF_CQ_MOD;
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport	= OFF;
 	user_param->post_list	= 1;
 	user_param->duration	= DEF_DURATION;
-	user_param->margin		= DEF_MARGIN;
+	user_param->margin	= DEF_MARGIN;
 	user_param->test_type	= ITERATIONS;
-	user_param->state		= START_STATE;
+	user_param->state	= START_STATE;
+	user_param->tos		= DEF_TOS;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -488,7 +492,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 		user_param->use_rdma_cm = ON;
-	} 
+	
+	} else if (user_param->tos != DEF_TOS) {
+                fprintf(stdout," TOS only valid for rdma_cm based QP. (-R flag)\n");
+                exit(1);
+        } 
 
 	if (user_param->use_mcg) {
 
@@ -886,18 +894,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "outs",           .has_arg = 1, .val = 'o' },
 			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
 			{ .name = "comm_rdma_cm",   .has_arg = 0, .val = 'z' },
-			{ .name = "rdma_cm",   		.has_arg = 0, .val = 'R' },
+			{ .name = "rdma_cm",   	    .has_arg = 0, .val = 'R' },
+			{ .name = "tos",            .has_arg = 1, .val = 'T' },
 			{ .name = "help",           .has_arg = 0, .val = 'h' },
 			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
 			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
 			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
-			{ .name = "cq-mod",  		.has_arg = 1, .val = 'Q' },
+			{ .name = "cq-mod",  	    .has_arg = 1, .val = 'Q' },
 			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
 			{ .name = "version",        .has_arg = 0, .val = 'V' },
 			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
 			{ .name = "report-histogrm",.has_arg = 0, .val = 'H' },
 			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
-			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
+			{ .name = "atomic_type",    .has_arg = 1, .val = 'A' },
 			{ .name = "dualport",       .has_arg = 0, .val = 'O' },
 			{ .name = "post_list",      .has_arg = 1, .val = 'l' },
 			{ .name = "duration",       .has_arg = 1, .val = 'D' },
@@ -916,54 +925,55 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 #else
 
         static const struct option long_options[] = {
-			{ "port",			1, NULL, 'p' },
-			{ "ib-dev",			1, NULL, 'd' },
+			{ "port",		1, NULL, 'p' },
+			{ "ib-dev",		1, NULL, 'd' },
 			{ "ib-port",		1, NULL, 'i' },
-			{ "mtu",			1, NULL, 'm' },
-			{ "size",			1, NULL, 's' },
-			{ "iters",			1, NULL, 'n' },
+			{ "mtu",		1, NULL, 'm' },
+			{ "size",		1, NULL, 's' },
+			{ "iters",		1, NULL, 'n' },
 			{ "tx-depth",		1, NULL, 't' },
 			{ "qp-timeout", 	1, NULL, 'u' },
-			{ "sl", 			1, NULL, 'S' },
+			{ "sl", 		1, NULL, 'S' },
 			{ "gid-index",		1, NULL, 'x' },
-			{ "all",			0, NULL, 'a' },
+			{ "all",		0, NULL, 'a' },
 			{ "CPU-freq",		0, NULL, 'F' },
 			{ "connection",		1, NULL, 'c' },
-			{ "qp", 			1, NULL, 'q' },
+			{ "qp", 		1, NULL, 'q' },
 			{ "events", 		0, NULL, 'e' },
 			{ "inline_size",	1, NULL, 'I' },
-			{ "outs",			1, NULL, 'o' },
-			{ "mcg",			0, NULL, 'g' },
+			{ "outs",		1, NULL, 'o' },
+			{ "mcg",		0, NULL, 'g' },
 			{ "comm_rdma_cm",	0, NULL, 'z' },
 			{ "rdma_cm",		0, NULL, 'R' },
-			{ "help",			0, NULL, 'h' },
-			{ "MGID",			1, NULL, 'M' },
+			{ "tos",            	1, NULL, 'T' },
+			{ "help",		0, NULL, 'h' },
+			{ "MGID",		1, NULL, 'M' },
 			{ "rx-depth",		1, NULL, 'r' },
 			{ "bidirectional",	0, NULL, 'b' },
 			{ "cq-mod", 		1, NULL, 'Q' },
 			{ "noPeak", 		0, NULL, 'N' },
 			{ "version",		0, NULL, 'V' },
-            { "report-cycles",	0, NULL, 'C' },
-			{ "report-histogrm"	,0, NULL, 'H' },
-            { "report-unsorted"	,0, NULL, 'U' },
-			{ "atomic_type"		,1, NULL, 'A' },
-			{ "dualport"		,0, NULL, 'O' },
-			{ "post_list"		,1, NULL, 'l' },
-			{ "duration"		,1, NULL, 'D' },
-			{ "margin"			,1, NULL, 'f' },
-			{ "source_mac"      ,1, NULL, 'B' },
-			{ "dest_mac"        ,1, NULL, 'E' },
-			{ "server_ip"       ,1, NULL, 'J' },
-			{ "client_ip"       ,1, NULL, 'j' },
-			{ "server_port"     ,1, NULL, 'K' },
-			{ "client_port"     ,1, NULL, 'k' },
-			{ "server"          ,0, NULL, 'Z' },
-			{ "client"          ,0, NULL, 'P' },
-            { "dualport"        ,0, &run_inf_flag, 1 },
+	                { "report-cycles",	0, NULL, 'C' },
+			{ "report-histogrm",	0, NULL, 'H' },
+            	        { "report-unsorted",	0, NULL, 'U' },
+			{ "atomic_type",	1, NULL, 'A' },
+			{ "dualport",		0, NULL, 'O' },
+			{ "post_list",		1, NULL, 'l' },
+			{ "duration",		1, NULL, 'D' },
+			{ "margin",		1, NULL, 'f' },
+			{ "source_mac",		1, NULL, 'B' },
+			{ "dest_mac",		1, NULL, 'E' },
+			{ "server_ip",		1, NULL, 'J' },
+			{ "client_ip",		1, NULL, 'j' },
+			{ "server_port",	1, NULL, 'K' },
+			{ "client_port",	1, NULL, 'k' },
+			{ "server",		0, NULL, 'Z' },
+			{ "client",		0, NULL, 'P' },
+	                { "dualport",		0, &run_inf_flag, 1 },
 			{ 0 }
 		};
 #endif
-        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:E:J:j:K:k:aFegzRhbNVCHUOZP",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRhbNVCHUOZP",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -977,9 +987,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); break;
 #endif
 			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); break;
-            case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
+            		case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
 			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
 			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
+			case 'T': CHECK_VALUE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS"); break;
 			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
 			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
 				if (user_param->sl > MAX_SL) { 
@@ -1346,13 +1357,22 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->use_rdma_cm) 
 		temp = 1;
 
-	printf(" Data ex. method : %s\n",exchange_state[temp]);
+	printf(" Data ex. method : %s",exchange_state[temp]);
 
-	if (user_param->work_rdma_cm && user_param->machine == SERVER) {
-		printf(RESULT_LINE);
-		printf(" Waiting for client rdma_cm QP to connect\n");
-		printf(" Please run the same command with the IB/RoCE interface IP\n");
+	if (user_param->work_rdma_cm) {
+
+		if (user_param->tos != DEF_TOS) {
+                        printf(" \tTOS    : %d",user_param->tos);
+                } 
+
+		if (user_param->machine == SERVER) { 
+			putchar('\n');
+			printf(RESULT_LINE);
+			printf(" Waiting for client rdma_cm QP to connect\n");
+			printf(" Please run the same command with the IB/RoCE interface IP");
+		}
 	}
+	putchar('\n');
 
 	printf(RESULT_LINE);
 

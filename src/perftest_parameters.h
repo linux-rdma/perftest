@@ -108,7 +108,8 @@
 #define DEF_QKEY      0x11111111
 #define DEF_DURATION  (10)
 #define	DEF_MARGIN    (2)
-#define DEF_INLINE	  (-1)
+#define DEF_INLINE    (-1)
+#define DEF_TOS       (-1)
 
 // Optimal Values for Inline
 #define DEF_INLINE_WRITE (220)
@@ -116,6 +117,8 @@
 #define DEF_INLINE_SEND_UD (188)
 
 // Max and Min allowed values for perftest parameters.
+#define MIN_TOS		(0)
+#define MAX_TOS		(256)
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (3)  //was 2
 #define MIN_ITER      (5)
@@ -202,47 +205,48 @@ enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY};
 
 struct perftest_parameters {
 
-	int				port;
+	int			port;
 	char			*ib_devname;
 	char			*servername;
 	uint8_t			ib_port;
 	uint8_t			ib_port2;
-	int				mtu;
-	enum ibv_mtu	curr_mtu;
+	int			mtu;
+	enum ibv_mtu		curr_mtu;
 	uint64_t		size;
-	int				iters;
-	int				tx_depth;
+	int			iters;
+	int			tx_depth;
 	uint8_t			qp_timeout;
 	uint8_t			sl;
-	int				gid_index;
-	int				gid_index2;
+	int			gid_index;
+	int			gid_index2;
 	uint8_t			source_mac[6];
 	uint8_t			dest_mac[6];
-	int				is_source_mac;
-	int				is_dest_mac;
+	int			is_source_mac;
+	int			is_dest_mac;
 	uint32_t		server_ip;
 	uint32_t		client_ip;
-	int				is_server_ip;
-	int				is_client_ip;
-	int				server_port;
-	int				client_port;
-	int				is_server_port;
-	int				is_client_port;
-	int				cpu_freq_f;
-	int				connection_type;
-	int				num_of_qps;
-	int				use_event;
+	int			is_server_ip;
+	int			is_client_ip;
+	int			server_port;
+	int			client_port;
+	int			is_server_port;
+	int			is_client_port;
+	int			cpu_freq_f;
+	int			connection_type;
+	int			num_of_qps;
+	int			use_event;
 	int 			inline_size;
-	int				out_reads;
-	int				rx_depth;
-	int				duplex;
-	int				noPeak;
-	int				cq_mod;
+	int			out_reads;
+	int			rx_depth;
+	int			duplex;
+	int			noPeak;
+	int			cq_mod;
 	int 			spec;
 	int 			dualport;
 	int 			post_list;
-	int				duration;
-	int				margin;
+	int			duration;
+	int			tos;
+	int			margin;
 	uint32_t		rem_ud_qpn;
 	uint32_t		rem_ud_qkey;
 	uint8_t			link_type;

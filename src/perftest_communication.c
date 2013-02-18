@@ -700,7 +700,15 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	rdma_ack_cm_event(event);
 	break;
    }
-		
+
+   if (user_param->tos != DEF_TOS) {
+
+	if (rdma_set_option(ctx->cm_id,RDMA_OPTION_ID,RDMA_OPTION_ID_TOS,&user_param->tos,sizeof(uint8_t))) {
+            fprintf(stderr, " Set TOS option failed: %d\n",event->event);
+            return FAILURE;
+        }
+   }
+	
     while (1) {
 
 		if (num_of_retry <= 0) {
@@ -929,6 +937,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->verb		   = user_param->verb;
 	comm->rdma_params->use_mcg	   = user_param->use_mcg;
 	comm->rdma_params->duplex	   = user_param->duplex;
+	comm->rdma_params->tos             = DEF_TOS;
 
 	if (user_param->use_rdma_cm) {
 
