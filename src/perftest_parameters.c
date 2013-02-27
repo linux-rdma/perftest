@@ -575,6 +575,23 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 /****************************************************************************** 
  *
  ******************************************************************************/
+const char *transport_str(enum ibv_transport_type type) {
+
+	switch (type) {
+		case IBV_TRANSPORT_IB:
+			return "IB";
+			break;
+		case IBV_TRANSPORT_IWARP:
+			return "IW";
+			break;
+		default:
+			return "Unknown";
+	}
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 const char *link_layer_str(uint8_t link_layer) {
 
 	switch (link_layer) {
@@ -592,18 +609,30 @@ const char *link_layer_str(uint8_t link_layer) {
 /****************************************************************************** 
  *
  ******************************************************************************/
-static Device ib_dev_name(struct ibv_context *context) { 
+static enum ctx_device ib_dev_name(struct ibv_context *context) {
 
-	Device dev_fname = UNKNOWN;
+	enum ctx_device dev_fname = UNKNOWN;
 	struct ibv_device_attr attr;
 
 	if (ibv_query_device(context,&attr)) {
 		dev_fname = DEVICE_ERROR;
 	}
 
-	else { 
+	else if (attr.vendor_id == 5157) { 
 
-		switch (attr.vendor_part_id) { 
+		switch (attr.vendor_part_id >> 12) {
+			case 10 :
+			case 4  : dev_fname = CHELSIO_T4; break;
+			case 11 :
+			case 5  : dev_fname = CHELSIO_T5; break;
+			default : dev_fname = UNKNOWN; break;
+		}
+
+	// Assuming it's Mellanox HCA or unknown.
+	// If you want Inline support in other vendor devices, please send patch to idos@dev.mellanox.co.il 
+	} else { 
+
+		switch (attr.vendor_part_id) {
 			case 4113  : dev_fname = CONNECTIB; break;
 			case 4099  : dev_fname = CONNECTX3; break;
 			case 26418 : dev_fname = CONNECTX2; break;
@@ -730,7 +759,7 @@ static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 static void ctx_set_max_inline(struct ibv_context *context,struct perftest_parameters *user_param) { 
 
 
-	Device current_dev = ib_dev_name(context);
+	enum ctx_device current_dev = ib_dev_name(context);
 
 	if (current_dev == UNKNOWN || current_dev == DEVICE_ERROR) { 
 
@@ -1203,7 +1232,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
  ******************************************************************************/
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param) {
 
+	user_param->transport_type = context->device->transport_type;
 	user_param->link_type = set_link_layer(context,user_param->ib_port);
+
 	if (user_param->link_type == LINK_FAILURE) {
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return FAILURE;
@@ -1319,8 +1350,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->use_mcg) 
 		printf(" MultiCast runs on UD!\n");
 
-	printf(" Dual-port       : %s\t\tDevice : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
-	printf(" Number of qps   : %d\n",user_param->num_of_qps);
+	printf(" Dual-port       : %s\t\tDevice         : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
+	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
 	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
 	
 	if (user_param->machine == CLIENT || user_param->duplex) {

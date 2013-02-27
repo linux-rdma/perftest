@@ -191,9 +191,6 @@ typedef enum { LOCAL , REMOTE } PrintDataSide;
 // The atomic test type
 typedef enum {CMP_AND_SWAP, FETCH_AND_ADD} AtomicType;
 
-// The type of the device (Hermon B0/A0 or no)
-typedef enum { DEVICE_ERROR = -1 ,UNKNOWN = 0 ,CONNECTX = 1,CONNECTX2 = 2, CONNECTX3 = 3, CONNECTIB = 4, LEGACY = 5} Device;
-
 // Type of test method.
 typedef enum { ITERATIONS , DURATION } TestMethod;
 
@@ -203,50 +200,63 @@ typedef enum { START_STATE, SAMPLE_STATE, STOP_SAMPLE_STATE, END_STATE} Duration
 // Test method
 enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY}; 
 
+// The type of the device
+enum ctx_device {
+	DEVICE_ERROR 	= -1 ,
+	UNKNOWN 		= 0,
+	CONNECTX 		= 1,
+	CONNECTX2 		= 2,
+	CONNECTX3 		= 3,
+	CONNECTIB 		= 4,
+	LEGACY 			= 5,
+	CHELSIO_T4 		= 6,
+	CHELSIO_T5 		= 7
+};
+
 struct perftest_parameters {
 
-	int			port;
+	int				port;
 	char			*ib_devname;
 	char			*servername;
 	uint8_t			ib_port;
 	uint8_t			ib_port2;
-	int			mtu;
-	enum ibv_mtu		curr_mtu;
+	int				mtu;
+	enum ibv_mtu	curr_mtu;
 	uint64_t		size;
-	int			iters;
-	int			tx_depth;
+	int				iters;
+	int				tx_depth;
 	uint8_t			qp_timeout;
 	uint8_t			sl;
-	int			gid_index;
-	int			gid_index2;
+	int				gid_index;
+	int				gid_index2;
 	uint8_t			source_mac[6];
 	uint8_t			dest_mac[6];
-	int			is_source_mac;
-	int			is_dest_mac;
+	int				is_source_mac;
+	int				is_dest_mac;
 	uint32_t		server_ip;
 	uint32_t		client_ip;
-	int			is_server_ip;
-	int			is_client_ip;
-	int			server_port;
-	int			client_port;
-	int			is_server_port;
-	int			is_client_port;
-	int			cpu_freq_f;
-	int			connection_type;
-	int			num_of_qps;
-	int			use_event;
+	int				is_server_ip;
+	int				is_client_ip;
+	int				server_port;
+	int				client_port;
+	int				is_server_port;
+	int				is_client_port;
+	int				cpu_freq_f;
+	int				connection_type;
+	int				num_of_qps;
+	int				use_event;
 	int 			inline_size;
-	int			out_reads;
-	int			rx_depth;
-	int			duplex;
-	int			noPeak;
-	int			cq_mod;
+	int				out_reads;
+	int				rx_depth;
+	int				duplex;
+	int				noPeak;
+	int				cq_mod;
 	int 			spec;
 	int 			dualport;
 	int 			post_list;
-	int			duration;
-	int			tos;
-	int			margin;
+	int				duration;
+	int				tos;
+	int				margin;
 	uint32_t		rem_ud_qpn;
 	uint32_t		rem_ud_qkey;
 	uint8_t			link_type;
@@ -264,7 +274,6 @@ struct perftest_parameters {
 	SOCKET 			sockfd;
 #endif
 	const char		*version;
-	struct report_options  *r_flag;
 	cycles_t		*tposted;
 	cycles_t		*tcompleted;
 	int				use_mcg;
@@ -272,7 +281,9 @@ struct perftest_parameters {
 	int				work_rdma_cm;
 	char			*user_mgid;
 	// New test params format pilot. will be used in all flags soon,.
-	enum ctx_test_method test_method;
+	enum ctx_test_method 	test_method;
+	enum ibv_transport_type transport_type;
+	struct report_options  	*r_flag;
 };
 
 struct report_options {

@@ -753,8 +753,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 
 	memset(&conn_param, 0, sizeof conn_param);
 	if (user_param->verb == READ) {
-		conn_param.responder_resources = RDMA_MAX_RESP_RES;
-		conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
+		conn_param.responder_resources = user_param->out_reads;
+		conn_param.initiator_depth = user_param->out_reads;
 	}
 	user_param->work_rdma_cm = temp;
 
@@ -870,8 +870,8 @@ int rdma_server_connect(struct pingpong_context *ctx,
 
 	memset(&conn_param, 0, sizeof conn_param);
 	if (user_param->verb == READ) {
-		conn_param.responder_resources = RDMA_MAX_RESP_RES;
-		conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
+		conn_param.responder_resources = user_param->out_reads;
+		conn_param.initiator_depth = user_param->out_reads;
 	}
 	if (user_param->connection_type == UD)
 		conn_param.qp_num = ctx->qp[0]->qp_num;
