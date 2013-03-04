@@ -185,20 +185,18 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	int tarr_size; 
 	
 	tarr_size = (user_param->noPeak) ? 1 : user_param->iters*user_param->num_of_qps;
+	ALLOCATE(user_param->tposted,cycles_t,tarr_size);
+	memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
 
 	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
 
 	if ((user_param->tst == BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
 
-		ALLOCATE(user_param->tposted,cycles_t,tarr_size);
-		memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
 		ALLOCATE(user_param->tcompleted,cycles_t,tarr_size);
 		memset(user_param->tcompleted, 0, sizeof(cycles_t)*tarr_size);
 
 		ALLOCATE(ctx->my_addr,uint64_t,user_param->num_of_qps);
 		ALLOCATE(ctx->rem_addr,uint64_t,user_param->num_of_qps);
-		
-
 		ALLOCATE(ctx->scnt,int,user_param->num_of_qps);
 		ALLOCATE(ctx->ccnt,int,user_param->num_of_qps);
 		memset(ctx->scnt, 0, user_param->num_of_qps * sizeof (int));
@@ -207,9 +205,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	} else if ((user_param->tst == BW ) && user_param->verb == SEND && user_param->machine == SERVER) {
 
 		ALLOCATE(ctx->my_addr,uint64_t,user_param->num_of_qps);
-		ALLOCATE(user_param->tposted,cycles_t,1);
 		ALLOCATE(user_param->tcompleted,cycles_t,1);
-
 	}
 
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) { 

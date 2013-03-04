@@ -554,7 +554,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
-	if (user_param->verb == SEND && user_param->machine == SERVER && !user_param->duplex)
+	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
 
 	// Run infinitely dependencies
@@ -1472,6 +1472,85 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	    (aux_up*cycles_to_units)/(aux_down*0x100000),
 	    ((aux_up*cycles_to_units)/aux_down)/((unsigned long)user_param->size)/1000000);
 }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static inline cycles_t get_median(int n, cycles_t delta[])
+{
+    if ((n - 1) % 2)
+        return(delta[n / 2] + delta[n / 2 - 1]) / 2;
+    else
+        return delta[n / 2];
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int cycles_compare(const void *aptr, const void *bptr)
+{
+    const cycles_t *a = aptr;
+    const cycles_t *b = bptr;
+    if (*a < *b) return -1;
+    if (*a > *b) return 1;
+    return 0;
+
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void print_report_lat (struct perftest_parameters *user_param) 
+{
+
+    int i;
+	int rtt_factor; 
+	double cycles_to_units;
+    cycles_t median;
+	cycles_t *delta = NULL;
+    const char* units;
+
+	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2; 
+	ALLOCATE(delta,cycles_t,user_param->iters - 1);
+
+    for (i = 0; i < user_param->iters - 1; ++i)
+        delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
+
+    if (user_param->r_flag->cycles) {
+        cycles_to_units = 1;
+        units = "cycles";
+
+    } else {
+        cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+        units = "usec";
+    }
+
+    if (user_param->r_flag->unsorted) {
+        printf("#, %s\n", units);
+        for (i = 0; i < user_param->iters - 1; ++i)
+		    printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+    }
+
+    qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
+
+    if (user_param->r_flag->histogram) {
+        printf("#, %s\n", units);
+        for (i = 0; i < user_param->iters - 1; ++i)
+            printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+    }
+
+    median = get_median(user_param->iters - 1, delta);
+
+    printf(REPORT_FMT_LAT,
+			(unsigned long)user_param->size,
+			user_param->iters,
+			delta[0] / cycles_to_units / rtt_factor,
+			delta[user_param->iters - 2] / cycles_to_units / rtt_factor,
+			median / cycles_to_units / rtt_factor);
+
+    free(delta);
+}
+
 /****************************************************************************** 
  * End
  ******************************************************************************/

@@ -51,8 +51,6 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-cycles_t *tstamp;
-
 #ifdef _WIN32
 #pragma warning( disable : 4242)
 #pragma warning( disable : 4244)
@@ -60,103 +58,20 @@ cycles_t *tstamp;
 #define __cdecl
 #endif
 
-#ifndef _WIN32
-/*
- * When there is an
- *	odd number of samples, the median is the middle number.
- * 	even number of samples, the median is the mean of the
- *		two middle numbers.
- *
- */
-static inline cycles_t get_median(int n, cycles_t delta[])
-{
-	if ((n - 1) % 2)
-		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
-	else
-		return delta[n / 2];
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static int cycles_compare(const void * aptr, const void * bptr)
-{
-	const cycles_t *a = aptr;
-	const cycles_t *b = bptr;
-	if (*a < *b) return -1;
-	if (*a > *b) return 1;
-	return 0;
-
-}
-#endif
-
-/****************************************************************************** 
- *
- ******************************************************************************/
-static void print_report(struct perftest_parameters *user_param) {
-
-	double cycles_to_units;
-	cycles_t median;
-	int i;
-	const char* units;
-	cycles_t *delta = malloc((user_param->iters - 1) * sizeof *delta);
-
-	if (!delta) {
-		perror("malloc");
-		return;
-	}
-
-	for (i = 0; i < user_param->iters - 1; ++i)
-		delta[i] = tstamp[i + 1] - tstamp[i];
-
-
-	if (user_param->r_flag->cycles) {
-		cycles_to_units = 1;
-		units = "cycles";
-	} else {
-#ifndef _WIN32
-		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
-#else
-		cycles_to_units = get_cpu_mhz()/1000000;
-#endif
-		units = "usec";
-	}
-
-	if (user_param->r_flag->unsorted) {
-		printf("#, %s\n", units);
-		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units );
-	}
-
-	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
-
-	if (user_param->r_flag->histogram) {
-		printf("#, %s\n", units);
-		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units );
-	}
-
-	median = get_median(user_param->iters - 1, delta);
-	printf(REPORT_FMT_LAT,(unsigned long)user_param->size,user_param->iters,delta[0] / cycles_to_units ,
-	       delta[user_param->iters - 2] / cycles_to_units ,median / cycles_to_units );
-
-	free(delta);
-}
-
 /****************************************************************************** 
  *
  ******************************************************************************/
 int run_iter(struct pingpong_context *ctx, 
 			 struct perftest_parameters *user_param) {
 
-	int 			scnt = 0;
-	int                     ne;
-	struct ibv_send_wr 	*bad_wr = NULL;
-	struct ibv_wc 		wc;
+	int 				scnt = 0;
+	int					ne;
+	struct ibv_send_wr	*bad_wr = NULL;
+	struct ibv_wc		wc;
 
 	while (scnt < user_param->iters) {
 	
-		tstamp[scnt] = get_cycles();
+		user_param->tposted[scnt] = get_cycles();
 		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 			return 11;
@@ -340,7 +255,6 @@ int __cdecl main(int argc, char *argv[]) {
 		} 
 	}
 
-	ALLOCATE(tstamp,cycles_t,user_param.iters);
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 	printf(RESULT_LINE);
 	printf(RESULT_FMT_LAT);
@@ -348,7 +262,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if(run_iter(&ctx,&user_param))
 		return 17;
 
-	print_report(&user_param);
+	print_report_lat(&user_param);
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 	 	fprintf(stderr,"Failed to close connection between server and client\n");
@@ -356,6 +270,5 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 	
 	printf(RESULT_LINE);
-	free(tstamp);
 	return 0;
 }

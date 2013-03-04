@@ -351,11 +351,21 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  * Parameters :
  *
  *	 user_param  - the parameters parameters.
- *   tposted	 - Posted cycles_t array
- *	 tcompleted  - Completed cycles_t array
  *
  */
 void print_report_bw (struct perftest_parameters *user_param);
+
+/* print_report_lat
+ *
+ * Description : Print the min/max/median latency samples taken from a latency test.
+ * 				 It also support a unsorted/histogram report of all samples. 
+ *
+ * Parameters :
+ *
+ *   user_param  - the parameters parameters.
+ *
+ */
+void print_report_lat (struct perftest_parameters *user_param);
 
 /* mac_from_gid
  *

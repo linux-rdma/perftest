@@ -11,6 +11,7 @@
 # $HEADER$
 #
 
+ACLOCAL_AMFLAGS= -I m4
 noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c
 noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h
