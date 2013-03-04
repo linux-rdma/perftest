@@ -471,7 +471,41 @@ int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  * Return Value : The Lid itself. (No error values).
  */
 
+int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+/*
+ *
+ * Description :
+ *
+ *  In this method we receive packets and "turn them around"
+ *  this is done by changing the dmac with the smac
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_parm  - user_parameters struct for this test.
+ */
+
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
+
+
+/*
+ * Description :
+ *
+ *  In this method we receive buffer and change it's dmac and smac
+ *
+ * Parameters :
+ *
+ *  sg     - sg->addr is pointer to the buffer.
+*/
+static __inline void switch_smac_dmac( struct ibv_sge *sg )
+{
+    ETH_header* eth_header;
+    eth_header = (ETH_header*)sg->addr;
+    uint8_t tmp_mac[6] = {0} ;
+    memcpy(tmp_mac , (uint8_t *)eth_header + sizeof(eth_header->src_mac) ,sizeof(eth_header->src_mac));
+    memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
+    memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
+}
 
 /* ctx_notify_events
  * 

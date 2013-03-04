@@ -50,8 +50,10 @@ ib_atomic_bw_LDADD = libperftest.a
 if HAVE_RAW_ETH
 raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
 raw_ethernet_bw_LDADD = libperftest.a
+
 else 
 raw_ethernet_bw_SOURCES =
 raw_ethernet_bw_LDADD =
+
 endif
 

@@ -287,6 +287,10 @@ void usage_raw_ethernet(){
 
 		printf("  -P, --client ");
 		printf(" choose client side for the current machine (--server/--client must be selected)\n");
+	
+		printf("  -v, --mac_fwd ");
+		printf(" run mac forwarding test \n");
+
 }
 /******************************************************************************
  *
@@ -296,8 +300,8 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->port       	= DEF_PORT;
 	user_param->ib_port    	= DEF_IB_PORT;
 	user_param->ib_port2	= DEF_IB_PORT2;
-	user_param->size       	= user_param->tst == BW ? DEF_SIZE_BW : DEF_SIZE_LAT;
-	user_param->tx_depth   	= user_param->tst == BW ? DEF_TX_BW : DEF_TX_LAT;
+	user_param->size       	= (user_param->tst == BW ) ? DEF_SIZE_BW : DEF_SIZE_LAT;
+	user_param->tx_depth   	= (user_param->tst == BW ) ? DEF_TX_BW : DEF_TX_LAT;
 	user_param->qp_timeout 	= DEF_QP_TIME;
 	user_param->test_method = RUN_REGULAR;
 	user_param->cpu_freq_f 	= OFF;
@@ -322,6 +326,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->test_type	= ITERATIONS;
 	user_param->state	= START_STATE;
 	user_param->tos		= DEF_TOS;
+	user_param->mac_fwd	= OFF;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -540,6 +545,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
 			exit(1);
+		} 
+
+		// Mac forwarding dependencies
+		if (user_param->duplex == OFF && user_param->mac_fwd == ON) {
+			printf("mac_fwd should run in duplex mode only. changing to duplex mode.\n");
+			user_param->duplex = ON;
 		}
 	}
 
@@ -568,7 +579,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 	}
-
 	return;
 }
 
@@ -948,6 +958,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "client_port",    .has_arg = 1, .val = 'k' },
 			{ .name = "server",         .has_arg = 0, .val = 'Z' },
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
+			{ .name = "mac_fwd",         .has_arg = 0, .val = 'v' },
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
             { 0 }
         };
@@ -998,11 +1009,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ "client_port",	1, NULL, 'k' },
 			{ "server",		0, NULL, 'Z' },
 			{ "client",		0, NULL, 'P' },
+			{ "mac_fwd",		0, NULL, 'v' },
 	                { "dualport",		0, &run_inf_flag, 1 },
 			{ 0 }
 		};
 #endif
-        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRhbNVCHUOZP",long_options,NULL);
+        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -1191,6 +1203,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				break;
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
+			case 'v': user_param->mac_fwd = ON; break;
 			case 0: break; // required for long options to work.
 			default: 
 				fprintf(stderr," Invalid Command or flag.\n");
@@ -1333,8 +1346,12 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 		printf("BW ");
 
-	} else {
+	} else if (user_param->tst == LAT) {
 		printf("Latency ");
+	}
+	
+	if (user_param->mac_fwd) {
+		printf("forwarding ");
 	}
 
 	if (user_param->use_mcg) 

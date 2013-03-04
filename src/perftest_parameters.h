@@ -179,7 +179,7 @@
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
-// The type of the machine ( server or client actually).
+// The type of the test
 typedef enum { LAT , BW } TestType;
 
 // The type of the machine ( server or client actually).
@@ -284,6 +284,7 @@ struct perftest_parameters {
 	enum ctx_test_method 	test_method;
 	enum ibv_transport_type transport_type;
 	struct report_options  	*r_flag;
+	int 			mac_fwd;
 };
 
 struct report_options {

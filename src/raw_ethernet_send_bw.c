@@ -484,7 +484,7 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 	}
 	//build raw Ethernet packets on ctx buffer
-	if(user_param.machine == CLIENT || user_param.duplex){
+	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd){
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 	}
 
@@ -509,7 +509,10 @@ int __cdecl main(int argc, char *argv[]) {
 			return 1;
 		}
 	}
-	if (user_param.duplex) {
+	if (user_param.mac_fwd) {
+		if(run_iter_fw(&ctx,&user_param))
+			return 17;
+	}else if (user_param.duplex) {
 		if(run_iter_bi(&ctx,&user_param))
 				return 17;
 			}else if (user_param.machine == CLIENT) {
