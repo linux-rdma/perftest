@@ -1437,8 +1437,12 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
  ******************************************************************************/
 void print_report_bw (struct perftest_parameters *user_param) {
 
-	double cycles_to_units,aux_up,aux_down;
-	int location_arr, i, j, opt_posted = 0, opt_completed = 0;
+	double cycles_to_units,sum_of_test_cycles;
+	int location_arr;
+	int opt_completed = 0;
+	int opt_posted = 0;
+	int i,j;
+	long num_of_calculated_iters = user_param->iters;
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
@@ -1465,18 +1469,17 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;
-	aux_up = (double)tsize*user_param->iters;
-	aux_up *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
+	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
-	aux_down = (double)(user_param->tcompleted[location_arr] - user_param->tposted[0]);
+    sum_of_test_cycles = (double)(user_param->tcompleted[location_arr] - user_param->tposted[0]);
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * 0x100000;
 	printf(REPORT_FMT,
 		(unsigned long)user_param->size, 
 		user_param->iters,
 		(double)peak_up/peak_down,
-	    (aux_up*cycles_to_units)/(aux_down*0x100000),
-	    ((aux_up*cycles_to_units)/aux_down)/((unsigned long)user_param->size)/1000000);
+	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*0x100000),
+	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles/1000000));
 }
 
 /******************************************************************************
