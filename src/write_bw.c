@@ -213,7 +213,14 @@ int __cdecl main(int argc, char *argv[]) {
 				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 				return 1;
 			}
-
+			
+			if (user_param.duplex && (atof(user_param.version) >= 4.6)) {
+				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+					return 1;
+				}
+			}
+			
 			print_report_bw(&user_param);
 		}
 
