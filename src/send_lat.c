@@ -393,6 +393,12 @@ int __cdecl main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.
+	if (user_param.connection_type == RawEth) {
+        fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
+        return FAILURE;
+    }
+
 	// Finding the IB device selected (or defalut if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
