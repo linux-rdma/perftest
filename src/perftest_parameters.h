@@ -148,7 +148,9 @@
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
 // The format of the results
-#define RESULT_FMT     " #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
+#define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
+
+#define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]\n"
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
@@ -196,6 +198,9 @@ typedef enum { ITERATIONS , DURATION } TestMethod;
 
 //for duration calculation
 typedef enum { START_STATE, SAMPLE_STATE, STOP_SAMPLE_STATE, END_STATE} DurationStates;
+
+//Report format (Gbit/s VS MB/s)
+enum ctx_report_fmt { GBS, MBS };
 
 // Test method
 enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY}; 
@@ -283,6 +288,7 @@ struct perftest_parameters {
 	// New test params format pilot. will be used in all flags soon,.
 	enum ctx_test_method 	test_method;
 	enum ibv_transport_type transport_type;
+	enum ctx_report_fmt		report_fmt;
 	struct report_options  	*r_flag;
 	int 			mac_fwd;
 };

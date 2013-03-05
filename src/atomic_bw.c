@@ -207,7 +207,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}
     
 	printf(RESULT_LINE);
-	printf(RESULT_FMT);
+	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));	
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 

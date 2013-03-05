@@ -299,8 +299,7 @@ int __cdecl main(int argc, char *argv[]) {
     }
 
 	printf(RESULT_LINE);
-	printf(RESULT_FMT);
-
+	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	if (user_param.test_method == RUN_ALL) {
 

@@ -189,7 +189,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}	
 
 	printf(RESULT_LINE);
-	printf(RESULT_FMT);
+	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	// For half duplex tests, server just waits for client to exit 
 	if (user_param.machine == SERVER && !user_param.duplex) {

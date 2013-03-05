@@ -489,7 +489,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	printf(RESULT_LINE);//change the printing of the test
-	printf(RESULT_FMT);
+	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	// Prepare IB resources for rtr/rts.
 	if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {

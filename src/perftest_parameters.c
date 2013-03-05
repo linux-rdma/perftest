@@ -211,7 +211,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
  
 		printf("  --run_infinitely ");
-		printf(" Run test forever, print results every 5 seconds\n");
+		printf(" Run test forever, print results every <duration> seconds\n");
+
+		printf("  --report_gbits ");
+		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+
 	}
 
 	if (verb != WRITE) {
@@ -327,6 +331,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->state	= START_STATE;
 	user_param->tos		= DEF_TOS;
 	user_param->mac_fwd	= OFF;
+	user_param->report_fmt = MBS;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -911,6 +916,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	int c;
 	static int run_inf_flag = 0;
+	static int report_fmt_flag = 0;
 
 	init_perftest_params(user_param);
 	if(user_param->connection_type == RawEth)
@@ -965,8 +971,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "client_port",    .has_arg = 1, .val = 'k' },
 			{ .name = "server",         .has_arg = 0, .val = 'Z' },
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
-			{ .name = "mac_fwd",         .has_arg = 0, .val = 'v' },
+			{ .name = "mac_fwd",        .has_arg = 0, .val = 'v' },
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
+			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
             { 0 }
         };
 #else
@@ -1000,9 +1007,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ "cq-mod", 		1, NULL, 'Q' },
 			{ "noPeak", 		0, NULL, 'N' },
 			{ "version",		0, NULL, 'V' },
-	                { "report-cycles",	0, NULL, 'C' },
+			{ "report-cycles",	0, NULL, 'C' },
 			{ "report-histogrm",	0, NULL, 'H' },
-            	        { "report-unsorted",	0, NULL, 'U' },
+			{ "report-unsorted",	0, NULL, 'U' },
 			{ "atomic_type",	1, NULL, 'A' },
 			{ "dualport",		0, NULL, 'O' },
 			{ "post_list",		1, NULL, 'l' },
@@ -1017,7 +1024,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ "server",		0, NULL, 'Z' },
 			{ "client",		0, NULL, 'P' },
 			{ "mac_fwd",		0, NULL, 'v' },
-	                { "dualport",		0, &run_inf_flag, 1 },
+	        { "dualport",		0, &run_inf_flag, 1 },
 			{ 0 }
 		};
 #endif
@@ -1226,6 +1233,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if (run_inf_flag) { 
 		user_param->test_method = RUN_INFINITELY;
+	}
+
+	if (report_fmt_flag) { 
+		user_param->report_fmt = GBS;
 	}
 
 	if(user_param->connection_type != RawEth) {
@@ -1443,6 +1454,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	int opt_completed = 0;
 	int opt_posted = 0;
 	int i,j;
+	long format_factor;
 	long num_of_calculated_iters = user_param->iters;
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
@@ -1472,14 +1484,16 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	tsize = tsize * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
+	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000; 
+
     sum_of_test_cycles = (double)(user_param->tcompleted[location_arr] - user_param->tposted[0]);
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
-	peak_down = (cycles_t)opt_delta * 0x100000;
+	peak_down = (cycles_t)opt_delta * format_factor;
 	printf(REPORT_FMT,
 		(unsigned long)user_param->size, 
 		user_param->iters,
 		(double)peak_up/peak_down,
-	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*0x100000),
+	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*format_factor),
 	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*1000000));
 }
 
