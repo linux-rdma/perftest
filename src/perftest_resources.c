@@ -821,8 +821,15 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 			} else if (user_param->verb == SEND && user_param->connection_type == UD) { 
 
 				ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
-				ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
-				ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[i].qpn;
+				if (user_param->work_rdma_cm) {	
+
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;
+
+				} else { 
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[i].qpn;
+				}
 			}
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
