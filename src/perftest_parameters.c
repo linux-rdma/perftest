@@ -566,6 +566,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	// Run infinitely dependencies
 	if (user_param->test_method == RUN_INFINITELY) { 
 		user_param->noPeak = ON;
+		user_param->test_type = DURATION;	
 		if (user_param->use_event) { 
 			printf(RESULT_LINE);
 			fprintf(stderr," run_infinitely does not support events feature yet.\n");
@@ -1479,7 +1480,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 		user_param->iters,
 		(double)peak_up/peak_down,
 	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*0x100000),
-	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles/1000000));
+	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*1000000));
 }
 
 /******************************************************************************

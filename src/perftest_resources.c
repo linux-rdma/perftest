@@ -1174,7 +1174,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	
 	duration_param=user_param;
 	signal(SIGALRM,catch_alarm_infintely);
-	alarm(5);
+	alarm(user_param->duration);
 	user_param->iters = 0;
 	
 	for (i=0; i < user_param->num_of_qps; i++)
@@ -1225,9 +1225,9 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
  ******************************************************************************/
 int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
 
-	int 			i,ne;
+	int 				i,ne;
 	struct ibv_wc 		*wc          = NULL;
-	struct ibv_recv_wr  	*bad_wr_recv = NULL;
+	struct ibv_recv_wr 	*bad_wr_recv = NULL;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1635,7 +1635,7 @@ void catch_alarm_infintely(int sig)
 	duration_param->tcompleted[0] = get_cycles();
 	print_report_bw(duration_param);
 	duration_param->iters = 0;
-	alarm(5);
+	alarm(duration_param->duration);
 	duration_param->tposted[0] = get_cycles();
 }
 
