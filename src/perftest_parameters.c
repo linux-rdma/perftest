@@ -479,6 +479,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->work_rdma_cm) {
 
+		if (user_param->connection_type == UC) { 
+			printf(RESULT_LINE);
+			printf(" UC is not supported in librdmacm\n");
+			exit(1);
+		}
+
 		if (user_param->use_mcg) { 
 			printf(RESULT_LINE);
 			printf(" Perftest still doesn't support Multicast with rdma_cm\n");
