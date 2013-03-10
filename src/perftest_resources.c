@@ -85,6 +85,29 @@ static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
 /******************************************************************************
  *
  ******************************************************************************/
+static int check_for_contig_pages_support(struct ibv_context *context)
+{
+
+	int answer;
+	struct ibv_device_attr attr;
+
+	if (ibv_query_device(context,&attr)) {
+		fprintf(stderr, "Couldn't get device attributes\n");
+		return FAILURE;
+	}
+
+	/*
+	 * We assume device driver support contig pages by enabling 23 bit in
+	 * device_cap_flag. this is defined as IBV_DEVICE_MR_ALLOCATE. 
+	 * Warning: this bit can represent others things in different devices.
+	 */
+	answer = attr.device_cap_flags & (1 << 23) ? SUCCESS : FAILURE;
+	return answer;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 int check_add_port(char **service,int port,
 				   const char *servername,
 				   struct addrinfo *hints,
@@ -284,12 +307,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	
-#ifndef _WIN32
-        free(ctx->buf);
-#else
-        posix_memfree(ctx->buf);
-#endif
+	if (ctx->is_contig_supported == FAILURE)
+		free(ctx->buf);
 
 	free(ctx->qp);
 
@@ -330,26 +349,26 @@ int destroy_ctx(struct pingpong_context *ctx,
  ******************************************************************************/
 int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	int i,flags;
-#ifdef _WIN32
-	SYSTEM_INFO si;
-	GetSystemInfo(&si);
-#endif
+	int i;
+	int flags = IBV_ACCESS_LOCAL_WRITE;
 
-	flags = IBV_ACCESS_LOCAL_WRITE;
+	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
-#ifndef _WIN32
-	ctx->buf = memalign(sysconf(_SC_PAGESIZE),ctx->buff_size);
-#else
-	posix_memalign(&(ctx->buf),si.dwPageSize, (int)ctx->buff_size);
-#endif
+	// Allocating buffer for data, in case driver not support contig pages. 
+	if (ctx->is_contig_supported == FAILURE) {
 
-	if (!ctx->buf) {
-		fprintf(stderr, "Couldn't allocate work buf.\n");
-		exit(1);
+		ctx->buf = memalign(sysconf(_SC_PAGESIZE),ctx->buff_size);
+		if (!ctx->buf) {
+			fprintf(stderr, "Couldn't allocate work buf.\n");
+			exit(1);
+		}
+
+		memset(ctx->buf, 0,ctx->buff_size);
+
+	} else {
+		ctx->buf = NULL;
+		flags |= (1 << 5);
 	}
-
-	memset(ctx->buf, 0,ctx->buff_size);
 
 	// Allocating an event channel if requested.
 	if (user_param->use_event) {
@@ -379,13 +398,16 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	} else if (user_param->verb == ATOMIC) {
 		flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	}
-	
+
 	// Allocating Memory region and assigning our buffer to it.
 	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return FAILURE;
 	}
+
+	if (ctx->is_contig_supported == SUCCESS) 
+		ctx->buf = ctx->mr->addr;
 
 	ctx->send_cq = ibv_create_cq(ctx->context,user_param->tx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
 	if (!ctx->send_cq) {
