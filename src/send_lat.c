@@ -250,115 +250,6 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 /****************************************************************************** 
  *
  ******************************************************************************/
-int run_iter(struct pingpong_context *ctx, 
-			 struct perftest_parameters *user_param) {
-
-	int			scnt = 0;
-	int			rcnt = 0;
-	int			poll = 0;
-	int			ne;
-	int 			qp_counter = 0;
-	struct ibv_wc 		wc;
-	int 			*rcnt_for_qp = NULL;
-	struct ibv_recv_wr      *bad_wr_recv;
-	struct ibv_send_wr 	*bad_wr;
-
-
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
-
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags 	   = 0; 
-
-	if (user_param->size <= user_param->inline_size) 
-		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
-
-	while (scnt < user_param->iters || rcnt < user_param->iters) {
-		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == CLIENT)) {
-		  
-			// Server is polling on recieve first .
-			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->channel)) {
-					fprintf(stderr , " Failed to notify events to CQ");
-					return 1;
-				}
-			}	
-
-			do {
-								
-				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
-				if (ne > 0) {
-
-					if (wc.status != IBV_WC_SUCCESS) 
-						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
-							
-					rcnt_for_qp[wc.wr_id]++;
-					qp_counter++;
-						
-					if (rcnt_for_qp[wc.wr_id] + user_param->rx_depth  <= user_param->iters) {
-						if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id], &bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
-							return 15;
-						}
-					}
-				}
-			} while (!user_param->use_event && qp_counter < user_param->num_of_qps);
-			rcnt++;
-			qp_counter  = 0;
-		}
-
-		// client post first. 
-		if (scnt < user_param->iters) {
-
-			user_param->tposted[scnt++] = get_cycles();
-
-			if (scnt % user_param->cq_mod == 0 || scnt == user_param->iters) {
-				poll = 1;
-				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
-			}
-			
-			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
-				return 11;
-			}
-		}
-
-		if (poll == 1) {
-
-		    struct ibv_wc s_wc;
-		    int s_ne;
-
-		    if (user_param->use_event) {
-				if (ctx_notify_events(ctx->channel)) {
-					fprintf(stderr , " Failed to notify events to CQ");
-					return 1;
-				}
-		    }
-
-		    do {
-				s_ne = ibv_poll_cq(ctx->send_cq, 1, &s_wc);
-		    } while (!user_param->use_event && s_ne == 0);
-
-		    if (s_ne < 0) {
-				fprintf(stderr, "poll SCQ failed %d\n", s_ne);
-				return 12;
-		    }
-
-		    if (s_wc.status != IBV_WC_SUCCESS) 
-			    NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
-				
-			poll = 0;
-			ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
-		}
-	}
-
-	free(rcnt_for_qp);
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
 	int                        i = 0;
@@ -518,7 +409,7 @@ int __cdecl main(int argc, char *argv[]) {
     }
 
 	printf(RESULT_LINE);
-	printf(RESULT_FMT_LAT);
+	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
     
@@ -544,11 +435,10 @@ int __cdecl main(int argc, char *argv[]) {
 				return 1;
 			}
 			
-			if(run_iter(&ctx, &user_param))
+			if(run_iter_lat_send(&ctx, &user_param))
 				return 17;
 
-			print_report_lat(&user_param);
-
+			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 		}
 	
 	} else {
@@ -566,10 +456,10 @@ int __cdecl main(int argc, char *argv[]) {
 			return 1;
 		}
 			
-		if(run_iter(&ctx, &user_param))
+		if(run_iter_lat_send(&ctx, &user_param))
 			return 17;
-		
-		print_report_lat(&user_param);
+
+		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {

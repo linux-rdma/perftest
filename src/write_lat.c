@@ -60,71 +60,6 @@
 /****************************************************************************** 
  *
  ******************************************************************************/
-int run_iter(struct pingpong_context *ctx, 
-			 struct perftest_parameters *user_param,
-	         struct pingpong_dest *rem_dest) {
-
-	int 					scnt = 0;
-	int 					ccnt = 0;
-	int 					rcnt = 0;
-	int                     ne;
-	volatile char           *poll_buf = NULL; 
-	volatile char           *post_buf = NULL;
-	struct ibv_send_wr 		*bad_wr = NULL;
-	struct ibv_wc 			wc;
-
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags 	   = IBV_SEND_SIGNALED; 
-
-	if (user_param->size <= user_param->inline_size) 
-		ctx->wr[0].send_flags |= IBV_SEND_INLINE; 
-
-	post_buf = (char*)ctx->buf + user_param->size - 1;
-	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
-
-	/* Done with setup. Start the test. */
-	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters) {
-
-		if (rcnt < user_param->iters && !(scnt < 1 && user_param->machine == SERVER)) {
-			rcnt++;
-			while (*poll_buf != (char)rcnt);
-		}
-
-		if (scnt < user_param->iters) {
-
-			user_param->tposted[scnt] = get_cycles();
-			*post_buf = (char)++scnt;
-			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
-				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
-				return 11;
-			}
-
-		}
-
-		if (ccnt < user_param->iters) {	
-		
-			do {
-				ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
-			} while (ne == 0);
-
-			if(ne > 0) {
-				if (wc.status != IBV_WC_SUCCESS) 
-					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
-				ccnt++;
-			}
-
-			else if (ne < 0) {
-				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 12;
-			}		
-		}
-	}
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
 	int                         ret_parser,i = 0;
@@ -259,22 +194,27 @@ int __cdecl main(int argc, char *argv[]) {
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 
 	printf(RESULT_LINE);
-	printf(RESULT_FMT_LAT);
+	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 
 	if (user_param.test_method == RUN_ALL) {
 
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
-			if(run_iter(&ctx,&user_param,&rem_dest))
-				return 17;
-			print_report_lat(&user_param);
+			if(run_iter_lat_write(&ctx,&user_param)) {
+				fprintf(stderr,"Test exited with Error\n");
+				return FAILURE;
+			}
+
+			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 		}
 
 	} else {
 
-		if(run_iter(&ctx,&user_param,&rem_dest))
-				return 17;
-			print_report_lat(&user_param);
+		if(run_iter_lat_write(&ctx,&user_param)) {
+			fprintf(stderr,"Test exited with Error\n");
+			return FAILURE;
+		}
+		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 	
 	printf(RESULT_LINE);

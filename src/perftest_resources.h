@@ -444,6 +444,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
  *
  */
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
 /* run_iter_bi.
  *
  * Description :
@@ -457,23 +458,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  *
  */
 int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_param);
-/* ctx_get_local_lid .
- *
- * Description :
- *
- *  This method find and returns the local Id in IB subnet manager of
- *  the selected port and HCA given.The lid identifies the port.
- *
- * Parameters : 
- *
- *  context - the context of the HCA device.
- *  ib_port - The port of the HCA (1 or 2).
- *
- * Return Value : The Lid itself. (No error values).
- */
 
-int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
-/*
+/* run_iter_fw
  *
  * Description :
  *
@@ -482,10 +468,64 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  *
  * Parameters :
  *
+ *  ctx     - Test Context.
+ *  user_parm  - user_parameters struct for this test.
+ */
+int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_lat_write
+ *
+ * Description :
+ *
+ *  This is the latency test function for WRITE verb.
+ *
+ * Parameters :
+ *
  *	ctx     - Test Context.
  *	user_parm  - user_parameters struct for this test.
  */
+int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+/* run_iter_lat
+ *
+ * Description :
+ *
+ *  This is the latency test function for READ or ATOMIC verb latency tests.
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_parm  - user_parameters struct for this test.
+ */
+int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_lat_send
+ *
+ * Description :
+ *
+ *  This is the latency test function for SEND verb latency test.
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_parm  - user_parameters struct for this test.
+ */
+int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* ctx_get_local_lid .
+ *
+ * Description :
+ *
+ *  This method find and returns the local Id in IB subnet manager of
+ *  the selected port and HCA given.The lid identifies the port.
+ *
+ * Parameters :
+ *
+ *  context - the context of the HCA device.
+ *  ib_port - The port of the HCA (1 or 2).
+ *
+ * Return Value : The Lid itself. (No error values).
+ */
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
 
 

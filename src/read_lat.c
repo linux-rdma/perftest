@@ -60,55 +60,6 @@
 /****************************************************************************** 
  *
  ******************************************************************************/
-int run_iter(struct pingpong_context *ctx, 
-			 struct perftest_parameters *user_param,
-			 struct pingpong_dest *rem_dest) {
-
-	int scnt = 0;
-	int ne;
-	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_wc wc;
-
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
-	
-	while (scnt < user_param->iters) {
-	
-		user_param->tposted[scnt] = get_cycles();
-		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
-			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
-			return 11;
-		}
-
-		scnt++;
-	
-		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->channel)) {
-				fprintf(stderr, "Couldn't request CQ notification\n");
-				return 1;
-			}
-		}
-
-		do {
-			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
-			if(ne > 0) { 
-				if (wc.status != IBV_WC_SUCCESS) 
-					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
-			}
-		} while (!user_param->use_event && ne == 0);
-
-		if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n", ne);
-			return 12;
-		}
-		
-	}
-	return 0;
-}
-
-/****************************************************************************** 
- *
- ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
 	int                         ret_parser,i = 0;
@@ -260,23 +211,23 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	printf(RESULT_LINE);
-	printf(RESULT_FMT_LAT);
+	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
 
 	if (user_param.test_method == RUN_ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
-			if(run_iter(&ctx,&user_param,&rem_dest))
+			if(run_iter_lat(&ctx,&user_param))
 				return 17;
-	    	
-			print_report_lat(&user_param);
+
+			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);	
 		}
 	} else {
-		if(run_iter(&ctx,&user_param,&rem_dest))
+		if(run_iter_lat(&ctx,&user_param))
 			return 18;
 		
-		print_report_lat(&user_param);
+		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {

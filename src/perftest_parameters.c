@@ -463,12 +463,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		if (user_param->tst == LAT) {
-			printf(RESULT_LINE);
-			fprintf(stderr, "Duration mode currently doesn't support latency tests.\n");
-			exit(1); 
-		}
-
 		if (user_param->test_method == RUN_ALL) { 
 			printf(RESULT_LINE);
 			fprintf(stderr, "Duration mode currently doesn't support running on all sizes.\n");
@@ -1573,6 +1567,24 @@ void print_report_lat (struct perftest_parameters *user_param)
 			median / cycles_to_units / rtt_factor);
 
     free(delta);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void print_report_lat_duration (struct perftest_parameters *user_param)
+{
+	int rtt_factor;
+	double cycles_to_units;
+	cycles_t test_sample_time;
+
+	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
+	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
+	printf(REPORT_FMT_LAT_DUR,
+		user_param->size,
+		user_param->iters,
+		(((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters));
 }
 
 /****************************************************************************** 

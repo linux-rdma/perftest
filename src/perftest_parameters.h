@@ -154,11 +154,15 @@
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
+#define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]\n"
+
 // Result print format
 #define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf\n"
 
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
+
+#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f\n"
 
 #define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
 	{ arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
@@ -372,6 +376,18 @@ void print_report_bw (struct perftest_parameters *user_param);
  *
  */
 void print_report_lat (struct perftest_parameters *user_param);
+
+/* print_report_lat_duration
+ *
+ * Description : Prints only the avergae latency for samples taken from a latency test 
+ *				 With Duration.
+ *
+ * Parameters :
+ *
+ *   user_param  - the parameters parameters.
+ *
+ */
+void print_report_lat_duration (struct perftest_parameters *user_param);
 
 /* mac_from_gid
  *

@@ -211,6 +211,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(user_param->tposted,cycles_t,tarr_size);
 	memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
 
+	if (user_param->tst == LAT && user_param->test_type == DURATION) 
+		ALLOCATE(user_param->tcompleted,cycles_t,1);
+
 	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
 
 	if ((user_param->tst == BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1615,7 +1618,266 @@ int run_iter_fw(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
+int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	int                     scnt = 0;
+	int                     ccnt = 0;
+	int                     rcnt = 0;
+	int                     ne;
+	volatile char           *poll_buf = NULL;
+	volatile char           *post_buf = NULL;
+	struct ibv_send_wr      *bad_wr = NULL;
+	struct ibv_wc           wc;
 
+	ctx->wr[0].sg_list->length = user_param->size;
+	ctx->wr[0].send_flags      = IBV_SEND_SIGNALED;
+
+	if (user_param->size <= user_param->inline_size)
+		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
+
+	post_buf = (char*)ctx->buf + user_param->size - 1;
+	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
+
+	// Duration support in latency tests.
+	if (user_param->test_type == DURATION) {
+		duration_param=user_param;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		alarm(user_param->margin);
+		user_param->iters = 0;
+	}
+
+	/* Done with setup. Start the test. */
+	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters 
+			|| ((user_param->test_type == DURATION && user_param->state != END_STATE))) {
+
+		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == SERVER)) {
+			rcnt++;
+			while (*poll_buf != (char)rcnt && user_param->state != END_STATE);
+		}
+
+		if (scnt < user_param->iters || user_param->test_type == DURATION) {
+
+			if (user_param->test_type == ITERATIONS)
+				user_param->tposted[scnt] = get_cycles();
+
+			*post_buf = (char)++scnt;
+
+			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
+				return FAILURE;
+			}
+		}
+
+		if (user_param->test_type == DURATION && user_param->state == END_STATE)
+			break;
+
+		if (ccnt < user_param->iters || user_param->test_type == DURATION) {
+
+			do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0);
+
+			if(ne > 0) {
+
+				if (wc.status != IBV_WC_SUCCESS)
+					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
+
+				ccnt++;
+				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					user_param->iters++;
+
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return FAILURE;
+			}
+		}
+	}
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	int scnt = 0;
+	int ne;
+	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_wc wc;
+
+	ctx->wr[0].sg_list->length = user_param->size;
+	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
+
+	// Duration support in latency tests.
+	if (user_param->test_type == DURATION) {
+		duration_param=user_param;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		alarm(user_param->margin);
+		user_param->iters = 0;
+	}
+
+	while (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+		if (user_param->test_type == ITERATIONS)
+			user_param->tposted[scnt++] = get_cycles();
+
+		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
+			return 11;
+		}
+
+		if (user_param->test_type == DURATION && user_param->state == END_STATE)
+			break;
+
+		if (user_param->use_event) {
+			if (ctx_notify_events(ctx->channel)) {
+				fprintf(stderr, "Couldn't request CQ notification\n");
+				return 1;
+			}
+		}
+
+		do {
+			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
+
+			if(ne > 0) {
+				if (wc.status != IBV_WC_SUCCESS)
+					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
+
+				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					user_param->iters++;
+
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return FAILURE;
+			}
+
+		} while (!user_param->use_event && ne == 0);
+	}
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	int				scnt = 0;
+	int				rcnt = 0;
+	int				poll = 0;
+	int				ne;
+	struct ibv_wc	wc;
+	struct ibv_recv_wr	*bad_wr_recv;
+	struct ibv_send_wr	*bad_wr;
+
+	ctx->wr[0].sg_list->length = user_param->size;
+	ctx->wr[0].send_flags = 0;
+
+	if (user_param->size <= user_param->inline_size)
+		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
+
+	// Duration support in latency tests.
+	if (user_param->test_type == DURATION) {
+		duration_param=user_param;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		alarm(user_param->margin);
+		user_param->iters = 0;
+	}
+
+	while (scnt < user_param->iters || rcnt < user_param->iters ||
+			(user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+		// Server is polling on recieve first
+		if ((rcnt < user_param->iters || user_param->test_type == DURATION) &&
+			!(scnt < 1 && user_param->machine == CLIENT)) {
+
+			if (user_param->use_event) {
+				if (ctx_notify_events(ctx->channel)) {
+					fprintf(stderr , " Failed to notify events to CQ");
+					return 1;
+				}
+			}
+
+			do {
+				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
+				if (user_param->test_type == DURATION && user_param->state == END_STATE)
+					break;
+
+				if (ne > 0) {
+					if (wc.status != IBV_WC_SUCCESS)
+						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
+
+					rcnt++;
+
+					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+						user_param->iters++;
+
+					if (user_param->test_type==DURATION || (rcnt + user_param->rx_depth  <= user_param->iters)) {
+
+						if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id], &bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
+							return FAILURE;
+						}
+					}
+				}
+			} while (!user_param->use_event && ne == 0);
+		}
+
+		if (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+			if (user_param->test_type == ITERATIONS)
+				user_param->tposted[scnt] = get_cycles();
+
+			scnt++;
+
+			if (scnt % user_param->cq_mod == 0 || (user_param->test_type == ITERATIONS && scnt == user_param->iters)) {
+				poll = 1;
+				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
+			}
+
+			if (user_param->test_type == DURATION && user_param->state == END_STATE)
+				break;
+
+			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
+				return FAILURE;
+			}
+
+			if (poll == 1) {
+
+				struct ibv_wc s_wc;
+				int s_ne;
+
+				if (user_param->use_event) {
+					if (ctx_notify_events(ctx->channel)) {
+						fprintf(stderr , " Failed to notify events to CQ");
+						return FAILURE;
+					}
+				}
+
+				do {
+					s_ne = ibv_poll_cq(ctx->send_cq, 1, &s_wc);
+				} while (!user_param->use_event && s_ne == 0);
+
+				if (s_ne < 0) {
+					fprintf(stderr, "poll on Send CQ failed %d\n", s_ne);
+					return FAILURE;
+				}
+
+				if (s_wc.status != IBV_WC_SUCCESS)
+					NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
+
+				poll = 0;
+				ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
+			}
+		}
+	}
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 uint16_t ctx_get_local_lid(struct ibv_context *context,int port) {
 
 	struct ibv_port_attr attr;
