@@ -70,28 +70,48 @@
  *
  ******************************************************************************/
 
-void print_spec(struct ibv_flow_spec* spec)
+void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_parm)
 {
-	char str_ip_s[INET_ADDRSTRLEN] = {0};
-	char str_ip_d[INET_ADDRSTRLEN] = {0};
-	if(spec == NULL)
+	struct ibv_flow_spec* spec_info = NULL;
+
+	void* header_buff = (void*)flow_rules;
+
+	if(flow_rules == NULL)
 	{
 		printf("error : spec is NULL\n");
 		return;
 	}
-	inet_ntop(AF_INET, &spec->dst_ip, str_ip_d, INET_ADDRSTRLEN);
-	printf("spec.dst_ip   : %s\n",str_ip_d);
-	inet_ntop(AF_INET, &spec->src_ip, str_ip_s, INET_ADDRSTRLEN);
-	printf("spec.src_ip   : %s\n",str_ip_s);
-	printf("spec.dst_port : %d\n",ntohs(spec->dst_port));
-	printf("spec.src_port : %d\n",ntohs(spec->src_port));
+
+	header_buff = header_buff + sizeof(struct ibv_flow_attr);
+	spec_info = (struct ibv_flow_spec*)header_buff;
 	printf("MAC attached  : %02X:%02X:%02X:%02X:%02X:%02X\n",
-					spec->l2_id.eth.mac[0],
-					spec->l2_id.eth.mac[1],
-					spec->l2_id.eth.mac[2],
-					spec->l2_id.eth.mac[3],
-					spec->l2_id.eth.mac[4],
-					spec->l2_id.eth.mac[5]);
+			spec_info->eth.val.dst_mac[0],
+			spec_info->eth.val.dst_mac[1],
+			spec_info->eth.val.dst_mac[2],
+			spec_info->eth.val.dst_mac[3],
+			spec_info->eth.val.dst_mac[4],
+			spec_info->eth.val.dst_mac[5]);
+	if(user_parm->is_server_ip && user_parm->is_client_ip)
+	{
+		char str_ip_s[INET_ADDRSTRLEN] = {0};
+		char str_ip_d[INET_ADDRSTRLEN] = {0};
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+		uint32_t dst_ip = ntohl(spec_info->ipv4.val.dst_ip);
+		uint32_t src_ip = ntohl(spec_info->ipv4.val.src_ip);
+		inet_ntop(AF_INET, &dst_ip, str_ip_d, INET_ADDRSTRLEN);
+		printf("spec_info - dst_ip   : %s\n",str_ip_d);
+		inet_ntop(AF_INET, &src_ip, str_ip_s, INET_ADDRSTRLEN);
+		printf("spec_info - src_ip   : %s\n",str_ip_s);
+	}
+	if(user_parm->is_server_port && user_parm->is_client_port)
+	{
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+
+		printf("spec_info - dst_port : %d\n",spec_info->tcp_udp.val.dst_port);
+		printf("spec_info - src_port : %d\n",spec_info->tcp_udp.val.src_port);
+	}
 }
 /******************************************************************************
  *
@@ -264,9 +284,23 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 }
 
 /******************************************************************************
+ clac_flow_rules_size
+ ******************************************************************************/
+int clac_flow_rules_size(int is_ip_header,int is_udp_header)
+{
+	int tot_size = sizeof(struct ibv_flow_attr);
+	tot_size += sizeof(struct ibv_flow_spec_eth);
+	if (is_ip_header)
+		tot_size += sizeof(struct ibv_flow_spec_ipv4);
+	if (is_udp_header)
+		tot_size += sizeof(struct ibv_flow_spec_tcp_udp);
+	return tot_size;
+}
+
+/******************************************************************************
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
-static int send_set_up_connection(struct ibv_flow_spec* pspec,
+static int send_set_up_connection(struct ibv_flow_attr **flow_rules,
 								  struct pingpong_context *ctx,
 								  struct perftest_parameters *user_parm,
 								  struct pingpong_dest *my_dest,
@@ -295,46 +329,75 @@ static int send_set_up_connection(struct ibv_flow_spec* pspec,
 	my_dest->qpn = ctx->qp[0]->qp_num;
 
 	if(user_parm->machine == SERVER || user_parm->duplex){
+		void* header_buff;
+		struct ibv_flow_spec* spec_info;
+		struct ibv_flow_attr* attr_info;
+		int flow_rules_size;
+		flow_rules_size = clac_flow_rules_size((user_parm->is_server_ip || user_parm->is_client_ip),
+												(user_parm->is_server_port || user_parm->is_client_port));
 
-		//default value to spec
-		pspec->l2_id.eth.vlan_present = 0;
-		pspec->type = IBV_FLOW_ETH;
-		pspec->l4_protocol = IBV_FLOW_L4_NONE;
-		pspec->l2_id.eth.port = user_parm->ib_port;
+		ALLOCATE(header_buff,uint8_t,flow_rules_size);
 
-		if(user_parm->is_server_ip && user_parm->is_client_ip)
-		{
-			if(user_parm->machine == SERVER)
-			{
-				pspec->dst_ip = user_parm->server_ip;
-				pspec->src_ip = user_parm->client_ip;
-			}else{
-				pspec->dst_ip = user_parm->client_ip;
-				pspec->src_ip = user_parm->server_ip;
-			}
-
-			pspec->l2_id.eth.ethertype = htons(IP_ETHER_TYPE);
-		}
-		if(user_parm->is_server_port && user_parm->is_client_port)
-		{
-			if(user_parm->machine == SERVER)
-			{
-				pspec->dst_port = htons(user_parm->server_port);
-				pspec->src_port = htons(user_parm->client_port);
-			}else{
-				pspec->dst_port = htons(user_parm->client_port);
-				pspec->src_port = htons(user_parm->server_port);
-			}
-			pspec->l4_protocol = IBV_FLOW_L4_UDP;
-		}
+		memset(header_buff, 0,flow_rules_size);
+		*flow_rules = (struct ibv_flow_attr*)header_buff;
+		attr_info = (struct ibv_flow_attr*)header_buff;
+		attr_info->comp_mask = 0;
+		attr_info->type = IBV_FLOW_ATTR_NORMAL;
+		attr_info->size = flow_rules_size;
+		attr_info->priority = 0;
+		attr_info->num_of_specs = 1 + (user_parm->is_server_ip || user_parm->is_client_ip) + (user_parm->is_server_port || user_parm->is_client_port);
+		attr_info->port = user_parm->ib_port;
+		attr_info->flags = 0;
+		header_buff = header_buff + sizeof(struct ibv_flow_attr);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+		spec_info->eth.type = IBV_FLOW_SPEC_ETH;
+		spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
+		spec_info->eth.val.ether_type = 0;
 
 		if(user_parm->is_source_mac)
 		{
-			mac_from_user(pspec->l2_id.eth.mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac) );
+			mac_from_user(spec_info->eth.val.dst_mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac));
 		}
 		else
 		{
-			mac_from_gid(pspec->l2_id.eth.mac, my_dest->gid.raw );//default option
+			mac_from_gid(spec_info->eth.val.dst_mac, my_dest->gid.raw);//default option
+		}
+		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
+		if(user_parm->is_server_ip && user_parm->is_client_ip)
+		{
+			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+			spec_info = (struct ibv_flow_spec*)header_buff;
+			spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
+			spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
+
+			if(user_parm->machine == SERVER)
+			{
+				spec_info->ipv4.val.dst_ip = htonl(user_parm->server_ip);
+				spec_info->ipv4.val.src_ip = htonl(user_parm->client_ip);
+			}else{
+				spec_info->ipv4.val.dst_ip = htonl(user_parm->client_ip);
+				spec_info->ipv4.val.src_ip = htonl(user_parm->server_ip);
+			}
+			memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
+			memset((void*)&spec_info->ipv4.mask.src_ip, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
+		}
+		if(user_parm->is_server_port && user_parm->is_client_port)
+		{
+			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
+			spec_info = (struct ibv_flow_spec*)header_buff;
+			spec_info->tcp_udp.type = IBV_FLOW_SPEC_UDP;
+			spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
+
+			if(user_parm->machine == SERVER)
+			{
+				spec_info->tcp_udp.val.dst_port = user_parm->server_port;
+				spec_info->tcp_udp.val.src_port = user_parm->client_port;
+			}else{
+				spec_info->tcp_udp.val.dst_port = user_parm->client_port;
+				spec_info->tcp_udp.val.src_port = user_parm->server_port;
+			}
+			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
+			memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
 		}
 	}
 
@@ -397,10 +460,10 @@ int __cdecl main(int argc, char *argv[]) {
 	struct raw_ethernet_info	my_dest_info,rem_dest_info;
 	struct pingpong_dest 		my_dest,rem_dest;
 	struct perftest_comm		user_comm;
-	struct ibv_flow_spec 		spec;
 	int							ret_parser;
-	struct perftest_parameters user_param;
-
+	struct perftest_parameters	user_param;
+	struct ibv_flow				*flow_create_result = NULL;
+	struct ibv_flow_attr		*flow_rules = NULL;
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
 	/* init default values to user's parameters */
@@ -411,8 +474,6 @@ int __cdecl main(int argc, char *argv[]) {
 	memset(&rem_dest, 0 , sizeof(struct pingpong_dest));
 	memset(&my_dest_info, 0 , sizeof(struct raw_ethernet_info));
 	memset(&rem_dest_info, 0 , sizeof(struct raw_ethernet_info));
-	memset(&spec, 0, sizeof(struct ibv_flow_spec));
-
 
 	user_param.verb    = SEND;
 	user_param.tst     = BW;
@@ -427,7 +488,6 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-
 	// Finding the IB device selected (or defalut if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
@@ -435,7 +495,6 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
@@ -443,17 +502,14 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-
 	// See if MTU and link type are valid and supported.
 	if (check_link_and_mtu(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return FAILURE;
 	}
-
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
-
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
@@ -463,21 +519,20 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return FAILURE;
 	}
-
 	// Set up the Connection.
 	//set mac address by user choose
-	if (send_set_up_connection(&spec,&ctx,&user_param,&my_dest,&rem_dest,&my_dest_info,&rem_dest_info,&user_comm)) {
+	if (send_set_up_connection(&flow_rules,&ctx,&user_param,&my_dest,&rem_dest,&my_dest_info,&rem_dest_info,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
 
 	if(user_param.machine == SERVER || user_param.duplex){
-		print_spec(&spec);
+		print_spec(flow_rules,&user_param);
 	}
-
 	//attaching the qp to the spec
 	if(user_param.machine == SERVER || user_param.duplex){
-		if (ibv_attach_flow(ctx.qp[0], &spec, 0)){
+		flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
+		if (!flow_create_result){
 			perror("error");
 			fprintf(stderr, "Couldn't attach QP\n");
 			return FAILURE;
@@ -530,12 +585,13 @@ int __cdecl main(int argc, char *argv[]) {
 	print_report_bw(&user_param);
 
 	if(user_param.machine == SERVER || user_param.duplex){
-			if (ibv_detach_flow(ctx.qp[0], &spec, 0))
+			if (ibv_destroy_flow(flow_create_result))
 			{
 				perror("error");
-				fprintf(stderr, "Couldn't attach QP\n");
+				fprintf(stderr, "Couldn't Destory flow\n");
 				return FAILURE;
 			}
+			free(flow_rules);
 		}
 
 	if (destroy_ctx(&ctx, &user_param)){

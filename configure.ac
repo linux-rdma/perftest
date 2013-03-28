@@ -32,8 +32,7 @@ AC_CHECK_LIB([ibverbs], [ibv_get_device_list], [], [AC_MSG_ERROR([libibverbs not
 AC_CHECK_LIB([rdmacm], [rdma_create_event_channel], [], AC_MSG_ERROR([librdmacm-devel not found]))
 AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad not found]))
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
-
-AC_CHECK_LIB([ibverbs], [ibv_attach_flow],[HAVE_RAW_ETH=yes],[HAVE_RAW_ETH=no])
+AC_CHECK_LIB([ibverbs], [ibv_get_device_list],[HAVE_RAW_ETH=yes],[HAVE_RAW_ETH=no])
 AM_CONDITIONAL([HAVE_RAW_ETH],[test "x$HAVE_RAW_ETH" = "xyes"])
 if test $HAVE_RAW_ETH = yes; then
 	AC_DEFINE([HAVE_RAW_ETH], [1], [Enable RAW_ETH_TEST])
