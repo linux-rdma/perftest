@@ -141,9 +141,6 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -i, --ib-port=<port> ");
 	printf(" Use port <port> of IB device (default %d)\n",DEF_IB_PORT);
 
-	printf("  -c, --connection=<RC/UC/UD> ");
-	printf(" Connection type RC/UC/UD (default RC)\n");
-
 	printf("  -m, --mtu=<mtu> ");
 	printf(" Mtu size : 256 - 4096 (default port mtu)\n");
 
@@ -183,6 +180,14 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	if (verb == SEND) {
 		printf("  -r, --rx-depth=<dep> ");
 		printf(" Rx queue size (default %d)\n",DEF_RX_SEND);
+
+		printf("  -c, --connection=<RC/UC/UD> ");
+		printf(" Connection type RC/UC/UD (default RC)\n");
+	}
+
+	if (verb == WRITE) {
+		printf("  -c, --connection=<RC/UC> ");
+		printf(" Connection type RC/UC (default RC)\n");
 	}
 
 	if (verb != READ || verb != ATOMIC) {
