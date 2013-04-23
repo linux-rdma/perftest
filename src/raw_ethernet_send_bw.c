@@ -172,7 +172,7 @@ void print_ip_header(IP_V4_header* ip_header)
 		printf("|ID        |%-12d|\n",ntohs(ip_header->id));
 		printf("|Frag      |%-12d|\n",ntohs(ip_header->frag_off));
 		printf("|TTL       |%-12d|\n",ip_header->ttl);
-		printf("|protocol  |%-12s|\n",ip_header->protocol == UDP_PROTOCOL ? "UPD" : "EMPTY");
+		printf("|protocol  |%-12s|\n",ip_header->protocol == UDP_PROTOCOL ? "UDP" : "EMPTY");
 		printf("|Check sum |%-12X|\n",ntohs(ip_header->check));
 		inet_ntop(AF_INET, &ip_header->saddr, str_ip_s, INET_ADDRSTRLEN);
 		printf("|Source IP |%-12s|\n",str_ip_s);
