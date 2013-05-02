@@ -1,0 +1,17 @@
+Source: perftest
+Section: net
+Priority: extra
+Maintainer: Ido Shamay <idos@dev.mellanox.co.il>
+Build-Depends: debhelper (>= 8.0.0), libibverbs-dev (>= 1.1.6), librdmacm-dev
+Standards-Version: 3.9.2
+Homepage: https://openfabrics.org/downloads/perftest/
+Vcs-Git: git://git.openfabrics.org/~shamoya/perftest.git
+Vcs-Browser: http://git.openfabrics.org/git?p=~shamoya/perftest.git;a=summary
+
+Package: perftest
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libibverbs1 (>= 1.1.6), librdmacm1 (>=1.0.8)
+Description: Infiniband verbs performance tests
+ This is a collection of tests written using Infiniband verbs intended for
+ use as a performance micro-benchmark. The tests can measure the latency
+ bandwidth and message rate of Infiniband or Ethernet (RoCE) fabrics.

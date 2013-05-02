@@ -1,0 +1,5 @@
+perftest (2.0-0) stable; urgency=low
+
+  * Initial release For Ubuntu (Closes: #182805)
+
+ -- Ido Shamay <idos@dev.mellanox.co.il>  Wed, 1 May 2013 17:47:57 +0200

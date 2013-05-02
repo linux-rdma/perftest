@@ -1,0 +1,9 @@
+ib_atomic_bw usr/bin/
+ib_atomic_lat usr/bin/
+ib_read_bw usr/bin/
+ib_read_lat usr/bin/
+ib_send_bw usr/bin/
+ib_clock_test usr/bin/
+ib_send_lat usr/bin/
+ib_write_bw usr/bin/
+ib_write_lat usr/bin/
