@@ -239,7 +239,7 @@ if (comm->rdma_params->gid_index == -1){
 #ifndef _WIN32
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 #else
-		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, 0) != sizeof msg) {
+		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, MSG_WAITALL) != sizeof msg) {
 #endif
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
@@ -270,7 +270,7 @@ if (comm->rdma_params->gid_index == -1){
 #ifndef _WIN32
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 #else
-		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, 0) != sizeof msg) {
+		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, MSG_WAITALL) != sizeof msg) {
 #endif
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
