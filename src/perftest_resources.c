@@ -140,7 +140,9 @@ int check_add_port(char **service,int port,
 int create_rdma_resources(struct pingpong_context *ctx,
 						  struct perftest_parameters *user_param) { 
 
-	enum rdma_port_space port_space = (user_param->connection_type == UD) ? RDMA_PS_UDP : RDMA_PS_TCP;
+	int is_udp_ps = user_param->connection_type == UD || user_param->connection_type == RawEth;
+
+	enum rdma_port_space port_space = (is_udp_ps) ? RDMA_PS_UDP : RDMA_PS_TCP;
 
 	ctx->cm_channel = rdma_create_event_channel();
 	if (ctx->cm_channel == NULL) {
@@ -479,7 +481,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	if (user_param->work_rdma_cm) {
 
 		if (rdma_create_qp(ctx->cm_id,ctx->pd,&attr)) {
-			fprintf(stderr, " Couldn't create rdma QP\n");
+			fprintf(stderr, " Couldn't create rdma QP - %s\n",strerror(errno));
 			return NULL;
 		}
 		qp = ctx->cm_id->qp;
@@ -627,54 +629,52 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 								struct ibv_qp_attr *attr,
 								struct perftest_parameters *user_parm,
 								struct pingpong_dest *dest,
-								int qpindex,
-								int my_reads)  {
+								struct pingpong_dest *my_dest,
+								int qpindex) {
 
 	int flags = IBV_QP_STATE;
-
 	attr->qp_state = IBV_QPS_RTR;
-	attr->ah_attr.dlid = dest->lid;
-		
-	if (user_parm->gid_index == DEF_GID_INDEX) {
-
-		attr->ah_attr.is_global  = 0;
-		attr->ah_attr.sl         = user_parm->sl;
-
-	} else {
-
-		attr->ah_attr.is_global  = 1;
-		attr->ah_attr.grh.dgid   = dest->gid;
-		attr->ah_attr.grh.sgid_index = user_parm->gid_index;
-		attr->ah_attr.grh.hop_limit = 1;
-		attr->ah_attr.sl         = 0;
-	}
-
 	attr->ah_attr.src_path_bits = 0;
-	attr->ah_attr.port_num = (user_parm->dualport == ON && qpindex >= (user_parm->num_of_qps/2)) ? user_parm->ib_port2 : user_parm->ib_port;
 
-	if (user_parm->connection_type != UD) { 
+	if (user_parm->dualport == ON && qpindex >= (user_parm->num_of_qps/2))
+		attr->ah_attr.port_num = user_parm->ib_port2;
+	else
+		attr->ah_attr.port_num = user_parm->ib_port;
 
-		attr->path_mtu     = user_parm->curr_mtu;
-		attr->dest_qp_num  = dest->qpn;
-		attr->rq_psn 	   = dest->psn;
+	if (user_parm->connection_type != RawEth) {
 
-		flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
+		attr->ah_attr.dlid = dest->lid;
+		if (user_parm->gid_index == DEF_GID_INDEX) {
 
-		if(user_parm->connection_type == RawEth)
-		{
-			flags = IBV_QP_STATE;
+			attr->ah_attr.is_global = 0;
+			attr->ah_attr.sl = user_parm->sl;
+
+		} else {
+
+			attr->ah_attr.is_global  = 1;
+			attr->ah_attr.grh.dgid = dest->gid;
+			attr->ah_attr.grh.sgid_index = user_parm->gid_index;
+			attr->ah_attr.grh.hop_limit = 1;
+			attr->ah_attr.sl = 0;
 		}
 
-		if (user_parm->connection_type == RC) { 
+		if (user_parm->connection_type != UD) {
 
-			attr->max_dest_rd_atomic = my_reads;
-			attr->min_rnr_timer 	 = 12;
-			flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
+			attr->path_mtu = user_parm->curr_mtu;
+			attr->dest_qp_num = dest->qpn;
+			attr->rq_psn = dest->psn;
+
+			flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
+
+			if (user_parm->connection_type == RC) { 
+
+				attr->max_dest_rd_atomic = my_dest->out_reads;
+				attr->min_rnr_timer = 12;
+				flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
+			}
 		}
 	}
-
 	return ibv_modify_qp(qp,attr,flags);
-	
 }
 
 /****************************************************************************** 
@@ -683,32 +683,30 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 								struct ibv_qp_attr *attr,
 								struct perftest_parameters *user_parm,
-								int dest_read,
-								int my_psn)  {
+								struct pingpong_dest *dest,
+								struct pingpong_dest *my_dest)
+{
 
-	int flags = IBV_QP_STATE | IBV_QP_SQ_PSN;
+	int flags = IBV_QP_STATE;
+	attr->qp_state = IBV_QPS_RTS;
 
-	attr->qp_state 	    = IBV_QPS_RTS;
-	attr->sq_psn 	    = my_psn;
+	if (user_parm->connection_type != RawEth) {
 
-	if (user_parm->connection_type == RC) {
+		flags |= IBV_QP_SQ_PSN;
+		attr->sq_psn = my_dest->psn;
 
-		attr->timeout   = user_parm->qp_timeout;
-		attr->retry_cnt = 7;
-		attr->rnr_retry = 7;
-		attr->max_rd_atomic  = dest_read;
+		if (user_parm->connection_type == RC) {
 
-		flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
+			attr->timeout   = user_parm->qp_timeout;
+			attr->retry_cnt = 7;
+			attr->rnr_retry = 7;
+			attr->max_rd_atomic  = dest->out_reads;
 
+			flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
+		}
 	}
-	if (user_parm->connection_type == RawEth) {
-
-			flags = IBV_QP_STATE;
-	}
-
-	return ibv_modify_qp(qp,attr,flags);		
+	return ibv_modify_qp(qp,attr,flags);
 }
-
 
 /****************************************************************************** 
  *
@@ -725,19 +723,18 @@ int ctx_connect(struct pingpong_context *ctx,
 	
 		memset(&attr, 0, sizeof attr);
 
-		if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[i],i,my_dest[i].out_reads)) { 
+		if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[i],&my_dest[i],i)) {
 			fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
 			return FAILURE;
 		}
 
-
-		if (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex) { 
-			if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_parm,dest[i].out_reads,my_dest[i].psn)) { 
-				fprintf(stderr, "Failed to modify QP %d to RTS\n",ctx->qp[i]->qp_num);
+		if (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex) {
+			if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_parm,&dest[i],&my_dest[i])) {
+				fprintf(stderr, "Failed to modify QP to RTS\n");
 				return FAILURE;
 			}
 		}
-		
+
 		if (user_parm->connection_type == UD && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
 			ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
 			if (!ctx->ah[i]) {
@@ -746,7 +743,6 @@ int ctx_connect(struct pingpong_context *ctx,
 			}
 		}
 	}
-	
 	return SUCCESS;
 }
 
@@ -776,11 +772,12 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i]	= (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
-			ctx->rem_addr[i] = rem_dest[i].vaddr;
+			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
+			if (user_param->verb != SEND)
+				ctx->rem_addr[i] = rem_dest[i].vaddr;
 		}
-		
-		for (j = 0; j < user_param->post_list; j++) { 
+
+		for (j = 0; j < user_param->post_list; j++) {
 
 			ctx->sge_list[i*user_param->post_list + j].length =  (user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr->lkey;
@@ -843,10 +840,10 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 					ctx->wr[i*user_param->post_list + j].wr.atomic.swap = ATOMIC_SWAP_VALUE;
 
 	
-			} else if (user_param->verb == SEND && user_param->connection_type == UD) { 
+			} else if (user_param->verb == SEND && user_param->connection_type == UD) {
 
 				ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
-				if (user_param->work_rdma_cm) {	
+				if (user_param->work_rdma_cm) {
 
 					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
 					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;

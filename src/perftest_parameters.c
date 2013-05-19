@@ -919,10 +919,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int report_fmt_flag = 0;
 
 	init_perftest_params(user_param);
+
 	if(user_param->connection_type == RawEth)
-	{
 		user_param->machine = UNCHOSEN;
-	}
 
 	while (1) {
 #ifndef _WIN32
@@ -1164,11 +1163,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				}
 				user_param->r_flag->histogram = ON;	
 				break;
-            case 'U': 
+				case 'U':
 				if (user_param->tst != LAT) {
 					fprintf(stderr," Availible only on Latency tests\n");
 					return 1;
-				} 
+				}
 				user_param->r_flag->unsorted = ON; 
 				break;
 			case 'B':
@@ -1227,7 +1226,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					usage_raw_ethernet();
 				}
 				return 1;
-
 		 }
 	}
 
@@ -1239,21 +1237,17 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->report_fmt = GBS;
 	}
 
-	if(user_param->connection_type != RawEth) {
-		
-		if (optind == argc - 1) {
-#ifndef _WIN32
-			GET_STRING(user_param->servername,strdupa(argv[optind]));
-#else
-			GET_STRING(user_param->servername,_strdup(argv[optind]));
-#endif
-		} else if (optind < argc) {
-				fprintf(stderr," Invalid Command line. Please check command rerun \n");
-				return 1;
-		}
+	if (optind == argc - 1) {
+		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
-		user_param->machine = user_param->servername ? CLIENT : SERVER;
+	} else if (optind < argc) {
+		fprintf(stderr," Invalid Command line. Please check command rerun \n");
+		return 1;
 	}
+
+	if(user_param->connection_type != RawEth)
+		user_param->machine = user_param->servername ? CLIENT : SERVER;
+
 	force_dependecies(user_param);
     return 0;
 }

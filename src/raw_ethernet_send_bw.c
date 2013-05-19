@@ -76,8 +76,7 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 
 	void* header_buff = (void*)flow_rules;
 
-	if(flow_rules == NULL)
-	{
+	if(flow_rules == NULL) {
 		printf("error : spec is NULL\n");
 		return;
 	}
@@ -91,8 +90,8 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			spec_info->eth.val.dst_mac[3],
 			spec_info->eth.val.dst_mac[4],
 			spec_info->eth.val.dst_mac[5]);
-	if(user_parm->is_server_ip && user_parm->is_client_ip)
-	{
+
+	if(user_parm->is_server_ip && user_parm->is_client_ip) {
 		char str_ip_s[INET_ADDRSTRLEN] = {0};
 		char str_ip_d[INET_ADDRSTRLEN] = {0};
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
@@ -104,14 +103,16 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 		inet_ntop(AF_INET, &src_ip, str_ip_s, INET_ADDRSTRLEN);
 		printf("spec_info - src_ip   : %s\n",str_ip_s);
 	}
-	if(user_parm->is_server_port && user_parm->is_client_port)
-	{
+
+	if(user_parm->is_server_port && user_parm->is_client_port) {
+
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 
 		printf("spec_info - dst_port : %d\n",spec_info->tcp_udp.val.dst_port);
 		printf("spec_info - src_port : %d\n",spec_info->tcp_udp.val.src_port);
 	}
+
 }
 /******************************************************************************
  *
@@ -300,41 +301,34 @@ int clac_flow_rules_size(int is_ip_header,int is_udp_header)
 /******************************************************************************
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
-static int send_set_up_connection(struct ibv_flow_attr **flow_rules,
-								  struct pingpong_context *ctx,
-								  struct perftest_parameters *user_parm,
-								  struct pingpong_dest *my_dest,
-								  struct pingpong_dest *rem_dest,
-								  struct raw_ethernet_info* my_dest_info,
-								  struct raw_ethernet_info* rem_dest_info,
-								  struct perftest_comm *comm) {
-	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
+static int send_set_up_connection(
+	struct ibv_flow_attr **flow_rules,
+	struct pingpong_context *ctx,
+	struct perftest_parameters *user_parm,
+	struct raw_ethernet_info* my_dest_info,
+	struct raw_ethernet_info* rem_dest_info)
+{
+
+	union ibv_gid temp_gid;
 
 	if (user_parm->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
+		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
 			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return -1;
+			return FAILURE;
 		}
 	}
-	// We do not fail test upon lid above RoCE.
-	if (user_parm->gid_index < 0)
-	{
-		if (!my_dest->lid) {
-			fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return -1;
-		}
-	}
-	my_dest->lid = ctx_get_local_lid(ctx->context,user_parm->ib_port);
-	my_dest->qpn = ctx->qp[0]->qp_num;
 
 	if(user_parm->machine == SERVER || user_parm->duplex){
+
 		void* header_buff;
 		struct ibv_flow_spec* spec_info;
 		struct ibv_flow_attr* attr_info;
 		int flow_rules_size;
-		flow_rules_size = clac_flow_rules_size((user_parm->is_server_ip || user_parm->is_client_ip),
-												(user_parm->is_server_port || user_parm->is_client_port));
+
+		int is_ip = user_parm->is_server_ip || user_parm->is_client_ip;
+		int is_port = user_parm->is_server_port || user_parm->is_client_port;
+
+		flow_rules_size = clac_flow_rules_size(is_ip,is_port);
 
 		ALLOCATE(header_buff,uint8_t,flow_rules_size);
 
@@ -345,7 +339,7 @@ static int send_set_up_connection(struct ibv_flow_attr **flow_rules,
 		attr_info->type = IBV_FLOW_ATTR_NORMAL;
 		attr_info->size = flow_rules_size;
 		attr_info->priority = 0;
-		attr_info->num_of_specs = 1 + (user_parm->is_server_ip || user_parm->is_client_ip) + (user_parm->is_server_port || user_parm->is_client_port);
+		attr_info->num_of_specs = 1 + is_ip + is_port;
 		attr_info->port = user_parm->ib_port;
 		attr_info->flags = 0;
 		header_buff = header_buff + sizeof(struct ibv_flow_attr);
@@ -354,99 +348,90 @@ static int send_set_up_connection(struct ibv_flow_attr **flow_rules,
 		spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
 		spec_info->eth.val.ether_type = 0;
 
-		if(user_parm->is_source_mac)
-		{
+		if(user_parm->is_source_mac) {
 			mac_from_user(spec_info->eth.val.dst_mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac));
+		} else {
+			mac_from_gid(spec_info->eth.val.dst_mac, temp_gid.raw);
 		}
-		else
-		{
-			mac_from_gid(spec_info->eth.val.dst_mac, my_dest->gid.raw);//default option
-		}
+
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
-		if(user_parm->is_server_ip && user_parm->is_client_ip)
-		{
+		if(user_parm->is_server_ip && user_parm->is_client_ip) {
+
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
 			spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
 
-			if(user_parm->machine == SERVER)
-			{
+			if(user_parm->machine == SERVER) {
+
 				spec_info->ipv4.val.dst_ip = htonl(user_parm->server_ip);
 				spec_info->ipv4.val.src_ip = htonl(user_parm->client_ip);
-			}else{
+
+			} else{
+
 				spec_info->ipv4.val.dst_ip = htonl(user_parm->client_ip);
 				spec_info->ipv4.val.src_ip = htonl(user_parm->server_ip);
 			}
+
 			memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
 			memset((void*)&spec_info->ipv4.mask.src_ip, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
 		}
-		if(user_parm->is_server_port && user_parm->is_client_port)
-		{
+
+		if(user_parm->is_server_port && user_parm->is_client_port) {
+
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			spec_info->tcp_udp.type = IBV_FLOW_SPEC_UDP;
 			spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
 
-			if(user_parm->machine == SERVER)
-			{
+			if(user_parm->machine == SERVER) {
+
 				spec_info->tcp_udp.val.dst_port = user_parm->server_port;
 				spec_info->tcp_udp.val.src_port = user_parm->client_port;
-			}else{
+
+			} else{
 				spec_info->tcp_udp.val.dst_port = user_parm->client_port;
 				spec_info->tcp_udp.val.src_port = user_parm->server_port;
 			}
+
 			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
 			memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
 		}
 	}
 
-	if(user_parm->machine == CLIENT || user_parm->duplex)
-	{
+	if(user_parm->machine == CLIENT || user_parm->duplex) {
+
 		//set source mac
-		if(user_parm->is_source_mac)
-		{
+		if(user_parm->is_source_mac) {
 			mac_from_user(my_dest_info->mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac) );
+
+		} else {
+			mac_from_gid(my_dest_info->mac, temp_gid.raw );
 		}
-		else
-		{
-			mac_from_gid(my_dest_info->mac, my_dest->gid.raw );//default option
-		}
+
 		//set dest mac
 		mac_from_user(rem_dest_info->mac , &(user_parm->dest_mac[0]) , sizeof(user_parm->dest_mac) );
 
-		if(user_parm->is_client_ip)
-		{
-			if(user_parm->machine == CLIENT)
-			{
+		if(user_parm->is_client_ip) {
+			if(user_parm->machine == CLIENT) {
 				my_dest_info->ip = user_parm->client_ip;
-			}else{
+			} else {
 				my_dest_info->ip = user_parm->server_ip;
 			}
 		}
 
-		if(user_parm->machine == CLIENT)
-		{
+		if(user_parm->machine == CLIENT) {
 			rem_dest_info->ip = user_parm->server_ip;
 			my_dest_info->port = user_parm->client_port;
 			rem_dest_info->port = user_parm->server_port;
 		}
 
-		if(user_parm->machine == SERVER && user_parm->duplex)
-		{
+		if(user_parm->machine == SERVER && user_parm->duplex) {
 			rem_dest_info->ip = user_parm->client_ip;
 			my_dest_info->port = user_parm->server_port;
 			rem_dest_info->port = user_parm->client_port;
 		}
-
-	#ifndef _WIN32
-		my_dest->psn   = lrand48() & 0xffffff;
-	#else
-		my_dest->psn   = rand() & 0xffffff;
-	#endif
 	}
-
-	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
 }
 
@@ -455,23 +440,17 @@ static int send_set_up_connection(struct ibv_flow_attr **flow_rules,
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
 
-	struct ibv_device		    *ib_dev = NULL;
-	struct pingpong_context  	ctx;
+	struct ibv_device			*ib_dev = NULL;
+	struct pingpong_context		ctx;
 	struct raw_ethernet_info	my_dest_info,rem_dest_info;
-	struct pingpong_dest 		my_dest,rem_dest;
-	struct perftest_comm		user_comm;
 	int							ret_parser;
 	struct perftest_parameters	user_param;
 	struct ibv_flow				*flow_create_result = NULL;
 	struct ibv_flow_attr		*flow_rules = NULL;
-	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
 	memset(&user_param, 0 , sizeof(struct perftest_parameters));
-	memset(&user_comm, 0,sizeof(struct perftest_comm));
-	memset(&my_dest, 0 , sizeof(struct pingpong_dest));
-	memset(&rem_dest, 0 , sizeof(struct pingpong_dest));
 	memset(&my_dest_info, 0 , sizeof(struct raw_ethernet_info));
 	memset(&rem_dest_info, 0 , sizeof(struct raw_ethernet_info));
 
@@ -481,6 +460,7 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.connection_type = RawEth;
 
 	ret_parser = parser(&user_param,argv,argc);
+
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT) { 
 			fprintf(stderr," Parser function exited with Error\n");
@@ -513,24 +493,47 @@ int __cdecl main(int argc, char *argv[]) {
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
-	// create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
-	if (ctx_init(&ctx,&user_param)) {
-		fprintf(stderr, " Couldn't create IB resources\n");
-		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		return FAILURE;
-	}
-	// Set up the Connection.
 	//set mac address by user choose
-	if (send_set_up_connection(&flow_rules,&ctx,&user_param,&my_dest,&rem_dest,&my_dest_info,&rem_dest_info,&user_comm)) {
+	if (send_set_up_connection(&flow_rules,&ctx,&user_param,&my_dest_info,&rem_dest_info)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
 
-	if(user_param.machine == SERVER || user_param.duplex){
+	if(user_param.machine == SERVER || user_param.duplex) {
 		print_spec(flow_rules,&user_param);
 	}
+
+	// Create (if necessary) the rdma_cm ids and channel.
+	if (user_param.work_rdma_cm == ON) {
+
+		if (create_rdma_resources(&ctx,&user_param)) {
+			fprintf(stderr," Unable to create the rdma_resources\n");
+			return FAILURE;
+		}
+
+		if (user_param.machine == CLIENT) {
+
+			if (rdma_client_connect(&ctx,&user_param)) {
+				fprintf(stderr,"Unable to perform rdma_client function\n");
+				return FAILURE;
+			}
+
+		} else if (rdma_server_connect(&ctx,&user_param)) {
+			fprintf(stderr,"Unable to perform rdma_client function\n");
+			return FAILURE;
+		}
+
+	} else {
+
+		// create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
+		if (ctx_init(&ctx,&user_param)) {
+			fprintf(stderr, " Couldn't create IB resources\n");
+			return FAILURE;
+		}
+	}
+
 	//attaching the qp to the spec
-	if(user_param.machine == SERVER || user_param.duplex){
+	if(user_param.machine == SERVER || user_param.duplex) {
 		flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
 		if (!flow_create_result){
 			perror("error");
@@ -538,6 +541,7 @@ int __cdecl main(int argc, char *argv[]) {
 			return FAILURE;
 		}
 	}
+
 	//build raw Ethernet packets on ctx buffer
 	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd){
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
@@ -547,14 +551,16 @@ int __cdecl main(int argc, char *argv[]) {
 	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	// Prepare IB resources for rtr/rts.
-	if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {
-		fprintf(stderr," Unable to Connect the HCA's through the link\n");
-		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		return 1;
+	if (user_param.work_rdma_cm == OFF) {
+		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {
+			fprintf(stderr," Unable to Connect the HCA's through the link\n");
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+			return 1;
+		}
 	}
 
 	if (user_param.machine == CLIENT || user_param.duplex) {
-		ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
+		ctx_set_send_wqes(&ctx,&user_param,NULL);
 	}
 
 	if (user_param.machine == SERVER || user_param.duplex) {
@@ -564,40 +570,52 @@ int __cdecl main(int argc, char *argv[]) {
 			return 1;
 		}
 	}
+
 	if (user_param.mac_fwd) {
-		if(run_iter_fw(&ctx,&user_param))
+
+		if(run_iter_fw(&ctx,&user_param)) {
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+			return FAILURE;
+		}
+
+	} else if (user_param.duplex) {
+
+		if(run_iter_bi(&ctx,&user_param)) {
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+			return FAILURE;
+		}
+
+	} else if (user_param.machine == CLIENT) {
+
+		if(run_iter_bw(&ctx,&user_param)) {
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+			return FAILURE;
+		}
+
+	} else {
+
+		if(run_iter_bw_server(&ctx,&user_param)) {
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 			return 17;
-	}else if (user_param.duplex) {
-		if(run_iter_bi(&ctx,&user_param))
-				return 17;
-			}else if (user_param.machine == CLIENT) {
-				if(run_iter_bw(&ctx,&user_param)) {
-					DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-					return 17;
-				}
-				} else	{
-						if(run_iter_bw_server(&ctx,&user_param)) {
-							DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-							return 17;
-						}
-					}
+		}
+	}
 
 	print_report_bw(&user_param);
 
-	if(user_param.machine == SERVER || user_param.duplex){
-			if (ibv_destroy_flow(flow_create_result))
-			{
-				perror("error");
-				fprintf(stderr, "Couldn't Destory flow\n");
-				return FAILURE;
-			}
-			free(flow_rules);
-		}
+	if(user_param.machine == SERVER || user_param.duplex) {
 
-	if (destroy_ctx(&ctx, &user_param)){
+		if (ibv_destroy_flow(flow_create_result)) {
+			perror("error");
+			fprintf(stderr, "Couldn't Destory flow\n");
+			return FAILURE;
+		}
+		free(flow_rules);
+	}
+
+	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr,"Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 1;
+		return 1;
 	}
 
 	printf(RESULT_LINE);

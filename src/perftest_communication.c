@@ -659,17 +659,17 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	hints.ai_family   = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-    if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
+	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
 		fprintf(stderr, "Problem in resolving basic adress and port\n");
 		return FAILURE;
-    }
+	}
 
-    sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
-    sin.sin_family = PF_INET;
-    sin.sin_port = htons((unsigned short)user_param->port);
+	sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
+	sin.sin_family = PF_INET;
+	sin.sin_port = htons((unsigned short)user_param->port);
 
-   while (1) {
-            
+	while (1) {
+
 	if (num_of_retry == 0) {
 	    fprintf(stderr, "Received %d times ADDR_ERROR\n",NUM_OF_RETRIES);
 	    return FAILURE;
@@ -701,14 +701,14 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	break;
    }
 
-   if (user_param->tos != DEF_TOS) {
+	if (user_param->tos != DEF_TOS) {
 
-	if (rdma_set_option(ctx->cm_id,RDMA_OPTION_ID,RDMA_OPTION_ID_TOS,&user_param->tos,sizeof(uint8_t))) {
-            fprintf(stderr, " Set TOS option failed: %d\n",event->event);
-            return FAILURE;
-        }
-   }
-	
+		if (rdma_set_option(ctx->cm_id,RDMA_OPTION_ID,RDMA_OPTION_ID_TOS,&user_param->tos,sizeof(uint8_t))) {
+			fprintf(stderr, " Set TOS option failed: %d\n",event->event);
+			return FAILURE;
+		}
+	}
+
     while (1) {
 
 		if (num_of_retry <= 0) {
@@ -763,7 +763,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		if (post_one_recv_wqe(ctx)) {
 			fprintf(stderr, "Couldn't post send \n");
 			return 1;
-		}	
+		}
 	}
 
 	if (rdma_connect(ctx->cm_id,&conn_param)) {
@@ -773,7 +773,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 
 	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
 		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return FAILURE; 
+		return FAILURE;
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
