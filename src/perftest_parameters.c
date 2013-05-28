@@ -687,7 +687,10 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user
 
 	// User did not ask for specific mtu.
 	if (user_mtu == 0) {
-		curr_mtu = (port_attr.active_mtu < 4) ? port_attr.active_mtu : IBV_MTU_2048;
+		enum ctx_device current_dev = ib_dev_name(context);
+		curr_mtu = port_attr.active_mtu;
+		if (curr_mtu == IBV_MTU_4096 && (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3))
+			curr_mtu = IBV_MTU_2048;
 	}
 
 	else {
