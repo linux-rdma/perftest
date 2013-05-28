@@ -686,8 +686,9 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user
 	ibv_query_port(context,ib_port,&port_attr);
 
 	// User did not ask for specific mtu.
-	if (user_mtu == 0) 
-		curr_mtu = port_attr.active_mtu;
+	if (user_mtu == 0) {
+		curr_mtu = (port_attr.active_mtu < 4) ? port_attr.active_mtu : IBV_MTU_2048;
+	}
 
 	else {
 
