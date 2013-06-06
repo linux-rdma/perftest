@@ -45,14 +45,15 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
+
 #include "raw_ethernet_resources.h"
 
 
-
-/******************************************************************************
- *
- ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+/*
+* Main function. implements raw_ethernet_send_lat
+*/
+int __cdecl main(int argc, char *argv[]) 
+{
 
 	struct ibv_device			*ib_dev = NULL;
 	struct pingpong_context		ctx;
@@ -61,34 +62,49 @@ int __cdecl main(int argc, char *argv[]) {
 	struct perftest_parameters	user_param;
 	struct ibv_flow				*flow_create_result = NULL;
 	struct ibv_flow_attr		*flow_rules = NULL;
+	struct report_options       report;
 
-	/* init default values to user's parameters */
-	memset(&ctx, 0,sizeof(struct pingpong_context));
-	memset(&user_param, 0 , sizeof(struct perftest_parameters));
-	memset(&my_dest_info, 0 , sizeof(struct raw_ethernet_info));
-	memset(&rem_dest_info, 0 , sizeof(struct raw_ethernet_info));
+	//allocate memory space for user parameters
+	memset(&ctx,		0, sizeof(struct pingpong_context));
+	memset(&user_param, 0, sizeof(struct perftest_parameters));
+	memset(&my_dest_info, 0 , sizeof(struct pingpong_dest));
+	memset(&rem_dest_info, 0 , sizeof(struct pingpong_dest));
 
-	user_param.verb    = SEND;
-	user_param.tst     = BW;
+	/* init default values to user's parameters that's relvant for this test:
+	* Raw Ethernet Send Latency Test
+	*/
+	user_param.verb    = SEND; 
+	user_param.tst     = LAT;
 	user_param.version = VERSION;
 	user_param.connection_type = RawEth;
-
-	ret_parser = parser(&user_param,argv,argc);
-
+	user_param.r_flag  = &report; 
+	
+	/* Configure the parameters values according to user 
+												arguments or default values. */
+	ret_parser = parser(&user_param, argv,argc);
+	
+	//check for parsing errors
 	if (ret_parser) {
-		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT) { 
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		}
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	// Finding the IB device selected (or default if no selected).
+	
+	//this is a bidirectional test, so we need to let the init functions
+	//to think we are in duplex mode
+	//TODO: ask Ido if that's ok, or should I add another field in user_param
+	user_param.duplex  = 1;
+	
+	
+	// Find the selected IB device (or default if the user didn't select one).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
-		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
+		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
- 		return 1;
+		return 1;
 	}
+	
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
@@ -96,156 +112,131 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
+	
 	// See if MTU and link type are valid and supported.
-	if (check_link_and_mtu(ctx.context,&user_param)) {
+	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return FAILURE;
 	}
+	
 	// Allocating arrays needed for the test.
-	alloc_ctx(&ctx,&user_param);
+	alloc_ctx(&ctx, &user_param);
+	
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
-
-	//set mac address by user choose
-	if (send_set_up_connection(&flow_rules,&ctx,&user_param,&my_dest_info,&rem_dest_info)) {
+	
+	//set up the connection, return the required flow rules (notice that user_param->duplex == TRUE)
+	//so the function will setup like it's a bidirectional test
+	if (send_set_up_connection(&flow_rules, &ctx, &user_param, &my_dest_info, &rem_dest_info)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
 
-	if(user_param.machine == SERVER || user_param.duplex) {
-		print_spec(flow_rules,&user_param);
-	}
-
+	//print specifications of the test
+	print_spec(flow_rules,&user_param);
+	
 	// Create (if necessary) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
-
-		if (create_rdma_resources(&ctx,&user_param)) {
+		
+		//create resources
+		if (create_rdma_resources(&ctx, &user_param)) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
 		}
 
 		if (user_param.machine == CLIENT) {
 
-			if (rdma_client_connect(&ctx,&user_param)) {
+			//Connects the client to a QP on the other machine with rdma_cm
+			if (rdma_client_connect(&ctx, &user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-
-		} else if (rdma_server_connect(&ctx,&user_param)) {
-			fprintf(stderr,"Unable to perform rdma_client function\n");
+		
+		} else if (rdma_server_connect(&ctx, &user_param)) {
+			//Assigning a server to listen on rdma_cm port and connect to it.
+			fprintf(stderr,"Unable to perform rdma_server function\n");
 			return FAILURE;
 		}
 
 	} else {
 
-		// create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
-		if (ctx_init(&ctx,&user_param)) {
+		// initalize IB resources (data buffer, PD, MR, CQ and events channel)
+		if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
 		}
 	}
+	
 
 	//attaching the qp to the spec
-	if(user_param.machine == SERVER || user_param.duplex) {
-		flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
-		if (!flow_create_result){
-			perror("error");
-			fprintf(stderr, "Couldn't attach QP\n");
-			return FAILURE;
-		}
+	flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
+	if (!flow_create_result){
+		perror("error");
+		fprintf(stderr, "Couldn't attach QP\n");
+		return FAILURE;
 	}
-
-	//build raw Ethernet packets on ctx buffer
-	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd){
+	
+	//build ONE Raw Ethernet packets on ctx buffer
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
-	}
 
-	printf(RESULT_LINE);//change the printing of the test
-	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-
-	// Prepare IB resources for rtr/rts.
+	printf(RESULT_LINE); // "---" line
+	// choose the correct format to print 
+	// (according  to the test: latency or latency with duration)
+	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT :
+														RESULT_FMT_LAT_DUR);
+	
+	// Prepare IB resources for rtr(ready to read)/rts(ready to send)
 	if (user_param.work_rdma_cm == OFF) {
-		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {
+		if (ctx_connect(&ctx, NULL, &user_param, NULL)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 			return 1;
 		}
 	}
-
-	if (user_param.machine == CLIENT || user_param.duplex) {
-		ctx_set_send_wqes(&ctx,&user_param,NULL);
+	
+	
+	//Post Send send_wqes for current message size
+	ctx_set_send_wqes(&ctx,&user_param,NULL);
+	
+	// Post receive recv_wqes for current message size
+	if (ctx_set_recv_wqes(&ctx,&user_param)) {
+		fprintf(stderr," Failed to post receive recv_wqes\n");
+		return 1;
 	}
-
-	if (user_param.machine == SERVER || user_param.duplex) {
-		if (ctx_set_recv_wqes(&ctx,&user_param)) {
-			fprintf(stderr," Failed to post receive recv_wqes\n");
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 1;
-		}
+		
+	//latency test function for SEND verb latency test.
+	if (run_iter_lat_send(&ctx, &user_param))
+	{
+		return 17;
 	}
+	
+	//print report (like print_report_bw) in the correct format
+	// (as set before: FMT_LAT or FMT_LAT_DUR)
+	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : 
+										print_report_lat_duration(&user_param);
+										
+		
 
-	if (user_param.mac_fwd) {
-
-		if(run_iter_fw(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else if (user_param.duplex) {
-
-		if(run_iter_bi(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else if (user_param.machine == CLIENT) {
-
-		if(run_iter_bw(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else {
-
-		if(run_iter_bw_server(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 17;
-		}
+	//destroy flow
+	if (ibv_destroy_flow(flow_create_result)) {
+		perror("error");
+		fprintf(stderr, "Couldn't Destory flow\n");
+		return FAILURE;
 	}
+	free(flow_rules);
+	
 
-	print_report_bw(&user_param);
-
-	if(user_param.machine == SERVER || user_param.duplex) {
-
-		if (ibv_destroy_flow(flow_create_result)) {
-			perror("error");
-			fprintf(stderr, "Couldn't Destory flow\n");
-			return FAILURE;
-		}
-		free(flow_rules);
-	}
-
+	
+	//Deallocate all perftest resources.
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr,"Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	
-	//limit verifier
-	//TODO: check which value should I return
-	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
-		return 1;
 
 	printf(RESULT_LINE);
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
+	
 }
-
-
-
-
-
-
-
-

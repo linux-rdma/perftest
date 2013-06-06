@@ -19,8 +19,12 @@ noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_param
 bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
 
 if HAVE_RAW_ETH
-bin_PROGRAMS += raw_ethernet_bw
+libperftest_a_SOURCES += src/raw_ethernet_resources.c
+noinst_HEADERS += src/raw_ethernet_resources.h
+bin_PROGRAMS += raw_ethernet_bw raw_ethernet_lat
 else
+libperftest_a_SOURCES +=
+noinst_HEADERS +=
 bin_PROGRAMS +=
 endif
 
@@ -52,9 +56,15 @@ if HAVE_RAW_ETH
 raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
 raw_ethernet_bw_LDADD = libperftest.a
 
+raw_ethernet_lat_SOURCES = src/raw_ethernet_send_lat.c
+raw_ethernet_lat_LDADD = libperftest.a
+
 else 
 raw_ethernet_bw_SOURCES =
 raw_ethernet_bw_LDADD =
+
+raw_ethernet_lat_SOURCES =
+raw_ethernet_lat_LDADD =
 
 endif
 

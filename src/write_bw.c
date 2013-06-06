@@ -251,6 +251,11 @@ int __cdecl main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	//limit verifier
+	//TODO: check which value should I return
+	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
+		return 1;
+	
 	free(my_dest);
 	free(rem_dest);
 	printf(RESULT_LINE);

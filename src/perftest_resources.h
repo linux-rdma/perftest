@@ -129,13 +129,7 @@
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
-struct ETH_header {
-	uint8_t dst_mac[6];
-	uint8_t src_mac[6];
-	uint16_t eth_type;
-}__attribute__((packed));
 
-typedef struct ETH_header ETH_header;
 
 struct IP_V4_header{
 	uint8_t ihl:4;
@@ -201,15 +195,40 @@ struct pingpong_context {
  };
 
 
- struct raw_ethernet_info {
- 	uint8_t mac[6];
- 	uint32_t ip;
- 	int port;
- };
+
+
+
+ struct ETH_header {
+	uint8_t dst_mac[6];
+	uint8_t src_mac[6];
+	uint16_t eth_type;
+}__attribute__((packed));
+
+
 /****************************************************************************** 
- * Perftest resources Methods and interface utilitizes.
+ * Perftest resources Methods and interface utilitizes.f
  ******************************************************************************/
 
+ /*
+ * Description :
+ *
+ *  In this method we receive buffer and change it's dmac and smac
+ *
+ * Parameters :
+ *
+ *  sg     - sg->addr is pointer to the buffer.
+*/
+static __inline void switch_smac_dmac( struct ibv_sge *sg )
+{
+    struct ETH_header* eth_header;
+    eth_header = (struct ETH_header*)sg->addr;
+    uint8_t tmp_mac[6] = {0} ;
+    memcpy(tmp_mac , (uint8_t *)eth_header + sizeof(eth_header->src_mac) ,sizeof(eth_header->src_mac));
+    memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
+    memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
+}
+ 
+ 
 /* link_layer_str
  *
  * Description : Determines the link layer type (IB or ETH).
@@ -529,24 +548,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
 
 
-/*
- * Description :
- *
- *  In this method we receive buffer and change it's dmac and smac
- *
- * Parameters :
- *
- *  sg     - sg->addr is pointer to the buffer.
-*/
-static __inline void switch_smac_dmac( struct ibv_sge *sg )
-{
-    ETH_header* eth_header;
-    eth_header = (ETH_header*)sg->addr;
-    uint8_t tmp_mac[6] = {0} ;
-    memcpy(tmp_mac , (uint8_t *)eth_header + sizeof(eth_header->src_mac) ,sizeof(eth_header->src_mac));
-    memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
-    memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
-}
+
 
 /* ctx_notify_events
  * 
@@ -577,17 +579,7 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 	return 0;
 }
 
-/* gen_eth_header .
- * Description :create raw Ethernet header on buffer
- *
- * Parameters :
- *	 	eth_header - Pointer to output
- *	 	src_mac - source MAC address of the packet
- *	 	dst_mac - destination MAC address of the packet
- *	 	eth_type - IP/or size of ptk
- *
- */
-void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
+
 
 /* gen_ip_header .
 

@@ -517,15 +517,7 @@ void dump_buffer(unsigned char *bufptr, int len) {
 	}
 	printf("\n");
 }
-/******************************************************************************
- *
- ******************************************************************************/
-void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type) {
-	memcpy(eth_header->src_mac, src_mac, 6);
-	memcpy(eth_header->dst_mac, dst_mac, 6);
-	eth_header->eth_type = htons(eth_type);
 
-}
 /******************************************************************************
  *
  ******************************************************************************/
@@ -882,7 +874,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->rwr[i].wr_id   = i;
 		ctx->rwr[i].next    = NULL;
 		ctx->rwr[i].num_sge	= MAX_RECV_SGE;
-
+ 
 		if (user_param->tst == BW )
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 		
@@ -1154,7 +1146,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 							return 15;
 						}
-
+						
 						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
@@ -1758,36 +1750,42 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  ******************************************************************************/
 int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int				scnt = 0;
-	int				rcnt = 0;
+	int				scnt = 0; //sent packets counter
+	int				rcnt = 0; //received packets counter
 	int				poll = 0;
 	int				ne;
-	struct ibv_wc	wc;
-	struct ibv_recv_wr	*bad_wr_recv;
-	struct ibv_send_wr	*bad_wr;
-
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags = 0;
+	struct 			ibv_wc	wc;
+	struct 			ibv_recv_wr	*bad_wr_recv;
+	struct 			ibv_send_wr	*bad_wr;
+	int  			firstRx = 1;
 
 	if (user_param->size <= user_param->inline_size)
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 
-	// Duration support in latency tests.
-	if (user_param->test_type == DURATION) {
-		duration_param=user_param;
-		duration_param->state = START_STATE;
-		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
-		user_param->iters = 0;
+	//this is for a duration test. it's valid when we're not on raw ethernet, or we are and this is the client.
+	//the purpose is to make the client send the first packet and run the timer.
+	if((user_param->test_type == DURATION )&& (user_param->connection_type != RawEth || (user_param->machine == CLIENT && firstRx)))
+	{
+			firstRx = OFF;
+			duration_param=user_param;
+			user_param->iters=0;
+			duration_param->state = START_STATE;
+			signal(SIGALRM, catch_alarm);
+			alarm(user_param->margin);
 	}
 
+	//run the test until:
+	//1. In duration mode: the time is over
+	//2. in Iteration mode: the number of packets that sent and received is equal or above the requested number of iterations
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
-			(user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
-		// Server is polling on recieve first
+			( (user_param->test_type == DURATION && user_param->state != END_STATE))) {
+		
+		// get the received packet. make sure that the client won't enter here until he sends 
+		// his first packet (scnt < 1)
+		// server will enter here first and wait for a packet to arrive (from the client)
 		if ((rcnt < user_param->iters || user_param->test_type == DURATION) &&
 			!(scnt < 1 && user_param->machine == CLIENT)) {
-
+			
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
@@ -1796,50 +1794,79 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 			}
 
 			do {
+				//try to get received packets
 				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
+				
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
-
+				
+				//check if we got the packet
+				//if we got a packet, ne = 1 in latency test.
+				//do this until you get a packet ( while (ne == 0))
 				if (ne > 0) {
+				
+					//when the server gets the first packet, the server starts his own timer and clear the iterations counter
+					if(user_param->connection_type == RawEth){
+						if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
+							firstRx = OFF;
+							duration_param=user_param;
+							user_param->iters=0;
+							duration_param->state = START_STATE;
+							signal(SIGALRM, catch_alarm);
+							alarm(user_param->margin);
+						}
+					}
+					
 					if (wc.status != IBV_WC_SUCCESS)
 						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
-
+					
+					//got a packet, update the received packets counter
 					rcnt++;
-
+					
+					//In duration mode, we should count the number of iterations were made
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters++;
 
+					//if we're in duration mode or there is enough space in the rx_depth, post that you received a packet
 					if (user_param->test_type==DURATION || (rcnt + user_param->rx_depth  <= user_param->iters)) {
 
 						if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id], &bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
 							return FAILURE;
 						}
+						
+						
+
 					}
 				}
 			} while (!user_param->use_event && ne == 0);
 		}
-
-		if (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
+		
+		//send a packet. client will enter here first (by make sure his firstRx == OFF, and the server's firstRx == ON)
+		if (scnt < user_param->iters || (user_param->test_type == DURATION && (firstRx == OFF) && user_param->state != END_STATE)) {
+			
 			if (user_param->test_type == ITERATIONS)
 				user_param->tposted[scnt] = get_cycles();
-
+			
+			//sent a packet, update the sent packets counter
 			scnt++;
-
+			
 			if (scnt % user_param->cq_mod == 0 || (user_param->test_type == ITERATIONS && scnt == user_param->iters)) {
 				poll = 1;
 				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
 			}
-
+			
+			//if we're in duration mode and the time is over, exit from this function
 			if (user_param->test_type == DURATION && user_param->state == END_STATE)
 				break;
-
+			
+			//send the packet that's in index 0 on the buffer
 			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return FAILURE;
 			}
 
+			
 			if (poll == 1) {
 
 				struct ibv_wc s_wc;
@@ -1852,10 +1879,13 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					}
 				}
 
+				//wait until you get a cq for the last packet
 				do {
 					s_ne = ibv_poll_cq(ctx->send_cq, 1, &s_wc);
 				} while (!user_param->use_event && s_ne == 0);
-
+				
+				
+				
 				if (s_ne < 0) {
 					fprintf(stderr, "poll on Send CQ failed %d\n", s_ne);
 					return FAILURE;
@@ -1863,12 +1893,13 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 
 				if (s_wc.status != IBV_WC_SUCCESS)
 					NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
-
+					
 				poll = 0;
 				ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
 			}
 		}
 	}
+	
 	return 0;
 }
 

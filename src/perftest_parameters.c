@@ -220,7 +220,12 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 		printf("  --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
-
+		
+		printf("  -w, --limit_bw ");
+		printf(" Set verifier limit for bandwidth\n");
+		
+		printf("  -y, --limit_msgrate ");
+		printf(" Set verifier limit for Msg Rate\n");
 	}
 
 	if (verb != WRITE) {
@@ -337,7 +342,11 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->tos		= DEF_TOS;
 	user_param->mac_fwd	= OFF;
 	user_param->report_fmt = MBS;
-
+	user_param->is_limit_bw = OFF;
+	user_param->limit_bw = 0;
+	user_param->is_limit_msgrate = OFF;
+	user_param->limit_msgrate = 0;
+	
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
 		user_param->r_flag->histogram = OFF;
@@ -589,6 +598,18 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			fprintf(stderr," run_infinitely not supported in SEND Bidirectional BW test\n");
 			exit(1);
 		}
+	}
+	
+	//raw ethernet send latency
+	//client and server must enter the destination mac
+	if (user_param->connection_type == RawEth && user_param->tst == LAT && user_param->verb == SEND) {
+		
+		if (user_param-> is_dest_mac == OFF) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
+			exit(1);
+		}
+	
 	}
 	return;
 }
@@ -968,6 +989,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "client_ip",      .has_arg = 1, .val = 'j' },
 			{ .name = "server_port",    .has_arg = 1, .val = 'K' },
 			{ .name = "client_port",    .has_arg = 1, .val = 'k' },
+			{ .name = "limit_bw",       .has_arg = 1, .val = 'w' },
+			{ .name = "limit_msgrate",  .has_arg = 1, .val = 'y' },
 			{ .name = "server",         .has_arg = 0, .val = 'Z' },
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
 			{ .name = "mac_fwd",        .has_arg = 0, .val = 'v' },
@@ -978,56 +1001,58 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 #else
 
         static const struct option long_options[] = {
-			{ "port",		1, NULL, 'p' },
-			{ "ib-dev",		1, NULL, 'd' },
-			{ "ib-port",		1, NULL, 'i' },
-			{ "mtu",		1, NULL, 'm' },
-			{ "size",		1, NULL, 's' },
-			{ "iters",		1, NULL, 'n' },
-			{ "tx-depth",		1, NULL, 't' },
-			{ "qp-timeout", 	1, NULL, 'u' },
-			{ "sl", 		1, NULL, 'S' },
-			{ "gid-index",		1, NULL, 'x' },
-			{ "all",		0, NULL, 'a' },
-			{ "CPU-freq",		0, NULL, 'F' },
-			{ "connection",		1, NULL, 'c' },
-			{ "qp", 		1, NULL, 'q' },
-			{ "events", 		0, NULL, 'e' },
-			{ "inline_size",	1, NULL, 'I' },
-			{ "outs",		1, NULL, 'o' },
-			{ "mcg",		0, NULL, 'g' },
-			{ "comm_rdma_cm",	0, NULL, 'z' },
-			{ "rdma_cm",		0, NULL, 'R' },
-			{ "tos",            	1, NULL, 'T' },
-			{ "help",		0, NULL, 'h' },
-			{ "MGID",		1, NULL, 'M' },
-			{ "rx-depth",		1, NULL, 'r' },
-			{ "bidirectional",	0, NULL, 'b' },
-			{ "cq-mod", 		1, NULL, 'Q' },
-			{ "noPeak", 		0, NULL, 'N' },
-			{ "version",		0, NULL, 'V' },
-			{ "report-cycles",	0, NULL, 'C' },
+			{ "port",				1, NULL, 'p' },
+			{ "ib-dev",				1, NULL, 'd' },
+			{ "ib-port",			1, NULL, 'i' },
+			{ "mtu",				1, NULL, 'm' },
+			{ "size",				1, NULL, 's' },
+			{ "iters",				1, NULL, 'n' },
+			{ "tx-depth",			1, NULL, 't' },
+			{ "qp-timeout",			1, NULL, 'u' },
+			{ "sl", 				1, NULL, 'S' },
+			{ "gid-index",			1, NULL, 'x' },
+			{ "all",				0, NULL, 'a' },
+			{ "CPU-freq",			0, NULL, 'F' },
+			{ "connection",			1, NULL, 'c' },
+			{ "qp", 				1, NULL, 'q' },
+			{ "events", 			0, NULL, 'e' },
+			{ "inline_size",		1, NULL, 'I' },
+			{ "outs",				1, NULL, 'o' },
+			{ "mcg",				0, NULL, 'g' },
+			{ "comm_rdma_cm",		0, NULL, 'z' },
+			{ "rdma_cm",			0, NULL, 'R' },
+			{ "tos",           		1, NULL, 'T' },
+			{ "help",				0, NULL, 'h' },
+			{ "MGID",				1, NULL, 'M' },
+			{ "rx-depth",			1, NULL, 'r' },
+			{ "bidirectional",		0, NULL, 'b' },
+			{ "cq-mod", 			1, NULL, 'Q' },
+			{ "noPeak", 			0, NULL, 'N' },
+			{ "version",			0, NULL, 'V' },
+			{ "report-cycles",		0, NULL, 'C' },
 			{ "report-histogrm",	0, NULL, 'H' },
 			{ "report-unsorted",	0, NULL, 'U' },
-			{ "atomic_type",	1, NULL, 'A' },
-			{ "dualport",		0, NULL, 'O' },
-			{ "post_list",		1, NULL, 'l' },
-			{ "duration",		1, NULL, 'D' },
-			{ "margin",		1, NULL, 'f' },
-			{ "source_mac",		1, NULL, 'B' },
-			{ "dest_mac",		1, NULL, 'E' },
-			{ "server_ip",		1, NULL, 'J' },
-			{ "client_ip",		1, NULL, 'j' },
-			{ "server_port",	1, NULL, 'K' },
-			{ "client_port",	1, NULL, 'k' },
-			{ "server",		0, NULL, 'Z' },
-			{ "client",		0, NULL, 'P' },
-			{ "mac_fwd",		0, NULL, 'v' },
-	        { "dualport",		0, &run_inf_flag, 1 },
+			{ "atomic_type",		1, NULL, 'A' },
+			{ "dualport",			0, NULL, 'O' },
+			{ "post_list",			1, NULL, 'l' },
+			{ "duration",			1, NULL, 'D' },
+			{ "margin",				1, NULL, 'f' },
+			{ "source_mac",			1, NULL, 'B' },
+			{ "dest_mac",			1, NULL, 'E' },
+			{ "server_ip",			1, NULL, 'J' },
+			{ "client_ip",			1, NULL, 'j' },
+			{ "server_port",		1, NULL, 'K' },
+			{ "client_port",		1, NULL, 'k' },
+			{ "limit_bw",			1, NULL, 'w' }, //new
+			{ "limit_msgrate",		1, NULL, 'y' }, //new
+			{ "server",				0, NULL, 'Z' },
+			{ "client",				0, NULL, 'P' },
+			{ "mac_fwd",			0, NULL, 'v' },
+	        { "dualport",			0, &run_inf_flag, 1 },
 			{ 0 }
 		};
 #endif
-        c = getopt_long(argc,argv,"p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
+        c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
 
         if (c == -1)
 			break;
@@ -1211,6 +1236,24 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if(OFF == check_if_valid_udp_port(user_param->client_port))
 				{
 					fprintf(stderr," Invalid client UDP port\n");
+					return FAILURE;
+				}
+				break;
+			case 'w':
+				user_param->is_limit_bw = ON;
+				user_param->limit_bw = strtof(optarg,NULL);
+				if (user_param->limit_bw < 0) {
+					
+					fprintf(stderr, " Invalid Minimum BW Limit\n");
+					return FAILURE;
+				}
+				break;
+			case 'y':
+				user_param->is_limit_msgrate = ON;
+				user_param->limit_msgrate = strtof(optarg,NULL);
+				if (user_param->limit_msgrate < 0) {
+					
+					fprintf(stderr, " Invalid Minimum msgRate Limit\n");
 					return FAILURE;
 				}
 				break;
@@ -1453,7 +1496,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
-
+	
 	if (user_param->noPeak == OFF) {
 		/* Find the peak bandwidth unless asked not to in command line*/
 		for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i) {
@@ -1478,17 +1521,41 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	tsize = tsize * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
-	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000; 
+      	//support in GBS format
+	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
+ 
+	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));
+	double bw_avg = ((double)tsize*num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * format_factor);
+	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * 1000000);
+	
 
-    sum_of_test_cycles = (double)(user_param->tcompleted[location_arr] - user_param->tposted[0]);
+	
+	// Verify Limits
+	if ( ((user_param->is_limit_bw == ON )&& (user_param -> limit_bw > bw_avg)) ) 
+		user_param -> is_bw_limit_passed = 0;
+	else
+		user_param -> is_bw_limit_passed = 1;
+	
+	if ( (user_param->is_limit_msgrate) && (user_param -> limit_msgrate > msgRate_avg) )
+	{
+		user_param -> is_msgrate_limit_passed = 0;
+	}
+	else
+		user_param -> is_msgrate_limit_passed = 1;
+
+	
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * format_factor;
-	printf(REPORT_FMT,
+	printf( REPORT_FMT,
 		(unsigned long)user_param->size, 
 		user_param->iters,
 		(double)peak_up/peak_down,
-	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*format_factor),
-	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*1000000));
+		bw_avg,
+//	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*format_factor),
+		msgRate_avg
+//	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*1000000)
+
+		);
 }
 
 /******************************************************************************
@@ -1586,7 +1653,6 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 		user_param->iters,
 		(((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters));
 }
-
 /****************************************************************************** 
  * End
  ******************************************************************************/

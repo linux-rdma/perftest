@@ -225,7 +225,15 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 					
 	} else {
-
+	
+		/*-----------------------TODO: Check if it's ok-----------------
+		//we should not run multicast when RDMA_CM is set to OFF
+		if(user_param->use_mcg == ON){
+			fprintf(stderr,"unable to run Multicast without RDMA_CM");
+			return FAILURE;
+		}
+		---------------------------------------------------------------*/
+		
 		 // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
 	    if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
@@ -425,6 +433,11 @@ int __cdecl main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	//limit verifier
+	//TODO: check which value should I return
+	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
+		return 1;
+		
 	printf(RESULT_LINE);
 	return 0; 
 }

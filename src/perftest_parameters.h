@@ -84,7 +84,7 @@
 #define MAX_OUT_READ_HERMON (16)
 #define MAX_OUT_READ        (4)
 #define UD_ADDITION         (40)
-#define RAWETH_ADDITTION    (18)
+#define RAWETH_ADDITION    (18)
 #define HW_CRC_ADDITION    (4)
 
 // Default Values of perftest parameters
@@ -267,6 +267,12 @@ struct perftest_parameters {
 	int				duration;
 	int				tos;
 	int				margin;
+	int 			is_bw_limit_passed;
+	int 			is_msgrate_limit_passed;
+	int 			is_limit_bw;
+	int 			is_limit_msgrate;
+	float			limit_bw;
+	float			limit_msgrate;
 	uint32_t		rem_ud_qpn;
 	uint32_t		rem_ud_qkey;
 	uint8_t			link_type;
@@ -296,6 +302,10 @@ struct perftest_parameters {
 	enum ctx_report_fmt		report_fmt;
 	struct report_options  	*r_flag;
 	int 			mac_fwd;
+
+	//results limits
+	float min_bw_limit;
+	float min_msgRate_limit;
 };
 
 struct report_options {

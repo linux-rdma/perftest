@@ -255,6 +255,11 @@ int __cdecl main(int argc, char *argv[]) {
 		return 1;
 	}
 	
+	//limit verifier
+	//TODO: check which value should I return
+	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
+		return 1;
+	
 	printf(RESULT_LINE);
 
 	return destroy_ctx(&ctx,&user_param);	

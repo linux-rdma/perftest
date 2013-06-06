@@ -27,7 +27,7 @@ The collection conatains a set of BW and latency benchmark such as :
 	* Write  - ib_write_bw and ib_wriet_lat.
 	* Send   - ib_send_bw and ib_send_lat.
 	* Atomic - ib_atomic_bw and ib_atomic_lat
-	* Raw Etherent (when working with MOFED2) - raw_ethernet_bw. 
+	* Raw Etherent (when working with MOFED2) - raw_ethernet_bw, raw_ethernet_lat 
 
 Please post results/observations to the openib-general mailing list.
 See "Contact Us" at http://openib.org/mailman/listinfo/openib-general and
@@ -88,9 +88,11 @@ read_bw.c 	BW test with RDMA read transactions
 atomic_lat.c	latency test with atomic transactions
 atomic_bw.c 	BW test atomic transactions
 raw_ethernet_send_bw.c BW test with Raw Etherent client and receiver. 
+raw_ethernet_send_lat.c lat test with Raw Etherent client and receiver. 
 
-The executable name of each test starts with the general prefix "ib_",e.g., ib_write_lat.
-Except of raw_ethernet_send_bw.c case, which the binary called raw_ethernet_bw.
+The executable name of each test starts with the general prefix "ib_",e.g., ib_write_lat, 
+Except: 1. raw_ethernet_send_bw.c case, which the binary called raw_ethernet_bw.
+		2. raw_ethernet_send_lat.c case, which the binary called raw_ethernet_lat.
 
 Running Tests
 -------------
