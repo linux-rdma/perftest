@@ -34,11 +34,14 @@
 #define IP_ETHER_TYPE (0x800)
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
+#define UDP_PROTOCOL (0x11)
+#define IP_HEADER_LEN (20)
+
 
  struct raw_ethernet_info {
- 	uint8_t mac[6];
- 	uint32_t ip;
- 	int port;
+	uint8_t mac[6];
+	uint32_t ip;
+	int port;
  };
 
 
@@ -53,28 +56,53 @@
  *	 	eth_type - IP/or size of ptk
  *
  */
+
+
+struct IP_V4_header{
+	uint8_t ihl:4;
+	uint8_t version:4;
+    uint8_t tos;
+    uint16_t tot_len;
+    uint16_t id;
+    uint16_t frag_off;
+    uint8_t ttl;
+    uint8_t protocol;
+    uint16_t check;
+    uint32_t saddr;
+    uint32_t daddr;
+}__attribute__((packed));
+
+struct UDP_header {
+	u_short	uh_sport;		/* source port */
+	u_short	uh_dport;		/* destination port */
+	u_short	uh_ulen;		/* udp length */
+	u_short	uh_sum;			/* udp checksum */
+}__attribute__((packed));
+
+
+
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
 
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_parm);
 
 void print_ethernet_header(struct ETH_header* p_ethernet_header);
 
-void print_ip_header(IP_V4_header* ip_header);
+void print_ip_header(struct IP_V4_header* ip_header);
 
-void print_udp_header(UDP_header* udp_header);
+void print_udp_header(struct UDP_header* udp_header);
 
 void print_pkt(void* pkt,struct perftest_parameters *user_param);
 
 /* build_pkt_on_buffer
  * Description: build single Ethernet packet on ctx buffer
- * 
+ *
  * Parameters:
  *		eth_header - Pointer to output
  *		my_dest_info - ethernet information of me
  *		rem_dest_info - ethernet information of the remote
  *		user_param - user_parameters struct for this test
  *		eth_type -
- *		ip_next_protocol - 
+ *		ip_next_protocol -
  *		print_flag - if print_flag == TRUE : print the packet after it's done
  *		sizePkt - size of the requested packet
  */
@@ -86,7 +114,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 						 uint16_t ip_next_protocol,
 						 int print_flag,
 						 int sizePkt);
-						 
+
 /*  create_raw_eth_pkt
  * 	Description: build raw Ethernet packet by user arguments
  *				 on bw test, build one packet and duplicate it on the buffer
@@ -102,7 +130,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 						 struct pingpong_context 	*ctx ,
 						 struct raw_ethernet_info	*my_dest_info,
 						 struct raw_ethernet_info	*rem_dest_info);
-						 
+
 /*calc_flow_rules_size
 * Description: calculate the size of the flow(size of headers - ib, ethernet and ip/udp if available)
 * Parameters:
@@ -124,12 +152,41 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header);
  *
 */
 
-/*static*/ int send_set_up_connection(
+int send_set_up_connection(
 	struct ibv_flow_attr **flow_rules,
 	struct pingpong_context *ctx,
 	struct perftest_parameters *user_parm,
 	struct raw_ethernet_info* my_dest_info,
 	struct raw_ethernet_info* rem_dest_info);
-	
+
+
+
+/* gen_ip_header .
+
+ * Description :create IP header on buffer
+ *
+ * Parameters :
+ * 		ip_header_buff - Pointer to output
+ * 		saddr - source IP address of the packet(network order)
+ * 		daddr - destination IP address of the packet(network order)
+ * 		sizePkt - size of the packet
+ */
+void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t protocol,int sizePkt);
+
+/* gen_udp_header .
+
+ * Description :create UDP header on buffer
+ *
+ * Parameters :
+ * 		UDP_header_buffer - Pointer to output
+ *		sPort - source UDP port of the packet
+ *		dPort -destination UDP port of the packet
+ *		sadder -source IP address of the packet(using for UPD checksum)(network order)
+ *		dadder - source IP address of the packet(using for UPD checksum)(network order)
+ *		sizePkt - size of the packet
+ */
+
+void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
+
 
 #endif //RAW_ETHERNET_RESOURCES_H

@@ -12,7 +12,7 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following						    			    
+ *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
@@ -33,18 +33,18 @@
  *
  * Description :
  *
- *  This API gathres the Socket interface methods for all perftest benchmarks 
+ *  This API gathres the Socket interface methods for all perftest benchmarks
  *  and can be used for any benchmark for IB.
  *  It passes messages between 2 end points through sockets interface methods,
- *  while passing the rellevant information for the IB entities. 
- *  
+ *  while passing the rellevant information for the IB entities.
+ *
  * Methods :
  *
  *  ctx_get_local_lid  - Receives the Local id from the subnet manager.
  *  ctx_client_connect - Connects the client through sockets interface.
  *  ctx_server_connect - Connects the Server to client through sockets.
  *  ctx_hand_shake     - Passes the data between 2 end points machines.
- *  ctx_print_pingpong_data - Prints the data that was passed. 
+ *  ctx_print_pingpong_data - Prints the data that was passed.
  *  ctx_close_connection    - Closing the sockets interface.
  */
 #ifndef PERFTEST_PARAMETERS_H
@@ -66,7 +66,7 @@
 
 // Connection types available.
 #define RC  (0)
-#define UC  (1) 
+#define UC  (1)
 #define UD  (2)
 #define RawEth  (3)
 // #define XRC 3 (TBD)
@@ -139,7 +139,7 @@
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
 
-// Raw etherent defines 
+// Raw etherent defines
 #define RAWETH_MIN_MSG_SIZE	(64)
 #define MIN_MTU_RAW_ETERNET	(64)
 #define MAX_MTU_RAW_ETERNET	(9600)
@@ -207,7 +207,7 @@ typedef enum { START_STATE, SAMPLE_STATE, STOP_SAMPLE_STATE, END_STATE} Duration
 enum ctx_report_fmt { GBS, MBS };
 
 // Test method
-enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY}; 
+enum ctx_test_method {RUN_REGULAR, RUN_ALL, RUN_INFINITELY};
 
 // The type of the device
 enum ctx_device {
@@ -334,7 +334,7 @@ const char *link_layer_str(uint8_t link_layer);
  * Parameters :
  *
  *	 user_param  - the parameters element.
- *	 argv & argc - from the user prompt. 
+ *	 argv & argc - from the user prompt.
  *
  * Return Value : 0 upon success. -1 if it fails.
  */
@@ -379,7 +379,7 @@ void print_report_bw (struct perftest_parameters *user_param);
 /* print_report_lat
  *
  * Description : Print the min/max/median latency samples taken from a latency test.
- * 				 It also support a unsorted/histogram report of all samples. 
+ * 				 It also support a unsorted/histogram report of all samples.
  *
  * Parameters :
  *
@@ -390,7 +390,7 @@ void print_report_lat (struct perftest_parameters *user_param);
 
 /* print_report_lat_duration
  *
- * Description : Prints only the avergae latency for samples taken from a latency test 
+ * Description : Prints only the avergae latency for samples taken from a latency test
  *				 With Duration.
  *
  * Parameters :

@@ -76,7 +76,7 @@ int __cdecl main(int argc, char *argv[]) {
 	ret_parser = parser(&user_param,argv,argc);
 
 	if (ret_parser) {
-		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT) { 
+		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT) {
 			fprintf(stderr," Parser function exited with Error\n");
 		}
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
@@ -231,7 +231,7 @@ int __cdecl main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	
+
 	//limit verifier
 	//TODO: check which value should I return
 	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )

@@ -57,7 +57,7 @@
 #define __cdecl
 #endif
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -69,7 +69,7 @@ int __cdecl main(int argc, char *argv[]) {
 	struct perftest_parameters  user_param;
 	struct pingpong_dest	    my_dest,rem_dest;
 	struct perftest_comm		user_comm;
-	
+
 	/* init default values to user's parameters */
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param,0,sizeof(struct perftest_parameters));
@@ -117,7 +117,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -136,7 +136,7 @@ int __cdecl main(int argc, char *argv[]) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -158,7 +158,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if (set_up_connection(&ctx,&user_param,&my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
-	} 
+	}
 
 	ctx_print_pingpong_data(&my_dest,&user_comm);
 
@@ -166,7 +166,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return 1;
-	}	
+	}
 
 	//  shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
@@ -191,7 +191,7 @@ int __cdecl main(int argc, char *argv[]) {
        return 1;
     }
 
-	// Only Client post read request. 
+	// Only Client post read request.
 	if (user_param.machine == SERVER) {
 
 		if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
@@ -201,13 +201,13 @@ int __cdecl main(int argc, char *argv[]) {
 		printf(RESULT_LINE);
 		return 0; // destroy_ctx(&ctx,&user_param);
 
-	} 
+	}
 
 	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
-		} 
+		}
 	}
 
 	printf(RESULT_LINE);
@@ -221,12 +221,12 @@ int __cdecl main(int argc, char *argv[]) {
 			if(run_iter_lat(&ctx,&user_param))
 				return 17;
 
-			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);	
+			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 		}
 	} else {
 		if(run_iter_lat(&ctx,&user_param))
 			return 18;
-		
+
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 

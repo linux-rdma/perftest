@@ -24,14 +24,14 @@
 #include <netdb.h>
 #include "perftest_communication.h"
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 
 static const char *sideArray[]  = {"local", "remote"};
 static const char *gidArray[]   = {"GID"  , "MGID"};
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 
@@ -58,7 +58,7 @@ static int post_one_recv_wqe(struct pingpong_context *ctx) {
 	return SUCCESS;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int post_recv_to_get_ah(struct pingpong_context *ctx) {
@@ -82,10 +82,10 @@ static int post_recv_to_get_ah(struct pingpong_context *ctx) {
 	}
 
 	return SUCCESS;
-	
+
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int send_qp_num_for_ah(struct pingpong_context *ctx,
@@ -129,10 +129,10 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
 	}
 
 	return 0;
-	
+
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int create_ah_from_wc_recv(struct pingpong_context *ctx,
@@ -158,7 +158,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int ethernet_write_keys(struct pingpong_dest *my_dest,
@@ -167,7 +167,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
     if (comm->rdma_params->gid_index == -1) {
 
 		char msg[KEY_MSG_SIZE];
-		
+
 
 
 #ifndef _WIN32
@@ -212,25 +212,25 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 					my_dest->gid.raw[10],my_dest->gid.raw[11],
 					my_dest->gid.raw[12],my_dest->gid.raw[13],
 					my_dest->gid.raw[14],my_dest->gid.raw[15]);
-		
+
 		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
 #endif
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
 			return 1;
-		}	
+		}
 
 	}
 
     return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 							  struct perftest_comm *comm)  {
-    
+
 if (comm->rdma_params->gid_index == -1){
 
         int parsed;
@@ -245,7 +245,7 @@ if (comm->rdma_params->gid_index == -1){
 			fprintf(stderr, "Couldn't read remote address\n");
 			return 1;
 		}
-		
+
 #ifndef _WIN32
 		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
 						&rem_dest->out_reads,&rem_dest->qpn,
@@ -254,12 +254,12 @@ if (comm->rdma_params->gid_index == -1){
 		parsed = sscanf_s(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
 		  				&rem_dest->out_reads,&rem_dest->qpn,
 		  				&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
-#endif		
+#endif
 		if (parsed != 6) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
 		}
-        
+
 	} else {
 
 		char msg[KEY_MSG_SIZE_GID];
@@ -344,7 +344,7 @@ if (comm->rdma_params->gid_index == -1){
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int rdma_write_keys(struct pingpong_dest *my_dest,
@@ -386,7 +386,7 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int rdma_read_keys(struct pingpong_dest *rem_dest,
@@ -410,15 +410,15 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 		fprintf(stderr, "Couldn't post send \n");
 		return 1;
 	}
-	
+
 	return 0;
 }
 
- /****************************************************************************** 
+ /******************************************************************************
  *
  ******************************************************************************/
 static int ethernet_client_connect(struct perftest_comm *comm) {
-    
+
 	struct addrinfo *res, *t;
 	struct addrinfo hints;
 	char *service;
@@ -474,7 +474,7 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int ethernet_server_connect(struct perftest_comm *comm) {
@@ -528,8 +528,8 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 
 #ifndef _WIN32
 	if (sockfd < 0) {
-#else 
-	if (sockfd == INVALID_SOCKET) { 
+#else
+	if (sockfd == INVALID_SOCKET) {
 #endif
 
 		fprintf(stderr, "Couldn't listen to port %d\n", comm->rdma_params->port);
@@ -561,7 +561,7 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int set_up_connection(struct pingpong_context *ctx,
@@ -594,7 +594,7 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		if (user_param->dualport == ON) {
 			// first half of qps are for ib_port and second half are for ib_port2
-			if (i < user_param->num_of_qps / 2) { 
+			if (i < user_param->num_of_qps / 2) {
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
 
 			} else {
@@ -642,8 +642,8 @@ int set_up_connection(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
- * 
+/******************************************************************************
+ *
  ******************************************************************************/
 int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
@@ -681,8 +681,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-	    fprintf(stderr, "rdma_get_cm_events failed\n"); 
-	    return FAILURE; 
+	    fprintf(stderr, "rdma_get_cm_events failed\n");
+	    return FAILURE;
 	}
 
 	if (event->event == RDMA_CM_EVENT_ADDR_ERROR) {
@@ -695,7 +695,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	    fprintf(stderr, "unexpected CM event %d\n",event->event);
 	    rdma_ack_cm_event(event);
 	    return FAILURE;
-	}  
+	}
 
 	rdma_ack_cm_event(event);
 	break;
@@ -720,17 +720,17 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 			fprintf(stderr, "rdma_resolve_route failed\n");
 			return FAILURE;
 		}
-	
+
 		if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-			fprintf(stderr, "rdma_get_cm_events failed\n"); 
-			return FAILURE; 
+			fprintf(stderr, "rdma_get_cm_events failed\n");
+			return FAILURE;
 		}
 
 		if (event->event == RDMA_CM_EVENT_ROUTE_ERROR) {
 			num_of_retry--;
 			rdma_ack_cm_event(event);
 			continue;
-		}	
+		}
 
 		if (event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) {
 			fprintf(stderr, "unexpected CM event %d\n",event->event);
@@ -772,16 +772,16 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
+		fprintf(stderr, "rdma_get_cm_events failed\n");
 		return FAILURE;
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
 		fprintf(stderr, "Unexpected CM event bl blka %d\n",event->event);
 		return FAILURE;
-	}	
+	}
 
-	if (user_param->connection_type == UD) { 
+	if (user_param->connection_type == UD) {
 
         user_param->rem_ud_qpn  = event->param.ud.qp_num;
         user_param->rem_ud_qkey = event->param.ud.qkey;
@@ -800,13 +800,13 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 				return FAILURE;
 			}
 		}
-	} 
+	}
 
 	rdma_ack_cm_event(event);
 	return SUCCESS;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int rdma_server_connect(struct pingpong_context *ctx,
@@ -843,10 +843,10 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		fprintf(stderr, "rdma_listen failed\n");
 		return 1;
 	}
- 
+
 	if (rdma_get_cm_event(ctx->cm_channel,&event)) {
-		fprintf(stderr, "rdma_get_cm_events failed\n"); 
-		return 1; 
+		fprintf(stderr, "rdma_get_cm_events failed\n");
+		return 1;
 	}
 
 	if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
@@ -885,7 +885,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 			return 1;
 		}
 
-	} else if (user_param->connection_type == UD) { 
+	} else if (user_param->connection_type == UD) {
 
 		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
 
@@ -901,9 +901,9 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return 1;
     }
 
-	if (user_param->work_rdma_cm && user_param->connection_type == UD) { 
+	if (user_param->work_rdma_cm && user_param->connection_type == UD) {
 
-		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) { 
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
 			if (create_ah_from_wc_recv(ctx,user_param)) {
 				fprintf(stderr, "Unable to create AH from WC\n");
 				return 1;
@@ -917,17 +917,17 @@ int rdma_server_connect(struct pingpong_context *ctx,
     return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int create_comm_struct(struct perftest_comm *comm,
 					   struct perftest_parameters *user_param) {
-	
+
 
 	ALLOCATE(comm->rdma_params,struct perftest_parameters,1);
 	memset(comm->rdma_params,0,sizeof(struct perftest_parameters));
-	
-	comm->rdma_params->port		   = user_param->port; 
+
+	comm->rdma_params->port		   = user_param->port;
 	comm->rdma_params->sockfd      = -1;
 	comm->rdma_params->gid_index   = user_param->gid_index;
 	comm->rdma_params->use_rdma_cm = user_param->use_rdma_cm;
@@ -959,19 +959,19 @@ int create_comm_struct(struct perftest_comm *comm,
 			fprintf(stderr," Unable to create the resources needed by comm struct\n");
 			return FAILURE;
 		}
-	}	
+	}
 
 	return SUCCESS;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int establish_connection(struct perftest_comm *comm) {
 
 	int (*ptr)(struct perftest_comm*);
 
-	if (comm->rdma_params->use_rdma_cm) {		
+	if (comm->rdma_params->use_rdma_cm) {
 
 		if (comm->rdma_params->machine == CLIENT) {
 
@@ -1001,7 +1001,7 @@ int establish_connection(struct perftest_comm *comm) {
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int ctx_hand_shake(struct perftest_comm *comm,
@@ -1018,10 +1018,10 @@ int ctx_hand_shake(struct perftest_comm *comm,
 	} else {
 		read_func_ptr  = &ethernet_read_keys;
 		write_func_ptr = &ethernet_write_keys;
-		
+
 	}
 
-	if (comm->rdma_params->servername) {  
+	if (comm->rdma_params->servername) {
 		if ((*write_func_ptr)(my_dest,comm)) {
 			fprintf(stderr," Unable to write to socket/rdam_cm\n");
 			return 1;
@@ -1044,7 +1044,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
 			fprintf(stderr," Unable to write from socket/rdam_cm\n");
 			return 1;
 		}
-	} 
+	}
 
     return 0;
 }
@@ -1052,7 +1052,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
 
 
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 void ctx_print_pingpong_data(struct pingpong_dest *element,
@@ -1077,8 +1077,8 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 
 		printf(PERF_GID_FMT,gidArray[comm->rdma_params->use_mcg && is_there_mgid],
 				element->gid.raw[0], element->gid.raw[1],
-				element->gid.raw[2], element->gid.raw[3], 
-			    element->gid.raw[4], element->gid.raw[5], 
+				element->gid.raw[2], element->gid.raw[3],
+			    element->gid.raw[4], element->gid.raw[5],
 			    element->gid.raw[6], element->gid.raw[7],
 			   	element->gid.raw[8], element->gid.raw[9],
 			    element->gid.raw[10],element->gid.raw[11],
@@ -1087,7 +1087,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	}
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int ctx_close_connection(struct perftest_comm *comm,
@@ -1096,7 +1096,7 @@ int ctx_close_connection(struct perftest_comm *comm,
 
 	// Signal client is finished.
     if (ctx_hand_shake(comm,my_dest,rem_dest)) {
-        return 1;     
+        return 1;
     }
 
 	if (!comm->rdma_params->use_rdma_cm && !comm->rdma_params->work_rdma_cm) {
@@ -1122,6 +1122,6 @@ int ctx_close_connection(struct perftest_comm *comm,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  * End
  ******************************************************************************/

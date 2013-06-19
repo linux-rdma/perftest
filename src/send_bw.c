@@ -50,7 +50,7 @@
 #define __cdecl
 #endif
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int set_mcast_group(struct pingpong_context *ctx,
@@ -62,7 +62,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&mcg_params->port_gid)) {
 			return 1;
 	}
-		
+
 	if (ibv_query_pkey(ctx->context,user_parm->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
 		return 1;
 	}
@@ -73,7 +73,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_parm->ib_port;
-	
+
 	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
 		// Request for Mcast group create registery in SM.
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
@@ -84,7 +84,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int send_set_up_connection(struct pingpong_context *ctx,
@@ -106,7 +106,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		if (set_mcast_group(ctx,user_parm,mcg_params)) {
 			return 1;
 		}
-		
+
 		while (i < user_parm->num_of_qps) {
 			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
 				fprintf(stderr, "Couldn't attach QP to MultiCast group");
@@ -122,7 +122,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	}
 	return 0;
 }
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -136,13 +136,13 @@ int __cdecl main(int argc, char *argv[]) {
 	struct mcast_parameters     mcg_params;
 	int                      	ret_parser,i = 0;
 	int                      	size_max_pow = 24;
-    
+
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
 	memset(&user_param, 0 , sizeof(struct perftest_parameters));
 	memset(&mcg_params, 0 , sizeof(struct mcast_parameters));
 	memset(&user_comm, 0,sizeof(struct perftest_comm));
- 
+
 	user_param.verb    = SEND;
 	user_param.tst     = BW;
 	user_param.version = VERSION;
@@ -156,7 +156,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.
-	if (user_param.connection_type == RawEth) { 
+	if (user_param.connection_type == RawEth) {
 		fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
 		fprintf(stderr," For this we have raw_ethernet_bw test in this package.\n");
 		return FAILURE;
@@ -196,7 +196,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -208,14 +208,14 @@ int __cdecl main(int argc, char *argv[]) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
 	    }
-		
+
   	    if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -223,9 +223,9 @@ int __cdecl main(int argc, char *argv[]) {
 				return FAILURE;
 			}
 		}
-					
+
 	} else {
-	
+
 		/*-----------------------TODO: Check if it's ok-----------------
 		//we should not run multicast when RDMA_CM is set to OFF
 		if(user_param->use_mcg == ON){
@@ -233,7 +233,7 @@ int __cdecl main(int argc, char *argv[]) {
 			return FAILURE;
 		}
 		---------------------------------------------------------------*/
-		
+
 		 // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
 	    if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
@@ -257,7 +257,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-	
+
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		// shaking hands and gather the other side info.
@@ -290,7 +290,7 @@ int __cdecl main(int argc, char *argv[]) {
 	// shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
-		return 1;    
+		return 1;
 	}
 
     if (user_param.use_event) {
@@ -311,7 +311,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	if (user_param.test_method == RUN_ALL) {
 
-		if (user_param.connection_type == UD) 
+		if (user_param.connection_type == UD)
 		   size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
@@ -344,7 +344,7 @@ int __cdecl main(int argc, char *argv[]) {
 					return 17;
 				}
 
-			} else	{		  				
+			} else	{
 
 				if(run_iter_bw_server(&ctx,&user_param)) {
 					return 17;
@@ -359,7 +359,7 @@ int __cdecl main(int argc, char *argv[]) {
 			}
 		}
 
-	} else if (user_param.test_method == RUN_REGULAR) { 
+	} else if (user_param.test_method == RUN_REGULAR) {
 
 		if (user_param.machine == CLIENT || user_param.duplex)
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
@@ -394,7 +394,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 		print_report_bw(&user_param);
 
-	} else if (user_param.test_method == RUN_INFINITELY) { 
+	} else if (user_param.test_method == RUN_INFINITELY) {
 
 		if (user_param.machine == CLIENT)
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
@@ -414,7 +414,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 		if (user_param.machine == CLIENT) {
 
-			if(run_iter_bw_infinitely(&ctx,&user_param)) { 
+			if(run_iter_bw_infinitely(&ctx,&user_param)) {
 				fprintf(stderr," Error occured while running infinitely! aborting ...\n");
 				return 1;
 			}
@@ -427,7 +427,7 @@ int __cdecl main(int argc, char *argv[]) {
 			}
 		}
 	}
-		
+
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr," Failed to close connection between server and client\n");
 		return 1;
@@ -437,8 +437,8 @@ int __cdecl main(int argc, char *argv[]) {
 	//TODO: check which value should I return
 	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
 		return 1;
-		
+
 	printf(RESULT_LINE);
-	return 0; 
+	return 0;
 }
 

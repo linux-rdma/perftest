@@ -12,7 +12,7 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following						    			    
+ *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
@@ -33,18 +33,18 @@
  *
  * Description :
  *
- *  This API gathres the Socket interface methods for all perftest benchmarks 
+ *  This API gathres the Socket interface methods for all perftest benchmarks
  *  and can be used for any benchmark for IB.
  *  It passes messages between 2 end points through sockets interface methods,
- *  while passing the rellevant information for the IB entities. 
- *  
+ *  while passing the rellevant information for the IB entities.
+ *
  * Methods :
  *
  *  ctx_get_local_lid  - Receives the Local id from the subnet manager.
  *  ctx_client_connect - Connects the client through sockets interface.
  *  ctx_server_connect - Connects the Server to client through sockets.
  *  ctx_hand_shake     - Passes the data between 2 end points machines.
- *  ctx_print_pingpong_data - Prints the data that was passed. 
+ *  ctx_print_pingpong_data - Prints the data that was passed.
  *  ctx_close_connection    - Closing the sockets interface.
  */
 
@@ -97,14 +97,14 @@
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
-	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;} 
+	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;}
 
 #define NOTIFY_COMP_ERROR_RECV(wc,rcnt)                     											    \
 	{ fprintf(stderr," Completion with error at server\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
-	  fprintf(stderr," rcnt=%d\n",rcnt); return 1;} 
+	  fprintf(stderr," rcnt=%d\n",rcnt); return 1;}
 
-// Macro to determine packet size in case of UD. 
+// Macro to determine packet size in case of UD.
 // The UD addition is for the GRH .
 #define SIZE(type,size,valid) ((type == UD && valid) ? (size + UD_ADDITION) : (size))
 
@@ -131,30 +131,7 @@
  ******************************************************************************/
 
 
-struct IP_V4_header{
-	uint8_t ihl:4;
-	uint8_t version:4;
-    uint8_t tos;
-    uint16_t tot_len;
-    uint16_t id;
-    uint16_t frag_off;
-    uint8_t ttl;
-    uint8_t protocol;
-    uint16_t check;
-    uint32_t saddr;
-    uint32_t daddr;
-}__attribute__((packed));
 
-typedef struct IP_V4_header IP_V4_header;
-
-struct UDP_header {
-	u_short	uh_sport;		/* source port */
-	u_short	uh_dport;		/* destination port */
-	u_short	uh_ulen;		/* udp length */
-	u_short	uh_sum;			/* udp checksum */
-}__attribute__((packed));
-
-typedef struct UDP_header UDP_header;
 
 struct pingpong_context {
 	struct rdma_event_channel	*cm_channel;
@@ -185,13 +162,13 @@ struct pingpong_context {
 };
 
  struct pingpong_dest {
- 	int 				lid;
- 	int 				out_reads;
- 	int 				qpn;
- 	int 				psn;  
- 	unsigned			rkey;
- 	unsigned long long	vaddr;
- 	union ibv_gid		gid;
+	int 				lid;
+	int 				out_reads;
+	int 				qpn;
+	int 				psn;
+	unsigned			rkey;
+	unsigned long long	vaddr;
+	union ibv_gid		gid;
  };
 
 
@@ -205,7 +182,7 @@ struct pingpong_context {
 }__attribute__((packed));
 
 
-/****************************************************************************** 
+/******************************************************************************
  * Perftest resources Methods and interface utilitizes.f
  ******************************************************************************/
 
@@ -227,8 +204,8 @@ static __inline void switch_smac_dmac( struct ibv_sge *sg )
     memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
     memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
 }
- 
- 
+
+
 /* link_layer_str
  *
  * Description : Determines the link layer type (IB or ETH).
@@ -244,8 +221,8 @@ const char *link_layer_str(uint8_t link_layer);
  *
  * Description : Creating a service struct from a given port and servername.
  *
- * Parameters : 
- *	service - an empty char** to contain the service name.	
+ * Parameters :
+ *	service - an empty char** to contain the service name.
  *  port - The selected port on which the server will listen.
  *  hints - The requested ai_* params for the connection.
  *  res - Holds the result.
@@ -259,11 +236,11 @@ int check_add_port(char **service,int port,
 
 /* ctx_find_dev
  *
- * Description : Returns the device corresponding to ib_devname 
+ * Description : Returns the device corresponding to ib_devname
  *	or the first one found , in case ib_devname == NULL
  *
- * Parameters : 
- *	
+ * Parameters :
+ *
  *	ib_devname - The name of the deivce requested or NULL for the first one.
  *
  * Return Value : the deivce or NULL in case of failure.
@@ -274,7 +251,7 @@ struct ibv_device* ctx_find_dev(const char *ib_devname);
  *
  * Description : Creates the rdma_cm_id and rdma_channel for the rdma_cm QPs.
  *
- * Parameters : 
+ * Parameters :
  *	ctx - Resources sructure.
  * 	user_param - the perftest parameters.
  *
@@ -287,7 +264,7 @@ int create_rdma_resources(struct pingpong_context *ctx,
  *
  * Description : allocate all perftest resources.
  *
- * Parameters : 
+ * Parameters :
  *	ctx - Resources sructure.
  * 	user_param - the perftest parameters.
  */
@@ -297,7 +274,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
  *
  * Description : Deallocate all perftest resources.
  *
- * Parameters : 
+ * Parameters :
  *	ctx - Resources sructure.
  * 	user_param - the perftest parameters.
  *
@@ -308,11 +285,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 /* ctx_init
  *
- * Description : 
+ * Description :
  * 		Creates all the test resources.
  *		It creates Buffer, PD, MR, CQ QPs and moves the QPs to INIT.
  *
- * Parameters : 
+ * Parameters :
  *	ctx - An empty resources sructure to fill inside the resources.
  * 	user_param - the perftest parameters.
  *
@@ -322,7 +299,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 /* ctx_qp_create.
  *
- * Description : 
+ * Description :
  *
  *	Creates a QP , according to the attributes given in param.
  *	The relevent attributes are tx_depth,rx_depth,inline_size and connection_type.
@@ -344,7 +321,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  * Description :
  *
  *	Modifies the given QP to INIT state , according to attributes in param.
- *  The relevent attributes are ib_port, connection_type and verb. 
+ *  The relevent attributes are ib_port, connection_type and verb.
  *
  * Parameters :
  *
@@ -360,7 +337,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
  *
  * Description :
  *
- *	Modifies the given QP to RTR and then RTS states, given it's transport type and feature. 
+ *	Modifies the given QP to RTR and then RTS states, given it's transport type and feature.
  *
  * Parameters :
  *
@@ -373,7 +350,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
  *
  */
 int ctx_connect(struct pingpong_context *ctx,
-				struct pingpong_dest *dest, 
+				struct pingpong_dest *dest,
 				struct perftest_parameters *user_parm,
 				struct pingpong_dest *my_dest);
 
@@ -551,16 +528,16 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
 
 
 /* ctx_notify_events
- * 
+ *
  * Description : Prepare the test to work with events instead of polling the CQ.
- *	This is the way to work in un interipted mode.  
- * 
- * Parameters : 
+ *	This is the way to work in un interipted mode.
+ *
+ * Parameters :
  *  channel - (Mandotory) the created event channel.
- *         
+ *
  * Return Value : SUCCESS, FAILURE.
  */
-static __inline int ctx_notify_events(struct ibv_comp_channel *channel) { 
+static __inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 
 	struct ibv_cq       *ev_cq;
 	void                *ev_ctx;
@@ -609,12 +586,12 @@ void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t
 void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
 /* increase_rem_addr.
  *
- * Description : 
- *	Increases the remote address in RDMA verbs by INC , 
+ * Description :
+ *	Increases the remote address in RDMA verbs by INC ,
  *  (at least 64 CACHE_LINE size) , so that the system will be a able to cahce the data
  *  in an orginzed way.
- * 
- *  Parameters : 
+ *
+ *  Parameters :
  *		wr - The send wqe.
  *		size - size of the message to send.
  *		scnt - The ammount of post_send or post_receive we called.
@@ -622,20 +599,20 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  *
  * Return Value : SUCCESS, FAILURE.
  */
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) { 
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
 
-	if (verb == ATOMIC) 
+	if (verb == ATOMIC)
 		wr->wr.atomic.remote_addr += INC(size);
 
 	else
-		wr->wr.rdma.remote_addr += INC(size);           
+		wr->wr.rdma.remote_addr += INC(size);
 
 	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0) {
 
-		if (verb == ATOMIC) 
+		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
 
-		else 
+		else
 			wr->wr.rdma.remote_addr = prim_addr;
 	}
 }
@@ -643,22 +620,22 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,
 /* increase_loc_addr.
  *
  * Description :
- * 	Increases the local address in all verbs , 
+ * 	Increases the local address in all verbs ,
  *  (at least 64 CACHE_LINE size) , so that the system will be a able to cahce the data
  *  in an orginzed way.
  *
- * Parameters : 
+ * Parameters :
  *		sg - The scatter element of the wqe.
  *		size - size of the message to send.
  *		rcnt - The ammount of post_send or post_receive we called.
  *		prim_addr - The address of the original buffer.
  *		server_is_ud - Indication to weather we are in UD mode.
  */
-static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr,int server_is_ud) { 
+static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr,int server_is_ud) {
 
 	sg->addr  += INC(size);
 
-	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 ) 
+	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
 		sg->addr = prim_addr;
 
 }
@@ -668,7 +645,7 @@ static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint
  * Description :
  * 	Signal catcher for duration feature.
  *  run_iter_bw in start will set it to triger at MARGIN (parameter), it will then start counting packets
- *  and triger it back to SAMPLE TIME, in that time the test will count packets and completion and 
+ *  and triger it back to SAMPLE TIME, in that time the test will count packets and completion and
  *  will calculate BW accordingley.
  *
  */
@@ -677,13 +654,13 @@ void catch_alarm(int sig);
 /* catch_alarm.
  *
  * Description :
- * 	Signal catcher for run_infinitely feature. 
+ * 	Signal catcher for run_infinitely feature.
  *  Will be triggered every 5 sec and measure BW in this time frame.
  *
  */
 void catch_alarm_infintely(int sig) ;
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 

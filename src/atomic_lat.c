@@ -58,7 +58,7 @@
 #define __cdecl
 #endif
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -84,7 +84,7 @@ int __cdecl main(int argc, char *argv[]) {
 	user_param.version = VERSION;
 
 	ret_parser = parser(&user_param,argv,argc);
-	if (ret_parser) { 
+	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
@@ -117,7 +117,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -136,7 +136,7 @@ int __cdecl main(int argc, char *argv[]) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -158,7 +158,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if (set_up_connection(&ctx,&user_param,&my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
-	} 
+	}
 
 	ctx_print_pingpong_data(&my_dest,&user_comm);
 
@@ -191,7 +191,7 @@ int __cdecl main(int argc, char *argv[]) {
         return 1;
     }
 
-	// Only Client post read request. 
+	// Only Client post read request.
 	if (user_param.machine == SERVER) {
 
 		if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
@@ -207,7 +207,7 @@ int __cdecl main(int argc, char *argv[]) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
-		} 
+		}
 	}
 
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
@@ -223,7 +223,7 @@ int __cdecl main(int argc, char *argv[]) {
 	 	fprintf(stderr,"Failed to close connection between server and client\n");
 	 	return 1;
 	}
-	
+
 	printf(RESULT_LINE);
 	return 0;
 }

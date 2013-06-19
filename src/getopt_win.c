@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005 Mellanox Technologies.  All rights reserved.
- * Copyright (c) 1996-2003 Intel Corporation. All rights reserved. 
+ * Copyright (c) 1996-2003 Intel Corporation. All rights reserved.
  *
  * This software is available to you under the OpenIB.org BSD license
  * below:
@@ -90,7 +90,7 @@ int getopt(int argc, char * const argv[], char const *opts)
 		if (argv[optind+1] && (argv[optind+1][0] == '-' || argv[optind+1][0] == '/'))
 			goto out;
 	}
- 
+
 	optarg = argv[++optind];
 	if (!optarg || !(*optarg)) {
 		return '?';

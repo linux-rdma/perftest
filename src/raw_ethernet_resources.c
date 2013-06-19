@@ -36,7 +36,7 @@
 
 
 
- 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,10 +51,69 @@
 
  #include "raw_ethernet_resources.h"
 
+static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
+{
+       unsigned long sum = 0;
+       const uint16_t *ip1;
+        ip1 = buf;
+        while (hdr_len > 1)
+        {
+                 sum += *ip1++;
+                if (sum & 0x80000000)
+                         sum = (sum & 0xFFFF) + (sum >> 16);
+                 hdr_len -= 2;
+        }
+        while (sum >> 16)
+                sum = (sum & 0xFFFF) + (sum >> 16);
+        return(~sum);
+ }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt) {
+
+
+	struct IP_V4_header ip_header;
+
+	memset(&ip_header,0,sizeof(struct IP_V4_header));
+
+	ip_header.version = 4;
+	ip_header.ihl = 5;
+	ip_header.tos = 0;
+	ip_header.tot_len = htons(sizePkt);
+	ip_header.id = htons(0);
+	ip_header.frag_off = htons(0);
+	ip_header.ttl = DEFAULT_TTL;
+	ip_header.protocol = protocol;
+	ip_header.saddr = *saddr;
+	ip_header.daddr = *daddr;
+	ip_header.check = ip_checksum((void*)&ip_header,sizeof(struct IP_V4_header));
+
+	memcpy(ip_header_buffer, &ip_header, sizeof(struct IP_V4_header));
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt) {
+
+	struct UDP_header udp_header;
+
+	memset(&udp_header,0,sizeof(struct UDP_header));
+
+	udp_header.uh_sport = htons(*sPort);
+	udp_header.uh_dport = htons(*dPort);
+	udp_header.uh_ulen = htons(sizePkt - sizeof(struct IP_V4_header));
+	udp_header.uh_sum = 0;
+
+	memcpy(UDP_header_buffer, &udp_header, sizeof(struct UDP_header));
+
+
+}
 
 
 
- 
  /*****************************************************************************
  * generates a new ethernet header
  *****************************************************************************/
@@ -66,7 +125,7 @@ void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
 	eth_header->eth_type = htons(eth_type);
 
 }
- 
+
 
 /******************************************************************************
  * print test specification
@@ -156,7 +215,7 @@ void print_ethernet_header(struct ETH_header* p_ethernet_header)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_ip_header(IP_V4_header* ip_header)
+void print_ip_header(struct IP_V4_header* ip_header)
 {
 		char str_ip_s[INET_ADDRSTRLEN];
 		char str_ip_d[INET_ADDRSTRLEN];
@@ -186,7 +245,7 @@ void print_ip_header(IP_V4_header* ip_header)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_udp_header(UDP_header* udp_header)
+void print_udp_header(struct UDP_header* udp_header)
 {
 		if(NULL == udp_header)
 		{
@@ -217,12 +276,12 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 	if(user_param->is_client_ip && user_param->is_server_ip)
 	{
 		pkt = (void*)pkt + sizeof(struct ETH_header);
-		print_ip_header((IP_V4_header*)pkt);
+		print_ip_header((struct IP_V4_header*)pkt);
 	}
 	if(user_param->is_client_port && user_param->is_server_port)
 	{
-		pkt = pkt + sizeof(IP_V4_header);
-		print_udp_header((UDP_header*)pkt);
+		pkt = pkt + sizeof(struct IP_V4_header);
+		print_udp_header((struct UDP_header*)pkt);
 	}
 }
 /******************************************************************************
@@ -247,7 +306,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	}
 	if(user_param->is_client_port && user_param->is_server_port)
 	{
-		header_buff = header_buff + sizeof(IP_V4_header);
+		header_buff = header_buff + sizeof(struct IP_V4_header);
 		gen_udp_header(header_buff,&my_dest_info->port,&rem_dest_info->port,
 									my_dest_info->ip,rem_dest_info->ip,sizePkt);
 	}
@@ -265,7 +324,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 void create_raw_eth_pkt( struct perftest_parameters *user_param,
 						 struct pingpong_context 	*ctx ,
 						 struct raw_ethernet_info	*my_dest_info,
-						 struct raw_ethernet_info	*rem_dest_info) 
+						 struct raw_ethernet_info	*rem_dest_info)
 {
 	int offset = 0;
 	struct ETH_header* eth_header;
@@ -290,7 +349,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 			}
 		}
 	}
-	
+
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 }
 
@@ -444,4 +503,6 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 	}
 	return 0;
 }
+
+
 

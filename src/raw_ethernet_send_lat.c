@@ -52,7 +52,7 @@
 /*
 * Main function. implements raw_ethernet_send_lat
 */
-int __cdecl main(int argc, char *argv[]) 
+int __cdecl main(int argc, char *argv[])
 {
 
 	struct ibv_device			*ib_dev = NULL;
@@ -73,16 +73,16 @@ int __cdecl main(int argc, char *argv[])
 	/* init default values to user's parameters that's relvant for this test:
 	* Raw Ethernet Send Latency Test
 	*/
-	user_param.verb    = SEND; 
+	user_param.verb    = SEND;
 	user_param.tst     = LAT;
 	user_param.version = VERSION;
 	user_param.connection_type = RawEth;
-	user_param.r_flag  = &report; 
-	
-	/* Configure the parameters values according to user 
+	user_param.r_flag  = &report;
+
+	/* Configure the parameters values according to user
 												arguments or default values. */
 	ret_parser = parser(&user_param, argv,argc);
-	
+
 	//check for parsing errors
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
@@ -90,13 +90,13 @@ int __cdecl main(int argc, char *argv[])
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	
+
 	//this is a bidirectional test, so we need to let the init functions
 	//to think we are in duplex mode
 	//TODO: ask Ido if that's ok, or should I add another field in user_param
 	user_param.duplex  = 1;
-	
-	
+
+
 	// Find the selected IB device (or default if the user didn't select one).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
@@ -104,7 +104,7 @@ int __cdecl main(int argc, char *argv[])
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	
+
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
@@ -112,20 +112,20 @@ int __cdecl main(int argc, char *argv[])
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-	
+
 	// See if MTU and link type are valid and supported.
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return FAILURE;
 	}
-	
+
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx, &user_param);
-	
+
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
-	
+
 	//set up the connection, return the required flow rules (notice that user_param->duplex == TRUE)
 	//so the function will setup like it's a bidirectional test
 	if (send_set_up_connection(&flow_rules, &ctx, &user_param, &my_dest_info, &rem_dest_info)) {
@@ -135,10 +135,10 @@ int __cdecl main(int argc, char *argv[])
 
 	//print specifications of the test
 	print_spec(flow_rules,&user_param);
-	
+
 	// Create (if necessary) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
-		
+
 		//create resources
 		if (create_rdma_resources(&ctx, &user_param)) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
@@ -152,7 +152,7 @@ int __cdecl main(int argc, char *argv[])
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else if (rdma_server_connect(&ctx, &user_param)) {
 			//Assigning a server to listen on rdma_cm port and connect to it.
 			fprintf(stderr,"Unable to perform rdma_server function\n");
@@ -167,7 +167,7 @@ int __cdecl main(int argc, char *argv[])
 			return FAILURE;
 		}
 	}
-	
+
 
 	//attaching the qp to the spec
 	flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
@@ -176,16 +176,16 @@ int __cdecl main(int argc, char *argv[])
 		fprintf(stderr, "Couldn't attach QP\n");
 		return FAILURE;
 	}
-	
+
 	//build ONE Raw Ethernet packets on ctx buffer
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 
 	printf(RESULT_LINE); // "---" line
-	// choose the correct format to print 
+	// choose the correct format to print
 	// (according  to the test: latency or latency with duration)
 	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT :
 														RESULT_FMT_LAT_DUR);
-	
+
 	// Prepare IB resources for rtr(ready to read)/rts(ready to send)
 	if (user_param.work_rdma_cm == OFF) {
 		if (ctx_connect(&ctx, NULL, &user_param, NULL)) {
@@ -194,29 +194,29 @@ int __cdecl main(int argc, char *argv[])
 			return 1;
 		}
 	}
-	
-	
+
+
 	//Post Send send_wqes for current message size
 	ctx_set_send_wqes(&ctx,&user_param,NULL);
-	
+
 	// Post receive recv_wqes for current message size
 	if (ctx_set_recv_wqes(&ctx,&user_param)) {
 		fprintf(stderr," Failed to post receive recv_wqes\n");
 		return 1;
 	}
-		
+
 	//latency test function for SEND verb latency test.
 	if (run_iter_lat_send(&ctx, &user_param))
 	{
 		return 17;
 	}
-	
+
 	//print report (like print_report_bw) in the correct format
 	// (as set before: FMT_LAT or FMT_LAT_DUR)
-	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : 
+	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) :
 										print_report_lat_duration(&user_param);
-										
-		
+
+
 
 	//destroy flow
 	if (ibv_destroy_flow(flow_create_result)) {
@@ -225,9 +225,9 @@ int __cdecl main(int argc, char *argv[])
 		return FAILURE;
 	}
 	free(flow_rules);
-	
 
-	
+
+
 	//Deallocate all perftest resources.
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr,"Failed to destroy_ctx\n");
@@ -238,5 +238,5 @@ int __cdecl main(int argc, char *argv[])
 	printf(RESULT_LINE);
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
-	
+
 }

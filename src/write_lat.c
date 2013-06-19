@@ -57,7 +57,7 @@
 #define __cdecl
 #endif
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -117,7 +117,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -130,13 +130,13 @@ int __cdecl main(int argc, char *argv[]) {
 			return FAILURE;
 	    }
 
-		 if (user_param.machine == CLIENT) {
+		if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -158,7 +158,7 @@ int __cdecl main(int argc, char *argv[]) {
 	if (set_up_connection(&ctx,&user_param,&my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
-	} 
+	}
 
 	ctx_print_pingpong_data(&my_dest,&user_comm);
 
@@ -216,7 +216,7 @@ int __cdecl main(int argc, char *argv[]) {
 		}
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
-	
+
 	printf(RESULT_LINE);
 	return 0;
 }

@@ -50,7 +50,7 @@
 #endif
 
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -62,18 +62,18 @@ int __cdecl main(int argc, char *argv[]) {
 	struct pingpong_dest	   *rem_dest = NULL;
 	struct perftest_parameters user_param;
 	struct perftest_comm	   user_comm;
-	
+
 	/* init default values to user's parameters */
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param , 0 , sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
-	
+
 	user_param.verb    = ATOMIC;
 	user_param.tst     = BW;
 	user_param.version = VERSION;
 
 	ret_parser = parser(&user_param,argv,argc);
-	if (ret_parser) { 
+	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
@@ -108,7 +108,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -120,14 +120,14 @@ int __cdecl main(int argc, char *argv[]) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
 	    }
-		
+
   	    if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -152,7 +152,7 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	// Print this machine QP information
-	for (i=0; i < user_param.num_of_qps; i++) 
+	for (i=0; i < user_param.num_of_qps; i++)
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
 	// Init the connection and print the local data.
@@ -162,9 +162,9 @@ int __cdecl main(int argc, char *argv[]) {
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-	
-	for (i=0; i < user_param.num_of_qps; i++) { 
-		
+
+	for (i=0; i < user_param.num_of_qps; i++) {
+
 		// shaking hands and gather the other side info.
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
@@ -184,10 +184,10 @@ int __cdecl main(int argc, char *argv[]) {
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
-        return 1;    
+        return 1;
     }
-     
-	// For half duplex tests, server just waits for client to exit 
+
+	// For half duplex tests, server just waits for client to exit
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -197,32 +197,32 @@ int __cdecl main(int argc, char *argv[]) {
 
 		printf(RESULT_LINE);
 		return destroy_ctx(&ctx,&user_param);
-	} 
+	}
 
 	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
 			return 1;
-		} 
+		}
 	}
-    
+
 	printf(RESULT_LINE);
-	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));	
+	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 	if (user_param.test_method == RUN_REGULAR) {
 
-		if(run_iter_bw(&ctx,&user_param)) { 
+		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Error occured in run_iter function\n");
 			return 1;
 		}
-		
+
 		print_report_bw(&user_param);
 
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
-		if(run_iter_bw_infinitely(&ctx,&user_param)) { 
+		if(run_iter_bw_infinitely(&ctx,&user_param)) {
 			fprintf(stderr," Error occured while running infinitely! aborting ...\n");
 			return 1;
 		}
@@ -232,12 +232,12 @@ int __cdecl main(int argc, char *argv[]) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
-	
+
 	//limit verifier
 	//TODO: check which value should I return
 	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
 		return 1;
-		
+
 	printf(RESULT_LINE);
-	return destroy_ctx(&ctx,&user_param);	
+	return destroy_ctx(&ctx,&user_param);
 }

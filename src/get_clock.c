@@ -108,7 +108,7 @@ static double sample_get_cpu_mhz(void)
 		syy += ty * ty;
 		sxy += tx * ty;
 	}
-	
+
 	b = (MEASUREMENTS * sxy - sx * sy) / (MEASUREMENTS * sxx - sx * sx);
 	a = (sy - b * sx) / MEASUREMENTS;
 

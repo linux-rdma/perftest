@@ -58,7 +58,7 @@
 #else
 #define __cdecl
 #endif
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int set_mcast_group(struct pingpong_context *ctx,
@@ -71,7 +71,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&mcg_params->port_gid)) {
 			return 1;
 	}
-		
+
 	if (ibv_query_pkey(ctx->context,user_parm->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
 		return 1;
 	}
@@ -105,7 +105,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int destroy_mcast_group(struct pingpong_context *ctx,
@@ -131,7 +131,7 @@ static int destroy_mcast_group(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 static int send_set_up_connection(struct pingpong_context *ctx,
@@ -165,7 +165,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 #else
 	my_dest->psn       = rand() & 0xffffff;
 #endif
-	
+
 	// We do not fail test upon lid above RoCE.
 	if (user_parm->gid_index < 0) {
 		if (!my_dest->lid) {
@@ -177,10 +177,10 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	return 0;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
-static int send_destroy_ctx_resources(struct pingpong_context    *ctx, 
+static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 								 struct perftest_parameters *user_parm,
 								 struct mcast_parameters    *mcg_params)  {
 
@@ -193,7 +193,7 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 		}
 	}
 
-	if (user_parm->connection_type == UD) {	
+	if (user_parm->connection_type == UD) {
 
 		if (ibv_destroy_ah(ctx->ah[0])) {
 			fprintf(stderr, "failed to destroy AH\n");
@@ -224,7 +224,7 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 		fprintf(stderr, "failed to deregister MR\n");
 		test_result = 1;
 	}
-	
+
 	if (ibv_dealloc_pd(ctx->pd)) {
 		fprintf(stderr, "failed to deallocate PD\n");
 		test_result = 1;
@@ -247,7 +247,7 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 	return test_result;
 }
 
-/****************************************************************************** 
+/******************************************************************************
  *
  ******************************************************************************/
 int __cdecl main(int argc, char *argv[]) {
@@ -319,7 +319,7 @@ int __cdecl main(int argc, char *argv[]) {
 	alloc_ctx(&ctx,&user_param);
 
 	// copy the rellevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) { 
+	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
@@ -332,14 +332,14 @@ int __cdecl main(int argc, char *argv[]) {
 			fprintf(stderr," Unable to create the rdma_resources\n");
 			return FAILURE;
 	    }
-		
+
   	    if (user_param.machine == CLIENT) {
 
 			if (rdma_client_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
-		
+
 		} else {
 
 			if (rdma_server_connect(&ctx,&user_param)) {
@@ -347,7 +347,7 @@ int __cdecl main(int argc, char *argv[]) {
 				return FAILURE;
 			}
 		}
-					
+
 	} else {
 
 		 // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
@@ -392,7 +392,7 @@ int __cdecl main(int argc, char *argv[]) {
 	// shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
-		return 1;    
+		return 1;
 	}
 
     if (user_param.use_event) {
@@ -400,62 +400,62 @@ int __cdecl main(int argc, char *argv[]) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request RCQ notification\n");
 			return 1;
-		} 
+		}
 
 		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, "Couldn't request RCQ notification\n");
 			return 1;
-		} 
+		}
     }
 
 	printf(RESULT_LINE);
 	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 
 	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
-    
+
 	if (user_param.test_method == RUN_ALL) {
 
-		if (user_param.connection_type == UD)  
+		if (user_param.connection_type == UD)
 			size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
-			
+
 			user_param.size = (uint64_t)1 << i;
-			
+
 			// Post recevie recv_wqes fo current message size
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
 				return 1;
 			}
-			
-			// Sync between the client and server so the client won't send packets 
+
+			// Sync between the client and server so the client won't send packets
 			// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
 			if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 				fprintf(stderr,"Failed to exchange date between server and clients\n");
 				return 1;
 			}
-			
+
 			if(run_iter_lat_send(&ctx, &user_param))
 				return 17;
 
 			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 		}
-	
+
 	} else {
-		
+
 		// Post recevie recv_wqes fo current message size
 		if (ctx_set_recv_wqes(&ctx,&user_param)) {
 			fprintf(stderr," Failed to post receive recv_wqes\n");
 			return 1;
 		}
-			
-		// Sync between the client and server so the client won't send packets 
+
+		// Sync between the client and server so the client won't send packets
 		// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
 		if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1;
 		}
-			
+
 		if(run_iter_lat_send(&ctx, &user_param))
 			return 17;
 
@@ -466,7 +466,7 @@ int __cdecl main(int argc, char *argv[]) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
-	
+
 	printf(RESULT_LINE);
 
 	return send_destroy_ctx_resources(&ctx,&user_param,&mcg_params);

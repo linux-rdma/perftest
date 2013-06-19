@@ -12,7 +12,7 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following						    			    
+ *        copyright notice, this list of conditions and the following
  *        disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
@@ -38,27 +38,27 @@
 
  /* Multicast Module for perftest.
   *
-  * Description : 
+  * Description :
   *
-  *   This file contains the structures and methods for implementing a multiple 
+  *   This file contains the structures and methods for implementing a multiple
   *   multicast groups in user space enviroment.
   *	  The module is in use in "send_bw" and "send_lat" ,but can be used on other
   *	  applications and can generate more methods and serve more benchmarks.
   *   The Module uses only the structire defined here , enabling generic use of it.
-  *   
+  *
   * Defined Types :
   *
   *   mcast_parameters - Contains all the parameters needed for this module.
   *   mcast_group      - The multicast group entitiy itself.
   *   mcg_qp		   - Is a QP structure that is attahced to the group.
-  *   
+  *
   */
 
 
-/************************************************************************ 
+/************************************************************************
  *   Macros , Defines and Files included for work.	    			    *
  ************************************************************************/
- 
+
 #include <infiniband/verbs.h>
 #include <infiniband/umad.h>
 
@@ -75,7 +75,7 @@
 #define MAX_POLL_ITERATION_TIMEOUT  1000000
 #define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 
-//  Definitions section for MADs 
+//  Definitions section for MADs
 #define SUBN_ADM_ATTR_MC_MEMBER_RECORD 0x38
 #define MANAGMENT_CLASS_SUBN_ADM       0x03 	  /* Subnet Administration class */
 #define MCMEMBER_JOINSTATE_FULL_MEMBER 0x1
@@ -85,22 +85,22 @@
 #define DEF_TCLASS                     0
 #define DEF_FLOW_LABLE                 0
 
-// Macro for 64 bit variables to switch to from net 
+// Macro for 64 bit variables to switch to from net
 #ifndef _WIN32
 #define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32))))
 #define htonll(x) ntohll(x)
 #endif
 
-// generate a bit mask S bits width 
+// generate a bit mask S bits width
 #define MASK32(S)  ( ((uint32_t) ~0L) >> (32-(S)) )
 
 // generate a bit mask with bits O+S..O set (assumes 32 bit integer).
 #define BITS32(O,S) ( MASK32(S) << (O) )
 
-// extract S bits from (u_int32_t)W with offset O and shifts them O places to the right 
+// extract S bits from (u_int32_t)W with offset O and shifts them O places to the right
 #define EXTRACT32(W,O,S) ( ((W)>>(O)) & MASK32(S) )
 
-// insert S bits with offset O from field F into word W (u_int32_t) 
+// insert S bits with offset O from field F into word W (u_int32_t)
 #define INSERT32(W,F,O,S) (/*(W)=*/ ( ((W) & (~BITS32(O,S)) ) | (((F) & MASK32(S))<<(O)) ))
 
 #ifndef INSERTF
@@ -108,7 +108,7 @@
 #endif
 
 
-// according to Table 187 in the IB spec 1.2.1 
+// according to Table 187 in the IB spec 1.2.1
 typedef enum {
 	SUBN_ADM_METHOD_SET    = 0x2,
 	SUBN_ADM_METHOD_DELETE = 0x15
@@ -132,7 +132,7 @@ typedef enum {
 } mcast_state;
 
 
-/************************************************************************ 
+/************************************************************************
  *   Multicast data structures.						    			    *
  ************************************************************************/
 
@@ -150,10 +150,10 @@ struct mcast_parameters {
 	uint8_t 			  sm_sl;
 	union ibv_gid 		  port_gid;
 	union ibv_gid 		  mgid;
-	
+
 };
 
-// according to Table 195 in the IB spec 1.2.1 
+// according to Table 195 in the IB spec 1.2.1
 
 #ifdef _WIN32
 #include <complib/cl_packon.h>
@@ -180,7 +180,7 @@ struct sa_mad_packet_t {
 }__attribute__((packed));
 #endif
 
-/************************************************************************ 
+/************************************************************************
  *   Multicast resources methods.					    			    *
  ************************************************************************/
 
@@ -188,12 +188,12 @@ struct sa_mad_packet_t {
  *
  * Description :
  *
- *  Sets the Multicast GID , and stores it in the "mgid" value of 
+ *  Sets the Multicast GID , and stores it in the "mgid" value of
  *  mcast resourcs. If the user requested for a specific MGID, which
  *  is stored in params->user_mgid (in this case params->is_user_mgid should be 1)
- *  than it will be his MGID, if not the library choose a default one.  
+ *  than it will be his MGID, if not the library choose a default one.
  *
- * Parameters : 
+ * Parameters :
  *
  *  params            - The parameters of the machine
  *  my_dest ,rem_dest - The 2 sides that ends the connection.
@@ -210,7 +210,7 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
  *  Close the connection between the 2 machines.
  *  It performs an handshake to ensure the 2 sides are there.
  *
- * Parameters : 
+ * Parameters :
  *
  *  params            - The parameters of the machine
  *  my_dest ,rem_dest - The 2 sides that ends the connection.
