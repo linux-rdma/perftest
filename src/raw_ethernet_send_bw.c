@@ -52,7 +52,7 @@
 /******************************************************************************
  *
  ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
 	struct ibv_device			*ib_dev = NULL;
 	struct pingpong_context		ctx;
@@ -241,11 +241,4 @@ int __cdecl main(int argc, char *argv[]) {
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
 }
-
-
-
-
-
-
-
 

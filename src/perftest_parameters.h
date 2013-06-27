@@ -52,13 +52,9 @@
 
 // Files included for work.
 #include <infiniband/verbs.h>
-#ifdef _WIN32
-#include "get_clock_win.h"
-#else
 #include <unistd.h>
 #include <malloc.h>
 #include "get_clock.h"
-#endif
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -172,13 +168,10 @@
 #define ALLOCATE(var,type,size)                                     \
     { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
         { fprintf(stderr," Cannot Allocate\n"); exit(1);}}
-#ifndef _WIN32
-	#define GET_STRING(orig,temp) 						            \
-		{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
-#else
-	#define GET_STRING(orig,temp)									\
-		{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy_s(orig, sizeof(char) * (strlen(temp) + 1), temp); }
-#endif
+
+// This is our string builder
+#define GET_STRING(orig,temp) 						            \
+	{ ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
 
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
@@ -284,11 +277,7 @@ struct perftest_parameters {
 	AtomicType		atomicType;
 	TestMethod		test_type;
 	DurationStates	state;
-#ifndef _WIN32
 	int				sockfd;
-#else
-	SOCKET 			sockfd;
-#endif
 	const char		*version;
 	cycles_t		*tposted;
 	cycles_t		*tcompleted;
@@ -302,7 +291,6 @@ struct perftest_parameters {
 	enum ctx_report_fmt		report_fmt;
 	struct report_options  	*r_flag;
 	int 			mac_fwd;
-
 	//results limits
 	float min_bw_limit;
 	float min_msgRate_limit;

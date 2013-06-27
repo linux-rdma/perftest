@@ -17,15 +17,6 @@ static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
 
-#ifdef _WIN32
-// The link layer of the current port.
-typedef enum {
-	IBV_LINK_LAYER_UNSPECIFIED = 0 ,
-	IBV_LINK_LAYER_INFINIBAND = 1 ,
-	IBV_LINK_LAYER_ETHERNET = 2
-} LinkType;
-#endif
-
 /******************************************************************************
  * parse_mac_from_str.
  *
@@ -761,12 +752,7 @@ static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
 		return LINK_FAILURE;
 	}
 
-#ifndef _WIN32
 	curr_link = port_attr.link_layer;
-#else
-	curr_link = IBV_LINK_LAYER_INFINIBAND;
-#endif
-
 	if (!strcmp(link_layer_str(curr_link),"Unknown")) {
 			fprintf(stderr," Unable to determine link layer \n");
 			return LINK_FAILURE;
@@ -851,7 +837,6 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 	}
 
 	while (1) {
-#ifndef _WIN32
 		static const struct option long_options[] = {
 			{ .name = "source_mac",     .has_arg = 1, .val = 'B' },
 			{ .name = "dest_mac",       .has_arg = 1, .val = 'E' },
@@ -863,21 +848,6 @@ int raw_ethernet_parser(struct perftest_parameters *user_param,char *argv[], int
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
             { 0 }
         };
-#else
-
-        static const struct option long_options[] = {
-			{ "margin"			,1, NULL, 'f' },
-			{ "source_mac"      ,1, NULL, 'B' },
-			{ "dest_mac"        ,1, NULL, 'E' },
-			{ "server_ip"       ,1, NULL, 'J' },
-			{ "client_ip"       ,1, NULL, 'j' },
-			{ "server_port"     ,1, NULL, 'K' },
-			{ "client_port"     ,1, NULL, 'k' },
-			{ "server"          ,0, NULL, 'Z' },
-			{ "client"          ,0, NULL, 'P' },
-			{ 0 }
-		};
-#endif
 
         c = getopt_long(argc,argv,"B:E:J:j:K:k:ZP",long_options,NULL);
 
@@ -951,7 +921,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->machine = UNCHOSEN;
 
 	while (1) {
-#ifndef _WIN32
 		static const struct option long_options[] = {
 			{ .name = "port",           .has_arg = 1, .val = 'p' },
 			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
@@ -1004,60 +973,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
             { 0 }
         };
-#else
-
-        static const struct option long_options[] = {
-			{ "port",				1, NULL, 'p' },
-			{ "ib-dev",				1, NULL, 'd' },
-			{ "ib-port",			1, NULL, 'i' },
-			{ "mtu",				1, NULL, 'm' },
-			{ "size",				1, NULL, 's' },
-			{ "iters",				1, NULL, 'n' },
-			{ "tx-depth",			1, NULL, 't' },
-			{ "qp-timeout",			1, NULL, 'u' },
-			{ "sl", 				1, NULL, 'S' },
-			{ "gid-index",			1, NULL, 'x' },
-			{ "all",				0, NULL, 'a' },
-			{ "CPU-freq",			0, NULL, 'F' },
-			{ "connection",			1, NULL, 'c' },
-			{ "qp", 				1, NULL, 'q' },
-			{ "events", 			0, NULL, 'e' },
-			{ "inline_size",		1, NULL, 'I' },
-			{ "outs",				1, NULL, 'o' },
-			{ "mcg",				0, NULL, 'g' },
-			{ "comm_rdma_cm",		0, NULL, 'z' },
-			{ "rdma_cm",			0, NULL, 'R' },
-			{ "tos",           		1, NULL, 'T' },
-			{ "help",				0, NULL, 'h' },
-			{ "MGID",				1, NULL, 'M' },
-			{ "rx-depth",			1, NULL, 'r' },
-			{ "bidirectional",		0, NULL, 'b' },
-			{ "cq-mod", 			1, NULL, 'Q' },
-			{ "noPeak", 			0, NULL, 'N' },
-			{ "version",			0, NULL, 'V' },
-			{ "report-cycles",		0, NULL, 'C' },
-			{ "report-histogrm",	0, NULL, 'H' },
-			{ "report-unsorted",	0, NULL, 'U' },
-			{ "atomic_type",		1, NULL, 'A' },
-			{ "dualport",			0, NULL, 'O' },
-			{ "post_list",			1, NULL, 'l' },
-			{ "duration",			1, NULL, 'D' },
-			{ "margin",				1, NULL, 'f' },
-			{ "source_mac",			1, NULL, 'B' },
-			{ "dest_mac",			1, NULL, 'E' },
-			{ "server_ip",			1, NULL, 'J' },
-			{ "client_ip",			1, NULL, 'j' },
-			{ "server_port",		1, NULL, 'K' },
-			{ "client_port",		1, NULL, 'k' },
-			{ "limit_bw",			1, NULL, 'w' }, //new
-			{ "limit_msgrate",		1, NULL, 'y' }, //new
-			{ "server",				0, NULL, 'Z' },
-			{ "client",				0, NULL, 'P' },
-			{ "mac_fwd",			0, NULL, 'v' },
-	        { "dualport",			0, &run_inf_flag, 1 },
-			{ 0 }
-		};
-#endif
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
 
         if (c == -1)
@@ -1066,13 +981,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
         switch (c) {
 
 			case 'p': user_param->port = strtol(optarg, NULL, 0); break;
-#ifndef _WIN32
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
-#else
-			case 'd': GET_STRING(user_param->ib_devname,_strdup(optarg)); break;
-#endif
 			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); break;
-            		case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
+			case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
 			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
 			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
 			case 'T': CHECK_VALUE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS"); break;
@@ -1101,11 +1012,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
 					return 1;
 				} break;
-#ifndef _WIN32
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg));
-#else
-			case 'M': GET_STRING(user_param->user_mgid,_strdup(optarg));
-#endif
 			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
 				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
 					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
@@ -1517,11 +1424,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 		}
 	}
 
-#ifndef _WIN32
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
-#else
-	cycles_to_units = get_cpu_mhz();
-#endif
 
 	tsize = user_param->duplex ? 2 : 1;
 	tsize = tsize * user_param->size;

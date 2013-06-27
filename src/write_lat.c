@@ -38,29 +38,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include "get_clock_win.h"
-#else
 #include <unistd.h>
 #include <malloc.h>
-#include "get_clock.h"
-#endif
 
+#include "get_clock.h"
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#else
-#define __cdecl
-#endif
-
 /******************************************************************************
  *
  ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
 	int                         ret_parser,i = 0;
 	struct report_options       report;

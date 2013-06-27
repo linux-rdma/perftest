@@ -2,21 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-
-#ifndef _WIN32
 #include <unistd.h>
 #include <getopt.h>
 #include <malloc.h>
 #include <errno.h>
 #include <byteswap.h>
-#else
-#include <stdarg.h>
-#include <time.h>
-#include <sys/types.h>
-#include <winsock2.h>
-#include <Winsock2.h>
-#endif
-
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -170,17 +160,10 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 
 
 
-#ifndef _WIN32
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
 
 		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
-#else
-		sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
-				  my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
-		printf("\nethernet_write_keys msg is: %s\n\n",msg);
-		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
-#endif
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
 			return 1;
@@ -188,7 +171,6 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 
     } else {
 		char msg[KEY_MSG_SIZE_GID];
-#ifndef _WIN32
 		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
 				my_dest->gid.raw[0],my_dest->gid.raw[1],
@@ -201,20 +183,6 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 				my_dest->gid.raw[14],my_dest->gid.raw[15]);
 
 		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
-#else
-		sprintf_s(msg, sizeof(msg), KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
-					my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
-					my_dest->gid.raw[0],my_dest->gid.raw[1],
-					my_dest->gid.raw[2],my_dest->gid.raw[3],
-					my_dest->gid.raw[4],my_dest->gid.raw[5],
-					my_dest->gid.raw[6],my_dest->gid.raw[7],
-					my_dest->gid.raw[8],my_dest->gid.raw[9],
-					my_dest->gid.raw[10],my_dest->gid.raw[11],
-					my_dest->gid.raw[12],my_dest->gid.raw[13],
-					my_dest->gid.raw[14],my_dest->gid.raw[15]);
-
-		if (send(comm->rdma_params->sockfd,msg,sizeof msg,0) != sizeof msg) {
-#endif
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
 			return 1;
@@ -236,25 +204,15 @@ if (comm->rdma_params->gid_index == -1){
         int parsed;
 		char msg[KEY_MSG_SIZE];
 
-#ifndef _WIN32
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
-#else
-		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, MSG_WAITALL) != sizeof msg) {
-#endif
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
 			return 1;
 		}
 
-#ifndef _WIN32
 		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
 						&rem_dest->out_reads,&rem_dest->qpn,
 						&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
-#else
-		parsed = sscanf_s(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
-		  				&rem_dest->out_reads,&rem_dest->qpn,
-		  				&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
-#endif
 		if (parsed != 6) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
@@ -267,11 +225,7 @@ if (comm->rdma_params->gid_index == -1){
 		char tmp[20];
 		int i;
 
-#ifndef _WIN32
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
-#else
-		if (recv(comm->rdma_params->sockfd, msg, sizeof msg, MSG_WAITALL) != sizeof msg) {
-#endif
 			perror("pp_read_keys");
 			fprintf(stderr, "Couldn't read remote address\n");
 			return 1;
@@ -311,11 +265,7 @@ if (comm->rdma_params->gid_index == -1){
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
 
-#ifndef _WIN32
 		rem_dest->vaddr = strtoull(tmp, NULL, 16); // VA
-#else
-		rem_dest->vaddr = _strtoui64(tmp, NULL, 16); // VA
-#endif
 
 		for (i = 0; i < 15; ++i) {
 			pstr += term - pstr + 1;
@@ -323,22 +273,13 @@ if (comm->rdma_params->gid_index == -1){
 			memcpy(tmp, pstr, term - pstr);
 			tmp[term - pstr] = 0;
 
-#ifndef _WIN32
 			rem_dest->gid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
-#else
-			rem_dest->gid.raw[i] = (unsigned char)strtol(tmp, NULL, 16);
-#endif
 		}
 
 		pstr += term - pstr + 1;
 
-#ifndef _WIN32
 		strcpy(tmp, pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
-#else
-		strcpy_s(tmp, sizeof(tmp), pstr);
-		rem_dest->gid.raw[15] = (unsigned char)strtol(tmp, NULL, 16);
-#endif
 
 	}
 	return 0;
@@ -423,12 +364,7 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	struct addrinfo hints;
 	char *service;
 
-#ifndef _WIN32
 	int sockfd = -1;
-#else
-	SOCKET sockfd = INVALID_SOCKET;
-#endif
-
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family   = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
@@ -441,31 +377,17 @@ static int ethernet_client_connect(struct perftest_comm *comm) {
 	for (t = res; t; t = t->ai_next) {
 		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
 
-#ifndef _WIN32
 		if (sockfd >= 0) {
 			if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
 				break;
 			close(sockfd);
 			sockfd = -1;
 		}
-#else
-		if (sockfd != INVALID_SOCKET) {
-			if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
-				break;
-
-			closesocket(sockfd);
-			sockfd = INVALID_SOCKET;
-		}
-#endif
 	}
 
 	freeaddrinfo(res);
 
-#ifndef _WIN32
 	if (sockfd < 0) {
-#else
-	if (sockfd == INVALID_SOCKET) {
-#endif
 		fprintf(stderr, "Couldn't connect to %s:%d\n",comm->rdma_params->servername,comm->rdma_params->port);
 		return 1;
 	}
@@ -484,12 +406,7 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	char *service;
 	int n;
 
-#ifndef _WIN32
 	int sockfd = -1, connfd;
-#else
-	SOCKET sockfd = INVALID_SOCKET, connfd;
-#endif
-
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags    = AI_PASSIVE;
 	hints.ai_family   = AF_INET;
@@ -503,7 +420,6 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	for (t = res; t; t = t->ai_next) {
 		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
 
-#ifndef _WIN32
 		if (sockfd >= 0) {
 			n = 1;
 			setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof n);
@@ -512,26 +428,10 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 			close(sockfd);
 			sockfd = -1;
 		}
-#else
-		if (sockfd != INVALID_SOCKET) {
-			n = 1;
-			setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char*)&n, sizeof n);
-			if (!bind(sockfd, t->ai_addr, t->ai_addrlen))
-				break;
-			closesocket(sockfd);
-			sockfd = INVALID_SOCKET;
-		}
-
-#endif
 	}
 	freeaddrinfo(res);
 
-#ifndef _WIN32
 	if (sockfd < 0) {
-#else
-	if (sockfd == INVALID_SOCKET) {
-#endif
-
 		fprintf(stderr, "Couldn't listen to port %d\n", comm->rdma_params->port);
 		return 1;
 	}
@@ -539,7 +439,6 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 	listen(sockfd, 1);
 	connfd = accept(sockfd, NULL, 0);
 
-#ifndef _WIN32
 	if (connfd < 0) {
 		perror("server accept");
 		fprintf(stderr, "accept() failed\n");
@@ -547,16 +446,6 @@ static int ethernet_server_connect(struct perftest_comm *comm) {
 		return 1;
 	}
 	close(sockfd);
-#else
-	if (connfd == INVALID_SOCKET) {
-		perror("server accept");
-		fprintf(stderr, "accept() failed\n");
-		closesocket(sockfd);
-		return 1;
-    }
-	closesocket(sockfd);
-#endif
-
 	comm->rdma_params->sockfd = connfd;
 	return 0;
 }
@@ -572,9 +461,7 @@ int set_up_connection(struct pingpong_context *ctx,
 	union ibv_gid temp_gid;
 	union ibv_gid temp_gid2;
 
-#ifndef _WIN32
 	srand48(getpid() * time(NULL));
-#endif
 
 	if (user_param->gid_index != -1) {
 		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
@@ -606,12 +493,7 @@ int set_up_connection(struct pingpong_context *ctx,
 		}
 
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
-
-#ifndef _WIN32
 		my_dest[i].psn   = lrand48() & 0xffffff;
-#else
-		my_dest[i].psn   = rand() & 0xffffff;
-#endif
 		my_dest[i].rkey  = ctx->mr->rkey;
 
 		// Each qp gives his receive buffer address .
@@ -1101,21 +983,13 @@ int ctx_close_connection(struct perftest_comm *comm,
 
 	if (!comm->rdma_params->use_rdma_cm && !comm->rdma_params->work_rdma_cm) {
 
-#ifndef _WIN32
         if (write(comm->rdma_params->sockfd,"done",sizeof "done") != sizeof "done") {
-#else
-		if (send(comm->rdma_params->sockfd,"done",sizeof "done", 0) != sizeof "done") {
-#endif
                 perror(" Client write");
                 fprintf(stderr,"Couldn't write to socket\n");
                 return -1;
         }
 
-#ifndef _WIN32
 		close(comm->rdma_params->sockfd);
-#else
-		closesocket(comm->rdma_params->sockfd);
-#endif
 		return 0;
 	}
 

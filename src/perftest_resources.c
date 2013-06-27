@@ -1,73 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#include <stdarg.h>
-#include <time.h>
-#include <sys/types.h>
-#include <winsock2.h>
-#include <Winsock2.h>
-#include "l2w.h"
-#else
 #include <unistd.h>
 #include <malloc.h>
 #include <getopt.h>
 #include <limits.h>
 #include <errno.h>
-#endif
-#include "perftest_resources.h"
-
 #include <signal.h>
-//#include "get_clock.h"
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#endif
-
+#include "perftest_resources.h"
 
 static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_READ};
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
-
 struct perftest_parameters* duration_param;
 
 /******************************************************************************
  * Beginning
- ******************************************************************************/
-
-/******************************************************************************
- *
- ******************************************************************************/
-/*uint16_t udp_checksum	( void * buff,size_t len,in_addr_t src_addr,in_addr_t dest_addr)
- {
-         const uint16_t *buf=buff;
-         uint16_t *ip_src=(void *)&src_addr, *ip_dst=(void *)&dest_addr;
-         uint32_t sum;
-         size_t length=len;
-         sum = 0;
-         while (len > 1)
-         {
-                 sum += *buf++;
-                 if (sum & 0x80000000)
-                         sum = (sum & 0xFFFF) + (sum >> 16);
-                 len -= 2;
-         }
-         if ( len & 1 )
-                 sum += *((uint8_t *)buf);
-         sum += *(ip_src++);
-         sum += *ip_src;
-         sum += *(ip_dst++);
-         sum += *ip_dst;
-         sum += htons(UDP_PROTOCOL);
-         sum += htons(length);
-         while (sum >> 16)
-                 sum = (sum & 0xFFFF) + (sum >> 16);
-         return ( (uint16_t)(~sum)  );
- }*/
-
-/******************************************************************************
- *
  ******************************************************************************/
 static int check_for_contig_pages_support(struct ibv_context *context)
 {
@@ -99,12 +47,7 @@ int check_add_port(char **service,int port,
 
 	int number;
 
-#ifndef _WIN32
 	if (asprintf(service,"%d", port) < 0) {
-#else
-	*service = (char*)malloc(6*sizeof(char));
-	if (sprintf_s(*service,(6*sizeof(char)), "%d", port) < 0) {
-#endif
 		return FAILURE;
 	 }
 

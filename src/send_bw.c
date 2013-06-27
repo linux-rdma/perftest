@@ -43,13 +43,6 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#else
-#define __cdecl
-#endif
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -125,7 +118,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
 	struct ibv_device		 	*ib_dev = NULL;
 	struct pingpong_context  	ctx;

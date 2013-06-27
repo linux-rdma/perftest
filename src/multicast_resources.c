@@ -8,22 +8,12 @@
 #include <netdb.h>
 #include <time.h>
 #include <limits.h>
-#ifdef _WIN32
-#include <stdarg.h>
-#include <time.h>
-#include <sys/types.h>
-#include <winsock2.h>
-#include <Winsock2.h>
-#include "l2w.h"
-#include "getopt_win.c"
-#else
 #include <unistd.h>
 #include <malloc.h>
 #include <getopt.h>
 #include <errno.h>
 #include <byteswap.h>
 #include <pthread.h>
-#endif
 #include "multicast_resources.h"
 
 /******************************************************************************
@@ -130,11 +120,7 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 		memcpy(tmp, pstr, term - pstr+1);
 		tmp[term - pstr] = 0;
 
-#ifndef _WIN32
 		mcg_gid[0] = (unsigned char)strtoll(tmp, NULL, 0);
-#else
-		mcg_gid[0] = (unsigned char)strtol(tmp, NULL, 0);
-#endif
 
 		for (i = 1; i < 15; ++i) {
 			pstr += term - pstr + 1;
@@ -142,21 +128,12 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 			memcpy(tmp, pstr, term - pstr+1);
 			tmp[term - pstr] = 0;
 
-#ifndef _WIN32
 			mcg_gid[i] = (unsigned char)strtoll(tmp, NULL, 0);
-#else
-			mcg_gid[i] = (unsigned char)strtol(tmp, NULL, 0);
-#endif
 		}
 		pstr += term - pstr + 1;
 
-#ifndef _WIN32
 		strcpy(tmp, pstr);
 		mcg_gid[15] = (unsigned char)strtoll(tmp, NULL, 0);
-#else
-		strcpy_s(tmp, sizeof(tmp), pstr);
-		mcg_gid[15] = (unsigned char)strtol(tmp, NULL, 0);
-#endif
 	}
 
 	memcpy(params->mgid.raw,mcg_gid,16);

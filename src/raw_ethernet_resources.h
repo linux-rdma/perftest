@@ -14,7 +14,6 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-
 #define INFO "INFO"
 #define TRACE "TRACE"
 
@@ -24,13 +23,6 @@
 #define DEBUG_LOG(type,fmt, args...)
 #endif
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#else
-#define __cdecl
-#endif
-
 #define IP_ETHER_TYPE (0x800)
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
@@ -38,12 +30,11 @@
 #define IP_HEADER_LEN (20)
 
 
- struct raw_ethernet_info {
+struct raw_ethernet_info {
 	uint8_t mac[6];
 	uint32_t ip;
 	int port;
- };
-
+};
 
 
 /* gen_eth_header .

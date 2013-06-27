@@ -39,25 +39,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include "get_clock_win.h"
-#else
 #include <unistd.h>
 #include <malloc.h>
-#include "get_clock.h"
-#endif
 
+#include "get_clock.h"
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#else
-#define __cdecl
-#endif
 /******************************************************************************
  *
  ******************************************************************************/
@@ -160,11 +150,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->qpn   	   = ctx->qp[0]->qp_num;
 	}
 
-#ifndef _WIN32
 	my_dest->psn       = lrand48() & 0xffffff;
-#else
-	my_dest->psn       = rand() & 0xffffff;
-#endif
 
 	// We do not fail test upon lid above RoCE.
 	if (user_parm->gid_index < 0) {
@@ -250,7 +236,7 @@ static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
 	int                        i = 0;
 	int                        size_max_pow = 24;

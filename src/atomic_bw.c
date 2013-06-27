@@ -42,18 +42,10 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 
-#ifdef _WIN32
-#pragma warning( disable : 4242)
-#pragma warning( disable : 4244)
-#else
-#define __cdecl
-#endif
-
-
 /******************************************************************************
  *
  ******************************************************************************/
-int __cdecl main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
 	int ret_parser,i;
 	struct ibv_device		   *ib_dev = NULL;

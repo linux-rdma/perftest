@@ -51,21 +51,11 @@
 #ifndef PERFTEST_RESOURCES_H
 #define PERFTEST_RESOURCES_H
 
-
 // Files included for work.
 #include <infiniband/verbs.h>
-
-#ifndef _WIN32
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
 #include <byteswap.h>
-#else
-#include "rdma_cma.h"
-#include "l2w.h"
-#endif
-
-#include "perftest_parameters.h"
-
 #include <math.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -73,6 +63,9 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <fcntl.h>
+
+#include "perftest_parameters.h"
+
 #define CYCLE_BUFFER        (4096)
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
@@ -129,10 +122,6 @@
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
-
-
-
-
 struct pingpong_context {
 	struct rdma_event_channel	*cm_channel;
 	struct rdma_cm_id			*cm_id_control;
@@ -170,10 +159,6 @@ struct pingpong_context {
 	unsigned long long	vaddr;
 	union ibv_gid		gid;
  };
-
-
-
-
 
  struct ETH_header {
 	uint8_t dst_mac[6];
@@ -523,9 +508,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
  * Return Value : The Lid itself. (No error values).
  */
 uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
-
-
-
 
 /* ctx_notify_events
  *

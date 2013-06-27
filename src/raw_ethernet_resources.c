@@ -35,8 +35,6 @@
  */
 
 
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,8 +46,7 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
-
- #include "raw_ethernet_resources.h"
+#include "raw_ethernet_resources.h"
 
 static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
 {
@@ -112,11 +109,9 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
 
 }
 
-
-
- /*****************************************************************************
- * generates a new ethernet header
- *****************************************************************************/
+/*****************************************************************************
+* generates a new ethernet header
+*****************************************************************************/
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
 											uint8_t* dst_mac, uint16_t eth_type)
 {
@@ -125,7 +120,6 @@ void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
 	eth_header->eth_type = htons(eth_type);
 
 }
-
 
 /******************************************************************************
  * print test specification
@@ -286,7 +280,6 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 }
 /******************************************************************************
  *build single packet on ctx buffer
- *
  ******************************************************************************/
 void build_pkt_on_buffer(struct ETH_header* eth_header,
 						 struct raw_ethernet_info *my_dest_info,
@@ -503,6 +496,4 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 	}
 	return 0;
 }
-
-
 

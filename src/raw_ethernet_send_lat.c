@@ -45,14 +45,13 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
-
 #include "raw_ethernet_resources.h"
 
 
 /*
 * Main function. implements raw_ethernet_send_lat
 */
-int __cdecl main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 
 	struct ibv_device			*ib_dev = NULL;
@@ -178,7 +177,7 @@ int __cdecl main(int argc, char *argv[])
 	}
 
 	//build ONE Raw Ethernet packets on ctx buffer
-		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
+	create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 
 	printf(RESULT_LINE); // "---" line
 	// choose the correct format to print

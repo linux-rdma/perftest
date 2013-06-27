@@ -32,7 +32,6 @@
  * Author: Ido Shamay <idos@dev.mellanox.co.il>
  */
 
-
 #ifndef MULTICAST_RESOURCES_H
 #define MULTICAST_RESOURCES_H
 
@@ -61,12 +60,7 @@
 
 #include <infiniband/verbs.h>
 #include <infiniband/umad.h>
-
-#ifdef _WIN32
-#include "get_clock_win.h"
-#else
 #include "get_clock.h"
-#endif
 
 #define QPNUM_MCAST 				0xffffff
 #define DEF_QKEY     			    0x11111111
@@ -86,10 +80,8 @@
 #define DEF_FLOW_LABLE                 0
 
 // Macro for 64 bit variables to switch to from net
-#ifndef _WIN32
 #define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32))))
 #define htonll(x) ntohll(x)
-#endif
 
 // generate a bit mask S bits width
 #define MASK32(S)  ( ((uint32_t) ~0L) >> (32-(S)) )
@@ -155,20 +147,6 @@ struct mcast_parameters {
 
 // according to Table 195 in the IB spec 1.2.1
 
-#ifdef _WIN32
-#include <complib/cl_packon.h>
-struct sa_mad_packet_t {
-        uint8_t                 mad_header_buf[24];
-        uint8_t                 rmpp_header_buf[12];
-        uint64_t                SM_Key;
-        uint16_t                AttributeOffset;
-        uint16_t                Reserved1;
-        uint64_t                ComponentMask;
-        uint8_t                 SubnetAdminData[200];
-} PACK_SUFFIX;
-#include <complib/cl_packoff.h>
-
-#else
 struct sa_mad_packet_t {
 	u_int8_t		mad_header_buf[24];
 	u_int8_t		rmpp_header_buf[12];
@@ -178,7 +156,6 @@ struct sa_mad_packet_t {
 	u_int64_t		ComponentMask;
 	u_int8_t		SubnetAdminData[200];
 }__attribute__((packed));
-#endif
 
 /************************************************************************
  *   Multicast resources methods.					    			    *
