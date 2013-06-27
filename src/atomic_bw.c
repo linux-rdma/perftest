@@ -211,7 +211,7 @@ int __cdecl main(int argc, char *argv[]) {
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-	if (user_param.test_method == RUN_REGULAR) {
+	if (user_param.test_method == RUN_REGULAR || user_param.test_method == RUN_ALL) {
 
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Error occured in run_iter function\n");
