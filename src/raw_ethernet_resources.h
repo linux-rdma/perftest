@@ -23,12 +23,14 @@
 #define DEBUG_LOG(type,fmt, args...)
 #endif
 
+#define PERF_MAC_FMT " %02X:%02X:%02X:%02X:%02X:%02X"
+
 #define IP_ETHER_TYPE (0x800)
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
 #define UDP_PROTOCOL (0x11)
 #define IP_HEADER_LEN (20)
-
+#define DEFAULT_TTL (128)
 
 struct raw_ethernet_info {
 	uint8_t mac[6];
@@ -48,6 +50,11 @@ struct raw_ethernet_info {
  *
  */
 
+struct ETH_header {
+	uint8_t dst_mac[6];
+	uint8_t src_mac[6];
+	uint16_t eth_type;
+}__attribute__((packed));
 
 struct IP_V4_header{
 	uint8_t ihl:4;
@@ -70,18 +77,11 @@ struct UDP_header {
 	u_short	uh_sum;			/* udp checksum */
 }__attribute__((packed));
 
-
-
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
-
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_parm);
-
 void print_ethernet_header(struct ETH_header* p_ethernet_header);
-
 void print_ip_header(struct IP_V4_header* ip_header);
-
 void print_udp_header(struct UDP_header* udp_header);
-
 void print_pkt(void* pkt,struct perftest_parameters *user_param);
 
 /* build_pkt_on_buffer
@@ -150,8 +150,6 @@ int send_set_up_connection(
 	struct raw_ethernet_info* my_dest_info,
 	struct raw_ethernet_info* rem_dest_info);
 
-
-
 /* gen_ip_header .
 
  * Description :create IP header on buffer
@@ -176,8 +174,38 @@ void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t
  *		dadder - source IP address of the packet(using for UPD checksum)(network order)
  *		sizePkt - size of the packet
  */
-
 void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
 
+/* run_iter_fw
+ *
+ * Description :
+ *
+ *  In this method we receive packets and "turn them around"
+ *  this is done by changing the dmac with the smac
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_parm  - user_parameters struct for this test.
+ */
+int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* switch_smac_dmac
+ *
+ * Description : In this method we receive buffer and change it's dmac and smac
+ *
+ * Parameters :
+ *
+ *  sg     - sg->addr is pointer to the buffer.
+*/
+static __inline void switch_smac_dmac(struct ibv_sge *sg)
+{
+	struct ETH_header* eth_header;
+	eth_header = (struct ETH_header*)sg->addr;
+	uint8_t tmp_mac[6] = {0} ;
+	memcpy(tmp_mac , (uint8_t *)eth_header + sizeof(eth_header->src_mac) ,sizeof(eth_header->src_mac));
+	memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
+	memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
+}
 
 #endif //RAW_ETHERNET_RESOURCES_H

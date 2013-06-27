@@ -43,7 +43,6 @@
 #include <rdma/rdma_cma.h>
 #include "perftest_resources.h"
 
-
 #define KEY_MSG_SIZE 	 (50)   // Message size without gid.
 #define KEY_MSG_SIZE_GID (98)   // Message size with gid (MGID as well).
 #define SYNC_SPEC_ID	 (5)

@@ -85,8 +85,6 @@
 #define PINGPONG_ATOMIC_WRID (22)
 #define DEFF_QKEY            (0x11111111)
 
-#define PERF_MAC_FMT " %02X:%02X:%02X:%02X:%02X:%02X"
-
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
@@ -115,9 +113,6 @@
 	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
 
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
-#define UDP_PROTOCOL (0x11)
-#define IP_HEADER_LEN (20)
-#define DEFAULT_TTL (128)
 
 /******************************************************************************
  * Perftest resources Structures and data types.
@@ -160,36 +155,9 @@ struct pingpong_context {
 	union ibv_gid		gid;
  };
 
- struct ETH_header {
-	uint8_t dst_mac[6];
-	uint8_t src_mac[6];
-	uint16_t eth_type;
-}__attribute__((packed));
-
-
 /******************************************************************************
  * Perftest resources Methods and interface utilitizes.f
  ******************************************************************************/
-
- /*
- * Description :
- *
- *  In this method we receive buffer and change it's dmac and smac
- *
- * Parameters :
- *
- *  sg     - sg->addr is pointer to the buffer.
-*/
-static __inline void switch_smac_dmac( struct ibv_sge *sg )
-{
-    struct ETH_header* eth_header;
-    eth_header = (struct ETH_header*)sg->addr;
-    uint8_t tmp_mac[6] = {0} ;
-    memcpy(tmp_mac , (uint8_t *)eth_header + sizeof(eth_header->src_mac) ,sizeof(eth_header->src_mac));
-    memcpy((uint8_t *)eth_header->src_mac , (uint8_t *)eth_header->dst_mac ,sizeof(eth_header->src_mac));
-    memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
-}
-
 
 /* link_layer_str
  *
@@ -439,20 +407,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  *
  */
 int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_param);
-
-/* run_iter_fw
- *
- * Description :
- *
- *  In this method we receive packets and "turn them around"
- *  this is done by changing the dmac with the smac
- *
- * Parameters :
- *
- *  ctx     - Test Context.
- *  user_parm  - user_parameters struct for this test.
- */
-int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
 /* run_iter_lat_write
  *

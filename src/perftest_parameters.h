@@ -387,27 +387,4 @@ void print_report_lat (struct perftest_parameters *user_param);
  */
 void print_report_lat_duration (struct perftest_parameters *user_param);
 
-/* mac_from_gid
- *
- * Description : Exract Mac for Gid.
- *
- * Parameters :
- *
- *	mac - pointer to Mac returned.
- *	gid - GID of the requested port.
- *
- */
-void mac_from_gid(uint8_t   *mac, uint8_t *gid );
-
-/* mac_from_user
- *
- * Description : Copy user Mac to a MAC array.
- *
- * Parameters :
- *
- *	mac - pointer to Mac returned.
- *	user_mac - GID of the requested port.
- *	size - size of arrays.
- */
-void mac_from_user(uint8_t   *mac, uint8_t *user_mac,int size );
 #endif /* PERFTEST_RESOURCES_H */
