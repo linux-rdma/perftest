@@ -1,0 +1,39 @@
+# Object Files
+*.o
+*.lo
+*.la
+
+# Libraries
+*.lib
+*.a
+.libs
+
+# Shared objects
+*.so
+*.so.*
+
+# Dependencies
+.dirstamp
+.deps
+
+# Automake
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+config.h
+config.h.in
+config.log
+config.status
+config/
+configure
+libtool
+m4/
+stamp-h1
+
+# Project/Eclipse
+.cproject
+.project
+
+#Ctags
+tags
