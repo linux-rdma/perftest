@@ -328,7 +328,6 @@ const char *link_layer_str(uint8_t link_layer);
  */
 int parser(struct perftest_parameters *user_param,char *argv[], int argc);
 
-int raw_eth_parser(struct perftest_parameters *user_param,char *argv[], int argc);
 /* check_link_and_mtu
  *
  * Description : Configures test MTU,inline and link layer of the test.
