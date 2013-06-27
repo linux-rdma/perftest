@@ -677,7 +677,9 @@ static enum ctx_device ib_dev_name(struct ibv_context *context) {
 		switch (attr.vendor_part_id) {
 			case 4113  : dev_fname = CONNECTIB; break;
 			case 4099  : dev_fname = CONNECTX3; break;
+			case 4100  : dev_fname = CONNECTX3; break;
 			case 4103  : dev_fname = CONNECTX3_PRO; break;
+			case 4104  : dev_fname = CONNECTX3_PRO; break;
 			case 26418 : dev_fname = CONNECTX2; break;
 			case 26428 : dev_fname = CONNECTX2; break;
 			case 26438 : dev_fname = CONNECTX2; break;
@@ -707,8 +709,12 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user
 	ibv_query_port(context,ib_port,&port_attr);
 
 	// User did not ask for specific mtu.
-	if (user_mtu == 0)
+	if (user_mtu == 0) {
+		enum ctx_device current_dev = ib_dev_name(context);
 		curr_mtu = port_attr.active_mtu;
+		if (curr_mtu == IBV_MTU_4096 && (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3))
+			curr_mtu = IBV_MTU_2048;
+	}
 
 	else {
 
