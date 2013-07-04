@@ -562,6 +562,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			printf("mac_fwd should run in duplex mode only. changing to duplex mode.\n");
 			user_param->duplex = ON;
 		}
+        if (user_param->mac_fwd == ON && user_param->cq_mod >= user_param->rx_depth) {
+            fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
+            user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
+            fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
+        }
+
 	}
 
 	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
@@ -1272,8 +1278,11 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
 	}
 
-	printf(" Mtu             : %luB\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
+	printf(" Mtu             : %lu[B]\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
+
+    //we use the receive buffer only for mac forwarding.
+	printf(" Buffer size     : %d[B]\n" ,user_param->mac_fwd == ON ? user_param->buff_size/2 : user_param->buff_size);
 
 	if (user_param->gid_index != DEF_GID_INDEX)
 		printf(" Gid index       : %d\n" ,user_param->gid_index);
@@ -1281,7 +1290,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 		printf(" Gid index2      : %d\n" ,user_param->gid_index2);
 
 	if (user_param->verb != READ && user_param->verb != ATOMIC)
-		printf(" Max inline data : %dB\n",user_param->inline_size);
+		printf(" Max inline data : %d[B]\n",user_param->inline_size);
 
 	else
 		printf(" Outstand reads  : %d\n",user_param->out_reads);
@@ -1344,7 +1353,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
 
-	tsize = user_param->duplex ? 2 : 1;
+	tsize = user_param->duplex ? (user_param->mac_fwd ? 1 : 2 ) : 1 ;
 	tsize = tsize * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;

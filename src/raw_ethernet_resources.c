@@ -50,6 +50,8 @@
 
 struct perftest_parameters* duration_param;
 
+int cycle_buffer=4096;
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -354,8 +356,8 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	if (user_param->tst == BW) {
 		//fill ctx buffer with same packets
-		if (ctx->size <= (CYCLE_BUFFER / 2)) {
-			while (offset < CYCLE_BUFFER-INC(ctx->size)) {
+		if (ctx->size <= (cycle_buffer / 2)) {
+			while (offset < cycle_buffer-INC(ctx->size)) {
 				offset += INC(ctx->size);
 				eth_header = (void*)ctx->buf+offset;
 				build_pkt_on_buffer(eth_header,my_dest_info,rem_dest_info,
@@ -537,6 +539,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
 	struct ibv_send_wr	*bad_wr = NULL;
 	int	firstRx = 1;
+    int rwqe_sent = user_param->rx_depth;
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
@@ -574,19 +577,20 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
 					break;
-
-				switch_smac_dmac(ctx->wr[index].sg_list);
+//                printf("switch mac at address totscnt %lu ) :  ctx->wr[index*user_param->post_list].sg_list.addr= %lu\n",totscnt , ctx->wr[index*user_param->post_list].sg_list->addr);
+				switch_smac_dmac(ctx->wr[index*user_param->post_list].sg_list);
 
 				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
 
-				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2))
+				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
 					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->rx_buffer_addr[0],0);
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
+//                printf("totscnt = %lu\n",totscnt);    //yuvala
 
 				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1)))
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
@@ -604,8 +608,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 			if (ne > 0) {
-
 				if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
+//                    printf("first packet\n"); //yuvala
 					firstRx = OFF;
 					duration_param=user_param;
 					user_param->iters=0;
@@ -621,31 +625,14 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 					rcnt_for_qp[wc[i].wr_id]++;
 					totrcnt++;
+//                    printf("totrcnt = %lu\n",totrcnt );    //yuvala
 
-					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-						user_param->iters++;
-
-					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
-
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return 15;
-						}
-
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2)) {
-							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
-											user_param->size,
-											rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth -1,
-											ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
-						}
-					}
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
 			}
 		}
-
 		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
 			if (ne > 0) {
@@ -654,6 +641,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
 
 					totccnt += user_param->cq_mod;
+                    
+//                    printf("totccnt = %lu\n",totccnt );    //yuvala
 					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
 
 					if (user_param->noPeak == OFF) {
@@ -665,17 +654,36 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-						user_param->iters += user_param->cq_mod;
+    					user_param->iters += user_param->cq_mod;
 				}
-
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
 			}
+            while (rwqe_sent - totccnt < user_param->rx_depth) {    // we don't post more than buffer_size
+//                printf("here\n"); //yuvala
+//                printf("recv wqe addr:  rwqe_sent= %d ) ctx->rwr[0].sg_list[0]->addr = %lu\n",rwqe_sent,ctx->rwr[0].sg_list[0].addr);  //yuvala
+    		    if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) {   //yuvala rcnt_for_qp[wc[i].wr_id]
+					if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
+						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",0,rcnt_for_qp[0]);
+						return 15;
+					}
+					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
+						increase_loc_addr(ctx->rwr[0].sg_list,
+										user_param->size,
+//										rcnt_for_qp[0] + user_param->rx_depth -1,
+										rwqe_sent ,
+										ctx->rx_buffer_addr[0],user_param->connection_type);
+					}
+				}
+                rwqe_sent++;
+           }
+
+
 		}
 	}
 
-	if (user_param->noPeak == ON)
+	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
 	free(rcnt_for_qp);

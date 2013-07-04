@@ -179,10 +179,13 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->rwr,struct ibv_recv_wr,user_param->num_of_qps);
 		ALLOCATE(ctx->rx_buffer_addr,uint64_t,user_param->num_of_qps);
 	}
+    if (user_param->mac_fwd == ON ) 
+        cycle_buffer = user_param->size * user_param->rx_depth;
 
 	ctx->size = user_param->size;
 	ctx->buff_size = BUFF_SIZE(ctx->size)*2*user_param->num_of_qps;
 
+    user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
 		ctx->buff_size += CACHE_LINE_SIZE;
 }
@@ -608,7 +611,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	for (i = 0 ; i < user_param->num_of_qps ; i++) {
 
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
-
+//        printf("send wqe addr = ctx->sge_list[%d].addr = %lu\n",i,ctx->sge_list[i*user_param->post_list].addr);  //yuvala
 		if (user_param->mac_fwd )
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
 
@@ -636,7 +639,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 
 				ctx->sge_list[i*user_param->post_list +j].addr = ctx->sge_list[i*user_param->post_list + (j-1)].addr;
 
-				if ((user_param->tst == BW ) && user_param->size <= (CYCLE_BUFFER / 2))
+				if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2))
 					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,j-1,ctx->my_addr[i],0);
 			}
 
@@ -668,7 +671,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.rdma.remote_addr = ctx->wr[i*user_param->post_list + (j-1)].wr.rdma.remote_addr;
 
-					if ((user_param->tst == BW) && user_param->size <= (CYCLE_BUFFER / 2))
+					if ((user_param->tst == BW) && user_param->size <= (cycle_buffer / 2))
 						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,j-1,ctx->rem_addr[i],WRITE);
 				}
 
@@ -736,14 +739,16 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		if (user_param->tst == BW )
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
-		for (j = 0; j < user_param->rx_depth; ++j) {
+//        printf("user_param->size = %lu\n",user_param->size); //yuvala
+		for (j = 0; j < user_param->rx_depth ; ++j) {
 
+//            printf("recv wqe addr = %d ) ctx->rwr[%d].sg_list[%d].addr = %lu\n",j,i,i,ctx->rwr[i].sg_list[i].addr);  //yuvala
 			if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)) {
 				fprintf(stderr, "Couldn't post recv Qp = %d: counter=%d\n",i,j);
 				return 1;
 			}
 
-			if ((user_param->tst == BW ) && user_param->size <= (CYCLE_BUFFER / 2)) {
+			if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2)) {
 
 				increase_loc_addr(&ctx->recv_sge_list[i],
 								  user_param->size,
@@ -866,7 +871,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					return 1;
 				}
 
-				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2)) {
+				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
 
 						increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
 
@@ -1005,7 +1010,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							return 15;
 						}
 
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2)) {
+						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
 											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
@@ -1199,7 +1204,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					return 1;
 				}
 
-				if (user_param->post_list == 1 && user_param->size <= (CYCLE_BUFFER / 2))
+				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
 					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
 
 				ctx->scnt[index] += user_param->post_list;
@@ -1250,7 +1255,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 						return FAILURE;
 					}
 
-					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (CYCLE_BUFFER / 2)) {
+					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 										  user_param->size,
 										  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth -1,

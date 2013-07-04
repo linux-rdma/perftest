@@ -835,7 +835,7 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_ctx->context = NULL;
 
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
-		comm->rdma_ctx->buff_size = CYCLE_BUFFER;
+		comm->rdma_ctx->buff_size = cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
 			fprintf(stderr," Unable to create the resources needed by comm struct\n");

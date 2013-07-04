@@ -66,7 +66,7 @@
 
 #include "perftest_parameters.h"
 
-#define CYCLE_BUFFER        (4096)
+// #define cycle_buffer        (4096)   yuvala
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
 
@@ -85,6 +85,9 @@
 #define PINGPONG_ATOMIC_WRID (22)
 #define DEFF_QKEY            (0x11111111)
 
+//global variables
+extern int cycle_buffer;
+
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
@@ -102,7 +105,7 @@
 // Macro to define the buffer size (according to "Nahalem" chip set).
 // for small message size (under 4K) , we allocate 4K buffer , and the RDMA write
 // verb will write in cycle on the buffer. this improves the BW in "Nahalem" systems.
-#define BUFF_SIZE(size) ((size < CYCLE_BUFFER) ? (CYCLE_BUFFER) : (size))
+#define BUFF_SIZE(size) ((size < cycle_buffer) ? (cycle_buffer) : (size))
 
 // UD addition to the buffer.
 #define IF_UD_ADD(type) ((type == UD) ? (CACHE_LINE_SIZE) : (0))
@@ -543,7 +546,7 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,
 	else
 		wr->wr.rdma.remote_addr += INC(size);
 
-	if ( ((scnt+1) % (CYCLE_BUFFER/ INC(size))) == 0) {
+	if ( ((scnt+1) % (cycle_buffer/ INC(size))) == 0) {
 
 		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
@@ -571,7 +574,7 @@ static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint
 
 	sg->addr  += INC(size);
 
-	if ( ((rcnt+1) % (CYCLE_BUFFER/ INC(size))) == 0 )
+	if ( ((rcnt+1) % (cycle_buffer/ INC(size))) == 0 )
 		sg->addr = prim_addr;
 
 }
