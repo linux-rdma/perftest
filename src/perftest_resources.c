@@ -1290,7 +1290,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->noPeak == ON)
+	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
 	free(rcnt_for_qp);
