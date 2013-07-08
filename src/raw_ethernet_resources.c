@@ -49,9 +49,6 @@
 #include "raw_ethernet_resources.h"
 
 struct perftest_parameters* duration_param;
-
-int cycle_buffer=4096;
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -662,7 +659,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[0].sg_list,
 										user_param->size,
-//										rcnt_for_qp[0] + user_param->rx_depth -1,
 										rwqe_sent ,
 										ctx->rx_buffer_addr[0],user_param->connection_type);
 					}

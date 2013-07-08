@@ -76,7 +76,7 @@ static int parse_mac_from_str(char *mac, u_int8_t *addr)
 /******************************************************************************
   parse_ip_from_str.
  *
- * Description : Convert from presentation format of an Internet number in buffer
+ * Description : Convert from presentation format of an Internet number in nuffer
    starting at CP to the binary network format and store result for
    interface type AF in buffer starting at BUF.
  *
@@ -1282,7 +1282,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
 
     //we use the receive buffer only for mac forwarding.
-	printf(" Buffer size     : %d[B]\n" ,user_param->mac_fwd == ON ? user_param->buff_size/2 : user_param->buff_size);
+    if (user_param->mac_fwd == ON)
+    	printf(" Buffer size     : %d[B]\n" ,user_param->buff_size/2);
 
 	if (user_param->gid_index != DEF_GID_INDEX)
 		printf(" Gid index       : %d\n" ,user_param->gid_index);
@@ -1353,7 +1354,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
 
-	tsize = user_param->duplex ? (user_param->mac_fwd ? 1 : 2 ) : 1 ;
+	tsize = user_param->duplex ? (user_param->test_type == DURATION ? 1 : 2 ) : 1 ;
 	tsize = tsize * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;

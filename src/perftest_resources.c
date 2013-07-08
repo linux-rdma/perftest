@@ -13,7 +13,7 @@
 static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_READ};
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
 struct perftest_parameters* duration_param;
-
+int cycle_buffer=4096;
 /******************************************************************************
  * Beginning
  ******************************************************************************/
