@@ -66,7 +66,6 @@
 
 #include "perftest_parameters.h"
 
-// #define cycle_buffer        (4096)   yuvala
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
 

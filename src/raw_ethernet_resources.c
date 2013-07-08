@@ -577,7 +577,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
 					break;
-//                printf("switch mac at address totscnt %lu ) :  ctx->wr[index*user_param->post_list].sg_list.addr= %lu\n",totscnt , ctx->wr[index*user_param->post_list].sg_list->addr);
 				switch_smac_dmac(ctx->wr[index*user_param->post_list].sg_list);
 
 				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
@@ -590,7 +589,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
-//                printf("totscnt = %lu\n",totscnt);    //yuvala
 
 				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1)))
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
@@ -609,7 +607,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 			if (ne > 0) {
 				if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
-//                    printf("first packet\n"); //yuvala
 					firstRx = OFF;
 					duration_param=user_param;
 					user_param->iters=0;
@@ -625,8 +622,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 					rcnt_for_qp[wc[i].wr_id]++;
 					totrcnt++;
-//                    printf("totrcnt = %lu\n",totrcnt );    //yuvala
-
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
@@ -641,8 +636,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
 
 					totccnt += user_param->cq_mod;
-                    
-//                    printf("totccnt = %lu\n",totccnt );    //yuvala
 					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
 
 					if (user_param->noPeak == OFF) {
@@ -660,10 +653,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				fprintf(stderr, "poll CQ failed %d\n", ne);
 				return 1;
 			}
-            while (rwqe_sent - totccnt < user_param->rx_depth) {    // we don't post more than buffer_size
-//                printf("here\n"); //yuvala
-//                printf("recv wqe addr:  rwqe_sent= %d ) ctx->rwr[0].sg_list[0]->addr = %lu\n",rwqe_sent,ctx->rwr[0].sg_list[0].addr);  //yuvala
-    		    if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) {   //yuvala rcnt_for_qp[wc[i].wr_id]
+            while (rwqe_sent - totccnt < user_param->rx_depth) {    // Post more than buffer_size
+    		    if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) { 
 					if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",0,rcnt_for_qp[0]);
 						return 15;

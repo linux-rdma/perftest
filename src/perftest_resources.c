@@ -611,7 +611,6 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	for (i = 0 ; i < user_param->num_of_qps ; i++) {
 
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
-//        printf("send wqe addr = ctx->sge_list[%d].addr = %lu\n",i,ctx->sge_list[i*user_param->post_list].addr);  //yuvala
 		if (user_param->mac_fwd )
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
 
@@ -739,10 +738,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		if (user_param->tst == BW )
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
-//        printf("user_param->size = %lu\n",user_param->size); //yuvala
 		for (j = 0; j < user_param->rx_depth ; ++j) {
-
-//            printf("recv wqe addr = %d ) ctx->rwr[%d].sg_list[%d].addr = %lu\n",j,i,i,ctx->rwr[i].sg_list[i].addr);  //yuvala
 			if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)) {
 				fprintf(stderr, "Couldn't post recv Qp = %d: counter=%d\n",i,j);
 				return 1;
