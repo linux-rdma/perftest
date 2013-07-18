@@ -200,8 +200,16 @@ int destroy_ctx(struct pingpong_context *ctx,
 	int test_result = 0;
 
 	for (i = 0; i < user_parm->num_of_qps; i++) {
+
+		if (user_parm->connection_type == UD && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
+			if (ibv_destroy_ah(ctx->ah[i])) {
+				fprintf(stderr, "failed to destroy AH\n");
+				test_result = 1;
+			}
+		}
+
 		if (ibv_destroy_qp(ctx->qp[i])) {
-			fprintf(stderr, "failed to destroy QP\n");
+			fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
 			test_result = 1;
 		}
 	}
@@ -717,7 +725,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
  ******************************************************************************/
 int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	int					i,j;
+	int	i,j;
 	struct ibv_recv_wr  *bad_wr_recv;
 
 	for (i=0; i < user_param->num_of_qps; i++) {
@@ -933,8 +941,26 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 /******************************************************************************
  *
  ******************************************************************************/
-int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
+static inline void set_on_first_rx_packet(struct perftest_parameters *user_param)
+{
+	if (user_param->test_type == DURATION) {
 
+		duration_param=user_param;
+		user_param->iters=0;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		alarm(user_param->margin);
+
+	} else if (user_param->tst == BW){
+		user_param->tposted[0] = get_cycles();
+	}
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+{
 	int 				rcnt = 0;
 	int 				ne,i,tot_iters;
 	int                 *rcnt_for_qp = NULL;
@@ -946,19 +972,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
-
-	if(user_param->connection_type != RawEth){
-		if (user_param->test_type == DURATION) {
-			duration_param=user_param;
-			duration_param->state = START_STATE;
-			signal(SIGALRM, catch_alarm);
-			alarm(user_param->margin);
-			user_param->iters = 0;
-		}
-	}
-
-	if (user_param->test_type == ITERATIONS)
-		user_param->tposted[0] = get_cycles();
 
 	tot_iters = user_param->iters*user_param->num_of_qps;
 
@@ -975,15 +988,10 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 
 			if (ne > 0) {
-				if(user_param->connection_type == RawEth){
-					if (firstRx && user_param->test_type == DURATION) {
-						firstRx = 0;
-						duration_param=user_param;
-						user_param->iters=0;
-						duration_param->state = START_STATE;
-						signal(SIGALRM, catch_alarm);
-						alarm(user_param->margin);
-					}
+
+				if (firstRx) {
+					set_on_first_rx_packet(user_param);
+					firstRx = 0;
 				}
 
 				for (i = 0; i < ne; i++) {
@@ -1464,29 +1472,15 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	if (user_param->size <= user_param->inline_size)
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 
-	//this is for a duration test. it's valid when we're not on raw ethernet, or we are and this is the client.
-	//the purpose is to make the client send the first packet and run the timer.
-	if((user_param->test_type == DURATION )&& (user_param->connection_type != RawEth || (user_param->machine == CLIENT && firstRx)))
-	{
-			firstRx = OFF;
-			duration_param=user_param;
-			user_param->iters=0;
-			duration_param->state = START_STATE;
-			signal(SIGALRM, catch_alarm);
-			alarm(user_param->margin);
-	}
-
-	//run the test until:
-	//1. In duration mode: the time is over
-	//2. in Iteration mode: the number of packets that sent and received is equal or above the requested number of iterations
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
 			( (user_param->test_type == DURATION && user_param->state != END_STATE))) {
 
-		// get the received packet. make sure that the client won't enter here until he sends
-		// his first packet (scnt < 1)
-		// server will enter here first and wait for a packet to arrive (from the client)
-		if ((rcnt < user_param->iters || user_param->test_type == DURATION) &&
-			!(scnt < 1 && user_param->machine == CLIENT)) {
+		/* 
+		 * Get the received packet. make sure that the client won't enter here until he sends
+		 * his first packet (scnt < 1)
+		 * server will enter here first and wait for a packet to arrive (from the client)
+		 */
+		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == CLIENT)) {
 
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
@@ -1496,36 +1490,23 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 			}
 
 			do {
-				//try to get received packets
 				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
 
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
 
-				//check if we got the packet
-				//if we got a packet, ne = 1 in latency test.
-				//do this until you get a packet ( while (ne == 0))
 				if (ne > 0) {
 
-					//when the server gets the first packet, the server starts his own timer and clear the iterations counter
-					if(user_param->connection_type == RawEth){
-						if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
-							firstRx = OFF;
-							duration_param=user_param;
-							user_param->iters=0;
-							duration_param->state = START_STATE;
-							signal(SIGALRM, catch_alarm);
-							alarm(user_param->margin);
-						}
+					if (firstRx) {
+						set_on_first_rx_packet(user_param);
+						firstRx = 0;
 					}
 
 					if (wc.status != IBV_WC_SUCCESS)
 						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
 
-					//got a packet, update the received packets counter
 					rcnt++;
 
-					//In duration mode, we should count the number of iterations were made
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters++;
 
@@ -1536,21 +1517,16 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
 							return FAILURE;
 						}
-
-
-
 					}
 				}
 			} while (!user_param->use_event && ne == 0);
 		}
 
-		//send a packet. client will enter here first (by make sure his firstRx == OFF, and the server's firstRx == ON)
-		if (scnt < user_param->iters || (user_param->test_type == DURATION && (firstRx == OFF) && user_param->state != END_STATE)) {
+		if (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 			if (user_param->test_type == ITERATIONS)
 				user_param->tposted[scnt] = get_cycles();
 
-			//sent a packet, update the sent packets counter
 			scnt++;
 
 			if (scnt % user_param->cq_mod == 0 || (user_param->test_type == ITERATIONS && scnt == user_param->iters)) {

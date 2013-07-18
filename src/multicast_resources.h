@@ -135,14 +135,17 @@ struct mcast_parameters {
 	int					  mcast_state;
 	int 				  ib_port;
 	uint16_t			  mlid;
+	uint16_t			  base_mlid;
 	const char			  *user_mgid;
-	const char			  *ib_devname;
+	char				  *ib_devname;
 	uint16_t 			  pkey;
 	uint16_t			  sm_lid;
 	uint8_t 			  sm_sl;
 	union ibv_gid 		  port_gid;
 	union ibv_gid 		  mgid;
-
+	// In case it's a latency test.
+	union ibv_gid         base_mgid;
+	int is_2nd_mgid_used;
 };
 
 // according to Table 195 in the IB spec 1.2.1

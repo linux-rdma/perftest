@@ -98,32 +98,6 @@ static int set_mcast_group(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-static int destroy_mcast_group(struct pingpong_context *ctx,
-							   struct perftest_parameters *user_parm,
-						       struct mcast_parameters *mcg_params) {
-	int i;
-
-	for (i = 0; i < user_parm->num_of_qps; i++) {
-		if (ibv_detach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-			fprintf(stderr, "Couldn't deattach QP from MultiCast group\n");
-			return 1;
-		}
-	}
-	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
-		// Removal Request for Mcast group in SM.
-		if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
-			fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
-			return 1;
-		}
-	}
-
-	mcg_params->mcast_state &= ~MCAST_IS_ATTACHED;
-	return 0;
-}
-
-/******************************************************************************
- *
- ******************************************************************************/
 static int send_set_up_connection(struct pingpong_context *ctx,
 								  struct perftest_parameters *user_parm,
 								  struct pingpong_dest *my_dest,
@@ -150,7 +124,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->qpn   	   = ctx->qp[0]->qp_num;
 	}
 
-	my_dest->psn       = lrand48() & 0xffffff;
+	my_dest->psn = lrand48() & 0xffffff;
 
 	// We do not fail test upon lid above RoCE.
 	if (user_parm->gid_index < 0) {
@@ -166,71 +140,36 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-static int send_destroy_ctx_resources(struct pingpong_context    *ctx,
-								 struct perftest_parameters *user_parm,
-								 struct mcast_parameters    *mcg_params)  {
+static int send_destroy_ctx(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param,
+	struct mcast_parameters *mcg_params)
+{
+	int i;
+	if (user_param->use_mcg) {
 
-	int i,test_result = 0;
-
-	if (user_parm->use_mcg) {
-		if (destroy_mcast_group(ctx,user_parm,mcg_params)) {
-			fprintf(stderr, "failed to destroy MultiCast resources\n");
-			test_result = 1;
+		for (i=0; i < user_param->num_of_qps; i++) {
+			if (ibv_detach_mcast(ctx->qp[i],&mcg_params->base_mgid,mcg_params->base_mlid)) {
+				fprintf(stderr, "Couldn't dettach QP to MultiCast group\n");
+				return FAILURE;
+			}
 		}
-	}
 
-	if (user_parm->connection_type == UD) {
+		if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
 
-		if (ibv_destroy_ah(ctx->ah[0])) {
-			fprintf(stderr, "failed to destroy AH\n");
-			test_result = 1;
-		}
-		free(ctx->ah);
-	}
+			if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+				fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+				return FAILURE;
+			}
 
-	for(i = 0; i < user_parm->num_of_qps; i++) {
-		if (ibv_destroy_qp(ctx->qp[i])) {
-			fprintf(stderr, "failed to destroy QP\n");
-			test_result = 1;
-		}
-	}
-	free(ctx->qp);
+			memcpy(mcg_params->mgid.raw,mcg_params->base_mgid.raw,16);
 
-	if (ibv_destroy_cq(ctx->send_cq)) {
-		fprintf(stderr, "failed to destroy CQ\n");
-		test_result = 1;
-	}
-
-	if (ibv_destroy_cq(ctx->recv_cq)) {
-		fprintf(stderr, "failed to destroy CQ\n");
-		test_result = 1;
-	}
-
-	if (ibv_dereg_mr(ctx->mr)) {
-		fprintf(stderr, "failed to deregister MR\n");
-		test_result = 1;
-	}
-
-	if (ibv_dealloc_pd(ctx->pd)) {
-		fprintf(stderr, "failed to deallocate PD\n");
-		test_result = 1;
-	}
-
-	if (ctx->channel) {
-		if (ibv_destroy_comp_channel(ctx->channel)) {
-			fprintf(stderr, "failed to destroy channel \n");
-			test_result = 1;
-		}
-	}
-
-	if (user_parm->work_rdma_cm == OFF) {
-
-		if (ibv_close_device(ctx->context)) {
-			fprintf(stderr, "failed to close device context\n");
-			test_result = 1;
-		}
-	}
-	return test_result;
+            if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+                fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+                return FAILURE;
+            }
+        }
+    }
+    return destroy_ctx(ctx,user_param);
 }
 
 /******************************************************************************
@@ -283,7 +222,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	mcg_params.ib_devname = ibv_get_device_name(ib_dev);
+	if (user_param.use_mcg)
+		GET_STRING(mcg_params.ib_devname,ibv_get_device_name(ib_dev));
 
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
@@ -309,7 +249,6 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
 	}
-
 
 	// Create (if nessacery) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
@@ -365,6 +304,32 @@ int main(int argc, char *argv[]) {
 
 	user_comm.rdma_params->side = REMOTE;
 	ctx_print_pingpong_data(&rem_dest,&user_comm);
+
+	if (user_param.use_mcg) {
+
+		memcpy(mcg_params.base_mgid.raw,mcg_params.mgid.raw,16);
+		memcpy(mcg_params.mgid.raw,rem_dest.gid.raw,16);
+		mcg_params.base_mlid = mcg_params.mlid;
+		mcg_params.is_2nd_mgid_used = ON;
+		if (!strcmp(link_layer_str(user_param.link_type),"IB")) {
+			// Request for Mcast group create registery in SM.
+			if (join_multicast_group(SUBN_ADM_METHOD_SET,&mcg_params)) {
+				fprintf(stderr," Failed to Join Mcast request\n");
+				return 1;
+			}
+		}
+
+		/*
+		 * The next stall in code (50 ms sleep) is a work around for fixing the
+		 * the bug this test had in Multicast for the past 1 year.
+		 * It appears, that when a switch involved, it takes ~ 10 ms for the join
+		 * request to propogate on the IB fabric, thus we need to wait for it.
+		 * what happened before this fix was  reaching the post_send
+		 * code segment in about 350 ns from here, and the switch(es) dropped
+		 * the packet because join request wasn't finished.
+		 */
+		usleep(50000);
+	}
 
 	if (user_param.work_rdma_cm == OFF) {
 
@@ -448,12 +413,11 @@ int main(int argc, char *argv[]) {
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
+	printf(RESULT_LINE);
 	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
-		return 1;
+		fprintf(stderr," Trying to close this side resources\n");
 	}
 
-	printf(RESULT_LINE);
-
-	return send_destroy_ctx_resources(&ctx,&user_param,&mcg_params);
+	return send_destroy_ctx(&ctx,&user_param,&mcg_params);
 }

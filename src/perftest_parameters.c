@@ -437,8 +437,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 		user_param->num_of_qps *= 2;
 		if (!user_param->tst==BW) {
-
 			printf(" Dual-port mode only supports BW tests.\n");
+			exit (1);
+		}
+
+		if (user_param->use_mcg){
+			printf(" Dual-port mode not supported in multicast feature\n");
 			exit (1);
 		}
 	}
@@ -477,8 +481,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
 			user_param->gid_index = 0;
-			if (user_param->dualport==ON)
-				user_param->gid_index2 = 0;
 	}
 
 	if (user_param->work_rdma_cm) {
@@ -509,20 +511,24 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->use_rdma_cm = ON;
 
 	} else if (user_param->tos != DEF_TOS) {
-                fprintf(stdout," TOS only valid for rdma_cm based QP. (-R flag)\n");
-                exit(1);
-        }
+		fprintf(stdout," TOS only valid for rdma_cm based QP. (-R flag)\n");
+		exit(1);
+	}
 
 	if (user_param->use_mcg) {
 
 		if (user_param->connection_type != UD)
 			user_param->connection_type = UD;
 
-		if (user_param->duplex && user_param->tst == BW) {
-			user_param->num_of_qps++;
+		if (user_param->duplex) {
+			fprintf(stdout,"Bidirectional mode not supported in multicast\n");
+			exit (1);
+		}
 
-		} else if (user_param->tst == BW && user_param->machine == CLIENT)
-			user_param->num_of_qps = 1;
+		if (user_param->num_of_qps > 1) {
+			fprintf(stdout,"Only 1 QP supported in multicast\n");
+			exit(1);
+		}
 	}
 
 	if (user_param->connection_type == RawEth) {

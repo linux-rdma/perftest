@@ -13,8 +13,31 @@
 #include <getopt.h>
 #include <errno.h>
 #include <byteswap.h>
+#include <signal.h>
 #include <pthread.h>
 #include "multicast_resources.h"
+
+// This is when we get sig handler from the user before we remove the join request.
+struct mcast_parameters *sighandler_params;
+
+/******************************************************************************
+ * signalCatcher - cacth user signal in order to reregiser the mcast group
+ ******************************************************************************/
+static void signalCatcher (int sig)
+{
+	if (sig == SIGINT) {
+
+		if (join_multicast_group(SUBN_ADM_METHOD_DELETE,sighandler_params))
+			fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+
+		if (sighandler_params->is_2nd_mgid_used) {
+			memcpy(sighandler_params->mgid.raw,sighandler_params->base_mgid.raw,16);
+			if (join_multicast_group(SUBN_ADM_METHOD_DELETE,sighandler_params))
+				fprintf(stderr,"Couldn't Unregister the Base Mcast group on the SM\n");
+		}
+	}
+	exit(1);
+}
 
 /******************************************************************************
  * prepare_mcast_mad
@@ -204,8 +227,10 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 	if (method == SUBN_ADM_METHOD_SET) {
 		get_mlid_from_mad((struct sa_mad_packet_t*)mad,&params->mlid);
 		params->mcast_state |= MCAST_IS_JOINED;
-
-	//  "Leave multicast group" message was sent
+		if (params->is_2nd_mgid_used == 0) {
+			sighandler_params = params;
+			signal(SIGINT,signalCatcher);
+		}
 	} else {
 		params->mcast_state &= ~MCAST_IS_JOINED;
 	}

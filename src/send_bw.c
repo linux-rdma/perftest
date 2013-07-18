@@ -84,7 +84,9 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 								  struct perftest_parameters *user_parm,
 								  struct pingpong_dest *my_dest,
 								  struct mcast_parameters *mcg_params,
-								  struct perftest_comm *comm) {
+								  struct perftest_comm *comm)
+{
+	int i;
 
 	if (set_up_connection(ctx,user_parm,my_dest)) {
 		fprintf(stderr," Unable to set up my IB connection parameters\n");
@@ -93,19 +95,17 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 
 	if (user_parm->use_mcg && (user_parm->duplex || user_parm->machine == SERVER)) {
 
-		int i = (user_parm->duplex) ? 1 : 0;
 		mcg_params->user_mgid = user_parm->user_mgid;
 		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_parm->machine);
 		if (set_mcast_group(ctx,user_parm,mcg_params)) {
 			return 1;
 		}
 
-		while (i < user_parm->num_of_qps) {
+		for (i=0; i < user_parm->num_of_qps; i++) {
 			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
 				fprintf(stderr, "Couldn't attach QP to MultiCast group");
 				return 1;
 			}
-			i++;
 		}
 
 		mcg_params->mcast_state |= MCAST_IS_ATTACHED;
@@ -115,6 +115,38 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	}
 	return 0;
 }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int send_destroy_ctx(
+	struct pingpong_context *ctx,
+	struct perftest_parameters *user_param,
+	struct mcast_parameters *mcg_params)
+{
+	int i;
+	if (user_param->use_mcg) {
+
+		if (user_param->duplex || user_param->machine == SERVER) {
+			for (i=0; i < user_param->num_of_qps; i++) {
+				if (ibv_detach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
+					fprintf(stderr, "Couldn't attach QP to MultiCast group");
+					return FAILURE;
+				}
+			}
+		}
+
+		// Removal Request for Mcast group in SM if needed.
+		if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
+			if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
+				fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
+				return FAILURE;
+			}
+		}
+	}
+	return destroy_ctx(ctx,user_param);
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -162,7 +194,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	mcg_params.ib_devname = ibv_get_device_name(ib_dev);
+	if (user_param.use_mcg)
+		GET_STRING(mcg_params.ib_devname,ibv_get_device_name(ib_dev));
 
 	// Getting the relevant context from the device
 	ctx.context = ibv_open_device(ib_dev);
@@ -219,15 +252,7 @@ int main(int argc, char *argv[]) {
 
 	} else {
 
-		/*-----------------------TODO: Check if it's ok-----------------
-		//we should not run multicast when RDMA_CM is set to OFF
-		if(user_param->use_mcg == ON){
-			fprintf(stderr,"unable to run Multicast without RDMA_CM");
-			return FAILURE;
-		}
-		---------------------------------------------------------------*/
-
-		 // create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
+		// create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
 	    if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
@@ -250,7 +275,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		// shaking hands and gather the other side info.
@@ -264,11 +288,22 @@ int main(int argc, char *argv[]) {
 
 	// Joining the Send side port the Mcast gid
 	if (user_param.use_mcg && (user_param.machine == CLIENT || user_param.duplex)) {
+
 		memcpy(mcg_params.mgid.raw, rem_dest[0].gid.raw, 16);
 		if (set_mcast_group(&ctx,&user_param,&mcg_params)) {
 			fprintf(stderr," Unable to Join Sender to Mcast gid\n");
 			return 1;
 		}
+		/*
+		 * The next stall in code (50 ms sleep) is a work around for fixing the
+		 * the bug this test had in Multicast for the past 1 year.
+		 * It appears, that when a switch involved, it takes ~ 10 ms for the join
+		 * request to propogate on the IB fabric, thus we need to wait for it.
+		 * what happened before this fix was client reaching the post_send
+		 * code segment in about 350 ns from here, and the switch(es) dropped
+		 * the packet because join request wasn't finished.
+		*/
+		usleep(50000);
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
@@ -421,17 +456,18 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	printf(RESULT_LINE);
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr," Failed to close connection between server and client\n");
-		return 1;
+		fprintf(stderr," Trying to close this side resources\n");
 	}
 
-	//limit verifier
-	//TODO: check which value should I return
-	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
-		return 1;
+	// Destory all test resources, including Mcast if exists
+	if (send_destroy_ctx(&ctx,&user_param,&mcg_params)) {
+		fprintf(stderr,"Couldn't Destory all SEND resources\n");
+		return FAILURE;
+	}
 
-	printf(RESULT_LINE);
 	return 0;
 }
 
