@@ -11,7 +11,7 @@
 # $HEADER$
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[4.6],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[4.7],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
