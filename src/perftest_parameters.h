@@ -258,6 +258,7 @@ struct perftest_parameters {
 	int 			dualport;
 	int 			post_list;
 	int				duration;
+	int 			use_srq;
 	int				tos;
 	int				margin;
 	int 			is_bw_limit_passed;

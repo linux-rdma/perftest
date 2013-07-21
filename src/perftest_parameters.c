@@ -433,6 +433,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->size = DEF_SIZE_ATOMIC;
 	}
 
+	if (user_param->use_srq && user_param->verb != SEND) {
+		printf(RESULT_LINE);
+		printf(" Using SRQ only avavilible in SEND tests.\n");
+		exit (1);
+	}
+
 	if (user_param->dualport==ON) {
 
 		user_param->num_of_qps *= 2;
@@ -844,6 +850,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	int c;
 	static int run_inf_flag = 0;
 	static int report_fmt_flag = 0;
+	static int srq_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -901,6 +908,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "mac_fwd",        .has_arg = 0, .val = 'v' },
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
+			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1119,6 +1127,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->test_method = RUN_INFINITELY;
 	}
 
+	if (srq_flag) {
+		user_param->use_srq = 1;
+	}
+
 	if (report_fmt_flag) {
 		user_param->report_fmt = GBS;
 	}
@@ -1190,7 +1202,6 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 
 	else
 		user_param->out_reads = 1;
-
 
 	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
 
@@ -1267,7 +1278,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	printf(" Dual-port       : %s\t\tDevice         : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
 	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
-	printf(" Connection type : %s\n",connStr[user_param->connection_type]);
+	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
 
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);

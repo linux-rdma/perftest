@@ -214,6 +214,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
+	if (user_parm->use_srq && (user_parm->tst == LAT || user_parm->machine == SERVER || user_parm->duplex == ON)) {
+		if (ibv_destroy_srq(ctx->srq)) {
+			fprintf(stderr, "Couldn't destroy SRQ\n");
+			return 1;
+		}
+	}
+
 	if (ibv_destroy_cq(ctx->send_cq)) {
 		fprintf(stderr, "failed to destroy CQ\n");
 		test_result = 1;
@@ -366,6 +373,22 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 	}
 
+	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+
+		struct ibv_srq_init_attr attr = {
+				.attr = {
+					.max_wr  = (user_param->rx_depth*user_param->num_of_qps),
+					.max_sge = 1
+				}
+		};
+
+		ctx->srq = ibv_create_srq(ctx->pd, &attr);
+		if (!ctx->srq)  {
+				fprintf(stderr, "Couldn't create SRQ\n");
+				return FAILURE;
+		}
+	}
+
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		ctx->qp[i] = ctx_qp_create(ctx,user_param);
@@ -399,10 +422,18 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	attr.send_cq = ctx->send_cq;
 	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
 	attr.cap.max_send_wr  = user_param->tx_depth;
-	attr.cap.max_recv_wr  = user_param->rx_depth;
 	attr.cap.max_send_sge = MAX_SEND_SGE;
-	attr.cap.max_recv_sge = MAX_RECV_SGE;
 	attr.cap.max_inline_data = user_param->inline_size;
+
+	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+		attr.srq = ctx->srq;
+		attr.cap.max_recv_wr  = 0;
+		attr.cap.max_recv_sge = 0;
+	} else {
+		attr.srq = NULL;
+		attr.cap.max_recv_wr  = user_param->rx_depth;
+		attr.cap.max_recv_sge = MAX_RECV_SGE;
+	}
 
 	switch (user_param->connection_type) {
 
@@ -747,9 +778,20 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
 		for (j = 0; j < user_param->rx_depth ; ++j) {
-			if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)) {
-				fprintf(stderr, "Couldn't post recv Qp = %d: counter=%d\n",i,j);
-				return 1;
+
+			if (user_param->use_srq) {
+
+				if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[i], &bad_wr_recv)) {
+					fprintf(stderr, "Couldn't post recv SRQ = %d: counter=%d\n",i,j);
+					return 1;
+				}
+
+			} else {
+
+				if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)) {
+					fprintf(stderr, "Couldn't post recv Qp = %d: counter=%d\n",i,j);
+					return 1;
+				}
 			}
 
 			if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2)) {
@@ -1009,9 +1051,19 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
 
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return 15;
+						if (user_param->use_srq) {
+
+							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,rcnt);
+								return 1;
+							}
+
+						} else {
+
+							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+								return 15;
+							}
 						}
 
 						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
@@ -1125,9 +1177,19 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 					return 1;
 				}
 
-				if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-					fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
-					return 1;
+				if (user_param->use_srq) {
+
+					if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+						fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
+						return 1;
+					}
+
+				} else {
+
+					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+						fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
+						return 15;
+					}
 				}
 			}
 
@@ -1254,9 +1316,19 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
 
-					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-						return FAILURE;
+					if (user_param->use_srq) {
+
+						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
+							return 1;
+						}
+
+					} else {
+
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+							return 15;
+						}
 					}
 
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
@@ -1513,9 +1585,19 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					//if we're in duration mode or there is enough space in the rx_depth, post that you received a packet
 					if (user_param->test_type==DURATION || (rcnt + user_param->rx_depth  <= user_param->iters)) {
 
-						if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id], &bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
-							return FAILURE;
+						if (user_param->use_srq) {
+
+							if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc.wr_id,rcnt);
+								return 1;
+							}
+
+						} else {
+
+							if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
+								return 15;
+							}
 						}
 					}
 				}

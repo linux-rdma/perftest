@@ -132,6 +132,7 @@ struct pingpong_context {
 	void						*buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
+	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
 	struct ibv_send_wr			*wr;
