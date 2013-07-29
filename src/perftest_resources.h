@@ -84,6 +84,11 @@
 #define PINGPONG_ATOMIC_WRID (22)
 #define DEFF_QKEY            (0x11111111)
 
+#ifdef HAVE_XRCD
+#define SERVER_FD "/tmp/xrc_domain_server"
+#define CLIENT_FD "/tmp/xrc_domain_client"
+#endif
+
 //global variables
 extern int cycle_buffer;
 
@@ -146,6 +151,10 @@ struct pingpong_context {
 	int							*scnt;
 	int							*ccnt;
 	int							is_contig_supported;
+#ifdef HAVE_XRCD
+	struct ibv_xrcd				*xrc_domain;
+	int 						fd;
+#endif
 };
 
  struct pingpong_dest {

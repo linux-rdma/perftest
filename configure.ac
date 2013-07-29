@@ -11,7 +11,7 @@
 # $HEADER$
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[4.7],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[4.8],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -38,6 +38,14 @@ AC_TRY_LINK([#include <infiniband/verbs.h>],
 AM_CONDITIONAL([HAVE_RAW_ETH],[test "x$HAVE_RAW_ETH" = "xyes"])
 if test $HAVE_RAW_ETH = yes; then
 	AC_DEFINE([HAVE_RAW_ETH], [1], [Enable RAW_ETH_TEST])
+fi
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_xrcd *t = ibv_open_xrcd(NULL,NULL);],[HAVE_XRCD=yes], [HAVE_XRCD=no])
+
+AM_CONDITIONAL([HAVE_XRCD],[test "x$HAVE_XRCD" = "xyes"])
+if test $HAVE_XRCD = yes; then
+	AC_DEFINE([HAVE_XRCD], [1], [Enable XRCD feature])
 fi
 
 AC_SUBST([LIBUMAD])
