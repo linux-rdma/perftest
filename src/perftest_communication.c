@@ -819,7 +819,8 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->verb		   = user_param->verb;
 	comm->rdma_params->use_mcg	   = user_param->use_mcg;
 	comm->rdma_params->duplex	   = user_param->duplex;
-	comm->rdma_params->tos             = DEF_TOS;
+	comm->rdma_params->tos         = DEF_TOS;
+	comm->rdma_params->use_xrc	   = user_param->use_xrc;
 
 	if (user_param->use_rdma_cm) {
 
@@ -948,8 +949,13 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	switch (comm->rdma_params->verb) {
 		case 2  : printf(READ_FMT,element->out_reads);
 		case 1  : printf(RDMA_FMT,element->rkey,element->vaddr);
-		default : putchar('\n');
+		default : ;
 	}
+
+	if (comm->rdma_params->use_xrc)
+		printf(XRC_FMT,element->rkey);
+
+	putchar('\n');
 
 	local_mgid    = (comm->rdma_params->side == 0)  && (comm->rdma_params->machine == 0);
 	remote_mgid   = (comm->rdma_params->side == 1)  && (comm->rdma_params->machine == 1);

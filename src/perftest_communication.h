@@ -62,6 +62,9 @@
 // The print format of the pingpong_dest element for RDMA verbs.
 #define RDMA_FMT       " RKey %#08x VAddr %#016Lx"
 
+// The print number of SRQ in case of XRC
+#define XRC_FMT 	   " SRQn %#08x"
+
 // The print format of a global address or a multicast address.
 #define PERF_GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
 

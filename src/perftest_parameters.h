@@ -65,7 +65,7 @@
 #define UC  (1)
 #define UD  (2)
 #define RawEth  (3)
-// #define XRC 3 (TBD)
+#define XRC (4)
 
 // Genral control definitions
 #define OFF	     (0)
@@ -259,6 +259,8 @@ struct perftest_parameters {
 	int 			post_list;
 	int				duration;
 	int 			use_srq;
+	int				use_xrc;
+	int				srq_exists;
 	int				tos;
 	int				margin;
 	int 			is_bw_limit_passed;

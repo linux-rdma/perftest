@@ -10,7 +10,7 @@
 #define MAC_ARR_LEN (6)
 #define HEX_BASE (16)
 
-static const char *connStr[] = {"RC","UC","UD","RawEth"};
+static const char *connStr[] = {"RC","UC","UD","RawEth","XRC"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
@@ -326,6 +326,9 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport	= OFF;
 	user_param->post_list	= 1;
+	user_param->use_srq = OFF;
+	user_param->use_xrc = OFF;
+	user_param->srq_exists = OFF;
 	user_param->duration	= DEF_DURATION;
 	user_param->margin	= DEF_MARGIN;
 	user_param->test_type	= ITERATIONS;
@@ -375,6 +378,13 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 	} else if(strcmp(connStr[3],optarg)==0) {
 		*cptr = RawEth;
 
+	} else if(strcmp(connStr[4],optarg)==0) {
+#ifdef HAVE_XRCD
+		*cptr = XRC;
+#else
+		fprintf(stderr," XRC not detected in libibverbs\n");
+		exit(1);
+#endif
 	} else {
 		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n");
 		exit(1);
@@ -620,6 +630,28 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 
 	}
+
+	// XRC Part
+	if (user_param->connection_type == XRC) {
+
+		if (user_param->tst == LAT || user_param->verb != SEND) {
+			printf(RESULT_LINE);
+			fprintf(stderr," XRC only supported in ib_send_bw test\n");
+			exit(1);
+		}
+
+		if (user_param->duplex) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Bidirectional feature not supported by XRC\n");
+			exit(1);
+		}
+		user_param->use_xrc = ON;
+		user_param->use_srq = ON;
+	}
+
+	if((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
+		user_param->srq_exists = 1;
+
 	return;
 }
 
@@ -1199,7 +1231,6 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
 		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
-
 	else
 		user_param->out_reads = 1;
 
@@ -1375,7 +1406,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	tsize = tsize * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
-      	//support in GBS format
+	//support in GBS format
 	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
 
 	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));

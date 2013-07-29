@@ -14,6 +14,7 @@ static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
 struct perftest_parameters* duration_param;
 int cycle_buffer=4096;
+
 /******************************************************************************
  * Beginning
  ******************************************************************************/
@@ -36,6 +37,93 @@ static int check_for_contig_pages_support(struct ibv_context *context)
 	answer = attr.device_cap_flags & (1 << 23) ? SUCCESS : FAILURE;
 	return answer;
 }
+
+#ifdef HAVE_XRCD
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int ctx_xrcd_create(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	char *tmp_file_name;
+	struct ibv_xrcd_init_attr xrcd_init_attr;
+
+	memset(&xrcd_init_attr , 0 , sizeof xrcd_init_attr);
+
+	tmp_file_name = (user_param->machine == SERVER) ? SERVER_FD : CLIENT_FD;
+
+	ctx->fd = open(tmp_file_name, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP);
+	if (ctx->fd < 0) {
+		fprintf(stderr,"Error opening file %s errno: %s", tmp_file_name,strerror(errno));
+		return FAILURE;
+	}
+
+	xrcd_init_attr.comp_mask = IBV_XRCD_INIT_ATTR_FD | IBV_XRCD_INIT_ATTR_OFLAGS;
+	xrcd_init_attr.fd = ctx->fd;
+	xrcd_init_attr.oflags = O_CREAT ;
+
+	ctx->xrc_domain = ibv_open_xrcd(ctx->context,&xrcd_init_attr);
+	if (ctx->xrc_domain == NULL) {
+		fprintf(stderr,"Error opening XRC domain\n");
+		return FAILURE;
+	}
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	struct ibv_srq_init_attr_ex srq_init_attr;
+
+	memset(&srq_init_attr, 0, sizeof(srq_init_attr));
+
+	srq_init_attr.attr.max_wr = (user_param->num_of_qps*user_param->rx_depth);
+	srq_init_attr.attr.max_sge = 1;
+	srq_init_attr.comp_mask = IBV_SRQ_INIT_ATTR_TYPE | IBV_SRQ_INIT_ATTR_XRCD | IBV_SRQ_INIT_ATTR_CQ | IBV_SRQ_INIT_ATTR_PD;
+	srq_init_attr.srq_type = IBV_SRQT_XRC;
+	srq_init_attr.xrcd = ctx->xrc_domain;
+	srq_init_attr.cq = ctx->recv_cq;
+	srq_init_attr.pd = ctx->pd;
+
+	ctx->srq = ibv_create_srq_ex(ctx->context,&srq_init_attr);
+	if (ctx->srq == NULL) {
+		fprintf(stderr," Couldn't open XRC SRQ\n");
+		return FAILURE;
+	}
+
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	struct ibv_qp* qp = NULL;
+	struct ibv_qp_init_attr_ex qp_init_attr;
+
+	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
+
+	if (user_param->machine == SERVER) {
+		qp_init_attr.qp_type = IBV_QPT_XRC_RECV;
+		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_XRCD;
+		qp_init_attr.xrcd = ctx->xrc_domain;
+
+	} else {
+
+		qp_init_attr.qp_type = IBV_QPT_XRC_SEND;
+		qp_init_attr.send_cq = ctx->send_cq;
+		qp_init_attr.cap.max_send_wr = user_param->tx_depth;
+		qp_init_attr.cap.max_send_sge = 1;
+		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
+		qp_init_attr.pd = ctx->pd;
+	}
+
+	qp = ibv_create_qp_ex(ctx->context,&qp_init_attr);
+	return qp;
+}
+#endif
 
 /******************************************************************************
  *
@@ -214,12 +302,29 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_parm->use_srq && (user_parm->tst == LAT || user_parm->machine == SERVER || user_parm->duplex == ON)) {
+	if (user_parm->srq_exists) {
 		if (ibv_destroy_srq(ctx->srq)) {
 			fprintf(stderr, "Couldn't destroy SRQ\n");
-			return 1;
+			test_result = 1;
 		}
 	}
+#ifdef HAVE_XRCD
+
+	if (user_parm->use_xrc) {
+
+		if (ibv_close_xrcd(ctx->xrc_domain)) {
+			fprintf(stderr, "Couldn't destroy XRC domain\n");
+			test_result = 1;
+		}
+
+		if (ctx->fd >= 0 && close(ctx->fd)) {
+			fprintf(stderr, "Couldn't close the file for the XRC Domain\n");
+			test_result = 1;
+		}
+
+	}
+
+#endif
 
 	if (ibv_destroy_cq(ctx->send_cq)) {
 		fprintf(stderr, "failed to destroy CQ\n");
@@ -373,7 +478,22 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 	}
 
-	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+#ifdef HAVE_XRCD
+	if (user_param->use_xrc) {
+
+		if (ctx_xrcd_create(ctx,user_param)) {
+			fprintf(stderr, "Couldn't create XRC resources\n");
+			return FAILURE;
+		}
+
+		if (ctx_xrc_srq_create(ctx,user_param)) {
+			fprintf(stderr, "Couldn't create SRQ XRC resources\n");
+			return FAILURE;
+		}
+	}
+#endif
+
+	if (user_param->use_srq && !user_param->use_xrc && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
 
 		struct ibv_srq_init_attr attr = {
 				.attr = {
@@ -391,13 +511,24 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	for (i=0; i < user_param->num_of_qps; i++) {
 
-		ctx->qp[i] = ctx_qp_create(ctx,user_param);
-		if (ctx->qp[i] == NULL) {
-			fprintf(stderr," Unable to create QP.\n");
-			return FAILURE;
+		if (user_param->use_xrc) {
+
+			ctx->qp[i] = ctx_xrc_qp_create(ctx,user_param);
+			if (ctx->qp[i] == NULL) {
+				fprintf(stderr," Unable to create XRC QP.\n");
+				return FAILURE;
+			}
+
+		} else {
+
+			ctx->qp[i] = ctx_qp_create(ctx,user_param);
+			if (ctx->qp[i] == NULL) {
+				fprintf(stderr," Unable to create QP.\n");
+				return FAILURE;
+			}
 		}
 
-        if (user_param->work_rdma_cm == OFF) {
+		if (user_param->work_rdma_cm == OFF) {
 
 			if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
 				fprintf(stderr, "Failed to modify QP to INIT\n");
@@ -440,6 +571,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
 		case UD : attr.qp_type = IBV_QPT_UD; break;
+		case XRC : attr.qp_type = IBV_QPT_XRC; break;
 #ifdef HAVE_RAW_ETH
 		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 #endif
@@ -558,7 +690,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 
 			flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
 
-			if (user_parm->connection_type == RC) {
+			if (user_parm->connection_type == RC || user_parm->connection_type == XRC) {
 
 				attr->max_dest_rd_atomic = my_dest->out_reads;
 				attr->min_rnr_timer = 12;
@@ -587,7 +719,7 @@ static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 		flags |= IBV_QP_SQ_PSN;
 		attr->sq_psn = my_dest->psn;
 
-		if (user_parm->connection_type == RC) {
+		if (user_parm->connection_type == RC || user_parm->connection_type == XRC) {
 
 			attr->timeout   = user_parm->qp_timeout;
 			attr->retry_cnt = 7;
@@ -648,9 +780,9 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	int i,j;
 
 	for (i = 0 ; i < user_param->num_of_qps ; i++) {
-
+		memset(&ctx->wr[i],0,sizeof(struct ibv_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
-		if (user_param->mac_fwd )
+		if (user_param->mac_fwd)
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
 
 		if (user_param->verb == WRITE || user_param->verb == READ)
@@ -747,6 +879,9 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
 				ctx->wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
+
+			if (user_param->use_xrc)
+				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[i].rkey;
 		}
 	}
 }
@@ -774,7 +909,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->rwr[i].next    = NULL;
 		ctx->rwr[i].num_sge	= MAX_RECV_SGE;
 
-		if (user_param->tst == BW )
+		if (user_param->tst == BW)
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
 		for (j = 0; j < user_param->rx_depth ; ++j) {
@@ -794,7 +929,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 			}
 
-			if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2)) {
+			if ((user_param->tst == BW) && user_param->size <= (cycle_buffer / 2)) {
 
 				increase_loc_addr(&ctx->recv_sge_list[i],
 								  user_param->size,
@@ -911,7 +1046,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
-
 				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
@@ -946,11 +1080,11 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
 
 			if (ne > 0) {
-
 				for (i = 0; i < ne; i++) {
 					if (wc[i].status != IBV_WC_SUCCESS)
+					{
 						NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
-
+					}
 					ctx->ccnt[(int)wc[i].wr_id] += user_param->cq_mod;
 					totccnt += user_param->cq_mod;
 
@@ -1028,9 +1162,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 		do {
 			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
-
 			if (ne > 0) {
-
 				if (firstRx) {
 					set_on_first_rx_packet(user_param);
 					firstRx = 0;
@@ -1052,7 +1184,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
 
 						if (user_param->use_srq) {
-
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,rcnt);
 								return 1;
