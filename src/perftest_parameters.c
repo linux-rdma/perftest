@@ -634,7 +634,13 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	// XRC Part
 	if (user_param->connection_type == XRC) {
 
-		if (user_param->tst == LAT || user_param->verb != SEND) {
+		if (user_param->work_rdma_cm == ON) {
+			printf(RESULT_LINE);
+			fprintf(stderr," XRC does not support RDMA\n");
+			exit(1);
+		}
+
+		if (user_param->tst == LAT) {
 			printf(RESULT_LINE);
 			fprintf(stderr," XRC only supported in ib_send_bw test\n");
 			exit(1);

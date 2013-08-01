@@ -165,6 +165,7 @@ struct pingpong_context {
 	unsigned			rkey;
 	unsigned long long	vaddr;
 	union ibv_gid		gid;
+	unsigned			srqn;
  };
 
 /******************************************************************************

@@ -113,16 +113,6 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		my_dest->lid = mcg_params->mlid;
 		my_dest->qpn = QPNUM_MCAST;
 	}
-#ifdef HAVE_XRCD
-	if (user_parm->use_xrc) {
-		for (i=0; i < user_parm->num_of_qps; i++) {
-			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].rkey))) {
-				fprintf(stderr, "Couldn't get SRQ number\n");
-				return 1;
-			}
-		}
-	}
-#endif
 	return 0;
 }
 

@@ -83,9 +83,13 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 	srq_init_attr.comp_mask = IBV_SRQ_INIT_ATTR_TYPE | IBV_SRQ_INIT_ATTR_XRCD | IBV_SRQ_INIT_ATTR_CQ | IBV_SRQ_INIT_ATTR_PD;
 	srq_init_attr.srq_type = IBV_SRQT_XRC;
 	srq_init_attr.xrcd = ctx->xrc_domain;
-	srq_init_attr.cq = ctx->recv_cq;
-	srq_init_attr.pd = ctx->pd;
 
+	if(user_param->verb == SEND)
+		srq_init_attr.cq = ctx->recv_cq;
+	else
+		srq_init_attr.cq = ctx->send_cq;
+
+	srq_init_attr.pd = ctx->pd;
 	ctx->srq = ibv_create_srq_ex(ctx->context,&srq_init_attr);
 	if (ctx->srq == NULL) {
 		fprintf(stderr," Couldn't open XRC SRQ\n");
@@ -109,6 +113,8 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perf
 		qp_init_attr.qp_type = IBV_QPT_XRC_RECV;
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_XRCD;
 		qp_init_attr.xrcd = ctx->xrc_domain;
+		qp_init_attr.cap.max_recv_wr  = user_param->rx_depth;
+		qp_init_attr.cap.max_recv_sge = 1;
 
 	} else {
 
@@ -447,8 +453,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	} else if (user_param->verb == READ) {
 		flags |= IBV_ACCESS_REMOTE_READ;
 
-		if (user_param->transport_type == IBV_TRANSPORT_IWARP)
-			flags |= IBV_ACCESS_REMOTE_WRITE;
+	if (user_param->transport_type == IBV_TRANSPORT_IWARP)
+		flags |= IBV_ACCESS_REMOTE_WRITE;
 
 	} else if (user_param->verb == ATOMIC) {
 		flags |= IBV_ACCESS_REMOTE_ATOMIC;
@@ -633,8 +639,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 			case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
 			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
 			case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
-			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
-												IBV_ACCESS_LOCAL_WRITE;
+			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 		}
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
@@ -881,7 +886,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 				ctx->wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
 
 			if (user_param->use_xrc)
-				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[i].rkey;
+				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[i].srqn;
 		}
 	}
 }

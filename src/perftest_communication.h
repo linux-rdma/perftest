@@ -43,15 +43,15 @@
 #include <rdma/rdma_cma.h>
 #include "perftest_resources.h"
 
-#define KEY_MSG_SIZE 	 (50)   // Message size without gid.
-#define KEY_MSG_SIZE_GID (98)   // Message size with gid (MGID as well).
+#define KEY_MSG_SIZE 	 (59)   // Message size without gid.
+#define KEY_MSG_SIZE_GID (108)   // Message size with gid (MGID as well).
 #define SYNC_SPEC_ID	 (5)
 
 // The Format of the message we pass through sockets , without passing Gid.
-#define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx"
+#define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx:%08x"
 
 // The Format of the message we pass through sockets (With Gid).
-#define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
+#define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%08x:"
 
 // The Basic print format for all verbs.
 #define BASIC_ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x"
@@ -166,6 +166,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
 				   struct pingpong_dest *rem_dest);
 
 
+
 /* ctx_print_pingpong_data.
  *
  * Description :
@@ -199,3 +200,6 @@ int ctx_close_connection(struct perftest_comm *comm,
 				         struct pingpong_dest *rem_dest);
 
 #endif /* PERFTEST_COMMUNICATION_H */
+
+
+

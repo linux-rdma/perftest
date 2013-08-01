@@ -148,6 +148,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 	return 0;
 }
 
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -161,7 +162,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 
 
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
-				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr);
+				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr, my_dest->srqn);
 
 		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
 			perror("client write");
@@ -180,7 +181,8 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 				my_dest->gid.raw[8],my_dest->gid.raw[9],
 				my_dest->gid.raw[10],my_dest->gid.raw[11],
 				my_dest->gid.raw[12],my_dest->gid.raw[13],
-				my_dest->gid.raw[14],my_dest->gid.raw[15]);
+				my_dest->gid.raw[14],my_dest->gid.raw[15],
+				my_dest->srqn);
 
 		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
@@ -212,8 +214,9 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 
 		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
 						&rem_dest->out_reads,&rem_dest->qpn,
-						&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr);
-		if (parsed != 6) {
+						&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,&rem_dest->srqn);
+
+		if (parsed != 7) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
 		}
@@ -280,6 +283,14 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 
 		strcpy(tmp, pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
+
+
+		pstr += term - pstr + 4;
+
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->srqn = (unsigned)strtoul(tmp, NULL, 16); // SRQN
 
 	}
 	return 0;
@@ -520,6 +531,17 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		}
 	}
+
+	#ifdef HAVE_XRCD
+	if (user_param->use_xrc) {
+		for (i=0; i < user_param->num_of_qps; i++) {
+			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
+				fprintf(stderr, "Couldn't get SRQ number\n");
+				return 1;
+			}
+		}
+	}
+	#endif
 
 	return 0;
 }
@@ -935,6 +957,8 @@ int ctx_hand_shake(struct perftest_comm *comm,
 
 
 
+
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -953,7 +977,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	}
 
 	if (comm->rdma_params->use_xrc)
-		printf(XRC_FMT,element->rkey);
+		printf(XRC_FMT,element->srqn);
 
 	putchar('\n');
 
