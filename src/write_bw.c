@@ -71,6 +71,10 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	if(user_param.use_xrc && user_param.duplex) {
+		user_param.num_of_qps *= 2;
+	}
+
 	// Finding the IB device selected (or default if none is selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {

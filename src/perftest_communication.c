@@ -468,11 +468,22 @@ int set_up_connection(struct pingpong_context *ctx,
 					  struct perftest_parameters *user_param,
 					  struct pingpong_dest *my_dest) {
 
+	int num_of_qps = user_param->num_of_qps;
+	int num_of_qps_per_port = user_param->num_of_qps / 2;
+
 	int i;
 	union ibv_gid temp_gid;
 	union ibv_gid temp_gid2;
 
 	srand48(getpid() * time(NULL));
+
+	//in xrc with bidirectional,
+	//there are send qps and recv qps. the actual number of send/recv qps
+	//is num_of_qps / 2.
+	if ( user_param->use_xrc && user_param->duplex) {
+		num_of_qps /= 2;
+		num_of_qps_per_port = num_of_qps / 2;
+	}
 
 	if (user_param->gid_index != -1) {
 		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
@@ -492,7 +503,10 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		if (user_param->dualport == ON) {
 			// first half of qps are for ib_port and second half are for ib_port2
-			if (i < user_param->num_of_qps / 2) {
+			// in xrc with bidirectional, the first half of qps are xrc_send qps and
+			// the second half are xrc_recv qps. the first half of the send/recv qps
+			// are for ib_port1 and the second half are for ib_port2
+			if (i % num_of_qps < num_of_qps_per_port) {
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
 
 			} else {
@@ -513,7 +527,7 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		if (user_param->dualport==ON) {
 
-			if (i < user_param->num_of_qps / 2)
+			if (i % num_of_qps < num_of_qps_per_port)
 				memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
 			else {

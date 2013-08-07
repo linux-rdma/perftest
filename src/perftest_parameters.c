@@ -636,21 +636,16 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 		if (user_param->work_rdma_cm == ON) {
 			printf(RESULT_LINE);
-			fprintf(stderr," XRC does not support RDMA\n");
+			fprintf(stderr," XRC does not support RDMA_CM\n");
 			exit(1);
 		}
 
 		if (user_param->tst == LAT) {
 			printf(RESULT_LINE);
-			fprintf(stderr," XRC only supported in ib_send_bw test\n");
+			fprintf(stderr," XRC only supported in bw tests\n");
 			exit(1);
 		}
 
-		if (user_param->duplex) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Bidirectional feature not supported by XRC\n");
-			exit(1);
-		}
 		user_param->use_xrc = ON;
 		user_param->use_srq = ON;
 	}
@@ -1386,16 +1381,20 @@ void print_report_bw (struct perftest_parameters *user_param) {
 	int opt_completed = 0;
 	int opt_posted = 0;
 	int i,j;
+	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
 	long num_of_calculated_iters = user_param->iters;
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
 
+	if(user_param->use_xrc && user_param->duplex)
+		num_of_qps /= 2;
+
 	if (user_param->noPeak == OFF) {
 		/* Find the peak bandwidth unless asked not to in command line*/
-		for (i = 0; i < user_param->iters * user_param->num_of_qps; ++i) {
-			for (j = i; j < user_param->iters * user_param->num_of_qps; ++j) {
+		for (i = 0; i < user_param->iters * num_of_qps; ++i) {
+			for (j = i; j < user_param->iters * num_of_qps; ++j) {
 				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
 				if (t < opt_delta) {
 					opt_delta  = t;
@@ -1410,15 +1409,14 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	tsize = user_param->duplex ? (user_param->test_type == DURATION ? 1 : 2 ) : 1 ;
 	tsize = tsize * user_param->size;
-	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : user_param->num_of_qps;
-	location_arr = (user_param->noPeak) ? 0 : user_param->iters*user_param->num_of_qps - 1;
+	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : num_of_qps;
+	location_arr = (user_param->noPeak) ? 0 : user_param->iters*num_of_qps - 1;
 	//support in GBS format
 	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
 
 	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));
 	double bw_avg = ((double)tsize*num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * format_factor);
 	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * 1000000);
-
 
 
 	// Verify Limits

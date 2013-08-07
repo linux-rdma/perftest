@@ -179,7 +179,9 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
-
+	if(user_param.use_xrc && user_param.duplex) {
+		user_param.num_of_qps *= 2;
+	}
 	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.
 	if (user_param.connection_type == RawEth) {
 		fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
