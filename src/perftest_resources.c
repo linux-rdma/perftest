@@ -110,13 +110,14 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perf
 
 	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
-	if ( (!user_param->duplex && (user_param->machine == SERVER) )
-						|| (user_param->duplex && (qp_index >= num_of_qps))) {
+	if ( (!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
+						|| ((user_param->duplex || user_param->tst == LAT) && (qp_index >= num_of_qps))) {
 		qp_init_attr.qp_type = IBV_QPT_XRC_RECV;
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_XRCD;
 		qp_init_attr.xrcd = ctx->xrc_domain;
 		qp_init_attr.cap.max_recv_wr  = user_param->rx_depth;
 		qp_init_attr.cap.max_recv_sge = 1;
+		qp_init_attr.cap.max_inline_data = user_param->inline_size;
 
 	} else {
 		qp_init_attr.qp_type = IBV_QPT_XRC_SEND;
@@ -125,6 +126,7 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perf
 		qp_init_attr.cap.max_send_sge = 1;
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
 		qp_init_attr.pd = ctx->pd;
+		qp_init_attr.cap.max_inline_data = user_param->inline_size;
 	}
 
 	qp = ibv_create_qp_ex(ctx->context,&qp_init_attr);
@@ -525,7 +527,6 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				fprintf(stderr," Unable to create XRC QP.\n");
 				return FAILURE;
 			}
-
 		} else {
 
 			ctx->qp[i] = ctx_qp_create(ctx,user_param);
@@ -617,7 +618,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = 0;
 
-	if ( user_param->use_xrc && user_param->duplex) {
+	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
@@ -679,7 +680,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	//in xrc with bidirectional,
 	//there are send qps and recv qps. the actual number of send/recv qps
 	//is num_of_qps / 2.
-	if ( user_parm->use_xrc && user_parm->duplex) {
+	if ( user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
@@ -772,14 +773,14 @@ int ctx_connect(struct pingpong_context *ctx,
 	struct ibv_qp_attr attr;
 	int xrc_offset = 0;
 
-	if(user_parm->use_xrc && user_parm->duplex) {
+	if(user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT)) {
 		xrc_offset = user_parm->num_of_qps / 2;
 	}
 	for (i=0; i < user_parm->num_of_qps; i++) {
 
 		memset(&attr, 0, sizeof attr);
 
-		if ( (i >= xrc_offset) && user_parm->use_xrc && user_parm->duplex)
+		if ( (i >= xrc_offset) && user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT))
 			xrc_offset = -1*xrc_offset;
 
 		if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
@@ -802,7 +803,7 @@ int ctx_connect(struct pingpong_context *ctx,
 			}
 		}
 
-		if(user_parm->use_xrc && user_parm->duplex)
+		if(user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT))
 			xrc_offset = user_parm->num_of_qps / 2;
 
 	}
@@ -820,7 +821,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	int num_of_qps = user_param->num_of_qps;
 	int xrc_offset = 0;
 
-	if(user_param->use_xrc && user_param->duplex) {
+	if(user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		xrc_offset = num_of_qps;
 	}
@@ -942,7 +943,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	struct ibv_recv_wr  *bad_wr_recv;
 	i = 0;
 
-	if(user_param->use_xrc && user_param->duplex) {
+	if(user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		i = user_param->num_of_qps / 2;
 		num_of_qps /= 2;
 	}
@@ -1069,7 +1070,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	}
 
 	// Will be 0, in case of Duration (look at force_dependencies or in the exp above).
-	if(user_param->duplex && user_param->use_xrc)
+	if (user_param->duplex && user_param->use_xrc)
 		num_of_qps /= 2;
 
 	tot_iters = user_param->iters*num_of_qps;
@@ -1584,6 +1585,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int                     ccnt = 0;
 	int                     rcnt = 0;
 	int                     ne;
+	int 					poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
 	struct ibv_send_wr      *bad_wr = NULL;
@@ -1595,8 +1597,10 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	if (user_param->size <= user_param->inline_size)
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 
+	if(user_param->use_xrc)
+		poll_buf_offset = 1;
 	post_buf = (char*)ctx->buf + user_param->size - 1;
-	poll_buf = (char*)ctx->buf + BUFF_SIZE(ctx->size) + user_param->size - 1;
+	poll_buf = (char*)ctx->buf + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size) + user_param->size - 1;
 
 	// Duration support in latency tests.
 	if (user_param->test_type == DURATION) {
@@ -1736,6 +1740,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->wr[0].send_flags = 0;
 	}
 
+	//ask Idos about this.
 	if (user_param->size <= user_param->inline_size)
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 

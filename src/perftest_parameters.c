@@ -172,18 +172,23 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("  -r, --rx-depth=<dep> ");
 		printf(" Rx queue size (default %d)\n",DEF_RX_SEND);
 
-		printf("  -c, --connection=<RC/UC/UD> ");
-		printf(" Connection type RC/UC/UD (default RC)\n");
+		printf("  -c, --connection=<RC/XRC/UC/UD> ");
+		printf(" Connection type RC/XRC/UC/UD (default RC)\n");
 	}
 
 	if (verb == WRITE) {
-		printf("  -c, --connection=<RC/UC> ");
-		printf(" Connection type RC/UC (default RC)\n");
+		printf("  -c, --connection=<RC/XRC/UC> ");
+		printf(" Connection type RC/XRC/UC (default RC)\n");
 	}
 
 	if (verb != READ || verb != ATOMIC) {
 		printf("  -I, --inline_size=<size> ");
 		printf(" Max size of message to be sent in inline\n");
+	}
+
+	if (verb == READ || verb == ATOMIC) {
+		printf("  -c, --connection=<RC/XRC> ");
+		printf(" Connection type RC/XRC (default RC)\n");
 	}
 
 	if (tst == BW) {
@@ -640,12 +645,6 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		if (user_param->tst == LAT) {
-			printf(RESULT_LINE);
-			fprintf(stderr," XRC only supported in bw tests\n");
-			exit(1);
-		}
-
 		user_param->use_xrc = ON;
 		user_param->use_srq = ON;
 	}
@@ -864,7 +863,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 			switch(user_param->verb) {
 
 				case WRITE: user_param->inline_size = DEF_INLINE_WRITE; break;
-				case SEND : user_param->inline_size = (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :DEF_INLINE_SEND_RC_UC ; break;
+				case SEND : user_param->inline_size = (user_param->connection_type == UD)? DEF_INLINE_SEND_UD : ((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
 				default   : user_param->inline_size = 0;
 			}
 

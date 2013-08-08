@@ -103,35 +103,48 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 								  struct pingpong_dest *my_dest,
 								  struct mcast_parameters *mcg_params,
 								  struct perftest_comm *comm) {
+	int i;
 
-	if (user_parm->use_mcg) {
+	for (i = 0; i < user_parm->num_of_qps; i++)
+	{
+		if (user_parm->use_mcg) {
 
-		if (set_mcast_group(ctx,user_parm,mcg_params)) {
-			return 1;
+			if (set_mcast_group(ctx,user_parm,mcg_params)) {
+				return 1;
+			}
+
+			my_dest[i].gid = mcg_params->mgid;
+			my_dest[i].lid = mcg_params->mlid;
+			my_dest[i].qpn = QPNUM_MCAST;
+
+		} else {
+			if (user_parm->gid_index != -1) {
+				if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
+					return -1;
+				}
+			}
+			my_dest[i].lid   	   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+			my_dest[i].qpn   	   = ctx->qp[i]->qp_num;
 		}
 
-		my_dest->gid = mcg_params->mgid;
-		my_dest->lid = mcg_params->mlid;
-		my_dest->qpn = QPNUM_MCAST;
+		my_dest[i].psn = lrand48() & 0xffffff;
 
-	} else {
-		if (user_parm->gid_index != -1) {
-			if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
+		// We do not fail test upon lid above RoCE.
+		if (user_parm->gid_index < 0) {
+			if (!my_dest->lid) {
+				fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
 				return -1;
 			}
 		}
-		my_dest->lid   	   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
-		my_dest->qpn   	   = ctx->qp[0]->qp_num;
-	}
 
-	my_dest->psn = lrand48() & 0xffffff;
-
-	// We do not fail test upon lid above RoCE.
-	if (user_parm->gid_index < 0) {
-		if (!my_dest->lid) {
-			fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
-			return -1;
-		}
+		#ifdef HAVE_XRCD
+		if (user_parm->use_xrc) {
+				if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
+					fprintf(stderr, "Couldn't get SRQ number\n");
+					return 1;
+				}
+			}
+		#endif
 	}
 
 	return 0;
@@ -182,7 +195,8 @@ int main(int argc, char *argv[]) {
 	int						   ret_val;
 	struct report_options      report;
 	struct pingpong_context    ctx;
-	struct pingpong_dest	   my_dest,rem_dest;
+	struct pingpong_dest	   *my_dest  = NULL;
+	struct pingpong_dest	   *rem_dest = NULL;
 	struct mcast_parameters	   mcg_params;
 	struct ibv_device          *ib_dev = NULL;
 	struct perftest_parameters user_param;
@@ -193,8 +207,6 @@ int main(int argc, char *argv[]) {
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm , 0, sizeof(struct perftest_comm));
 	memset(&mcg_params, 0, sizeof(struct mcast_parameters));
-	memset(&my_dest, 0 , sizeof(struct pingpong_dest));
-	memset(&rem_dest, 0 , sizeof(struct pingpong_dest));
 
 	user_param.verb    = SEND;
 	user_param.tst     = LAT;
@@ -207,6 +219,10 @@ int main(int argc, char *argv[]) {
 		if (ret_val != VERSION_EXIT && ret_val != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
+	}
+
+	if(user_param.use_xrc) {
+		user_param.num_of_qps *= 2;
 	}
 
 	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.
@@ -240,6 +256,11 @@ int main(int argc, char *argv[]) {
 
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
+
+	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
+	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
@@ -283,12 +304,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Set up the Connection.
-	if (send_set_up_connection(&ctx,&user_param,&my_dest,&mcg_params,&user_comm)) {
+	if (send_set_up_connection(&ctx,&user_param,my_dest,&mcg_params,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
 
-	ctx_print_pingpong_data(&my_dest,&user_comm);
+	for (i=0; i < user_param.num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
 	// Init the connection and print the local data.
 	if (establish_connection(&user_comm)) {
@@ -296,19 +318,23 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// shaking hands and gather the other side info.
-	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
-		fprintf(stderr,"Failed to exchange date between server and clients\n");
-		return 1;
+	for (i=0; i < user_param.num_of_qps; i++) {
+
+		// shaking hands and gather the other side info.
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-	ctx_print_pingpong_data(&rem_dest,&user_comm);
 
 	if (user_param.use_mcg) {
 
 		memcpy(mcg_params.base_mgid.raw,mcg_params.mgid.raw,16);
-		memcpy(mcg_params.mgid.raw,rem_dest.gid.raw,16);
+		memcpy(mcg_params.mgid.raw,rem_dest[0].gid.raw,16);
 		mcg_params.base_mlid = mcg_params.mlid;
 		mcg_params.is_2nd_mgid_used = ON;
 		if (!strcmp(link_layer_str(user_param.link_type),"IB")) {
@@ -334,14 +360,14 @@ int main(int argc, char *argv[]) {
 	if (user_param.work_rdma_cm == OFF) {
 
 		// Prepare IB resources for rtr/rts.
-		if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {
+		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
 	}
 
 	// shaking hands and gather the other side info.
-	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
 		return 1;
 	}
@@ -362,7 +388,7 @@ int main(int argc, char *argv[]) {
 	printf(RESULT_LINE);
 	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 
-	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
+	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 	if (user_param.test_method == RUN_ALL) {
 
@@ -381,7 +407,7 @@ int main(int argc, char *argv[]) {
 
 			// Sync between the client and server so the client won't send packets
 			// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
-			if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange date between server and clients\n");
 				return 1;
 			}
@@ -402,7 +428,7 @@ int main(int argc, char *argv[]) {
 
 		// Sync between the client and server so the client won't send packets
 		// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
-		if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+		if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 			fprintf(stderr,"Failed to exchange date between server and clients\n");
 			return 1;
 		}
@@ -414,7 +440,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	printf(RESULT_LINE);
-	if (ctx_close_connection(&user_comm,&my_dest,&rem_dest)) {
+	if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		fprintf(stderr," Trying to close this side resources\n");
 	}

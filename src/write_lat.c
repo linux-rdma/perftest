@@ -54,7 +54,8 @@ int main(int argc, char *argv[]) {
 	int                         ret_parser,i = 0;
 	struct report_options       report;
 	struct pingpong_context     ctx;
-	struct pingpong_dest        my_dest,rem_dest;
+	struct pingpong_dest	    *my_dest  = NULL;
+	struct pingpong_dest	    *rem_dest = NULL;
 	struct ibv_device           *ib_dev;
 	struct perftest_parameters  user_param;
 	struct perftest_comm		user_comm;
@@ -63,8 +64,6 @@ int main(int argc, char *argv[]) {
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
-	memset(&my_dest,0,sizeof(struct pingpong_dest));
-	memset(&rem_dest,0,sizeof(struct pingpong_dest));
 
 	user_param.verb    = WRITE;
 	user_param.tst     = LAT;
@@ -77,6 +76,10 @@ int main(int argc, char *argv[]) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		return FAILURE;
+	}
+
+	if(user_param.use_xrc) {
+		user_param.num_of_qps *= 2;
 	}
 
 	// Finding the IB device selected (or defalut if no selected).
@@ -101,6 +104,11 @@ int main(int argc, char *argv[]) {
 
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
+
+	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
+	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
@@ -144,12 +152,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Set up the Connection.
-	if (set_up_connection(&ctx,&user_param,&my_dest)) {
+	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
 
-	ctx_print_pingpong_data(&my_dest,&user_comm);
+	for (i=0; i < user_param.num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
 	// Init the connection and print the local data.
 	if (establish_connection(&user_comm)) {
@@ -158,29 +167,38 @@ int main(int argc, char *argv[]) {
 	}
 
 	// shaking hands and gather the other side info.
-	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
 		return 1;
 	}
 
 	user_comm.rdma_params->side = REMOTE;
-	ctx_print_pingpong_data(&rem_dest,&user_comm);
+	for (i=0; i < user_param.num_of_qps; i++) {
+
+		// shaking hands and gather the other side info.
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			return 1;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
+	};
 
 	if (user_param.work_rdma_cm == OFF) {
 
-		if (ctx_connect(&ctx,&rem_dest,&user_param,&my_dest)) {
+		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
 	}
 
 	// An additional handshake is required after moving qp to RTR.
-	if (ctx_hand_shake(&user_comm,&my_dest,&rem_dest)) {
+	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
         fprintf(stderr,"Failed to exchange date between server and clients\n");
         return 1;
     }
 
-	ctx_set_send_wqes(&ctx,&user_param,&rem_dest);
+	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 	printf(RESULT_LINE);
 	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);

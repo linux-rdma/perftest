@@ -480,7 +480,7 @@ int set_up_connection(struct pingpong_context *ctx,
 	//in xrc with bidirectional,
 	//there are send qps and recv qps. the actual number of send/recv qps
 	//is num_of_qps / 2.
-	if ( user_param->use_xrc && user_param->duplex) {
+	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
