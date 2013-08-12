@@ -1295,6 +1295,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
     int index = 0,ne;
     struct ibv_send_wr *bad_wr = NULL;
     struct ibv_wc *wc = NULL;
+	int num_of_qps = user_param->num_of_qps;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1303,7 +1304,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	alarm(user_param->duration);
 	user_param->iters = 0;
 
-	for (i=0; i < user_param->num_of_qps; i++)
+	// Will be 0, in case of Duration (look at force_dependencies or in the exp above)
+	if (user_param->duplex && user_param->use_xrc)
+		num_of_qps /= 2;
+
+	for (i=0; i < num_of_qps; i++)
 		for (j=0 ; j < user_param->post_list; j++)
 			ctx->wr[i*user_param->post_list +j].send_flags |= IBV_SEND_SIGNALED;
 
@@ -1313,7 +1318,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	while (1) {
 
 		// main loop to run over all the qps and post each time n messages
-		for (index =0 ; index < user_param->num_of_qps ; index++) {
+		for (index =0 ; index < num_of_qps ; index++) {
 
 			while (ctx->scnt[index] < user_param->tx_depth) {
 
