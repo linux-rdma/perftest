@@ -307,6 +307,14 @@ struct report_options {
 	int cycles;
 };
 
+struct bw_report_data {
+	unsigned long size;
+	int iters;
+	double bw_peak;
+	double bw_avg;
+	double msgRate_avg;
+};
+
 /* link_layer_str
  *
  * Description : Return a String representation of the link type.
@@ -359,14 +367,30 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
 
 /* print_report_bw
  *
- * Description : Print the peak and average throughput of the BW test.
+ * Description : Calculate the peak and average throughput of the BW test.
+ *				 The function will print when not in duplex mode.
  *
  * Parameters :
  *
  *	 user_param  - the parameters parameters.
+ *   my_bw_rep   - get my bw test report.
  *
  */
-void print_report_bw (struct perftest_parameters *user_param);
+void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep);
+
+/* print_full_bw_report
+ *
+ * Description : Print the peak and average throughput of the BW test.
+ *				 If rem_bw_rep is not NULL, the function will sum the server and client results.
+ *
+ * Parameters :
+ *
+ *	 user_param  - the parameters parameters.
+ *   my_bw_rep   - my bw test report.
+ *   rem_bw_rep   - remote's bw test report.
+ *
+ */
+void print_full_bw_report (struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep);
 
 /* print_report_lat
  *

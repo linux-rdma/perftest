@@ -521,12 +521,13 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if (user_param->use_xrc) {
-
-			ctx->qp[i] = ctx_xrc_qp_create(ctx,user_param,i);
-			if (ctx->qp[i] == NULL) {
-				fprintf(stderr," Unable to create XRC QP.\n");
-				return FAILURE;
-			}
+			#ifdef HAVE_XRCD
+				ctx->qp[i] = ctx_xrc_qp_create(ctx,user_param,i);
+			#endif
+				if (ctx->qp[i] == NULL) {
+					fprintf(stderr," Unable to create XRC QP.\n");
+					return FAILURE;
+				}
 		} else {
 
 			ctx->qp[i] = ctx_qp_create(ctx,user_param);
@@ -579,7 +580,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
 		case UD : attr.qp_type = IBV_QPT_UD; break;
+#ifdef HAVEE_XRCD
 		case XRC : attr.qp_type = IBV_QPT_XRC; break;
+#endif
 #ifdef HAVE_RAW_ETH
 		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 #endif
@@ -926,9 +929,10 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
 				ctx->wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
-
+		#ifdef HAVE_XRCD
 			if (user_param->use_xrc)
 				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[xrc_offset + i].srqn;
+		#endif
 		}
 	}
 }
@@ -1291,10 +1295,10 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  ******************************************************************************/
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-    int i,j = 0;
-    int index = 0,ne;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_wc *wc = NULL;
+    	int i,j = 0;
+    	int index = 0,ne;
+    	struct ibv_send_wr *bad_wr = NULL;
+    	struct ibv_wc *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
@@ -1359,7 +1363,6 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	int 				i,ne;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
-
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
 	while (1) {
@@ -1910,7 +1913,7 @@ void catch_alarm(int sig) {
 void catch_alarm_infintely(int sig)
 {
 	duration_param->tcompleted[0] = get_cycles();
-	print_report_bw(duration_param);
+	print_report_bw(duration_param,NULL);
 	duration_param->iters = 0;
 	alarm(duration_param->duration);
 	duration_param->tposted[0] = get_cycles();

@@ -152,13 +152,14 @@ static int send_destroy_ctx(
  ******************************************************************************/
 int main(int argc, char *argv[]) {
 
-	struct ibv_device		 	*ib_dev = NULL;
+	struct ibv_device		*ib_dev = NULL;
 	struct pingpong_context  	ctx;
 	struct pingpong_dest	 	*my_dest  = NULL;
 	struct pingpong_dest		*rem_dest = NULL;
-	struct perftest_parameters  user_param;
+	struct perftest_parameters  	user_param;
 	struct perftest_comm		user_comm;
-	struct mcast_parameters     mcg_params;
+	struct mcast_parameters     	mcg_params;
+	struct bw_report_data		my_bw_rep, rem_bw_rep;
 	int                      	ret_parser,i = 0;
 	int                      	size_max_pow = 24;
 
@@ -381,7 +382,12 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			print_report_bw(&user_param);
+			print_report_bw(&user_param,&my_bw_rep);
+
+			if (user_param.duplex && user_param.test_type != DURATION) {
+				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+				print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+                        }
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange date between server and clients\n");
@@ -422,8 +428,12 @@ int main(int argc, char *argv[]) {
 			return 17;
 		}
 
-		print_report_bw(&user_param);
+		print_report_bw(&user_param,&my_bw_rep);
 
+		if (user_param.duplex && user_param.test_type != DURATION) {
+			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+			print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
 		if (user_param.machine == CLIENT)

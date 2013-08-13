@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	print_report_bw(&user_param);
+	print_report_bw(&user_param,NULL);
 
 	if(user_param.machine == SERVER || user_param.duplex) {
 

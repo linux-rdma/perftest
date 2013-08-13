@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
 	struct pingpong_dest	   *rem_dest = NULL;
 	struct perftest_parameters user_param;
 	struct perftest_comm	   user_comm;
+	struct bw_report_data      my_bw_rep, rem_bw_rep;
 
 	/* init default values to user's parameters */
 	memset(&ctx,0,sizeof(struct pingpong_context));
@@ -214,7 +215,12 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 
-		print_report_bw(&user_param);
+		print_report_bw(&user_param,&my_bw_rep);
+
+                if (user_param.duplex) {
+			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+                        print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+                }
 
 	} else if (user_param.test_method == RUN_INFINITELY) {
 

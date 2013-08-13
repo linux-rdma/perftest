@@ -1373,13 +1373,14 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 /******************************************************************************
  *
  ******************************************************************************/
-void print_report_bw (struct perftest_parameters *user_param) {
+void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep) {
 
 	double cycles_to_units,sum_of_test_cycles;
 	int location_arr;
 	int opt_completed = 0;
 	int opt_posted = 0;
 	int i,j;
+	int run_inf_bi_factor;
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
 	long num_of_calculated_iters = user_param->iters;
@@ -1406,8 +1407,8 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
 
-	tsize = user_param->duplex ? (user_param->test_type == DURATION ? 1 : 2 ) : 1 ;
-	tsize = tsize * user_param->size;
+	run_inf_bi_factor = (user_param->duplex && user_param->test_method == RUN_INFINITELY) ? (user_param->verb == SEND ? 1 : 2) : 1 ;
+	tsize = run_inf_bi_factor * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*num_of_qps - 1;
 	//support in GBS format
@@ -1415,7 +1416,7 @@ void print_report_bw (struct perftest_parameters *user_param) {
 
 	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));
 	double bw_avg = ((double)tsize*num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * format_factor);
-	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * 1000000);
+	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units * run_inf_bi_factor) / (sum_of_test_cycles * 1000000);
 
 
 	// Verify Limits
@@ -1425,27 +1426,45 @@ void print_report_bw (struct perftest_parameters *user_param) {
 		user_param -> is_bw_limit_passed = 1;
 
 	if ( (user_param->is_limit_msgrate) && (user_param -> limit_msgrate > msgRate_avg) )
-	{
 		user_param -> is_msgrate_limit_passed = 0;
-	}
 	else
 		user_param -> is_msgrate_limit_passed = 1;
 
-
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * format_factor;
-	printf( REPORT_FMT,
-		(unsigned long)user_param->size,
-		user_param->iters,
-		(double)peak_up/peak_down,
-		bw_avg,
-//	    ((double)tsize*num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*format_factor),
-		msgRate_avg
-//	    ((double)num_of_calculated_iters*cycles_to_units)/(sum_of_test_cycles*1000000)
 
-		);
+	if (my_bw_rep == NULL) {
+		ALLOCATE(my_bw_rep , struct bw_report_data , 1);
+		memset(my_bw_rep, 0, sizeof(struct bw_report_data));
+	}
+
+	my_bw_rep->size = (unsigned long)user_param->size;
+	my_bw_rep->iters = user_param->iters;
+	my_bw_rep->bw_peak = (double)peak_up/peak_down;
+	my_bw_rep->bw_avg = bw_avg;
+	my_bw_rep->msgRate_avg = msgRate_avg;
+
+	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
+							|| user_param->test_method == RUN_INFINITELY)
+		print_full_bw_report(my_bw_rep, NULL);
 }
 
+
+void print_full_bw_report (struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
+{
+
+	double bw_peak     = my_bw_rep->bw_peak;
+	double bw_avg      = my_bw_rep->bw_avg;
+	double msgRate_avg = my_bw_rep->msgRate_avg;
+
+	if (rem_bw_rep != NULL) {
+		bw_peak     += rem_bw_rep->bw_peak;
+		bw_avg      += rem_bw_rep->bw_avg;
+		msgRate_avg += rem_bw_rep->msgRate_avg;
+	}
+
+	printf( REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+}
 /******************************************************************************
  *
  ******************************************************************************/
