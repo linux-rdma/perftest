@@ -972,6 +972,212 @@ int ctx_hand_shake(struct perftest_comm *comm,
 
 
 
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ctx_xchg_data_ethernet( struct perftest_comm *comm,
+				   void *my_data,
+				   void *rem_data,int size) {
+
+	if (comm->rdma_params->servername) {
+		if (ethernet_write_data(comm,(char*)my_data)) {
+			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			return 1;
+		}
+
+		if (ethernet_read_data(comm,(char*)rem_data)) {
+			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			return 1;
+		}
+
+	// Server side will wait for the client side to reach the write function.
+	} else {
+
+		if (ethernet_read_data(comm,(char*)rem_data)) {
+			fprintf(stderr," Unable to read to socket/rdam_cm\n");
+			return 1;
+		}
+
+		if (ethernet_write_data(comm,(char*)my_data)) {
+			fprintf(stderr," Unable to write from socket/rdam_cm\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ctx_xchg_data_rdma( struct perftest_comm *comm,
+				   void *my_data,
+				   void *rem_data,int size) {
+
+	if (comm->rdma_params->servername) {
+		if (rdma_write_data(my_data,comm,size)) {
+			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			return 1;
+		}
+
+		if (rdma_read_data(rem_data,comm,size)) {
+			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			return 1;
+		}
+
+	// Server side will wait for the client side to reach the write function.
+	} else {
+
+		if (rdma_read_data(rem_data,comm,size)) {
+			fprintf(stderr," Unable to read to socket/rdam_cm\n");
+			return 1;
+		}
+
+		if (rdma_write_data(my_data,comm,size)) {
+			fprintf(stderr," Unable to write from socket/rdam_cm\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int rdma_read_data(void *data,
+						  struct perftest_comm *comm, int size) {
+
+	struct ibv_wc wc;
+	int ne;
+
+	do {
+		ne = ibv_poll_cq(comm->rdma_ctx->recv_cq,1,&wc);
+	} while (ne == 0);
+
+	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
+		fprintf(stderr, "Bad wc status -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
+		return 1;
+	}
+
+	memcpy(data,comm->rdma_ctx->buf,size);
+
+	if (post_one_recv_wqe(comm->rdma_ctx)) {
+		fprintf(stderr, "Couldn't post send \n");
+		return 1;
+	}
+
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int rdma_write_data(void *data,
+						   struct perftest_comm *comm, int size) {
+
+	struct ibv_send_wr wr;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_sge list;
+	struct ibv_wc wc;
+	int ne;
+	memcpy(comm->rdma_ctx->buf,data,size);
+
+	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
+	list.length = size;
+	list.lkey   = comm->rdma_ctx->mr->lkey;
+
+	wr.wr_id      = SYNC_SPEC_ID;
+	wr.sg_list    = &list;
+	wr.num_sge    = 1;
+	wr.opcode     = IBV_WR_SEND;
+	wr.send_flags = IBV_SEND_SIGNALED;
+	wr.next       = NULL;
+
+	if (ibv_post_send(comm->rdma_ctx->qp[0],&wr,&bad_wr)) {
+		fprintf(stderr, "Function ibv_post_send failed\n");
+		return 1;
+	}
+
+	do {
+		ne = ibv_poll_cq(comm->rdma_ctx->send_cq, 1,&wc);
+	} while (ne == 0);
+
+	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != SYNC_SPEC_ID) {
+		fprintf(stderr, " Bad wc status %d\n",(int)wc.status);
+		return 1;
+	}
+
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ethernet_write_data(struct perftest_comm *comm, char* msg) {
+
+		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
+			perror("client write");
+			fprintf(stderr, "Couldn't send reports\n");
+			return 1;
+		}
+
+    return 0;
+
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ethernet_read_data(struct perftest_comm *comm, char* recv_msg) {
+
+	if (read(comm->rdma_params->sockfd, recv_msg, sizeof recv_msg) != sizeof recv_msg) {
+		perror("pp_read_keys");
+		fprintf(stderr, "Couldn't read reports\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ctx_xchg_data( struct perftest_comm *comm,
+				   void *my_data,
+				   void *rem_data,int size) {
+
+	if (comm->rdma_params->use_rdma_cm || comm->rdma_params->work_rdma_cm)
+		ctx_xchg_data_rdma(comm,my_data,rem_data,size);
+	else
+		ctx_xchg_data_ethernet(comm,my_data,rem_data,size);
+
+    return 0;
+}
+
+void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
+							struct bw_report_data *rem_bw_rep) {
+	/*******************Exchange Reports*******************/
+        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->size),(void*)(&rem_bw_rep->size),sizeof(unsigned long))) {
+	        fprintf(stderr," Failed to exchange date between server and clients\n");
+                exit(1);
+        }
+        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->iters),(void*)(&rem_bw_rep->iters),sizeof(int))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+	}	 
+        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_peak),(void*)(&rem_bw_rep->bw_peak),sizeof(double))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+        }
+        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_avg),(void*)(&rem_bw_rep->bw_avg),sizeof(double))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+        }
+        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->msgRate_avg),(void*)(&rem_bw_rep->msgRate_avg),sizeof(double))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+        }
+}
 
 /******************************************************************************
  *

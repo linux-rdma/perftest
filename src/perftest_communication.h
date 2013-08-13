@@ -199,6 +199,145 @@ int ctx_close_connection(struct perftest_comm *comm,
 				         struct pingpong_dest *my_dest,
 				         struct pingpong_dest *rem_dest);
 
+/* ctx_xchg_data .
+ *
+ * Description :
+ *
+ *  Exchanging data between
+ *  a server and client after performing ctx_server/client_connect.
+ *  The method fills in rem_data the remote machine data , and passed the data
+ *  in my_dest to other machine.
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  my_data  - Contains the data you want to pass to the other side.
+ *  rem_data - The other side data.
+ *  size - size of my_data (after casting is made)
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ctx_xchg_data( struct perftest_comm *comm,
+				   void *my_data,
+				   void *rem_data,int size);
+
+/* ethernet_write_data .
+ *
+ * Description :
+ *
+ *  Sends data that is written in msg using ethernet
+ *  This functions can send any basic type (int,float,double,char*,string, etc..).
+ *	If you need to send a struct, decoder and encoder must be implemented to convert
+ *  the struct to a string
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  msg    - message that will be sent
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ethernet_write_data(struct perftest_comm *comm, char* msg);
+
+/* ethernet_read_data .
+ *
+ * Description :
+ *
+ *  Read data from remote machine using ethernet.
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  recv_msg    - function will return, in this argument, the message from remote machine 
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ethernet_read_data(struct perftest_comm *comm, char* recv_msg);
+
+/* rdma_write_data .
+ *
+ * Description :
+ *
+ *  Sends data that to remote machine using RDMA.
+ *  This functions can send any variable type
+ *
+ * Parameters :
+ *
+ *  data   - data that will be sent
+ *  comm   - contains connections info
+ *  size    - size of data
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int rdma_write_data(void *data,	struct perftest_comm *comm, int size);
+
+/* rdma_read_data .
+ *
+ * Description :
+ *
+ *  Reads  data from remote machine using RDMA.
+ *  This functions can read any variable type
+ *
+ * Parameters :
+ *
+ *  data   - data that will be sent
+ *  comm   - contains connections info
+ *  size    - size of data
+ * Return Value : 0 upon success. -1 if it fails.
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int rdma_read_data(void *data, struct perftest_comm *comm, int size);
+
+/* ctx_xchg_data .
+ *
+ * Description :
+ *
+ *  Implements ctx_xchg_data for ethernet
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  my_data  - Contains the data you want to pass to the other side.
+ *  rem_data - The other side data.
+ *  size - size of my_data (after casting is made)
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ctx_xchg_data_ethernet( struct perftest_comm *comm, void *my_data, void *rem_data,int size);
+
+/* ctx_xchg_data .
+ *
+ * Description :
+ *
+ *  Implements ctx_xchg_data for RDMA
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  my_data  - Contains the data you want to pass to the other side.
+ *  rem_data - The other side data.
+ *  size - size of my_data (after casting is made)
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+int ctx_xchg_data_rdma( struct perftest_comm *comm, void *my_data, void *rem_data,int size);
+
+/* ctx_xchg_data .
+ *
+ * Description :
+ *
+ *  Exchanging bw reports between
+ *  a server and client after performing ctx_server/client_connect.
+ *  The method fills in rem_data the remote machine data , and passed the data
+ *  in my_dest to other machine.
+ *
+ * Parameters :
+ *
+ *  comm   - contains connections info
+ *  my_bw_rep  - Contains the data you want to pass to the other side.
+ *  rem_bw_rep - The other side data.
+ *
+ * Return Value : 0 upon success. -1 if it fails.
+ */
+void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
+                                                        struct bw_report_data *rem_bw_rep);
 #endif /* PERFTEST_COMMUNICATION_H */
 
 
