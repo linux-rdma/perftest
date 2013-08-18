@@ -158,6 +158,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	exchange_versions(&user_comm, &user_param);
+
 	user_comm.rdma_params->side = REMOTE;
 
 	for (i=0; i < user_param.num_of_qps; i++) {

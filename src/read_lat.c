@@ -166,6 +166,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	exchange_versions(&user_comm, &user_param);
+
 	//  shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
