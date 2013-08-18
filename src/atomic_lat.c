@@ -167,6 +167,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	exchange_versions(&user_comm, &user_param);
+
 	// shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
@@ -219,6 +221,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
 	printf(RESULT_LINE);
 	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 

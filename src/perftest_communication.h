@@ -338,6 +338,15 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm, void *my_data, void *rem_dat
  */
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
                                                         struct bw_report_data *rem_bw_rep);
+														
+														/* exchange_versions.
+ *
+ * Description :
+ * 	Exchange versions between sides.
+ *
+ */
+void exchange_versions (struct perftest_comm *user_comm, struct perftest_parameters *user_param);
+
 #endif /* PERFTEST_COMMUNICATION_H */
 
 

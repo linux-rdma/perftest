@@ -318,6 +318,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	exchange_versions(&user_comm, &user_param);
+
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		// shaking hands and gather the other side info.

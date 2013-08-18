@@ -1247,5 +1247,16 @@ int ctx_close_connection(struct perftest_comm *comm,
 }
 
 /******************************************************************************
+ *
+ ******************************************************************************/
+void exchange_versions(struct perftest_comm *user_comm, struct perftest_parameters *user_param) {
+
+	if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(float))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+	}
+}
+
+/******************************************************************************
  * End
  ******************************************************************************/

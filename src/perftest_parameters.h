@@ -283,6 +283,7 @@ struct perftest_parameters {
 	DurationStates	state;
 	int				sockfd;
 	const char		*version;
+	char		*rem_version;
 	cycles_t		*tposted;
 	cycles_t		*tcompleted;
 	int				use_mcg;
