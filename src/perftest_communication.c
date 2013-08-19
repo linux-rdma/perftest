@@ -670,7 +670,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -787,7 +787,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
