@@ -138,13 +138,20 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		}
 
 		#ifdef HAVE_XRCD
-		if (user_parm->use_xrc) {
-				if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
-					fprintf(stderr, "Couldn't get SRQ number\n");
-					return 1;
-				}
+		if (user_parm->use_xrc || user_parm->connection_type == DC) {
+			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
+				fprintf(stderr, "Couldn't get SRQ number\n");
+				return 1;
 			}
+		}
 		#endif
+
+		if (user_parm->connection_type == DC) {
+			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
+				fprintf(stderr, "Couldn't get SRQ number\n");
+				return 1;
+			}
+		}
 	}
 
 	return 0;
@@ -221,7 +228,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if(user_param.use_xrc) {
+	if(user_param.use_xrc || user_param.connection_type == DC) {
 		user_param.num_of_qps *= 2;
 	}
 

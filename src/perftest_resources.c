@@ -102,6 +102,39 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
+static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
+{
+	struct ibv_qp_init_attr_ex qp_init_attr;
+	struct ibv_qp* qp = NULL;
+	int num_of_qps = user_param->num_of_qps / 2;
+
+	memset(&qp_init_attr, 0, sizeof(struct ibv_qp_init_attr_ex));
+	qp_init_attr.send_cq = ctx->send_cq;
+	qp_init_attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
+	qp_init_attr.cap.max_inline_data = user_param->inline_size;
+	qp_init_attr.pd = ctx->pd;
+	qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
+
+	if ( (!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
+						|| ((user_param->duplex || user_param->tst == LAT) && (qp_index >= num_of_qps))) {
+		qp_init_attr.qp_type = IBV_QPT_DC_TGT;
+		qp_init_attr.srq = ctx->srq;
+		qp_init_attr.cap.max_recv_wr  = user_param->rx_depth;
+		qp_init_attr.cap.max_recv_sge = 1;
+	} else {
+		qp_init_attr.qp_type = IBV_QPT_DC_INI;
+		qp_init_attr.srq = NULL;
+		qp_init_attr.cap.max_send_wr  = user_param->tx_depth;
+		qp_init_attr.cap.max_send_sge = MAX_SEND_SGE;
+	}
+
+	qp = ibv_create_qp_ex(ctx->context,&qp_init_attr);
+	return qp;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
 {
 	struct ibv_qp* qp = NULL;
@@ -265,9 +298,11 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
 		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
 
-		if ((user_param->verb == SEND && user_param->connection_type == UD)) {
+		if ((user_param->verb == SEND && (user_param->connection_type == UD || user_param->connection_type == DC))) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
+		if (user_param->connection_type == DC)
+			ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
@@ -298,7 +333,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	for (i = 0; i < user_parm->num_of_qps; i++) {
 
-		if (user_parm->connection_type == UD && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
+		if ((user_parm->connection_type == DC || user_parm->connection_type == UD) && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
 			if (ibv_destroy_ah(ctx->ah[i])) {
 				fprintf(stderr, "failed to destroy AH\n");
 				test_result = 1;
@@ -520,7 +555,13 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	for (i=0; i < user_param->num_of_qps; i++) {
 
-		if (user_param->use_xrc) {
+		if(user_param->connection_type == DC) {
+				ctx->qp[i] = ctx_dc_qp_create(ctx,user_param,i);
+				if (ctx->qp[i] == NULL) {
+					fprintf(stderr," Unable to create DC QP.\n");
+					return FAILURE;
+				}
+		} else if (user_param->use_xrc) {
 			#ifdef HAVE_XRCD
 				ctx->qp[i] = ctx_xrc_qp_create(ctx,user_param,i);
 			#endif
@@ -538,8 +579,13 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 
 		if (user_param->work_rdma_cm == OFF) {
-
-			if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
+			if(user_param->connection_type == DC) {
+				if (ctx_modify_dc_qp_to_init(ctx->qp[i],user_param)) {
+					fprintf(stderr," Unable to create DC QP.\n");
+					return FAILURE;
+				}
+			}
+			else if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
 				fprintf(stderr, "Failed to modify QP to INIT\n");
 				return FAILURE;
 			}
@@ -607,6 +653,58 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  /******************************************************************************
  *
  ******************************************************************************/
+int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param)  {
+
+	int num_of_qps = user_param->num_of_qps;
+	int num_of_qps_per_port = user_param->num_of_qps / 2;
+
+	struct ibv_qp_attr_ex attr;
+	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+
+	static int portindex=0;  // for dual-port support
+
+	memset(&attr, 0, sizeof(struct ibv_qp_attr));
+	attr.qp_state        = IBV_QPS_INIT;
+	attr.pkey_index      = 0;
+
+	if (user_param->duplex || user_param->tst == LAT) {
+		num_of_qps /= 2;
+		num_of_qps_per_port = num_of_qps / 2;
+	}
+
+	if (user_param->dualport==ON) {
+		if (portindex % num_of_qps < num_of_qps_per_port) {
+	        attr.port_num = user_param->ib_port;
+		} else {
+			attr.port_num = user_param->ib_port2;
+		}
+		portindex++;
+
+	} else {
+
+		attr.port_num = user_param->ib_port;
+	}
+	switch (user_param->verb) {
+		case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
+		case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
+		case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
+		case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
+	}
+
+	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
+	attr.dct_key = user_param->dct_key;
+	attr.comp_mask = IBV_QP_ATTR_DCT_KEY;
+
+	if (ibv_modify_qp_ex(qp,&attr,flags)) {
+		fprintf(stderr, "Failed to modify QP to INIT\n");
+		return 1;
+	}
+	return 0;
+}
+
+ /******************************************************************************
+ *
+ ******************************************************************************/
 int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param)  {
 
 	int num_of_qps = user_param->num_of_qps;
@@ -661,6 +759,64 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		return 1;
 	}
 	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
+								struct ibv_qp_attr_ex *attr,
+								struct perftest_parameters *user_parm,
+								struct pingpong_dest *dest,
+								struct pingpong_dest *my_dest,
+								int qpindex) {
+
+	int num_of_qps = user_parm->num_of_qps;
+	int num_of_qps_per_port = user_parm->num_of_qps / 2;
+
+	int flags = IBV_QP_STATE;
+	attr->qp_state = IBV_QPS_RTR;
+	attr->ah_attr.src_path_bits = 0;
+
+	//in DC with bidirectional,
+	//there are send qps and recv qps. the actual number of send/recv qps
+	//is num_of_qps / 2.
+	if (user_parm->duplex || user_parm->tst == LAT) {
+		num_of_qps /= 2;
+		num_of_qps_per_port = num_of_qps / 2;
+	}
+
+	// first half of qps are for ib_port and second half are for ib_port2
+	// in DC with bidirectional, the first half of qps are DC_INI qps and
+	// the second half are DC_TGT qps. the first half of the send/recv qps
+	// are for ib_port1 and the second half are for ib_port2
+	if (user_parm->dualport == ON && (qpindex % num_of_qps >= num_of_qps_per_port))
+		attr->ah_attr.port_num = user_parm->ib_port2;
+	else
+		attr->ah_attr.port_num = user_parm->ib_port;
+
+	attr->ah_attr.dlid = dest->lid;
+	if (user_parm->gid_index == DEF_GID_INDEX) {
+
+		attr->ah_attr.is_global = 0;
+		attr->ah_attr.sl = user_parm->sl;
+
+	} else {
+		attr->ah_attr.is_global  = 1;
+		attr->ah_attr.grh.dgid = dest->gid;
+		attr->ah_attr.grh.sgid_index = user_parm->gid_index;
+		attr->ah_attr.grh.hop_limit = 1;
+		attr->ah_attr.sl = 0;
+	}
+
+	flags |= IBV_QP_PATH_MTU | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
+
+	attr->max_dest_rd_atomic = my_dest->out_reads;
+	attr->min_rnr_timer = 0;
+	attr->dct_key = user_parm->dct_key;
+	attr->path_mtu = user_parm->curr_mtu;
+
+	return ibv_modify_qp_ex(qp,attr,flags);
 }
 
 /******************************************************************************
@@ -736,6 +892,30 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 /******************************************************************************
  *
  ******************************************************************************/
+static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
+								struct ibv_qp_attr_ex *attr,
+								struct perftest_parameters *user_parm,
+								struct pingpong_dest *dest,
+								struct pingpong_dest *my_dest)
+{
+
+	int flags = IBV_QP_STATE;
+	attr->qp_state = IBV_QPS_RTS;
+
+	attr->timeout   = user_parm->qp_timeout;
+	attr->retry_cnt = 7;
+	attr->rnr_retry = 7;
+	attr->max_rd_atomic  = dest->out_reads;
+
+	flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
+
+	return ibv_modify_qp_ex(qp,attr,flags);
+}
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 								struct ibv_qp_attr *attr,
 								struct perftest_parameters *user_parm,
@@ -773,40 +953,57 @@ int ctx_connect(struct pingpong_context *ctx,
 				struct pingpong_dest *my_dest) {
 
 	int i;
+	struct ibv_qp_attr_ex attr_ex;
 	struct ibv_qp_attr attr;
 	int xrc_offset = 0;
 
-	if(user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT)) {
+	if((user_parm->use_xrc || user_parm->connection_type == DC) && (user_parm->duplex || user_parm->tst == LAT)) {
 		xrc_offset = user_parm->num_of_qps / 2;
 	}
 	for (i=0; i < user_parm->num_of_qps; i++) {
 
+		memset(&attr_ex, 0, sizeof attr_ex);
 		memset(&attr, 0, sizeof attr);
 
-		if ( (i >= xrc_offset) && user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT))
+		if ( (i >= xrc_offset) && (user_parm->use_xrc || user_parm->connection_type == DC) && (user_parm->duplex || user_parm->tst == LAT))
 			xrc_offset = -1*xrc_offset;
 
-		if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
-			fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
-			return FAILURE;
+		if(user_parm->connection_type == DC) {
+			if(ctx_modify_dc_qp_to_rtr(ctx->qp[i],&attr_ex,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
+				fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
+				return FAILURE;
+			}
+		} else {
+			if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
+				fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
+				return FAILURE;
+			}
 		}
 
 		if (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex) {
-			if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i])) {
-				fprintf(stderr, "Failed to modify QP to RTS\n");
-				return FAILURE;
+			if(user_parm->connection_type == DC) {
+				if(ctx_modify_dc_qp_to_rts(ctx->qp[i],&attr_ex,user_parm,&dest[xrc_offset + i],&my_dest[i])) {
+					fprintf(stderr, "Failed to modify QP to RTS\n");
+					return FAILURE;
+				}
+			} else {
+				if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i])) {
+					fprintf(stderr, "Failed to modify QP to RTS\n");
+					return FAILURE;
+				}
 			}
 		}
 
-		if (user_parm->connection_type == UD && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
-			ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
-			if (!ctx->ah[i]) {
-				fprintf(stderr, "Failed to create AH for UD\n");
-				return FAILURE;
-			}
+			if ((user_parm->connection_type == UD || user_parm->connection_type == DC) &&
+				(user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
+				ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr_ex.ah_attr));
+				if (!ctx->ah[i]) {
+					fprintf(stderr, "Failed to create AH for UD\n");
+					return FAILURE;
+				}
 		}
 
-		if(user_parm->use_xrc && (user_parm->duplex || user_parm->tst == LAT))
+		if((user_parm->use_xrc || user_parm->connection_type == DC) && (user_parm->duplex || user_parm->tst == LAT))
 			xrc_offset = user_parm->num_of_qps / 2;
 
 	}
@@ -824,7 +1021,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	int num_of_qps = user_param->num_of_qps;
 	int xrc_offset = 0;
 
-	if(user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
+	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		xrc_offset = num_of_qps;
 	}
@@ -913,17 +1110,25 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 					ctx->wr[i*user_param->post_list + j].wr.atomic.swap = ATOMIC_SWAP_VALUE;
 
 
-			} else if (user_param->verb == SEND && user_param->connection_type == UD) {
+			} else if (user_param->verb == SEND) {
 
-				ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
-				if (user_param->work_rdma_cm) {
+				if (user_param->connection_type == UD) {
 
-					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
-					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;
+					ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
+					if (user_param->work_rdma_cm) {
 
-				} else {
-					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
-					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[xrc_offset + i].qpn;
+						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
+						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;
+
+					} else {
+						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
+						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[xrc_offset + i].qpn;
+					}
+
+				} else if (user_param->connection_type == DC) {
+					ctx->wr[i*user_param->post_list + j].dc.ah = ctx->ah[xrc_offset + i];
+					ctx->wr[i*user_param->post_list + j].dc.dct_access_key = user_param->dct_key;
+					ctx->wr[i*user_param->post_list + j].dc.dct_number = rem_dest[xrc_offset + i].qpn;
 				}
 			}
 
@@ -947,7 +1152,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	struct ibv_recv_wr  *bad_wr_recv;
 	i = 0;
 
-	if(user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
+	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		i = user_param->num_of_qps / 2;
 		num_of_qps /= 2;
 	}
@@ -1011,7 +1216,7 @@ static int perform_warm_up(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc *wc_for_cleaning = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
-	if(user_param->duplex && user_param->use_xrc)
+	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
 	warmupsession = (user_param->post_list == 1) ? user_param->tx_depth : user_param->post_list;
@@ -1074,7 +1279,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	}
 
 	// Will be 0, in case of Duration (look at force_dependencies or in the exp above).
-	if (user_param->duplex && user_param->use_xrc)
+	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
 	tot_iters = user_param->iters*num_of_qps;
@@ -1309,7 +1514,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	user_param->iters = 0;
 
 	// Will be 0, in case of Duration (look at force_dependencies or in the exp above)
-	if (user_param->duplex && user_param->use_xrc)
+	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
 	for (i=0; i < num_of_qps; i++)
@@ -1448,7 +1653,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 	}
 
-	if(user_param->duplex && user_param->use_xrc)
+	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
 	tot_iters = user_param->iters*num_of_qps;
@@ -1605,7 +1810,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	if (user_param->size <= user_param->inline_size)
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 
-	if(user_param->use_xrc)
+	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
 	post_buf = (char*)ctx->buf + user_param->size - 1;
 	poll_buf = (char*)ctx->buf + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size) + user_param->size - 1;

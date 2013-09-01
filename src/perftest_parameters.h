@@ -66,6 +66,7 @@
 #define UD  (2)
 #define RawEth  (3)
 #define XRC (4)
+#define DC  (5)
 
 // Genral control definitions
 #define OFF	     (0)
@@ -227,6 +228,7 @@ struct perftest_parameters {
 	int				mtu;
 	enum ibv_mtu	curr_mtu;
 	uint64_t		size;
+	uint64_t		dct_key;
 	int				iters;
 	int				tx_depth;
 	uint8_t			qp_timeout;

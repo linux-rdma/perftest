@@ -10,7 +10,7 @@
 #define MAC_ARR_LEN (6)
 #define HEX_BASE (16)
 
-static const char *connStr[] = {"RC","UC","UD","RawEth","XRC"};
+static const char *connStr[] = {"RC","UC","UD","RawEth","XRC","DC"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
@@ -390,6 +390,8 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 		fprintf(stderr," XRC not detected in libibverbs\n");
 		exit(1);
 #endif
+	} else if (strcmp(connStr[5],optarg)==0) {
+		*cptr = DC;
 	} else {
 		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n");
 		exit(1);
@@ -635,6 +637,9 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 
 	}
+
+	if (user_param->connection_type == DC && !user_param->use_srq)
+		user_param->use_srq = 1;
 
 	// XRC Part
 	if (user_param->connection_type == XRC) {
@@ -1388,7 +1393,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
 
-	if(user_param->use_xrc && user_param->duplex)
+	if((user_param->connection_type == DC ||user_param->use_xrc) && user_param->duplex)
 		num_of_qps /= 2;
 
 	if (user_param->noPeak == OFF) {
