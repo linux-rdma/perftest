@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr," Parser function exited with Error\n");
 		return 1;
 	}
-	if(user_param.use_xrc && user_param.duplex) {
+	if((user_param.connection_type == DC || user_param.use_xrc) && user_param.duplex) {
 		user_param.num_of_qps *= 2;
 	}
 	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.

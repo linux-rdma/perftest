@@ -609,6 +609,7 @@ void catch_alarm(int sig);
  */
 void catch_alarm_infintely(int sig) ;
 
+int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param);
 /******************************************************************************
  *
  ******************************************************************************/
