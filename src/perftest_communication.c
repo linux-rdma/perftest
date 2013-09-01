@@ -480,7 +480,7 @@ int set_up_connection(struct pingpong_context *ctx,
 	//in xrc with bidirectional,
 	//there are send qps and recv qps. the actual number of send/recv qps
 	//is num_of_qps / 2.
-	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
+	if ( (user_param->connection_type == DC || user_param->use_xrc) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
@@ -557,6 +557,16 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 	#endif
 
+	if(user_param->machine == SERVER || user_param->duplex || user_param->tst == LAT) {
+		if (user_param->connection_type == DC) {
+			for (i=0; i < user_param->num_of_qps; i++) {
+				if (ibv_get_srq_num(ctx->srq, &(my_dest[i].srqn))) {
+					fprintf(stderr, "Couldn't get SRQ number\n");
+					return 1;
+				}
+			}
+		}
+	}
 	return 0;
 }
 
@@ -857,6 +867,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->duplex	   = user_param->duplex;
 	comm->rdma_params->tos         = DEF_TOS;
 	comm->rdma_params->use_xrc	   = user_param->use_xrc;
+	comm->rdma_params->connection_type	= user_param->connection_type;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1196,8 +1207,12 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 		default : ;
 	}
 
-	if (comm->rdma_params->use_xrc)
+	if (comm->rdma_params->use_xrc) {
 		printf(XRC_FMT,element->srqn);
+
+	} else if (comm->rdma_params->connection_type == DC){
+		printf(DC_FMT,element->srqn);
+	}
 
 	putchar('\n');
 

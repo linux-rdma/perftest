@@ -64,6 +64,7 @@
 
 // The print number of SRQ in case of XRC
 #define XRC_FMT 	   " SRQn %#08x"
+#define DC_FMT         " SRQn %#08x"
 
 // The print format of a global address or a multicast address.
 #define PERF_GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
