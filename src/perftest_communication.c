@@ -557,6 +557,7 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 	#endif
 
+	#ifdef HAVE_DC
 	if(user_param->machine == SERVER || user_param->duplex || user_param->tst == LAT) {
 		if (user_param->connection_type == DC) {
 			for (i=0; i < user_param->num_of_qps; i++) {
@@ -567,6 +568,7 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		}
 	}
+	#endif
 	return 0;
 }
 
