@@ -556,7 +556,9 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if(user_param->connection_type == DC) {
+			#ifdef HAVE_DC
 				ctx->qp[i] = ctx_dc_qp_create(ctx,user_param,i);
+			#endif
 				if (ctx->qp[i] == NULL) {
 					fprintf(stderr," Unable to create DC QP.\n");
 					return FAILURE;
@@ -580,10 +582,12 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 		if (user_param->work_rdma_cm == OFF) {
 			if(user_param->connection_type == DC) {
+			#ifdef HAVE_DC
 				if (ctx_modify_dc_qp_to_init(ctx->qp[i],user_param)) {
 					fprintf(stderr," Unable to create DC QP.\n");
 					return FAILURE;
 				}
+			#endif
 			}
 			else if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
 				fprintf(stderr, "Failed to modify QP to INIT\n");
@@ -650,6 +654,8 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	return qp;
 }
 
+#ifdef HAVE_DC
+
  /******************************************************************************
  *
  ******************************************************************************/
@@ -701,6 +707,7 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 	}
 	return 0;
 }
+#endif
 
  /******************************************************************************
  *
@@ -761,6 +768,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	return 0;
 }
 
+#ifdef HAVE_DC
 /******************************************************************************
  *
  ******************************************************************************/
@@ -818,6 +826,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 
 	return ibv_modify_qp_ex(qp,attr,flags);
 }
+#endif
 
 /******************************************************************************
  *
@@ -889,6 +898,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	return ibv_modify_qp(qp,attr,flags);
 }
 
+#ifdef HAVE_DC
 /******************************************************************************
  *
  ******************************************************************************/
@@ -911,7 +921,7 @@ static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
 
 	return ibv_modify_qp_ex(qp,attr,flags);
 }
-
+#endif
 
 /******************************************************************************
  *
@@ -953,7 +963,9 @@ int ctx_connect(struct pingpong_context *ctx,
 				struct pingpong_dest *my_dest) {
 
 	int i;
+#ifdef HAVE_DC
 	struct ibv_qp_attr_ex attr_ex;
+#endif
 	struct ibv_qp_attr attr;
 	int xrc_offset = 0;
 
@@ -962,17 +974,21 @@ int ctx_connect(struct pingpong_context *ctx,
 	}
 	for (i=0; i < user_parm->num_of_qps; i++) {
 
+	#ifdef HAVE_DC
 		memset(&attr_ex, 0, sizeof attr_ex);
+	#endif
 		memset(&attr, 0, sizeof attr);
 
 		if ( (i >= xrc_offset) && (user_parm->use_xrc || user_parm->connection_type == DC) && (user_parm->duplex || user_parm->tst == LAT))
 			xrc_offset = -1*xrc_offset;
 
 		if(user_parm->connection_type == DC) {
+		#ifdef HAVE_DC
 			if(ctx_modify_dc_qp_to_rtr(ctx->qp[i],&attr_ex,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
 				fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
 				return FAILURE;
 			}
+		#endif
 		} else {
 			if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i],i)) {
 				fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
@@ -982,10 +998,12 @@ int ctx_connect(struct pingpong_context *ctx,
 
 		if (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex) {
 			if(user_parm->connection_type == DC) {
+			#ifdef HAVE_DC
 				if(ctx_modify_dc_qp_to_rts(ctx->qp[i],&attr_ex,user_parm,&dest[xrc_offset + i],&my_dest[i])) {
 					fprintf(stderr, "Failed to modify QP to RTS\n");
 					return FAILURE;
 				}
+			#endif
 			} else {
 				if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_parm,&dest[xrc_offset + i],&my_dest[i])) {
 					fprintf(stderr, "Failed to modify QP to RTS\n");
@@ -996,7 +1014,14 @@ int ctx_connect(struct pingpong_context *ctx,
 
 			if ((user_parm->connection_type == UD || user_parm->connection_type == DC) &&
 				(user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
-				ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr_ex.ah_attr));
+
+				#ifdef HAVE_DC
+				if(user_parm->connection_type == DC)
+					ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr_ex.ah_attr));
+				else
+				#endif
+					ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
+
 				if (!ctx->ah[i]) {
 					fprintf(stderr, "Failed to create AH for UD\n");
 					return FAILURE;
@@ -1125,11 +1150,14 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[xrc_offset + i].qpn;
 					}
 
+				#ifdef HAVE_DC
 				} else if (user_param->connection_type == DC) {
 					ctx->wr[i*user_param->post_list + j].dc.ah = ctx->ah[xrc_offset + i];
 					ctx->wr[i*user_param->post_list + j].dc.dct_access_key = user_param->dct_key;
 					ctx->wr[i*user_param->post_list + j].dc.dct_number = rem_dest[xrc_offset + i].qpn;
+				#endif
 				}
+
 			}
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
