@@ -64,6 +64,7 @@ if test $HAVE_ENDIAN = yes; then
 	AC_DEFINE([HAVE_ENDIAN], [1], [Enable endian conversion])
 fi
 
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"
