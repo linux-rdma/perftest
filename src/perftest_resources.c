@@ -965,6 +965,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 					fprintf(stderr, "Failed to modify QP to INIT\n");
 					return FAILURE;
 				}
+			#endif
 			}
 		}
 	}
