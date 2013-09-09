@@ -48,6 +48,14 @@ if test $HAVE_XRCD = yes; then
 	AC_DEFINE([HAVE_XRCD], [1], [Enable XRCD feature])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_send_wr *t; t->dc.dct_number = 0;],[HAVE_DC=yes], [HAVE_DC=no])
+
+AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
+if test $HAVE_DC = yes; then
+	AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
+fi
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"

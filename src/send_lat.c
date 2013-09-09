@@ -146,12 +146,14 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		}
 		#endif
 
+		#ifdef HAVE_DC
 		if (user_parm->connection_type == DC) {
 			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
 				fprintf(stderr, "Couldn't get SRQ number\n");
 				return 1;
 			}
 		}
+		#endif
 	}
 
 	return 0;
