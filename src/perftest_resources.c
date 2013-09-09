@@ -1158,6 +1158,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 					ctx->wr[i*user_param->post_list + j].dc.dct_number = rem_dest[xrc_offset + i].qpn;
 				#endif
 				}
+
 			}
 
 			#ifdef HAVE_DC
