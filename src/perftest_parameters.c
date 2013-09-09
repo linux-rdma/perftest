@@ -391,7 +391,12 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 		exit(1);
 #endif
 	} else if (strcmp(connStr[5],optarg)==0) {
+#ifdef HAVE_DC
 		*cptr = DC;
+#else
+		fprintf(stderr," DC not detected in libibverbs\n");
+		exit(1);
+#endif
 	} else {
 		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n");
 		exit(1);
