@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 		return FAILURE;
 	}
 
-	if(user_param.use_xrc) {
+	if(user_param.use_xrc || user_param.connection_type == DC) {
 		user_param.num_of_qps *= 2;
 	}
 
