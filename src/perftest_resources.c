@@ -298,7 +298,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
 		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
 
-		if ((user_param->verb == SEND && (user_param->connection_type == UD || user_param->connection_type == DC))) {
+		if ((user_param->verb == SEND && user_param->connection_type == UD ) || user_param->connection_type == DC) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
 		if (user_param->connection_type == DC)
@@ -1157,11 +1157,19 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 					ctx->wr[i*user_param->post_list + j].dc.dct_number = rem_dest[xrc_offset + i].qpn;
 				#endif
 				}
-
 			}
+
+			#ifdef HAVE_DC
+				if (user_param->connection_type == DC) {
+					ctx->wr[i*user_param->post_list + j].dc.ah = ctx->ah[xrc_offset + i];
+					ctx->wr[i*user_param->post_list + j].dc.dct_access_key = user_param->dct_key;
+					ctx->wr[i*user_param->post_list + j].dc.dct_number = rem_dest[xrc_offset + i].qpn;
+				}
+			#endif
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
 				ctx->wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
+
 		#ifdef HAVE_XRCD
 			if (user_param->use_xrc)
 				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[xrc_offset + i].srqn;
