@@ -212,6 +212,16 @@ int main(int argc, char *argv[]) {
 
 	if (user_param.test_method == RUN_REGULAR || user_param.test_method == RUN_ALL) {
 
+		if(perform_warm_up(&ctx,&user_param)) {
+			fprintf(stderr,"Problems with warm up\n");
+			return 1;
+		}
+
+		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+			return 1;
+		}
+
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Error occured in run_iter function\n");
 			return 1;
