@@ -213,9 +213,11 @@ int main(int argc, char *argv[]) {
 					return 1;
 			}
 
-			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-				return 1;
+			if(user_param.duplex) {
+				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+					return 1;
+				}
 			}
 
 			if(run_iter_bw(&ctx,&user_param)) {
@@ -249,10 +251,12 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-			return 1;
-		}
+		if(user_param.duplex) {
+				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+					return 1;
+				}
+			}
 
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
