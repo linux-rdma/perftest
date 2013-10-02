@@ -1244,7 +1244,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 /******************************************************************************
  *
  ******************************************************************************/
-static int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
+int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
 	int ne,index,warmindex,warmupsession;
 	struct ibv_send_wr *bad_wr = NULL;
@@ -1306,6 +1306,13 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
+	// if (user_param->verb != SEND) {
+		// if(perform_warm_up(ctx,user_param)) {
+			// fprintf(stderr,"Problems with warm up\n");
+			// return 1;
+		// }
+	// }
+
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
 		duration_param->state = START_STATE;
@@ -1319,14 +1326,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		num_of_qps /= 2;
 
 	tot_iters = user_param->iters*num_of_qps;
-
-	if (user_param->verb != SEND) {
-
-		if(perform_warm_up(ctx,user_param)) {
-			fprintf(stderr,"Problems with warm up\n");
-			return 1;
-		}
-	}
 
 	if (user_param->test_type == DURATION && user_param->state != START_STATE) {
 		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
