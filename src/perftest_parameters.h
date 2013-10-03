@@ -157,6 +157,8 @@
 // Result print format
 #define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf\n"
 
+#define REPORT_FMT_EXT     " %-7lu    %d           %-7.6lf            %-7.6lf		   %-7.6lf\n"
+
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
 
@@ -393,7 +395,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
  *   rem_bw_rep   - remote's bw test report.
  *
  */
-void print_full_bw_report (struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep);
+void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep);
 
 /* print_report_lat
  *
