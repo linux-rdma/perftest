@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
 
 			if (user_param.duplex && user_param.test_type != DURATION) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
-				print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                         }
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -434,7 +434,7 @@ int main(int argc, char *argv[]) {
 
 		if (user_param.duplex && user_param.test_type != DURATION) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
-			print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
 		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
