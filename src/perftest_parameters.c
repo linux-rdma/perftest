@@ -1456,16 +1456,20 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
 							|| user_param->test_method == RUN_INFINITELY)
-		print_full_bw_report(my_bw_rep, NULL);
+		print_full_bw_report(user_param, my_bw_rep, NULL);
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 
-void print_full_bw_report (struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
+void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
 {
 
 	double bw_peak     = my_bw_rep->bw_peak;
 	double bw_avg      = my_bw_rep->bw_avg;
 	double msgRate_avg = my_bw_rep->msgRate_avg;
+	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
 
 	if (rem_bw_rep != NULL) {
 		bw_peak     += rem_bw_rep->bw_peak;
@@ -1473,7 +1477,7 @@ void print_full_bw_report (struct bw_report_data *my_bw_rep, struct bw_report_da
 		msgRate_avg += rem_bw_rep->msgRate_avg;
 	}
 
-	printf( REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 }
 /******************************************************************************
  *

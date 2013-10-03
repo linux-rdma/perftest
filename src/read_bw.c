@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
 
 			if (user_param.duplex) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
-				print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                 	}
 		}
 
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
 
 		if (user_param.duplex) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
-			print_full_bw_report(&my_bw_rep, &rem_bw_rep);
+			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                 }
 
 	} else if (user_param.test_method == RUN_INFINITELY) {
