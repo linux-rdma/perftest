@@ -541,7 +541,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 		struct ibv_srq_init_attr attr = {
 				.attr = {
-					.max_wr  = (user_param->rx_depth*user_param->num_of_qps),
+					//when using sreq, rx_depth sets the max_wr
+					.max_wr  = user_param->rx_depth,
 					.max_sge = 1
 				}
 		};
