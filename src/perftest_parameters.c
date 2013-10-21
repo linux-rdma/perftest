@@ -170,7 +170,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 	if (verb == SEND) {
 		printf("  -r, --rx-depth=<dep> ");
-		printf(" Rx queue size (default %d)\n",DEF_RX_SEND);
+		printf(" Rx queue size (default %d).",DEF_RX_SEND);
+		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
 
 		printf("  -c, --connection=<RC/XRC/UC/UD> ");
 		printf(" Connection type RC/XRC/UC/UD (default RC)\n");
