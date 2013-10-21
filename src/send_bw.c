@@ -436,6 +436,20 @@ int main(int argc, char *argv[]) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
 			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
 		}
+
+		if (user_param.report_both && user_param.duplex) {
+			printf(RESULT_LINE);
+			printf("\n Local results: \n");
+			printf(RESULT_LINE);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			print_full_bw_report(&user_param, &my_bw_rep, NULL);
+			printf(RESULT_LINE);
+
+			printf("\n Remote results: \n");
+			printf(RESULT_LINE);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
 		if (user_param.machine == CLIENT)
