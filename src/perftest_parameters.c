@@ -268,6 +268,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	if (tst == BW)
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
 
+	if ( tst == BW )
+		printf("  --report-both ");
+		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -342,6 +346,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->tos		= DEF_TOS;
 	user_param->mac_fwd	= OFF;
 	user_param->report_fmt = MBS;
+	user_param->report_both = OFF;
 	user_param->is_limit_bw = OFF;
 	user_param->limit_bw = 0;
 	user_param->is_limit_msgrate = OFF;
@@ -894,6 +899,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int run_inf_flag = 0;
 	static int report_fmt_flag = 0;
 	static int srq_flag = 0;
+	static int report_both_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -952,6 +958,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
+			{ .name = "report-both",        .has_arg = 0, .flag = &report_both_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1177,7 +1184,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	if (report_fmt_flag) {
 		user_param->report_fmt = GBS;
 	}
-
+	if (report_both_flag) {
+		user_param->report_both = 1;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
