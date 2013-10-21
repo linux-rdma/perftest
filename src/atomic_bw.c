@@ -257,16 +257,22 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	printf(RESULT_LINE);
+
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
 		return 1;
 	}
 
-	//limit verifier
-	//TODO: check which value should I return
-	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
+	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
+		fprintf(stderr,"Error: BW result is below bw limit\n");
 		return 1;
+	}
 
-	printf(RESULT_LINE);
+	if (!user_param.is_msgrate_limit_passed && (user_param.is_limit_bw == ON )) {
+		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
+		return 1;
+	}
+
 	return destroy_ctx(&ctx,&user_param);
 }

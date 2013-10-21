@@ -1438,18 +1438,6 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	double bw_avg = ((double)tsize*num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * format_factor);
 	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units * run_inf_bi_factor) / (sum_of_test_cycles * 1000000);
 
-
-	// Verify Limits
-	if ( ((user_param->is_limit_bw == ON )&& (user_param -> limit_bw > bw_avg)) )
-		user_param -> is_bw_limit_passed = 0;
-	else
-		user_param -> is_bw_limit_passed = 1;
-
-	if ( (user_param->is_limit_msgrate) && (user_param -> limit_msgrate > msgRate_avg) )
-		user_param -> is_msgrate_limit_passed = 0;
-	else
-		user_param -> is_msgrate_limit_passed = 1;
-
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * format_factor;
 
@@ -1485,6 +1473,19 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		bw_peak     += rem_bw_rep->bw_peak;
 		bw_avg      += rem_bw_rep->bw_avg;
 		msgRate_avg += rem_bw_rep->msgRate_avg;
+	}
+
+	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {//bibw test, and not report-both printing
+		// Verify Limits
+		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > bw_avg)) )
+			user_param->is_bw_limit_passed = 0;
+		else
+			user_param->is_bw_limit_passed = 1;
+
+		if ( (user_param->is_limit_msgrate) && (user_param->limit_msgrate > msgRate_avg) )
+			user_param->is_msgrate_limit_passed = 0;
+		else
+			user_param->is_msgrate_limit_passed = 1;
 	}
 
 	printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
