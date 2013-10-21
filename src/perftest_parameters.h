@@ -301,6 +301,7 @@ struct perftest_parameters {
 	enum ctx_report_fmt		report_fmt;
 	struct report_options  	*r_flag;
 	int 			mac_fwd;
+	int report_both; //in bidirectional tests, report tx and rx separately
 	//results limits
 	float min_bw_limit;
 	float min_msgRate_limit;
