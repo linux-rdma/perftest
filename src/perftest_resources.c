@@ -2001,7 +2001,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	int  			firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
-
 	if (user_param->connection_type != RawEth) {
 		ctx->wr[0].sg_list->length = user_param->size;
 		ctx->wr[0].send_flags = 0;
