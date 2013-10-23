@@ -78,7 +78,7 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 
 	memset(&srq_init_attr, 0, sizeof(srq_init_attr));
 
-	srq_init_attr.attr.max_wr = (user_param->num_of_qps*user_param->rx_depth);
+	srq_init_attr.attr.max_wr = user_param->rx_depth;
 	srq_init_attr.attr.max_sge = 1;
 	srq_init_attr.comp_mask = IBV_SRQ_INIT_ATTR_TYPE | IBV_SRQ_INIT_ATTR_XRCD | IBV_SRQ_INIT_ATTR_CQ | IBV_SRQ_INIT_ATTR_PD;
 	srq_init_attr.srq_type = IBV_SRQT_XRC;
@@ -1189,11 +1189,15 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int num_of_qps = user_param->num_of_qps;
 	struct ibv_recv_wr  *bad_wr_recv;
 	i = 0;
+	int size_per_qp = user_param->rx_depth;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		i = user_param->num_of_qps / 2;
 		num_of_qps /= 2;
 	}
+
+	if (user_param->use_srq)
+			size_per_qp /= user_param->num_of_qps;
 
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 
@@ -1213,7 +1217,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		if (user_param->tst == BW)
 			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
-		for (j = 0; j < user_param->rx_depth ; ++j) {
+		for (j = 0; j < size_per_qp ; ++j) {
 
 			if (user_param->use_srq) {
 
@@ -1451,6 +1455,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
 	int firstRx = 1;
+	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1489,7 +1494,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters++;
 
-					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
+					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
 
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
@@ -1508,7 +1513,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
-											  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth,
+											  rcnt_for_qp[wc[i].wr_id] + size_per_qp,
 											  ctx->rx_buffer_addr[wc[i].wr_id],
 											  user_param->connection_type);
 						}
