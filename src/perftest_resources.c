@@ -1609,6 +1609,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	int 				i,ne;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
+
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
 	while (1) {
@@ -1668,6 +1669,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int num_of_qps = user_param->num_of_qps;
 	// This is to ensure SERVER will not start to send packets before CLIENT start the test.
 	int before_first_rx = ON;
+	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
@@ -1764,7 +1767,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 					user_param->iters++;
 
-				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth <= user_param->iters) {
+				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
 
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
@@ -1783,7 +1786,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 										  user_param->size,
-										  rcnt_for_qp[wc[i].wr_id] + user_param->rx_depth -1,
+										  rcnt_for_qp[wc[i].wr_id] + size_per_qp -1,
 										  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
 					}
 				}
@@ -1987,6 +1990,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	struct 			ibv_recv_wr	*bad_wr_recv;
 	struct 			ibv_send_wr	*bad_wr;
 	int  			firstRx = 1;
+	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
 
 	if (user_param->connection_type != RawEth) {
@@ -2037,7 +2041,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 						user_param->iters++;
 
 					//if we're in duration mode or there is enough space in the rx_depth, post that you received a packet
-					if (user_param->test_type==DURATION || (rcnt + user_param->rx_depth  <= user_param->iters)) {
+					if (user_param->test_type==DURATION || (rcnt + size_per_qp  <= user_param->iters)) {
 
 						if (user_param->use_srq) {
 
