@@ -347,6 +347,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->mac_fwd	= OFF;
 	user_param->report_fmt = MBS;
 	user_param->report_both = OFF;
+	user_param->is_reversed = OFF;
 	user_param->is_limit_bw = OFF;
 	user_param->limit_bw = 0;
 	user_param->is_limit_msgrate = OFF;
@@ -900,6 +901,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int report_fmt_flag = 0;
 	static int srq_flag = 0;
 	static int report_both_flag = 0;
+	static int is_reversed_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -959,6 +961,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
 			{ .name = "report-both",        .has_arg = 0, .flag = &report_both_flag, .val = 1},
+			{ .name = "reversed",        .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1184,9 +1187,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	if (report_fmt_flag) {
 		user_param->report_fmt = GBS;
 	}
+
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}
+
+	if (is_reversed_flag) {
+		user_param->is_reversed = 1;
+	}
+
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
@@ -1197,6 +1206,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if(user_param->connection_type != RawEth)
 		user_param->machine = user_param->servername ? CLIENT : SERVER;
+
+	//fan-in addition
+	if (user_param->is_reversed) {
+		if (user_param->machine == SERVER)
+			user_param->machine = CLIENT;
+		else
+			user_param->machine = SERVER;
+	}
 
 	force_dependecies(user_param);
     return 0;
