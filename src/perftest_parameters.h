@@ -292,6 +292,7 @@ struct perftest_parameters {
 	cycles_t		*tcompleted;
 	int				use_mcg;
 	int 			use_rdma_cm;
+	int				is_reversed;
 	int				work_rdma_cm;
 	char			*user_mgid;
 	int				buff_size;

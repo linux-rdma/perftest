@@ -193,6 +193,14 @@ int main(int argc, char *argv[]) {
 	// For half duplex tests, server just waits for client to exit
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
+		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr," Failed to exchange date between server and clients\n");
+			return FAILURE;
+		}
+
+		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
@@ -295,6 +303,16 @@ int main(int argc, char *argv[]) {
 
 	printf(RESULT_LINE);
 
+	// For half duplex tests, server just waits for client to exit
+	if (user_param.machine == CLIENT && !user_param.duplex) {
+
+		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr," Failed to exchange date between server and clients\n");
+			return FAILURE;
+		}
+
+		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+	}
 	// Closing connection.
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 	 	fprintf(stderr,"Failed to close connection between server and client\n");
