@@ -306,13 +306,26 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	struct ibv_send_wr *bad_wr;
 	struct ibv_sge list;
 	struct ibv_wc wc;
-	int ne;
+	int ne, i;
+	struct pingpong_dest m_my_dest;
 
-	memcpy(comm->rdma_ctx->buf,my_dest,sizeof(struct pingpong_dest));
+	m_my_dest.lid 		= htobe32(my_dest->lid);
+	m_my_dest.out_reads 	= htobe32(my_dest->out_reads);
+	m_my_dest.qpn 		= htobe32(my_dest->qpn);
+	m_my_dest.psn 		= htobe32(my_dest->psn);
+	m_my_dest.rkey 		= htobe32(my_dest->rkey);
+	m_my_dest.vaddr		= htobe64(my_dest->vaddr);
+
+	for(i=0; i<16; i++) {
+		m_my_dest.gid.raw[i] = my_dest->gid.raw[i];
+	}
+
+	memcpy(comm->rdma_ctx->buf, &m_my_dest, sizeof(struct pingpong_dest));
 
 	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
 	list.length = sizeof(struct pingpong_dest);
 	list.lkey   = comm->rdma_ctx->mr->lkey;
+
 
 	wr.wr_id      = SYNC_SPEC_ID;
 	wr.sg_list    = &list;
@@ -344,6 +357,7 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 static int rdma_read_keys(struct pingpong_dest *rem_dest,
 						  struct perftest_comm *comm) {
 
+	struct pingpong_dest a_rem_dest;
 	struct ibv_wc wc;
 	int ne;
 
@@ -356,7 +370,14 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 		return 1;
 	}
 
-	memcpy(rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
+        memcpy(&a_rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
+        rem_dest->lid   = ntohl(a_rem_dest.lid);
+        rem_dest->out_reads     = ntohl(a_rem_dest.out_reads);
+        rem_dest->qpn   = ntohl(a_rem_dest.qpn);
+        rem_dest->psn   = ntohl(a_rem_dest.psn);
+        rem_dest->rkey  = ntohl(a_rem_dest.rkey);
+        rem_dest->vaddr         = be64toh(a_rem_dest.vaddr);
+        memcpy(rem_dest->gid.raw, &(a_rem_dest.gid), 16*sizeof(uint8_t));
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
 		fprintf(stderr, "Couldn't post send \n");
