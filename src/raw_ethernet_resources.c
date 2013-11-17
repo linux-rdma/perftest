@@ -537,6 +537,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	struct ibv_send_wr	*bad_wr = NULL;
 	int	firstRx = 1;
     int rwqe_sent = user_param->rx_depth;
+	uint64_t inc_size = INC(user_param->size);
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
@@ -582,7 +583,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
-					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->rx_buffer_addr[0],0);
+					increase_loc_addr(ctx->wr[index].sg_list,inc_size,ctx->scnt[index],ctx->rx_buffer_addr[0],0);
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
@@ -658,7 +659,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[0].sg_list,
-										user_param->size,
+										inc_size,
 										rwqe_sent ,
 										ctx->rx_buffer_addr[0],user_param->connection_type);
 					}
