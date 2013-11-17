@@ -217,7 +217,8 @@ enum ctx_device {
 	LEGACY 			= 5,
 	CHELSIO_T4 		= 6,
 	CHELSIO_T5 		= 7,
-	CONNECTX3_PRO	= 8
+	CONNECTX3_PRO		= 8,
+	SKYHAWK			= 9
 };
 
 struct perftest_parameters {
