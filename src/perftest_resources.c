@@ -1309,6 +1309,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
     struct ibv_send_wr *bad_wr = NULL;
     struct ibv_wc 	   *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
+	uint64_t inc_size = INC(user_param->size);
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1365,10 +1366,10 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
 
-						increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+						increase_loc_addr(ctx->wr[index].sg_list,inc_size,ctx->scnt[index],ctx->my_addr[index],0);
 
 						if (user_param->verb != SEND)
-							increase_rem_addr(&ctx->wr[index],user_param->size,ctx->scnt[index],ctx->rem_addr[index],user_param->verb);
+							increase_rem_addr(&ctx->wr[index],inc_size,ctx->scnt[index],ctx->rem_addr[index],user_param->verb);
 				}
 
 				ctx->scnt[index] += user_param->post_list;
@@ -1456,6 +1457,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
 	int firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	uint64_t inc_size = INC(user_param->size);
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1512,7 +1514,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
-											  user_param->size,
+											  inc_size,
 											  rcnt_for_qp[wc[i].wr_id] + size_per_qp,
 											  ctx->rx_buffer_addr[wc[i].wr_id],
 											  user_param->connection_type);
@@ -1671,7 +1673,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	// This is to ensure SERVER will not start to send packets before CLIENT start the test.
 	int before_first_rx = ON;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
-
+	uint64_t inc_size = INC(user_param->size);
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
@@ -1725,7 +1727,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
-					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+					increase_loc_addr(ctx->wr[index].sg_list,inc_size,ctx->scnt[index],ctx->my_addr[index],0);
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
@@ -1786,7 +1788,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
-										  user_param->size,
+										  inc_size,
 										  rcnt_for_qp[wc[i].wr_id] + size_per_qp -1,
 										  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
 					}
