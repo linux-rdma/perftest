@@ -80,8 +80,12 @@
 #define DEF_FLOW_LABLE                 0
 
 // Macro for 64 bit variables to switch to from net
+#ifndef ntohll
 #define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32))))
+#endif
+#ifndef htonll
 #define htonll(x) ntohll(x)
+#endif
 
 // generate a bit mask S bits width
 #define MASK32(S)  ( ((uint32_t) ~0L) >> (32-(S)) )
