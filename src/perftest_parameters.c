@@ -749,6 +749,7 @@ static enum ctx_device ib_dev_name(struct ibv_context *context) {
 			case 25418 : dev_fname = CONNECTX;  break;
 			case 25428 : dev_fname = CONNECTX;  break;
 			case 25448 : dev_fname = CONNECTX;  break;
+			case 1824  : dev_fname = SKYHAWK;  break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
