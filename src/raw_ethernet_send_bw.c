@@ -73,6 +73,10 @@ int main(int argc, char *argv[]) {
 	user_param.version = VERSION;
 	user_param.connection_type = RawEth;
 
+	if (check_flow_steering_support()) {
+	    return 1;
+	}
+
 	ret_parser = parser(&user_param,argv,argc);
 
 	if (ret_parser) {
