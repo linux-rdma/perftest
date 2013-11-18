@@ -78,6 +78,10 @@ int main(int argc, char *argv[])
 	user_param.connection_type = RawEth;
 	user_param.r_flag  = &report;
 
+	if (check_flow_steering_support()) {
+            return 1;
+        }
+
 	/* Configure the parameters values according to user
 												arguments or default values. */
 	ret_parser = parser(&user_param, argv,argc);
