@@ -375,7 +375,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
-	if (user_parm->verb == SEND && (user_parm->tst == LAT || user_parm->machine == SERVER || user_parm->duplex) ) {
+
+	if (user_parm->verb == SEND && (user_parm->tst == LAT || user_parm->machine == SERVER || user_parm->duplex || (ctx->channel && user_parm->work_rdma_cm == ON)) ) {
 		if (ibv_destroy_cq(ctx->recv_cq)) {
 			fprintf(stderr, "failed to destroy CQ\n");
 			test_result = 1;
@@ -394,6 +395,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	if (ctx->channel) {
 		if (ibv_destroy_comp_channel(ctx->channel)) {
+			fprintf(stderr, "failed to close event channel\n");
 			test_result = 1;
 		}
 	}
