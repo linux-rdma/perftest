@@ -66,8 +66,8 @@ int main(int argc, char *argv[])
 	//allocate memory space for user parameters
 	memset(&ctx,		0, sizeof(struct pingpong_context));
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
-	memset(&my_dest_info, 0 , sizeof(struct pingpong_dest));
-	memset(&rem_dest_info, 0 , sizeof(struct pingpong_dest));
+	memset(&my_dest_info, 0 , sizeof(struct raw_ethernet_info));
+	memset(&rem_dest_info, 0 , sizeof(struct raw_ethernet_info));
 
 	/* init default values to user's parameters that's relvant for this test:
 	* Raw Ethernet Send Latency Test
