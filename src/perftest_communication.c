@@ -306,7 +306,10 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	struct ibv_send_wr *bad_wr;
 	struct ibv_sge list;
 	struct ibv_wc wc;
-	int ne, i;
+	int ne;
+
+#ifdef HAVE_ENDIAN
+	int i;
 	struct pingpong_dest m_my_dest;
 
 	m_my_dest.lid 		= htobe32(my_dest->lid);
@@ -321,7 +324,9 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	}
 
 	memcpy(comm->rdma_ctx->buf, &m_my_dest, sizeof(struct pingpong_dest));
-
+#else
+	memcpy(comm->rdma_ctx->buf, &my_dest, sizeof(struct pingpong_dest));
+#endif
 	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
 	list.length = sizeof(struct pingpong_dest);
 	list.lkey   = comm->rdma_ctx->mr->lkey;
@@ -357,7 +362,9 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 static int rdma_read_keys(struct pingpong_dest *rem_dest,
 						  struct perftest_comm *comm) {
 
+#ifdef HAVE_ENDIAN
 	struct pingpong_dest a_rem_dest;
+#endif
 	struct ibv_wc wc;
 	int ne;
 
@@ -370,14 +377,19 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 		return 1;
 	}
 
+	#ifdef HAVE_ENDIAN
         memcpy(&a_rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
         rem_dest->lid   = ntohl(a_rem_dest.lid);
         rem_dest->out_reads     = ntohl(a_rem_dest.out_reads);
         rem_dest->qpn   = ntohl(a_rem_dest.qpn);
         rem_dest->psn   = ntohl(a_rem_dest.psn);
         rem_dest->rkey  = ntohl(a_rem_dest.rkey);
+
         rem_dest->vaddr         = be64toh(a_rem_dest.vaddr);
         memcpy(rem_dest->gid.raw, &(a_rem_dest.gid), 16*sizeof(uint8_t));
+	#else
+		memcpy(&rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
+	#endif
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
 		fprintf(stderr, "Couldn't post send \n");
