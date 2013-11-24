@@ -297,6 +297,7 @@ struct perftest_parameters {
 	int				work_rdma_cm;
 	char			*user_mgid;
 	int				buff_size;
+	int             pkey_index;
 	// New test params format pilot. will be used in all flags soon,.
 	enum ctx_test_method 	test_method;
 	enum ibv_transport_type transport_type;
