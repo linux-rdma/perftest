@@ -272,6 +272,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("  --report-both ");
 		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
 
+	printf("  --pkey_index=<pkey index> PKey index to use for QP\n");
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -352,6 +354,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->limit_bw = 0;
 	user_param->is_limit_msgrate = OFF;
 	user_param->limit_msgrate = 0;
+	user_param->pkey_index    = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -365,6 +368,32 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	}
 
 }
+
+ /******************************************************************************
+  *
+  ******************************************************************************/
+static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
+{
+	int idx = 0;
+	struct ibv_device_attr attr;
+
+	if (!ibv_query_device(context,&attr)) {
+		if (pkey_idx > attr.max_pkeys - 1) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Specified PKey Index, %i, greater than allowed max, %i\n",pkey_idx,attr.max_pkeys - 1);
+			fprintf(stderr," Changing to 0\n");
+			idx = 0;
+		} else
+			idx = pkey_idx;
+	} else {
+		fprintf(stderr," Unable to validate PKey Index, changing to 0\n");
+		idx = 0;
+	}
+
+	return idx;
+
+}
+
 
 /******************************************************************************
  *
@@ -903,6 +932,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int srq_flag = 0;
 	static int report_both_flag = 0;
 	static int is_reversed_flag = 0;
+	static int pkey_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -963,6 +993,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
 			{ .name = "report-both",        .has_arg = 0, .flag = &report_both_flag, .val = 1},
 			{ .name = "reversed",        .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
+			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1165,7 +1196,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
 			case 'v': user_param->mac_fwd = ON; break;
-			case 0: break; // required for long options to work.
+			case 0: // required for long options to work.
+				if (pkey_flag) {
+					user_param->pkey_index = strtol(optarg,NULL,0);
+				}
+				break;
+
 			default:
 				fprintf(stderr," Invalid Command or flag.\n");
 				fprintf(stderr," Please check command line and run again.\n\n");
@@ -1293,6 +1329,9 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	}
 	if (!user_param->ib_devname)
 		GET_STRING(user_param->ib_devname,ibv_get_device_name(context->device))
+
+	if (user_param->pkey_index > 0)
+		user_param->pkey_index = ctx_chk_pkey_index(context, user_param->pkey_index);
 
 	return SUCCESS;
 }

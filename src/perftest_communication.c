@@ -207,8 +207,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		char msg[KEY_MSG_SIZE];
 
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
-			perror("pp_read_keys");
-			fprintf(stderr, "Couldn't read remote address\n");
+			fprintf(stderr, "ethernet_read_keys: Couldn't read remote address\n");
 			return 1;
 		}
 
@@ -229,8 +228,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		int i;
 
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
-			perror("pp_read_keys");
-			fprintf(stderr, "Couldn't read remote address\n");
+			fprintf(stderr, "ethernet_read_keys: Couldn't read remote address\n");
 			return 1;
 		}
 
@@ -1176,8 +1174,7 @@ int ethernet_write_data(struct perftest_comm *comm, char* msg) {
 int ethernet_read_data(struct perftest_comm *comm, char* recv_msg) {
 
 	if (read(comm->rdma_params->sockfd, recv_msg, sizeof recv_msg) != sizeof recv_msg) {
-		perror("pp_read_keys");
-		fprintf(stderr, "Couldn't read reports\n");
+		fprintf(stderr, "ethernet_read_data: Couldn't read reports\n");
 		return 1;
 	}
 

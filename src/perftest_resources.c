@@ -674,7 +674,7 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state        = IBV_QPS_INIT;
-	attr.pkey_index      = 0;
+	attr.pkey_index      = user_param->pkey_index;
 
 	if (user_param->duplex || user_param->tst == LAT) {
 		num_of_qps /= 2;
@@ -727,7 +727,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state        = IBV_QPS_INIT;
-	attr.pkey_index      = 0;
+	attr.pkey_index      = user_param->pkey_index;;
 
 	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
