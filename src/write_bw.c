@@ -55,6 +55,9 @@ int main(int argc, char *argv[]) {
 	struct perftest_comm		user_comm;
 	struct bw_report_data		my_bw_rep, rem_bw_rep;
 
+	#ifndef HAVE_ENDIAN
+		fprintf(stderr,"don't have endian :(\n");
+	#endif
 	/* init default values to user's parameters */
 	memset(&user_param,0,sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
