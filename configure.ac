@@ -65,6 +65,7 @@ if test $HAVE_ENDIAN = yes; then
 fi
 
 
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"
