@@ -150,6 +150,10 @@
 
 #define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]\n"
 
+#define RESULT_FMT_QOS  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
+
+#define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]\n"
+
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 #define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]\n"
@@ -158,6 +162,8 @@
 #define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf\n"
 
 #define REPORT_FMT_EXT     " %-7lu    %d           %-7.6lf            %-7.6lf		   %-7.6lf\n"
+
+#define REPORT_FMT_QOS " %-7lu    %d           %d           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
@@ -298,6 +304,7 @@ struct perftest_parameters {
 	char			*user_mgid;
 	int				buff_size;
 	int             pkey_index;
+	int				raw_qos;
 	// New test params format pilot. will be used in all flags soon,.
 	enum ctx_test_method 	test_method;
 	enum ibv_transport_type transport_type;
@@ -322,6 +329,7 @@ struct bw_report_data {
 	double bw_peak;
 	double bw_avg;
 	double msgRate_avg;
+	int sl;
 };
 
 /* link_layer_str

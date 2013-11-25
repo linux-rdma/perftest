@@ -898,8 +898,9 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			}
 		}
 	}
-	else {
+	else if (user_parm->raw_qos){
 		attr->ah_attr.sl = user_parm->sl;
+		flags |= IBV_QP_AV;
 	}
 	return ibv_modify_qp(qp,attr,flags);
 }
