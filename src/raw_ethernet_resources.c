@@ -106,7 +106,7 @@ static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
 /******************************************************************************
  *
  ******************************************************************************/
-void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt) 
+void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt, int tos)
 {
 	struct IP_V4_header ip_header;
 
@@ -114,7 +114,7 @@ void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uin
 
 	ip_header.version = 4;
 	ip_header.ihl = 5;
-	ip_header.tos = 0;
+	ip_header.tos = (tos == DEF_TOS)? 0 : tos;
 	ip_header.tot_len = htons(sizePkt);
 	ip_header.id = htons(0);
 	ip_header.frag_off = htons(0);
@@ -332,7 +332,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	if(user_param->is_client_ip && user_param->is_server_ip)
 	{
 		header_buff = (void*)eth_header + sizeof(struct ETH_header);
-		gen_ip_header(header_buff,&my_dest_info->ip,&rem_dest_info->ip,ip_next_protocol,sizePkt);
+		gen_ip_header(header_buff,&my_dest_info->ip,&rem_dest_info->ip,ip_next_protocol,sizePkt, user_param->tos);
 	}
 	if(user_param->is_client_port && user_param->is_server_port)
 	{

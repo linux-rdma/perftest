@@ -574,8 +574,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 		user_param->use_rdma_cm = ON;
 
-	} else if (user_param->tos != DEF_TOS) {
-		fprintf(stdout," TOS only valid for rdma_cm based QP. (-R flag)\n");
+	} else if (user_param->tos != DEF_TOS && user_param->connection_type != RawEth) {
+		fprintf(stdout," TOS only valid for rdma_cm based QP and RawEth QP \n");
 		exit(1);
 	}
 

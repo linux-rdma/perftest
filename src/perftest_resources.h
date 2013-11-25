@@ -507,18 +507,6 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel) {
 
 
 
-/* gen_ip_header .
-
- * Description :create IP header on buffer
- *
- * Parameters :
- * 		ip_header_buff - Pointer to output
- * 		saddr - source IP address of the packet(network order)
- * 		daddr - destination IP address of the packet(network order)
- * 		sizePkt - size of the packet
- */
-void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t protocol,int sizePkt);
-
 /* gen_udp_header .
 
  * Description :create UDP header on buffer
