@@ -56,6 +56,14 @@ if test $HAVE_DC = yes; then
 	AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
 fi
 
+AC_TRY_LINK([#include <endian.h>],
+	[int x = htobe32(0);],[HAVE_ENDIAN=yes], [HAVE_ENDIAN=no])
+
+AM_CONDITIONAL([HAVE_ENDIAN],[test "x$HAVE_ENDIAN" = "xyes"])
+if test $HAVE_ENDIAN = yes; then
+	AC_DEFINE([HAVE_ENDIAN], [1], [Enable endian conversion])
+fi
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"
