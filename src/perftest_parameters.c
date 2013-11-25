@@ -355,6 +355,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->is_limit_msgrate = OFF;
 	user_param->limit_msgrate = 0;
 	user_param->pkey_index    = 0;
+	user_param->raw_qos 	  = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -1015,7 +1016,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if (user_param->sl > MAX_SL) {
 					fprintf(stderr," Only %d Service levels\n",MAX_SL);
 					return 1;
-				} break;
+				}
+				if (user_param->connection_type == RawEth)
+					user_param->raw_qos = 1;
+				break;
 			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q':
@@ -1508,6 +1512,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->bw_peak = (double)peak_up/peak_down;
 	my_bw_rep->bw_avg = bw_avg;
 	my_bw_rep->msgRate_avg = msgRate_avg;
+	my_bw_rep->sl = user_param->sl;
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
 							|| user_param->test_method == RUN_INFINITELY)
@@ -1545,7 +1550,10 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 			user_param->is_msgrate_limit_passed = 1;
 	}
 
-	printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	if (user_param->raw_qos)
+		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	else
+		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 }
 /******************************************************************************
  *

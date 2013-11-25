@@ -166,7 +166,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	printf(RESULT_LINE);//change the printing of the test
-	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+
+	if (user_param.raw_qos)
+		printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
+	else
+		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
 	// Prepare IB resources for rtr/rts.
 	if (user_param.work_rdma_cm == OFF) {
