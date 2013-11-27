@@ -369,6 +369,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc);
  *
  * Return Value : SUCCESS, FAILURE.
  */
+int check_link(struct ibv_context *context,struct perftest_parameters *user_param);
+
+/* check_link_and_mtu
+ *
+ * Description : Configures test MTU,inline and link layer of the test.
+ *
+ * Parameters :
+ *
+ *	 context    - Context of the deivce.
+ *	 user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param);
 
 /* ctx_print_test_info
@@ -432,5 +445,9 @@ void print_report_lat (struct perftest_parameters *user_param);
  *
  */
 void print_report_lat_duration (struct perftest_parameters *user_param);
+
+enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu);
+
+int set_eth_mtu(struct perftest_parameters *user_param);
 
 #endif /* PERFTEST_RESOURCES_H */
