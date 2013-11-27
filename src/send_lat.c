@@ -104,7 +104,14 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 								  struct mcast_parameters *mcg_params,
 								  struct perftest_comm *comm) {
 	int i;
+	srand48(getpid() * time(NULL));
+	union ibv_gid temp_gid;
 
+	if (user_parm->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
+			return -1;
+		}
+	}
 	for (i = 0; i < user_parm->num_of_qps; i++)
 	{
 		if (user_parm->use_mcg) {
@@ -118,11 +125,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 			my_dest[i].qpn = QPNUM_MCAST;
 
 		} else {
-			if (user_parm->gid_index != -1) {
-				if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&my_dest->gid)) {
-					return -1;
-				}
-			}
+			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 			my_dest[i].lid   	   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
 			my_dest[i].qpn   	   = ctx->qp[i]->qp_num;
 		}
@@ -329,6 +332,7 @@ int main(int argc, char *argv[]) {
 
 	exchange_versions(&user_comm, &user_param);
 
+	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		// shaking hands and gather the other side info.
@@ -339,8 +343,6 @@ int main(int argc, char *argv[]) {
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
-
-	user_comm.rdma_params->side = REMOTE;
 
 	if (user_param.use_mcg) {
 
@@ -378,7 +380,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	// shaking hands and gather the other side info.
-	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
+	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange date between server and clients\n");
 		return 1;
 	}
