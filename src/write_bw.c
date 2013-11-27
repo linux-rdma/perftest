@@ -94,11 +94,36 @@ int main(int argc, char *argv[]) {
 	}
 
 	// See if MTU and link type are valid and supported.
-	if (check_link_and_mtu(ctx.context,&user_param)) {
+	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
 
+	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
+	if (create_comm_struct(&user_comm,&user_param)) {
+		fprintf(stderr," Unable to create RDMA_CM resources\n");
+		return 1;
+	}
+
+	if (user_param.machine == SERVER) {
+		printf("\n************************************\n");
+		printf("* Waiting for client to connect... *\n");
+		printf("************************************\n");
+	}
+
+	// Initialize the connection and print the local data.
+	if (establish_connection(&user_comm)) {
+		fprintf(stderr," Unable to init the socket connection\n");
+		return FAILURE;
+	}
+	sleep(1);
+	exchange_versions(&user_comm, &user_param);
+
+	// See if MTU and link type are valid and supported.
+	if (check_mtu(ctx.context,&user_param, &user_comm)) {
+		fprintf(stderr, " Couldn't get context for the device\n");
+		return FAILURE;
+	}
 	// Print basic test information.
 	ctx_print_test_info(&user_param);
 
@@ -109,12 +134,6 @@ int main(int argc, char *argv[]) {
 
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
-
-	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
-	if (create_comm_struct(&user_comm,&user_param)) {
-		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return 1;
-	}
 
 	// Create (if necessary) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
@@ -158,13 +177,6 @@ int main(int argc, char *argv[]) {
 	for (i=0; i < user_param.num_of_qps; i++)
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
-	// Initialize the connection and print the local data.
-	if (establish_connection(&user_comm)) {
-		fprintf(stderr," Unable to init the socket connection\n");
-		return FAILURE;
-	}
-
-	exchange_versions(&user_comm, &user_param);
 
 	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {

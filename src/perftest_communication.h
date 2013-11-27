@@ -340,13 +340,29 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm, void *my_data, void *rem_dat
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
                                                         struct bw_report_data *rem_bw_rep);
 														
-														/* exchange_versions.
+/* exchange_versions.
  *
  * Description :
  * 	Exchange versions between sides.
  *
  */
 void exchange_versions (struct perftest_comm *user_comm, struct perftest_parameters *user_param);
+
+int exchange_mtu(struct perftest_comm *user_comm, int my_mtu);
+
+
+/* check_link_and_mtu
+ *
+ * Description : Configures test MTU,inline and link layer of the test.
+ *
+ * Parameters :
+ *
+ *	 context    - Context of the deivce.
+ *	 user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm);
 
 #endif /* PERFTEST_COMMUNICATION_H */
 
