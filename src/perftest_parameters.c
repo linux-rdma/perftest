@@ -442,7 +442,7 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 /******************************************************************************
   *
   ******************************************************************************/
-static int set_eth_mtu(struct perftest_parameters *user_param) {
+int set_eth_mtu(struct perftest_parameters *user_param) {
 
 	if (user_param->mtu == 0) {
 		user_param->mtu = 1518;//1500
@@ -790,7 +790,7 @@ static enum ctx_device ib_dev_name(struct ibv_context *context) {
 /******************************************************************************
  *
  ******************************************************************************/
-static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
+enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
 
 	struct ibv_port_attr port_attr;
 	enum ibv_mtu curr_mtu;
@@ -801,6 +801,7 @@ static enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user
 	if (user_mtu == 0) {
 		enum ctx_device current_dev = ib_dev_name(context);
 		curr_mtu = port_attr.active_mtu;
+		//CX3_PRO and CX3 have a HW bug in 4K MTU, so we're forcing it to be 2K MTU
 		if (curr_mtu == IBV_MTU_4096 && (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3))
 			curr_mtu = IBV_MTU_2048;
 	}
@@ -1291,6 +1292,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	} else {
 		user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
 	}
+
 	// in case of dual-port mode
 	if (user_param->dualport==ON) {
 
@@ -1339,6 +1341,64 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 
 	return SUCCESS;
 }
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int check_link(struct ibv_context *context,struct perftest_parameters *user_param) {
+
+	user_param->transport_type = context->device->transport_type;
+	user_param->link_type = set_link_layer(context,user_param->ib_port);
+
+	if (user_param->link_type == LINK_FAILURE) {
+		fprintf(stderr, " Couldn't set the link layer\n");
+		return FAILURE;
+	}
+
+	if (user_param->link_type == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index == -1) {
+			user_param->gid_index = 0;
+	}
+
+	if (user_param->connection_type == RawEth) {
+
+		if (user_param->link_type != IBV_LINK_LAYER_ETHERNET) {
+			fprintf(stderr, " Raw Etherent test can only run on Ethernet link! exiting ...\n");
+			return FAILURE;
+		}
+	}
+
+	// in case of dual-port mode
+	if (user_param->dualport==ON) {
+
+		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
+		if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
+			user_param->gid_index2 = 1;
+		}
+		if (user_param->link_type2 == LINK_FAILURE) {
+			fprintf(stderr, " Couldn't set the link layer\n");
+			return FAILURE;
+		}
+	}
+
+	// Compute Max inline size with pre found statistics values
+	ctx_set_max_inline(context,user_param);
+
+	if (user_param->verb == READ || user_param->verb == ATOMIC)
+		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
+	else
+		user_param->out_reads = 1;
+
+
+	if (!user_param->ib_devname)
+		GET_STRING(user_param->ib_devname,ibv_get_device_name(context->device))
+
+	if (user_param->pkey_index > 0)
+		user_param->pkey_index = ctx_chk_pkey_index(context, user_param->pkey_index);
+
+	return SUCCESS;
+}
+
 
 /******************************************************************************
  *
@@ -1515,7 +1575,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->sl = user_param->sl;
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
-							|| user_param->test_method == RUN_INFINITELY)
+							|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 }
 

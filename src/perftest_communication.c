@@ -1197,6 +1197,9 @@ int ctx_xchg_data( struct perftest_comm *comm,
     return 0;
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
 							struct bw_report_data *rem_bw_rep) {
 	/*******************Exchange Reports*******************/
@@ -1302,6 +1305,67 @@ void exchange_versions(struct perftest_comm *user_comm, struct perftest_paramete
 		fprintf(stderr," Failed to exchange date between server and clients\n");
 		exit(1);
 	}
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int exchange_mtu(struct perftest_comm *user_comm, int my_mtu) {
+
+	int rem_mtu;
+
+	if (ctx_xchg_data(user_comm,(void*)(&my_mtu),(void*)(&rem_mtu),sizeof(int))) {
+		fprintf(stderr," Failed to exchange date between server and clients\n");
+		exit(1);
+	}
+
+	return rem_mtu;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm) {
+
+	int curr_mtu, rem_mtu=0;
+	if (user_param->connection_type == RawEth) {
+		if (set_eth_mtu(user_param) != 0 ) {
+			fprintf(stderr, " Couldn't set Eth MTU\n");
+			return FAILURE;
+		}
+	} else {
+		curr_mtu = (int) (set_mtu(context,user_param->ib_port,user_param->mtu));
+		if ( atof(user_param->rem_version) >= 5.1) {
+			rem_mtu = exchange_mtu(user_comm,curr_mtu);
+			user_param->curr_mtu = (enum ibv_mtu)((curr_mtu > rem_mtu) ? rem_mtu : curr_mtu);
+		} else {
+			user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
+		}
+	}
+
+	//exchange_mtu(&user_comm, &user_param);
+
+	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
+
+		if (user_param->test_method == RUN_ALL) {
+			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
+			fprintf(stderr," Changing to this MTU\n");
+		}
+		user_param->size = MTU_SIZE(user_param->curr_mtu);
+	}
+	//checking msg size in raw ethernet
+	if (user_param->connection_type == RawEth){
+		if (user_param->size > user_param->curr_mtu) {
+			fprintf(stderr," Max msg size in RawEth is MTU %d\n",user_param->curr_mtu);
+			fprintf(stderr," Changing msg size to this MTU\n");
+			user_param->size = user_param->curr_mtu;
+		} else if (user_param->size < RAWETH_MIN_MSG_SIZE) {
+			printf(" Min msg size for RawEth is 64B - changing msg size to 64 \n");
+			user_param->size = RAWETH_MIN_MSG_SIZE;
+		}
+	}
+
+	return SUCCESS;
 }
 
 /******************************************************************************
