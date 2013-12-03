@@ -64,8 +64,13 @@ if test $HAVE_ENDIAN = yes; then
 	AC_DEFINE([HAVE_ENDIAN], [1], [Enable endian conversion])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+        [char *c = IBV_LINK_LAYER_SCIF;],[HAVE_SCIF=yes], [HAVE_SCIF=no])
 
-
+AM_CONDITIONAL([HAVE_SCIF],[test "x$HAVE_SCIF" = "xyes"])
+if test $HAVE_SCIF = yes; then
+        AC_DEFINE([HAVE_SCIF], [1], [Enable SCIF link Layer])
+fi
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"

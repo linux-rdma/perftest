@@ -731,6 +731,10 @@ const char *link_layer_str(uint8_t link_layer) {
 			return "IB";
         case IBV_LINK_LAYER_ETHERNET:
 			return "Ethernet";
+		#ifdef HAVE_SCIF
+		case IBV_LINK_LAYER_SCIF:
+			return "SCIF";
+		#endif
         default:
 		    return "Unknown";
     }
