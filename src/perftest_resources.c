@@ -102,39 +102,6 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
-static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
-{
-	struct ibv_qp_init_attr_ex qp_init_attr;
-	struct ibv_qp* qp = NULL;
-	int num_of_qps = user_param->num_of_qps / 2;
-
-	memset(&qp_init_attr, 0, sizeof(struct ibv_qp_init_attr_ex));
-	qp_init_attr.send_cq = ctx->send_cq;
-	qp_init_attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
-	qp_init_attr.cap.max_inline_data = user_param->inline_size;
-	qp_init_attr.pd = ctx->pd;
-	qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
-
-	if ( (!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
-						|| ((user_param->duplex || user_param->tst == LAT) && (qp_index >= num_of_qps))) {
-		qp_init_attr.qp_type = IBV_QPT_DC_TGT;
-		qp_init_attr.srq = ctx->srq;
-		qp_init_attr.cap.max_recv_wr  = user_param->rx_depth;
-		qp_init_attr.cap.max_recv_sge = 1;
-	} else {
-		qp_init_attr.qp_type = IBV_QPT_DC_INI;
-		qp_init_attr.srq = NULL;
-		qp_init_attr.cap.max_send_wr  = user_param->tx_depth;
-		qp_init_attr.cap.max_send_sge = MAX_SEND_SGE;
-	}
-
-	qp = ibv_create_qp_ex(ctx->context,&qp_init_attr);
-	return qp;
-}
-
-/******************************************************************************
- *
- ******************************************************************************/
 static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
 {
 	struct ibv_qp* qp = NULL;
@@ -167,6 +134,40 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perf
 }
 #endif
 
+#ifdef HAVE_DC
+/******************************************************************************
+ *
+ ******************************************************************************/
+static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
+{
+	struct ibv_qp_init_attr_ex qp_init_attr;
+	struct ibv_qp* qp = NULL;
+	int num_of_qps = user_param->num_of_qps / 2;
+
+	memset(&qp_init_attr, 0, sizeof(struct ibv_qp_init_attr_ex));
+	qp_init_attr.send_cq = ctx->send_cq;
+	qp_init_attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
+	qp_init_attr.cap.max_inline_data = user_param->inline_size;
+	qp_init_attr.pd = ctx->pd;
+	qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
+
+	if ( (!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
+						|| ((user_param->duplex || user_param->tst == LAT) && (qp_index >= num_of_qps))) {
+		qp_init_attr.qp_type = IBV_QPT_DC_TGT;
+		qp_init_attr.srq = ctx->srq;
+		qp_init_attr.cap.max_recv_wr  = user_param->rx_depth;
+		qp_init_attr.cap.max_recv_sge = 1;
+	} else {
+		qp_init_attr.qp_type = IBV_QPT_DC_INI;
+		qp_init_attr.srq = NULL;
+		qp_init_attr.cap.max_send_wr  = user_param->tx_depth;
+		qp_init_attr.cap.max_send_sge = MAX_SEND_SGE;
+	}
+
+	qp = ibv_create_qp_ex(ctx->context,&qp_init_attr);
+	return qp;
+}
+#endif
 /******************************************************************************
  *
  ******************************************************************************/
