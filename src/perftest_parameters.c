@@ -1394,6 +1394,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					}
 					verbosity_output_flag = 0;
 				}
+				if (inline_recv_flag) {
+					user_param->inline_recv_size = strtol(optarg,NULL,0);
+				}
 				break;
 
 			default:
