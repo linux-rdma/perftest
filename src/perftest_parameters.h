@@ -60,6 +60,10 @@
 #include <config.h>
 #endif
 
+#ifdef HAVE_VERBS_EXP
+#include <infiniband/verbs_exp.h>
+#endif
+
 // Connection types available.
 #define RC  (0)
 #define UC  (1)
@@ -261,6 +265,7 @@ struct perftest_parameters {
 	int				num_of_qps;
 	int				use_event;
 	int 			inline_size;
+	int				inline_recv_size;
 	int				out_reads;
 	int				rx_depth;
 	int				duplex;
