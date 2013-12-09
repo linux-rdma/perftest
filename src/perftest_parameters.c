@@ -356,6 +356,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->limit_msgrate = 0;
 	user_param->pkey_index    = 0;
 	user_param->raw_qos 	  = 0;
+	user_param->inline_recv_size = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -939,7 +940,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int report_both_flag = 0;
 	static int is_reversed_flag = 0;
 	static int pkey_flag = 0;
-
+	static int inline_recv_flag = 0;
 	init_perftest_params(user_param);
 
 	if(user_param->connection_type == RawEth)
@@ -1000,6 +1001,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "report-both",        .has_arg = 0, .flag = &report_both_flag, .val = 1},
 			{ .name = "reversed",        .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
+			{ .name = "inline_recv",     .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1208,6 +1210,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 0: // required for long options to work.
 				if (pkey_flag) {
 					user_param->pkey_index = strtol(optarg,NULL,0);
+				}
+				if (inline_recv_flag) {
+					user_param->inline_recv_size = strtol(optarg,NULL,0);
 				}
 				break;
 
