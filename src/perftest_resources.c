@@ -10,6 +10,7 @@
 
 #include "perftest_resources.h"
 
+
 static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_READ};
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
 struct perftest_parameters* duration_param;
@@ -446,6 +447,75 @@ int destroy_ctx(struct pingpong_context *ctx,
 	return test_result;
 }
 
+#ifdef HAVE_VERBS_EXP
+
+static struct ibv_qp* ctx_qp_create_inline_recv(struct pingpong_context *ctx,
+							 struct perftest_parameters *user_param) {
+
+	struct ibv_exp_qp_init_attr attr;
+	struct ibv_exp_device_attr dattr;
+	struct ibv_qp* qp = NULL;
+	int ret;
+
+	memset(&attr, 0, sizeof(attr));
+	memset(&dattr, 0, sizeof(dattr));
+
+	dattr.comp_mask |= IBV_EXP_DEVICE_ATTR_INLINE_RECV_SZ;
+	ret = ibv_exp_query_device(ctx->context, &dattr);
+	if (ret) {
+			printf("  Couldn't query device for inline-receive capabilities.\n");
+		} else if (!(dattr.comp_mask & IBV_EXP_DEVICE_ATTR_INLINE_RECV_SZ)) {
+			printf("  Inline-receive not supported by driver.\n");
+		} else if (dattr.inline_recv_sz < user_param->inline_recv_size) {
+			printf("  Max inline-receive(%d) < Requested inline-receive(%d).\n",
+			       dattr.inline_recv_sz, user_param->inline_recv_size);
+	}
+
+	attr.send_cq = ctx->send_cq;
+	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
+	attr.cap.max_send_wr  = user_param->tx_depth;
+	attr.cap.max_send_sge = MAX_SEND_SGE;
+	attr.cap.max_inline_data = user_param->inline_size;
+	attr.max_inl_recv = user_param->inline_recv_size;
+	attr.pd = ctx->pd;
+	attr.comp_mask = IBV_EXP_QP_INIT_ATTR_PD;
+	attr.comp_mask |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
+
+	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+		attr.srq = ctx->srq;
+		attr.cap.max_recv_wr  = 0;
+		attr.cap.max_recv_sge = 0;
+	} else {
+		attr.srq = NULL;
+		attr.cap.max_recv_wr  = user_param->rx_depth;
+		attr.cap.max_recv_sge = MAX_RECV_SGE;
+	}
+
+	switch (user_param->connection_type) {
+
+		case RC : attr.qp_type = IBV_QPT_RC; break;
+		case UC : attr.qp_type = IBV_QPT_UC; break;
+		case UD : attr.qp_type = IBV_QPT_UD; break;
+#ifdef HAVE_XRCD
+		case XRC : attr.qp_type = IBV_QPT_XRC; break;
+#endif
+#ifdef HAVE_RAW_ETH
+		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
+#endif
+		default:  fprintf(stderr, "Unknown connection type \n");
+			return NULL;
+	}
+
+	qp = ibv_exp_create_qp(ctx->context, &attr);
+
+	if (user_param->inline_recv_size > attr.max_inl_recv)
+			printf("  Actual inline-receive(%d) < requested inline-receive(%d)\n",
+			       attr.max_inl_recv, user_param->inline_recv_size);
+
+	return qp;
+}
+#endif
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -556,7 +626,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				return FAILURE;
 		}
 	}
-
+	fprintf(stderr,"test2!\n");
+	fprintf(stderr,"test3 %d!\n", user_param->inline_recv_size +1);
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if(user_param->connection_type == DC) {
@@ -575,8 +646,17 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 					fprintf(stderr," Unable to create XRC QP.\n");
 					return FAILURE;
 				}
+		} else if (user_param->inline_recv_size) {
+			fprintf(stderr,"test4!\n");
+			#ifdef HAVE_VERBS_EXP
+			fprintf(stderr,"test5!\n");
+			ctx->qp[i] = ctx_qp_create_inline_recv(ctx,user_param);
+			#endif
+			if (ctx->qp[i] == NULL) {
+				fprintf(stderr," Unable to create QP.\n");
+				return FAILURE;
+			}
 		} else {
-
 			ctx->qp[i] = ctx_qp_create(ctx,user_param);
 			if (ctx->qp[i] == NULL) {
 				fprintf(stderr," Unable to create QP.\n");
