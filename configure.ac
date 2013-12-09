@@ -71,6 +71,14 @@ AM_CONDITIONAL([HAVE_SCIF],[test "x$HAVE_SCIF" = "xyes"])
 if test $HAVE_SCIF = yes; then
         AC_DEFINE([HAVE_SCIF], [1], [Enable SCIF link Layer])
 fi
+AC_TRY_LINK([#include <infiniband/verbs_exp.h>],
+        [struct ibv_exp_device_attr dattr;],[HAVE_VERBS_EXP=yes], [HAVE_VERBS_EXP=no])
+
+AM_CONDITIONAL([HAVE_VERBS_EXP],[test "x$HAVE_VERBS_EXP" = "xyes"])
+if test $HAVE_VERBS_EXP = yes; then
+        AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])
+fi
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"

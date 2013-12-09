@@ -69,6 +69,7 @@
 #define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
 
+
 // Outstanding reads for "read" verb only.
 #define MAX_SEND_SGE        (1)
 #define MAX_RECV_SGE        (1)
