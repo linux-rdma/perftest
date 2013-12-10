@@ -340,6 +340,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->post_list	= 1;
 	user_param->use_srq = OFF;
 	user_param->use_xrc = OFF;
+	user_param->use_rss = OFF;
 	user_param->srq_exists = OFF;
 	user_param->duration	= DEF_DURATION;
 	user_param->margin	= DEF_MARGIN;
@@ -995,6 +996,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "server",         .has_arg = 0, .val = 'Z' },
 			{ .name = "client",         .has_arg = 0, .val = 'P' },
 			{ .name = "mac_fwd",        .has_arg = 0, .val = 'v' },
+			{ .name = "use_rss",        .has_arg = 0, .val = 'G' },
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
@@ -1207,6 +1209,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
 			case 'v': user_param->mac_fwd = ON; break;
+			case 'G': user_param->use_rss = ON; break;
 			case 0: // required for long options to work.
 				if (pkey_flag) {
 					user_param->pkey_index = strtol(optarg,NULL,0);

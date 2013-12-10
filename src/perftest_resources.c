@@ -169,6 +169,56 @@ static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perft
 	return qp;
 }
 #endif
+
+static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
+{
+
+	struct ibv_exp_qp_init_attr attr;
+	struct ibv_qp* qp = NULL;
+
+
+	memset(&attr, 0, sizeof(struct ibv_exp_qp_init_attr));
+
+
+
+
+
+	attr.send_cq = ctx->send_cq;
+	attr.recv_cq = ctx->recv_cq;
+	attr.cap.max_send_wr  = user_param->tx_depth;
+	attr.cap.max_send_sge = MAX_SEND_SGE;
+	attr.cap.max_inline_data = user_param->inline_size;
+
+
+
+	attr.cap.max_recv_wr  = user_param->rx_depth;
+	attr.cap.max_recv_sge = MAX_RECV_SGE;
+
+	attr.qp_type = IBV_QPT_RAW_PACKET;
+
+
+
+
+
+	attr.comp_mask = IBV_EXP_QP_INIT_ATTR_PD | IBV_EXP_QP_INIT_ATTR_QPG;
+	attr.pd = ctx->pd;
+
+	if (qp_index == 0) { //rss parent
+		attr.qpg.qpg_type = IBV_QPG_PARENT;
+		attr.qpg.qpg_parent = NULL;
+
+
+		attr.qpg.parent_attrib.tss_child_count = 0;
+		attr.qpg.parent_attrib.rss_child_count = 2;
+	} else { //rss childs
+		attr.qpg.qpg_type = IBV_QPG_CHILD_RX;
+		attr.qpg.qpg_parent = ctx->qp[0];
+	}
+	qp = ibv_exp_create_qp(ctx->context,&attr);
+
+
+	return qp;
+}
 /******************************************************************************
  *
  ******************************************************************************/
@@ -330,10 +380,16 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 int destroy_ctx(struct pingpong_context *ctx,
 				struct perftest_parameters *user_parm)  {
 
-	int i;
+	int i, first;
 	int test_result = 0;
+	/* RSS parent should be last */
+	if (user_parm->use_rss)
+		first = 1;
+	else
+		first = 0;
+	for (i = first; i < user_parm->num_of_qps; i++) {
 
-	for (i = 0; i < user_parm->num_of_qps; i++) {
+
 
 		if ((user_parm->connection_type == DC || user_parm->connection_type == UD) && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
 			if (ibv_destroy_ah(ctx->ah[i])) {
@@ -348,6 +404,19 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
+	if (user_parm->use_rss) {
+		if (user_parm->connection_type == UD && (user_parm->tst == LAT || user_parm->machine == CLIENT || user_parm->duplex)) {
+			if (ibv_destroy_ah(ctx->ah[0])) {
+				fprintf(stderr, "failed to destroy AH\n");
+				test_result = 1;
+			}
+		}
+
+		if (ibv_destroy_qp(ctx->qp[0])) {
+			fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
+			test_result = 1;
+		}
+	}
 	if (user_parm->srq_exists) {
 		if (ibv_destroy_srq(ctx->srq)) {
 			fprintf(stderr, "Couldn't destroy SRQ\n");
@@ -523,6 +592,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
+	int init_flag = 0;
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
@@ -626,11 +696,47 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				return FAILURE;
 		}
 	}
-	fprintf(stderr,"test2!\n");
-	fprintf(stderr,"test3 %d!\n", user_param->inline_recv_size +1);
+	if (user_param->use_rss) {
+		struct ibv_exp_device_attr attr;
+
+		attr.comp_mask = IBV_EXP_DEVICE_ATTR_FLAGS2 |
+				 IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ;
+		if (ibv_exp_query_device(ctx->context, &attr)) {
+			fprintf(stderr, "Experimental ibv_exp_query_device.\n");
+			exit(1);
+		}
+
+		if (!((attr.device_cap_flags2 & IBV_EXP_DEVICE_QPG) &&
+		      (attr.device_cap_flags2 & IBV_EXP_DEVICE_UD_RSS) &&
+		      (attr.comp_mask & IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ) &&
+		      (attr.max_rss_tbl_sz > 0))) {
+			fprintf(stderr, "RSS not supported .\n");
+			exit(1);
+		}
+
+		/* num of qps includes the parent */
+		if (user_param->num_of_qps > attr.max_rss_tbl_sz + 1) {
+			fprintf(stderr, "RSS limit is %d .\n",
+				attr.max_rss_tbl_sz);
+			exit(1);
+		}
+	}
 	for (i=0; i < user_param->num_of_qps; i++) {
 
-		if(user_param->connection_type == DC) {
+		if (user_param->use_rss && user_param->connection_type == RawEth) {
+
+
+
+
+			ctx->qp[i] = ctx_rss_eth_qp_create(ctx,user_param,i);
+
+			if (ctx->qp[i] == NULL) {
+				fprintf(stderr," Unable to create RSS QP.\n");
+				return FAILURE;
+			}
+
+		}
+		else if(user_param->connection_type == DC) {
 			#ifdef HAVE_DC
 				ctx->qp[i] = ctx_dc_qp_create(ctx,user_param,i);
 			#endif
@@ -665,6 +771,10 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 
 		if (user_param->work_rdma_cm == OFF) {
+			if (i == 0 && user_param->use_rss)
+				init_flag = IBV_QP_GROUP_RSS;
+			else
+				init_flag = 0;
 			if(user_param->connection_type == DC) {
 			#ifdef HAVE_DC
 				if (ctx_modify_dc_qp_to_init(ctx->qp[i],user_param)) {
@@ -673,7 +783,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				}
 			#endif
 			}
-			else if (ctx_modify_qp_to_init(ctx->qp[i],user_param)) {
+			else if (ctx_modify_qp_to_init(ctx->qp[i],user_param,init_flag)) {
 				fprintf(stderr, "Failed to modify QP to INIT\n");
 				return FAILURE;
 			}
@@ -796,13 +906,13 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
  /******************************************************************************
  *
  ******************************************************************************/
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param)  {
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int init_flag)  {
 
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	struct ibv_qp_attr attr;
-	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+	int flags = init_flag | IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
 
 	static int portindex=0;  // for dual-port support
 
@@ -829,7 +939,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	}
 
 	if (user_param->connection_type == RawEth) {
-		flags = IBV_QP_STATE | IBV_QP_PORT;
+		flags = init_flag | IBV_QP_STATE | IBV_QP_PORT;
 
 	} else if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;
@@ -1110,6 +1220,7 @@ int ctx_connect(struct pingpong_context *ctx,
 				#endif
 					ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
 
+
 				if (!ctx->ah[i]) {
 					fprintf(stderr, "Failed to create AH for UD\n");
 					return FAILURE;
@@ -1255,6 +1366,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 				}
 			#endif
 
+
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
 				ctx->wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
 
@@ -1285,6 +1397,10 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	if (user_param->use_srq)
 			size_per_qp /= user_param->num_of_qps;
 
+	if (user_param->use_rss) {
+		i = 1;
+		num_of_qps = 1;
+	}
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 
 		ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf + (num_of_qps + k)*BUFF_SIZE(ctx->size);
@@ -1398,13 +1514,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t inc_size = INC(user_param->size);
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
-
-	// if (user_param->verb != SEND) {
-		// if(perform_warm_up(ctx,user_param)) {
-			// fprintf(stderr,"Problems with warm up\n");
-			// return 1;
-		// }
-	// }
 
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
@@ -1538,7 +1647,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 {
 	int 				rcnt = 0;
 	int 				ne,i,tot_iters;
-	int                 *rcnt_for_qp = NULL;
+	long                 *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
 	int firstRx = 1;
@@ -1547,10 +1656,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,long,user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(long)*user_param->num_of_qps);
 
-	tot_iters = user_param->iters*user_param->num_of_qps;
+
+	if (user_param->use_rss)
+		tot_iters = user_param->iters*(user_param->num_of_qps-1);
+	else
+		tot_iters = user_param->iters*user_param->num_of_qps;
 
 	while (rcnt < tot_iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
@@ -1573,7 +1686,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 					if (wc[i].status != IBV_WC_SUCCESS) {
 
-						NOTIFY_COMP_ERROR_RECV(wc[i],rcnt_for_qp[0]);
+						NOTIFY_COMP_ERROR_RECV(wc[i],(int)rcnt_for_qp[0]);
 					}
 
 					rcnt_for_qp[wc[i].wr_id]++;
@@ -1593,7 +1706,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						} else {
 
 							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%ld\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 								return 15;
 							}
 						}
@@ -1619,6 +1732,12 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 	if (user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
+
+	/*
+	if (user_param->use_rss) {
+		for (i = 1; i < user_param->num_of_qps; i++)
+			fprintf(stderr,"child %d count = %ld\n",i,rcnt_for_qp[i]);
+	}*/
 
 	free(wc);
 	free(rcnt_for_qp);
