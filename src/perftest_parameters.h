@@ -277,6 +277,7 @@ struct perftest_parameters {
 	int				duration;
 	int 			use_srq;
 	int				use_xrc;
+	int				use_rss;
 	int				srq_exists;
 	int				tos;
 	int				margin;

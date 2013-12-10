@@ -86,6 +86,9 @@ int main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
+
+	if (user_param.use_rss)
+		user_param.num_of_qps = 3; //parent rss and 2 child_rx
 	// Finding the IB device selected (or default if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
