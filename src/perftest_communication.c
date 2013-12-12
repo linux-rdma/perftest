@@ -1310,24 +1310,11 @@ void exchange_versions(struct perftest_comm *user_comm, struct perftest_paramete
 /******************************************************************************
  *
  ******************************************************************************/
-int exchange_mtu(struct perftest_comm *user_comm, int my_mtu) {
-
-	int rem_mtu;
-
-	if (ctx_xchg_data(user_comm,(void*)(&my_mtu),(void*)(&rem_mtu),sizeof(int))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
-		exit(1);
-	}
-
-	return rem_mtu;
-}
-
-/******************************************************************************
- *
- ******************************************************************************/
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm) {
+	int curr_mtu=0, rem_mtu=0;
+	char cur[2];
+	char rem[2];
 
-	int curr_mtu, rem_mtu=0;
 	if (user_param->connection_type == RawEth) {
 		if (set_eth_mtu(user_param) != 0 ) {
 			fprintf(stderr, " Couldn't set Eth MTU\n");
@@ -1336,7 +1323,12 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 	} else {
 		curr_mtu = (int) (set_mtu(context,user_param->ib_port,user_param->mtu));
 		if ( atof(user_param->rem_version) >= 5.1) {
-			rem_mtu = exchange_mtu(user_comm,curr_mtu);
+			sprintf(cur,"%d",curr_mtu);
+			if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
+				fprintf(stderr," Failed to exchange date between server and clients\n");
+				exit(1);
+			}
+			rem_mtu = (int) strtol(rem, (char **)NULL, 10);
 			user_param->curr_mtu = (enum ibv_mtu)((curr_mtu > rem_mtu) ? rem_mtu : curr_mtu);
 		} else {
 			user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
