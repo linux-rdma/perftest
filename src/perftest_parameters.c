@@ -698,6 +698,14 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->use_srq = ON;
 	}
 
+	if(user_param->connection_type == DC) {
+		if (user_param->work_rdma_cm == ON) {
+			printf(RESULT_LINE);
+			fprintf(stderr," DC does not support RDMA_CM\n");
+			exit(1);
+		}
+	}
+
 	if((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
 
@@ -917,8 +925,9 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 
 			switch(user_param->verb) {
 
-				case WRITE: user_param->inline_size = DEF_INLINE_WRITE; break;
-				case SEND : user_param->inline_size = (user_param->connection_type == UD)? DEF_INLINE_SEND_UD : ((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
+				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
+				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
+					((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
 				default   : user_param->inline_size = 0;
 			}
 

@@ -117,6 +117,7 @@
 #define DEF_INLINE_SEND_RC_UC (236)
 #define DEF_INLINE_SEND_XRC (236)
 #define DEF_INLINE_SEND_UD (188)
+#define DEF_INLINE_DC (150)
 
 // Max and Min allowed values for perftest parameters.
 #define MIN_TOS		(0)
