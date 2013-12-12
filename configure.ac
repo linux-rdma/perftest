@@ -49,7 +49,7 @@ if test $HAVE_XRCD = yes; then
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
-	[struct ibv_send_wr *t; t->dc.dct_number = 0;],[HAVE_DC=no], [HAVE_DC=no])
+	[struct ibv_send_wr *t; t->dc.dct_number = 0;],[HAVE_DC=yes], [HAVE_DC=no])
 
 AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
 if test $HAVE_DC = yes; then
