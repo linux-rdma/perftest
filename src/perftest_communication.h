@@ -348,9 +348,6 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
  */
 void exchange_versions (struct perftest_comm *user_comm, struct perftest_parameters *user_param);
 
-int exchange_mtu(struct perftest_comm *user_comm, int my_mtu);
-
-
 /* check_link_and_mtu
  *
  * Description : Configures test MTU,inline and link layer of the test.
