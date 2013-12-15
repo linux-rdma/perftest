@@ -706,6 +706,13 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
+	#ifndef HAVE_RSS_EXP
+	if (user_param->use_rss) {
+		printf(RESULT_LINE);
+		fprintf(stderr," RSS feature is not available in libibverbs\n");
+		exit(1);
+	}
+	#endif
 	if((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
 

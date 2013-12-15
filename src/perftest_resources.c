@@ -261,6 +261,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 }
 #endif
 
+#ifdef HAVE_RSS_EXP
 static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
 {
 
@@ -294,6 +295,8 @@ static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct 
 
 	return qp;
 }
+#endif
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -795,6 +798,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				return FAILURE;
 		}
 	}
+#ifdef HAVE_RSS_EXP
 	if (user_param->use_rss) {
 		struct ibv_exp_device_attr attr;
 
@@ -820,6 +824,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 			exit(1);
 		}
 	}
+#endif
+
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if(user_param->connection_type == DC) {
@@ -841,8 +847,9 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 					return FAILURE;
 				}
 		} else if (user_param->use_rss && user_param->connection_type == RawEth) {
-
+			#ifdef HAVE_RSS_EXP
 			ctx->qp[i] = ctx_rss_eth_qp_create(ctx,user_param,i);
+			#endif
 			if (ctx->qp[i] == NULL) {
 				fprintf(stderr," Unable to create RSS QP.\n");
 				return FAILURE;
