@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
 	// Finding the IB device selected (or default if none is selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
-		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
+		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		return 1;
 	}
 
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr," Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return 1;
 		}
 
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		return FAILURE;
 	}
 
@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr," Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
 
@@ -322,7 +322,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.machine == CLIENT && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr," Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
 

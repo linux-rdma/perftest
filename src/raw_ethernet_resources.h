@@ -78,7 +78,7 @@ struct UDP_header {
 }__attribute__((packed));
 
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
-void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_parm);
+void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param);
 void print_ethernet_header(struct ETH_header* p_ethernet_header);
 void print_ip_header(struct IP_V4_header* ip_header);
 void print_udp_header(struct UDP_header* udp_header);
@@ -139,7 +139,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header);
  *	Parameters:
  *				flow_rules - Pointer to output, is set to header buffer and specification information
  *				ctx - Test Context.
- *				user_parm - user_parameters struct for this test
+ *				user_param - user_parameters struct for this test
  *				my_dest_info - ethernet information of me
  *				rem_dest_info - ethernet information of the remote
  *
@@ -148,7 +148,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header);
 int send_set_up_connection(
 	struct ibv_flow_attr **flow_rules,
 	struct pingpong_context *ctx,
-	struct perftest_parameters *user_parm,
+	struct perftest_parameters *user_param,
 	struct raw_ethernet_info* my_dest_info,
 	struct raw_ethernet_info* rem_dest_info);
 
@@ -188,7 +188,7 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  * Parameters :
  *
  *  ctx     - Test Context.
- *  user_parm  - user_parameters struct for this test.
+ *  user_param  - user_parameters struct for this test.
  */
 int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 

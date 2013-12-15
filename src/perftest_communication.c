@@ -126,7 +126,7 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static int create_ah_from_wc_recv(struct pingpong_context *ctx,
-								  struct perftest_parameters *user_parm) {
+								  struct perftest_parameters *user_param) {
 
     struct ibv_qp_attr attr;
     struct ibv_qp_init_attr init_attr;
@@ -141,9 +141,9 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 	}
 
 	ctx->ah[0] = ibv_create_ah_from_wc(ctx->pd,&wc,(struct ibv_grh*)ctx->buf,ctx->cm_id->port_num);
-    user_parm->rem_ud_qpn = ntohl(wc.imm_data);
+    user_param->rem_ud_qpn = ntohl(wc.imm_data);
 	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
-    user_parm->rem_ud_qkey = attr.qkey;
+    user_param->rem_ud_qkey = attr.qkey;
 
 	return 0;
 }
@@ -1204,23 +1204,23 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 							struct bw_report_data *rem_bw_rep) {
 	/*******************Exchange Reports*******************/
         if (ctx_xchg_data(comm,(void*)(&my_bw_rep->size),(void*)(&rem_bw_rep->size),sizeof(unsigned long))) {
-	        fprintf(stderr," Failed to exchange date between server and clients\n");
+	        fprintf(stderr," Failed to exchange data between server and clients\n");
                 exit(1);
         }
         if (ctx_xchg_data(comm,(void*)(&my_bw_rep->iters),(void*)(&rem_bw_rep->iters),sizeof(int))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
 	}	 
         if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_peak),(void*)(&rem_bw_rep->bw_peak),sizeof(double))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
         }
         if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_avg),(void*)(&rem_bw_rep->bw_avg),sizeof(double))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
         }
         if (ctx_xchg_data(comm,(void*)(&my_bw_rep->msgRate_avg),(void*)(&rem_bw_rep->msgRate_avg),sizeof(double))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
         }
 }
@@ -1302,7 +1302,7 @@ int ctx_close_connection(struct perftest_comm *comm,
 void exchange_versions(struct perftest_comm *user_comm, struct perftest_parameters *user_param) {
 
 	if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(float))) {
-		fprintf(stderr," Failed to exchange date between server and clients\n");
+		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
 	}
 }
@@ -1325,7 +1325,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		if ( atof(user_param->rem_version) >= 5.1) {
 			sprintf(cur,"%d",curr_mtu);
 			if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
-				fprintf(stderr," Failed to exchange date between server and clients\n");
+				fprintf(stderr," Failed to exchange data between server and clients\n");
 				exit(1);
 			}
 			rem_mtu = (int) strtol(rem, (char **)NULL, 10);

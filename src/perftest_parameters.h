@@ -33,19 +33,22 @@
  *
  * Description :
  *
- *  This API gathres the Socket interface methods for all perftest benchmarks
- *  and can be used for any benchmark for IB.
- *  It passes messages between 2 end points through sockets interface methods,
- *  while passing the rellevant information for the IB entities.
+ *  This API defines structs, formats and enums for all perftest benchmarks.
+ *  It includes parameters parser, and a report generator.
  *
  * Methods :
  *
- *  ctx_get_local_lid  - Receives the Local id from the subnet manager.
- *  ctx_client_connect - Connects the client through sockets interface.
- *  ctx_server_connect - Connects the Server to client through sockets.
- *  ctx_hand_shake     - Passes the data between 2 end points machines.
- *  ctx_print_pingpong_data - Prints the data that was passed.
- *  ctx_close_connection    - Closing the sockets interface.
+ *  link_layer_str  - Return a String representation of the link type.
+ *  parser - Setting default test parameters and parsing the user choices.
+ *  check_link - Configures test MTU,inline and link layer of the test.
+ *  check_link_and_mtu     - Configures test MTU,inline and link layer of the test.
+ *  print_report_bw - Calculate the peak and average throughput of the BW test.
+ *  print_full_bw_report    - Print the peak and average throughput of the BW test.
+ *  print_report_lat - Print the min/max/median latency samples taken from a latency test.
+ *  print_report_lat_duration     - Prints only the avergae latency for samples taken from
+ *									a latency test with Duration..
+ *  set_mtu - set MTU from the port or user.
+ *  set_eth_mtu    - set MTU for Raw Ethernet tests.
  */
 #ifndef PERFTEST_PARAMETERS_H
 #define PERFTEST_PARAMETERS_H
@@ -371,7 +374,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc);
  *
  * Parameters :
  *
- *	 context    - Context of the deivce.
+ *	 context    - Context of the device.
  *	 user_param - Perftest parameters.
  *
  * Return Value : SUCCESS, FAILURE.
@@ -384,7 +387,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
  *
  * Parameters :
  *
- *	 context    - Context of the deivce.
+ *	 context    - Context of the device.
  *	 user_param - Perftest parameters.
  *
  * Return Value : SUCCESS, FAILURE.
@@ -453,8 +456,30 @@ void print_report_lat (struct perftest_parameters *user_param);
  */
 void print_report_lat_duration (struct perftest_parameters *user_param);
 
+/* set_mtu
+ *
+ * Description : set MTU from the port or user
+ *
+ * Parameters :
+ *
+ *   context  - Context of the device.
+ *   ib_port  - ib port number that's in use.
+ *   user_mtu  - MTU that the user supplied.
+ *
+ * Return Value : MTU size
+ */
 enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu);
 
+/* set_eth_mtu
+ *
+ * Description : set MTU for Raw Ethernet tests
+ *
+ * Parameters :
+ *
+ *   user_param  - the parameters parameters.
+ *
+ * Return Value : MTU size
+ */
 int set_eth_mtu(struct perftest_parameters *user_param);
 
 #endif /* PERFTEST_RESOURCES_H */
