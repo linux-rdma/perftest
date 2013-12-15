@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
 
 		// shaking hands and gather the other side info.
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
 		}
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-        fprintf(stderr,"Failed to exchange date between server and clients\n");
+        fprintf(stderr,"Failed to exchange data between server and clients\n");
         return 1;
     }
 
@@ -201,7 +201,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr," Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
 
@@ -282,7 +282,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.machine == CLIENT && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr," Failed to exchange date between server and clients\n");
+			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
 

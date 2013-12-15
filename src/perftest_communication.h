@@ -95,13 +95,13 @@ int create_comm_struct (struct perftest_comm *comm,
  *
  * Parameters :
  *  ctx 		- Pingoong context after the ctx_init function.
- *  user_parm   - Perftest parameters.
+ *  user_param   - Perftest parameters.
  *  my_dest		- An empty pingpong_dest struct.
  *
  * Return Value : SUCCESS,FAILURE.
  */
 int set_up_connection(struct pingpong_context *ctx,
-					  struct perftest_parameters *user_parm,
+					  struct perftest_parameters *user_param,
 					  struct pingpong_dest *my_dest);
 
 /* establish_connection .
@@ -348,15 +348,15 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
  */
 void exchange_versions (struct perftest_comm *user_comm, struct perftest_parameters *user_param);
 
-/* check_link_and_mtu
+/* check_mtu
  *
- * Description : Configures test MTU,inline and link layer of the test.
+ * Description : Configures test MTU.
  *
  * Parameters :
  *
- *	 context    - Context of the deivce.
+ *	 context    - Context of the device.
  *	 user_param - Perftest parameters.
- *
+ *   user_comm	- user communication struct.
  * Return Value : SUCCESS, FAILURE.
  */
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm);
