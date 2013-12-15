@@ -304,7 +304,7 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 		return;
 	}
 	print_ethernet_header((struct ETH_header*)pkt);
-	if(user_param->is_client_ip && user_param->is_server_ip)
+	if(user_param->is_client_ip || user_param->is_server_ip)
 	{
 		pkt = (void*)pkt + sizeof(struct ETH_header);
 		print_ip_header((struct IP_V4_header*)pkt);
@@ -329,7 +329,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 {
 	void* header_buff = NULL;
 	gen_eth_header(eth_header,my_dest_info->mac,rem_dest_info->mac,eth_type);
-	if(user_param->is_client_ip && user_param->is_server_ip)
+	if(user_param->is_client_ip || user_param->is_server_ip)
 	{
 		header_buff = (void*)eth_header + sizeof(struct ETH_header);
 		gen_ip_header(header_buff,&my_dest_info->ip,&rem_dest_info->ip,ip_next_protocol,sizePkt, user_param->tos);
@@ -358,7 +358,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 {
 	int offset = 0;
 	struct ETH_header* eth_header;
-    uint16_t eth_type = (user_param->is_client_ip && user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
+    uint16_t eth_type = (user_param->is_client_ip || user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
     uint16_t ip_next_protocol = (user_param->is_client_port && user_param->is_server_port ? UDP_PROTOCOL : 0);
     DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
@@ -454,7 +454,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		}
 
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
-		if(user_param->is_server_ip && user_param->is_client_ip) {
+		if(user_param->is_server_ip || user_param->is_client_ip) {
 
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 			spec_info = (struct ibv_flow_spec*)header_buff;
