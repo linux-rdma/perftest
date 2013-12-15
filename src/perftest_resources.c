@@ -488,8 +488,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 				test_result = 1;
 			}
 		}
+<<<<<<< HEAD
 
 		if (user_param->connection_type == DC &&   ((!(user_param->duplex || user_param->tst == LAT)
+=======
+		#ifdef HAVE_DC
+		if (user_param->connection_type == DC &&   ((!(user_param->duplex || user_param->tst == LAT) 
+>>>>>>> revert last commit.
 			&& (user_param->machine == SERVER)) || ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) {
 				if (ibv_exp_destroy_dct(ctx->dct[i])) {
 					fprintf(stderr, "failed to destroy dct\n");
@@ -497,7 +502,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 				}
 				if ( i == user_param->num_of_qps -1 )
 					return test_result;
-		} else if (ibv_destroy_qp(ctx->qp[i])) {
+		} else
+		#endif
+		if (ibv_destroy_qp(ctx->qp[i])) {
 				fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
 				test_result = 1;
 		}
@@ -2321,6 +2328,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	struct 			ibv_send_wr	*bad_wr;
 	int  			firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+
 
 	if (user_param->connection_type != RawEth) {
 		ctx->wr[0].sg_list->length = user_param->size;
