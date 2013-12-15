@@ -80,6 +80,14 @@ if test $HAVE_VERBS_EXP = yes; then
         AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ;],[HAVE_RSS_EXP=yes], [HAVE_RSS_EXP=no])
+
+AM_CONDITIONAL([HAVE_RSS_EXP],[test "x$HAVE_RSS_EXP" = "xyes"])
+if test $HAVE_RSS_EXP = yes; then
+        AC_DEFINE([HAVE_RSS_EXP], [1], [Have RSS in verbs_exp header])
+fi
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O2"
