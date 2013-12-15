@@ -29,6 +29,7 @@
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
 #define UDP_PROTOCOL (0x11)
+#define TCP_PROTOCOL (0x06)
 #define IP_HEADER_LEN (20)
 #define DEFAULT_TTL (128)
 
@@ -75,6 +76,19 @@ struct UDP_header {
 	u_short	uh_dport;		/* destination port */
 	u_short	uh_ulen;		/* udp length */
 	u_short	uh_sum;			/* udp checksum */
+}__attribute__((packed));
+
+struct TCP_header {
+       uint16_t        th_sport;               /* source port */
+       uint16_t        th_dport;               /* destination port */
+       uint32_t        th_seq;
+       uint32_t        th_ack;
+       uint8_t         th_rsv:4;
+       uint8_t         th_doff:4;
+       uint8_t         th_falgs;
+       uint16_t        th_window;
+       uint16_t        th_check;
+       uint16_t        th_urgptr;
 }__attribute__((packed));
 
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
@@ -177,6 +191,17 @@ void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t
  *		sizePkt - size of the packet
  */
 void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
+
+/* gen_udp_header .
+
+ * Description :create UDP header on buffer
+ *
+ * Parameters :
+ * 		TCP_header_buffer - Pointer to output
+ *		sPort - source TCP port of the packet
+ *		dPort -destination TCP port of the packet
+ */
+void gen_tcp_header(void* TCP_header_buffer,int* sPort ,int* dPort);
 
 /* run_iter_fw
  *

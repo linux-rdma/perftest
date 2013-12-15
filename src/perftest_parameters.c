@@ -212,12 +212,6 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("  -l, --post_list=<list size>");
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
 
-		printf("  --run_infinitely ");
-		printf(" Run test forever, print results every <duration> seconds\n");
-
-		printf("  --report_gbits ");
-		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
-
 		printf("  -w, --limit_bw ");
 		printf(" Set verifier limit for bandwidth\n");
 
@@ -269,13 +263,19 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
 
 	if ( tst == BW )
-		printf("  --report-both ");
+		printf("      --report-both ");
 		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
 
-	printf("  --pkey_index=<pkey index> PKey index to use for QP\n");
+		printf("      --run_infinitely ");
+		printf(" Run test forever, print results every <duration> seconds\n");
+
+		printf("      --report_gbits ");
+		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+
+		printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
 
 	if (verb != WRITE) {
-		printf(" --inline_recv=<size> ");
+		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
 	}
 
@@ -299,10 +299,10 @@ void usage_raw_ethernet(){
 		printf(" source ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
 		printf("  -K, --dest_port ");
-		printf(" destination port number (using to send packets with UPD header)\n");
+		printf(" destination port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
 
 		printf("  -k, --source_port ");
-		printf(" source port number (using to send packets with UDP header)\n");
+		printf(" source port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
 
 		printf("  -Z, --server ");
 		printf(" choose server side for the current machine (--server/--client must be selected )\n");
@@ -312,6 +312,11 @@ void usage_raw_ethernet(){
 
 		printf("  -v, --mac_fwd ");
 		printf(" run mac forwarding test \n");
+
+		printf("      --tcp ");
+		printf(" send TCP Packets. must include IP and Ports information.\n");
+
+		printf("\n");
 
 }
 /******************************************************************************
@@ -363,6 +368,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->pkey_index    = 0;
 	user_param->raw_qos 	  = 0;
 	user_param->inline_recv_size = 0;
+	user_param->tcp = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -963,6 +969,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int is_reversed_flag = 0;
 	static int pkey_flag = 0;
 	static int inline_recv_flag = 0;
+	static int tcp_flag = 0;
+
 	init_perftest_params(user_param);
 
 	if(user_param->connection_type == RawEth)
@@ -1025,6 +1033,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "reversed",       .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
 			{ .name = "inline_recv",    .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
+			{ .name = "tcp",			.has_arg = 0, .flag = &tcp_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1251,6 +1260,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		 }
 	}
 
+	if (tcp_flag) {
+		user_param->tcp = 1;
+	}
 	if (run_inf_flag) {
 		user_param->test_method = RUN_INFINITELY;
 	}

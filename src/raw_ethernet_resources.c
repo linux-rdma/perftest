@@ -145,6 +145,25 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
 
 
 }
+/******************************************************************************
+*
+******************************************************************************/
+void gen_tcp_header(void* TCP_header_buffer,int* sPort ,int* dPort) {
+
+       struct TCP_header tcp_header;
+
+       memset(&tcp_header,0,sizeof(struct TCP_header));
+
+       tcp_header.th_sport = htons(*sPort);
+       tcp_header.th_dport = htons(*dPort);
+       tcp_header.th_doff = 5;
+       tcp_header.th_window = htons(8192);
+       memcpy(TCP_header_buffer, &tcp_header, sizeof(struct TCP_header));
+}
+
+/******************************************************************************
+*
+******************************************************************************/
 
 /*****************************************************************************
 * generates a new ethernet header
@@ -265,7 +284,10 @@ void print_ip_header(struct IP_V4_header* ip_header)
 		printf("|ID        |%-12d|\n",ntohs(ip_header->id));
 		printf("|Frag      |%-12d|\n",ntohs(ip_header->frag_off));
 		printf("|TTL       |%-12d|\n",ip_header->ttl);
-		printf("|protocol  |%-12s|\n",ip_header->protocol == UDP_PROTOCOL ? "UDP" : "EMPTY");
+		if (ip_header->protocol)
+            printf("|protocol  |%-12s|\n",ip_header->protocol == UDP_PROTOCOL ? "UDP" : "TCP");
+        else
+            printf("|protocol  |%-12s|\n","EMPTY");
 		printf("|Check sum |%-12X|\n",ntohs(ip_header->check));
 		inet_ntop(AF_INET, &ip_header->saddr, str_ip_s, INET_ADDRSTRLEN);
 		printf("|Source IP |%-12s|\n",str_ip_s);
@@ -292,6 +314,26 @@ void print_udp_header(struct UDP_header* udp_header)
 		printf("|---------------------|\n");
 }
 /******************************************************************************
+*
+******************************************************************************/
+
+void print_tcp_header(struct TCP_header* tcp_header)
+{
+   if(NULL == tcp_header)
+   {
+		   fprintf(stderr, "tcp_header pointer is Null\n");
+		   return;
+   }
+   printf("**TCP header***********\n");
+   printf("|---------------------|\n");
+   printf("|Src  Port |%-10d|\n",ntohs(tcp_header->th_sport));
+   printf("|Dest Port |%-10d|\n",ntohs(tcp_header->th_dport));
+   printf("|offset    |%-10d|\n",tcp_header->th_doff);
+   printf("|window    |%-10d|\n",ntohs(tcp_header->th_window));
+   printf("|---------------------|\n");
+}
+
+/******************************************************************************
  *
  ******************************************************************************/
 
@@ -312,7 +354,10 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 	if(user_param->is_client_port && user_param->is_server_port)
 	{
 		pkt = pkt + sizeof(struct IP_V4_header);
-		print_udp_header((struct UDP_header*)pkt);
+		if (user_param->tcp)
+			print_tcp_header((struct TCP_header*)pkt);
+	    else
+			print_udp_header((struct UDP_header*)pkt);
 	}
 }
 /******************************************************************************
@@ -337,8 +382,11 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	if(user_param->is_client_port && user_param->is_server_port)
 	{
 		header_buff = header_buff + sizeof(struct IP_V4_header);
-		gen_udp_header(header_buff,&my_dest_info->port,&rem_dest_info->port,
-									my_dest_info->ip,rem_dest_info->ip,sizePkt);
+		if (user_param->tcp)
+			gen_tcp_header(header_buff,&my_dest_info->port,&rem_dest_info->port);
+	    else
+			gen_udp_header(header_buff,&my_dest_info->port,&rem_dest_info->port,my_dest_info->ip,rem_dest_info->ip,sizePkt);
+
 	}
 
 	if(print_flag == PRINT_ON)
@@ -358,8 +406,11 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 {
 	int offset = 0;
 	struct ETH_header* eth_header;
+	uint16_t ip_next_protocol = 0;
     uint16_t eth_type = (user_param->is_client_ip || user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
-    uint16_t ip_next_protocol = (user_param->is_client_port && user_param->is_server_port ? UDP_PROTOCOL : 0);
+    if(user_param->is_client_port && user_param->is_server_port)
+		ip_next_protocol = (user_param->tcp ? TCP_PROTOCOL : UDP_PROTOCOL);
+
     DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
     eth_header = (void*)ctx->buf;

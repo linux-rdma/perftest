@@ -262,6 +262,7 @@ struct perftest_parameters {
 	int				is_client_ip;
 	int				server_port;
 	int				client_port;
+	int				tcp;
 	int				is_server_port;
 	int				is_client_port;
 	int				cpu_freq_f;
