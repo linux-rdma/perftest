@@ -145,7 +145,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	}
 
 	printf("  -n, --iters=<iters> ");
-	printf(" Number of exchanges (at least 2, default %d)\n",DEF_ITERS);
+	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
 
 	if (tst == BW) {
 
@@ -173,23 +173,23 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Rx queue size (default %d).",DEF_RX_SEND);
 		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
 
-		printf("  -c, --connection=<RC/XRC/UC/UD> ");
-		printf(" Connection type RC/XRC/UC/UD (default RC)\n");
+		printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
+		printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
 	}
 
 	if (verb == WRITE) {
-		printf("  -c, --connection=<RC/XRC/UC> ");
-		printf(" Connection type RC/XRC/UC (default RC)\n");
+		printf("  -c, --connection=<RC/XRC/UC/DC> ");
+		printf(" Connection type RC/XRC/UC/DC (default RC)\n");
 	}
 
-	if (verb != READ || verb != ATOMIC) {
+	if (verb != READ && verb != ATOMIC) {
 		printf("  -I, --inline_size=<size> ");
 		printf(" Max size of message to be sent in inline\n");
 	}
 
 	if (verb == READ || verb == ATOMIC) {
-		printf("  -c, --connection=<RC/XRC> ");
-		printf(" Connection type RC/XRC (default RC)\n");
+		printf("  -c, --connection=<RC/XRC/DC> ");
+		printf(" Connection type RC/XRC/DC (default RC)\n");
 	}
 
 	if (tst == BW) {
@@ -274,6 +274,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 	printf("  --pkey_index=<pkey index> PKey index to use for QP\n");
 
+	if (verb != WRITE) {
+		printf(" --inline_recv=<size> ");
+		printf(" Max size of message to be sent in inline receive\n");
+	}
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -287,17 +292,17 @@ void usage_raw_ethernet(){
 		printf("  -E, --dest_mac ");
 		printf(" destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
 
-		printf("  -J, --server_ip ");
-		printf(" server ip address by this format X.X.X.X (using to send packets with IP header)\n");
+		printf("  -J, --dest_ip ");
+		printf(" destination ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
-		printf("  -j, --client_ip ");
-		printf(" client ip address by this format X.X.X.X (using to send packets with IP header)\n");
+		printf("  -j, --source_ip ");
+		printf(" source ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
-		printf("  -K, --server_port ");
-		printf(" server port number (using to send packets with UPD header)\n");
+		printf("  -K, --dest_port ");
+		printf(" destination port number (using to send packets with UPD header)\n");
 
-		printf("  -k, --client_port ");
-		printf(" client port number (using to send packets with UDP header)\n");
+		printf("  -k, --source_port ");
+		printf(" source port number (using to send packets with UDP header)\n");
 
 		printf("  -Z, --server ");
 		printf(" choose server side for the current machine (--server/--client must be selected )\n");
@@ -389,7 +394,7 @@ static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
 		} else
 			idx = pkey_idx;
 	} else {
-		fprintf(stderr," Unable to validate PKey Index, changing to 0\n");
+		fprintf(stderr," Unable to validata PKey Index, changing to 0\n");
 		idx = 0;
 	}
 
@@ -1003,9 +1008,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "margin",         .has_arg = 1, .val = 'f' },
 			{ .name = "source_mac",     .has_arg = 1, .val = 'B' },
 			{ .name = "dest_mac",       .has_arg = 1, .val = 'E' },
-			{ .name = "dest_ip",      .has_arg = 1, .val = 'J' },
+			{ .name = "dest_ip",        .has_arg = 1, .val = 'J' },
 			{ .name = "source_ip",      .has_arg = 1, .val = 'j' },
-			{ .name = "dest_port",    .has_arg = 1, .val = 'K' },
+			{ .name = "dest_port", 		.has_arg = 1, .val = 'K' },
 			{ .name = "source_port",    .has_arg = 1, .val = 'k' },
 			{ .name = "limit_bw",       .has_arg = 1, .val = 'w' },
 			{ .name = "limit_msgrate",  .has_arg = 1, .val = 'y' },
@@ -1016,10 +1021,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
-			{ .name = "report-both",        .has_arg = 0, .flag = &report_both_flag, .val = 1},
-			{ .name = "reversed",        .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
+			{ .name = "report-both",    .has_arg = 0, .flag = &report_both_flag, .val = 1},
+			{ .name = "reversed",       .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
-			{ .name = "inline_recv",     .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
+			{ .name = "inline_recv",    .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);

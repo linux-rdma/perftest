@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
 	// Finding the IB device selected (or defalut if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
-		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
+		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		return FAILURE;
 	}
 
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
 
 	//  shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
-		fprintf(stderr,"Failed to exchange date between server and clients\n");
+		fprintf(stderr,"Failed to exchange data between server and clients\n");
 		return 1;
 	}
 
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
 
 		// shaking hands and gather the other side info.
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
 		}
 
@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
 
 	// An additional handshake is required after moving qp to RTR.
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
-       fprintf(stderr,"Failed to exchange date between server and clients\n");
+       fprintf(stderr,"Failed to exchange data between server and clients\n");
        return 1;
     }
 
