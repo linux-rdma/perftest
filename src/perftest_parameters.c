@@ -623,11 +623,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		if((user_param->is_server_ip == ON && user_param->is_client_ip == OFF) || (user_param->is_server_ip == OFF && user_param->is_client_ip == ON)) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
-			exit(1);
-		}
+		// if((user_param->is_server_ip == ON && user_param->is_client_ip == OFF) || (user_param->is_server_ip == OFF && user_param->is_client_ip == ON)) {
+			// printf(RESULT_LINE);
+			// fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
+			// exit(1);
+		// }
 
 		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) {
 			printf(RESULT_LINE);
