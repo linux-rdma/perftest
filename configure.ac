@@ -48,9 +48,7 @@ if test $HAVE_XRCD = yes; then
 	AC_DEFINE([HAVE_XRCD], [1], [Enable XRCD feature])
 fi
 
-AC_TRY_LINK([#include <infiniband/verbs.h>],
-	[struct ibv_send_wr *t; t->dc.dct_number = 0;],[HAVE_DC=yes], [HAVE_DC=yes])
-
+AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_DC=yes],[HAVE_DC=no])
 AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
 if test $HAVE_DC = yes; then
 	AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
@@ -72,9 +70,7 @@ if test $HAVE_SCIF = yes; then
         AC_DEFINE([HAVE_SCIF], [1], [Enable SCIF link Layer])
 fi
 
-AC_TRY_LINK([#include <infiniband/verbs_exp.h>],
-        [struct ibv_exp_device_attr dattr;],[HAVE_VERBS_EXP=yes], [HAVE_VERBS_EXP=yes])
-
+AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_VERBS_EXP=yes],[HAVE_VERBS_EXP=no])
 AM_CONDITIONAL([HAVE_VERBS_EXP],[test "x$HAVE_VERBS_EXP" = "xyes"])
 if test $HAVE_VERBS_EXP = yes; then
         AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])

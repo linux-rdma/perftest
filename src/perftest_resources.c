@@ -488,7 +488,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 				test_result = 1;
 			}
 		}
-
+		#ifdef HAVE_DC
 		if (user_param->connection_type == DC &&   ((!(user_param->duplex || user_param->tst == LAT) 
 			&& (user_param->machine == SERVER)) || ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) {
 				if (ibv_exp_destroy_dct(ctx->dct[i])) {
@@ -497,7 +497,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 				}
 				if ( i == user_param->num_of_qps -1 )
 					return test_result;
-		} else if (ibv_destroy_qp(ctx->qp[i])) {
+		} else
+		#endif
+		if (ibv_destroy_qp(ctx->qp[i])) {
 				fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
 				test_result = 1;
 		}
