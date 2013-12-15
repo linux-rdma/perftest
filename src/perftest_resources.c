@@ -518,13 +518,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 				test_result = 1;
 			}
 		}
-<<<<<<< HEAD
-
-		if (user_param->connection_type == DC &&   ((!(user_param->duplex || user_param->tst == LAT)
-=======
 		#ifdef HAVE_DC
 		if (user_param->connection_type == DC &&   ((!(user_param->duplex || user_param->tst == LAT) 
->>>>>>> revert last commit.
 			&& (user_param->machine == SERVER)) || ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) {
 				if (ibv_exp_destroy_dct(ctx->dct[i])) {
 					fprintf(stderr, "failed to destroy dct\n");
