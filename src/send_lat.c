@@ -52,30 +52,30 @@
  *
  ******************************************************************************/
 static int set_mcast_group(struct pingpong_context *ctx,
-						   struct perftest_parameters *user_parm,
+						   struct perftest_parameters *user_param,
 						   struct mcast_parameters *mcg_params) {
 
 	int i;
 	struct ibv_port_attr port_attr;
 
-	if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&mcg_params->port_gid)) {
+	if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&mcg_params->port_gid)) {
 			return 1;
 	}
 
-	if (ibv_query_pkey(ctx->context,user_parm->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
+	if (ibv_query_pkey(ctx->context,user_param->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
 		return 1;
 	}
 
-	if (ibv_query_port(ctx->context,user_parm->ib_port,&port_attr)) {
+	if (ibv_query_port(ctx->context,user_param->ib_port,&port_attr)) {
 		return 1;
 	}
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
-	mcg_params->ib_port = user_parm->ib_port;
-	mcg_params->user_mgid = user_parm->user_mgid;
-	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_parm->machine);
+	mcg_params->ib_port = user_param->ib_port;
+	mcg_params->user_mgid = user_param->user_mgid;
+	set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_param->machine);
 
-	if (!strcmp(link_layer_str(user_parm->link_type),"IB")) {
+	if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
 		// Request for Mcast group create registery in SM.
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
 			fprintf(stderr," Failed to Join Mcast request\n");
@@ -83,7 +83,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 		}
 	}
 
-	for (i=0; i < user_parm->num_of_qps; i++) {
+	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
 			fprintf(stderr, "Couldn't attach QP to MultiCast group");
@@ -99,7 +99,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static int send_set_up_connection(struct pingpong_context *ctx,
-								  struct perftest_parameters *user_parm,
+								  struct perftest_parameters *user_param,
 								  struct pingpong_dest *my_dest,
 								  struct mcast_parameters *mcg_params,
 								  struct perftest_comm *comm) {
@@ -107,16 +107,16 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	srand48(getpid() * time(NULL));
 	union ibv_gid temp_gid;
 
-	if (user_parm->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
+	if (user_param->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
 			return -1;
 		}
 	}
-	for (i = 0; i < user_parm->num_of_qps; i++)
+	for (i = 0; i < user_param->num_of_qps; i++)
 	{
-		if (user_parm->use_mcg) {
+		if (user_param->use_mcg) {
 
-			if (set_mcast_group(ctx,user_parm,mcg_params)) {
+			if (set_mcast_group(ctx,user_param,mcg_params)) {
 				return 1;
 			}
 
@@ -126,14 +126,14 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 
 		} else {
 			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
-			my_dest[i].lid   	   = ctx_get_local_lid(ctx->context,user_parm->ib_port);
+			my_dest[i].lid   	   = ctx_get_local_lid(ctx->context,user_param->ib_port);
 			my_dest[i].qpn   	   = ctx->qp[i]->qp_num;
 		}
 
 		my_dest[i].psn = lrand48() & 0xffffff;
 
 		// We do not fail test upon lid above RoCE.
-		if (user_parm->gid_index < 0) {
+		if (user_param->gid_index < 0) {
 			if (!my_dest->lid) {
 				fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
 				return -1;
@@ -141,7 +141,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		}
 
 		#ifdef HAVE_XRCD
-		if (user_parm->use_xrc || user_parm->connection_type == DC) {
+		if (user_param->use_xrc || user_param->connection_type == DC) {
 			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
 				fprintf(stderr, "Couldn't get SRQ number\n");
 				return 1;
@@ -150,7 +150,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		#endif
 
 		#ifdef HAVE_DC
-		if (user_parm->connection_type == DC) {
+		if (user_param->connection_type == DC) {
 			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
 				fprintf(stderr, "Couldn't get SRQ number\n");
 				return 1;
@@ -246,7 +246,7 @@ int main(int argc, char *argv[]) {
 	// Finding the IB device selected (or defalut if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
-		fprintf(stderr," Unable to find the Infiniband/RoCE deivce\n");
+		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		return 1;
 	}
 
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
 
 		// shaking hands and gather the other side info.
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
 		}
 
@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
 
 	// shaking hands and gather the other side info.
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-		fprintf(stderr,"Failed to exchange date between server and clients\n");
+		fprintf(stderr,"Failed to exchange data between server and clients\n");
 		return 1;
 	}
 
@@ -433,7 +433,7 @@ int main(int argc, char *argv[]) {
 			// Sync between the client and server so the client won't send packets
 			// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-				fprintf(stderr,"Failed to exchange date between server and clients\n");
+				fprintf(stderr,"Failed to exchange data between server and clients\n");
 				return 1;
 			}
 
@@ -454,7 +454,7 @@ int main(int argc, char *argv[]) {
 		// Sync between the client and server so the client won't send packets
 		// Before the server has posted his receive wqes (in UC/UD it will result in a deadlock).
 		if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
-			fprintf(stderr,"Failed to exchange date between server and clients\n");
+			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
 		}
 

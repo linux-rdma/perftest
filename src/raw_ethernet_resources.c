@@ -162,7 +162,7 @@ void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
  * print test specification
  ******************************************************************************/
 
-void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_parm)
+void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param)
 {
 	struct ibv_flow_spec* spec_info = NULL;
 
@@ -183,7 +183,7 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			spec_info->eth.val.dst_mac[4],
 			spec_info->eth.val.dst_mac[5]);
 
-	if (user_parm->is_server_ip && user_parm->is_client_ip) {
+	if (user_param->is_server_ip && user_param->is_client_ip) {
 		char str_ip_s[INET_ADDRSTRLEN] = {0};
 		char str_ip_d[INET_ADDRSTRLEN] = {0};
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
@@ -196,7 +196,7 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 		printf("spec_info - src_ip   : %s\n",str_ip_s);
 	}
 
-	if (user_parm->is_server_port && user_parm->is_client_port) {
+	if (user_param->is_server_port && user_param->is_client_port) {
 
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 		spec_info = (struct ibv_flow_spec*)header_buff;
@@ -403,29 +403,29 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
  int send_set_up_connection(
 	struct ibv_flow_attr **flow_rules,
 	struct pingpong_context *ctx,
-	struct perftest_parameters *user_parm,
+	struct perftest_parameters *user_param,
 	struct raw_ethernet_info* my_dest_info,
 	struct raw_ethernet_info* rem_dest_info)
 {
 
 	union ibv_gid temp_gid;
 
-	if (user_parm->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_parm->ib_port,user_parm->gid_index,&temp_gid)) {
+	if (user_param->gid_index != -1) {
+		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
 			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 			return FAILURE;
 		}
 	}
 
-	if (user_parm->machine == SERVER || user_parm->duplex) {
+	if (user_param->machine == SERVER || user_param->duplex) {
 
 		void* header_buff;
 		struct ibv_flow_spec* spec_info;
 		struct ibv_flow_attr* attr_info;
 		int flow_rules_size;
 
-		int is_ip = user_parm->is_server_ip || user_parm->is_client_ip;
-		int is_port = user_parm->is_server_port || user_parm->is_client_port;
+		int is_ip = user_param->is_server_ip || user_param->is_client_ip;
+		int is_port = user_param->is_server_port || user_param->is_client_port;
 
 		flow_rules_size = calc_flow_rules_size(is_ip,is_port);
 
@@ -439,7 +439,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		attr_info->size = flow_rules_size;
 		attr_info->priority = 0;
 		attr_info->num_of_specs = 1 + is_ip + is_port;
-		attr_info->port = user_parm->ib_port;
+		attr_info->port = user_param->ib_port;
 		attr_info->flags = 0;
 		header_buff = header_buff + sizeof(struct ibv_flow_attr);
 		spec_info = (struct ibv_flow_spec*)header_buff;
@@ -447,50 +447,50 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
 		spec_info->eth.val.ether_type = 0;
 
-		if(user_parm->is_source_mac) {
-			mac_from_user(spec_info->eth.val.dst_mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac));
+		if(user_param->is_source_mac) {
+			mac_from_user(spec_info->eth.val.dst_mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac));
 		} else {
 			mac_from_gid(spec_info->eth.val.dst_mac, temp_gid.raw);
 		}
 
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
-		if(user_parm->is_server_ip && user_parm->is_client_ip) {
+		if(user_param->is_server_ip && user_param->is_client_ip) {
 
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
 			spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
 
-			if(user_parm->machine == SERVER) {
+			if(user_param->machine == SERVER) {
 
-				spec_info->ipv4.val.dst_ip = htonl(user_parm->server_ip);
-				spec_info->ipv4.val.src_ip = htonl(user_parm->client_ip);
+				spec_info->ipv4.val.dst_ip = htonl(user_param->server_ip);
+				spec_info->ipv4.val.src_ip = htonl(user_param->client_ip);
 
 			} else{
 
-				spec_info->ipv4.val.dst_ip = htonl(user_parm->client_ip);
-				spec_info->ipv4.val.src_ip = htonl(user_parm->server_ip);
+				spec_info->ipv4.val.dst_ip = htonl(user_param->client_ip);
+				spec_info->ipv4.val.src_ip = htonl(user_param->server_ip);
 			}
 
 			memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
 			memset((void*)&spec_info->ipv4.mask.src_ip, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
 		}
 
-		if(user_parm->is_server_port && user_parm->is_client_port) {
+		if(user_param->is_server_port && user_param->is_client_port) {
 
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			spec_info->tcp_udp.type = IBV_FLOW_SPEC_UDP;
 			spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
 
-			if(user_parm->machine == SERVER) {
+			if(user_param->machine == SERVER) {
 
-				spec_info->tcp_udp.val.dst_port = user_parm->server_port;
-				spec_info->tcp_udp.val.src_port = user_parm->client_port;
+				spec_info->tcp_udp.val.dst_port = user_param->server_port;
+				spec_info->tcp_udp.val.src_port = user_param->client_port;
 
 			} else{
-				spec_info->tcp_udp.val.dst_port = user_parm->client_port;
-				spec_info->tcp_udp.val.src_port = user_parm->server_port;
+				spec_info->tcp_udp.val.dst_port = user_param->client_port;
+				spec_info->tcp_udp.val.src_port = user_param->server_port;
 			}
 
 			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
@@ -498,37 +498,37 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		}
 	}
 
-	if (user_parm->machine == CLIENT || user_parm->duplex) {
+	if (user_param->machine == CLIENT || user_param->duplex) {
 
 		//set source mac
-		if(user_parm->is_source_mac) {
-			mac_from_user(my_dest_info->mac , &(user_parm->source_mac[0]) , sizeof(user_parm->source_mac) );
+		if(user_param->is_source_mac) {
+			mac_from_user(my_dest_info->mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac) );
 
 		} else {
 			mac_from_gid(my_dest_info->mac, temp_gid.raw );
 		}
 
 		//set dest mac
-		mac_from_user(rem_dest_info->mac , &(user_parm->dest_mac[0]) , sizeof(user_parm->dest_mac) );
+		mac_from_user(rem_dest_info->mac , &(user_param->dest_mac[0]) , sizeof(user_param->dest_mac) );
 
-		if(user_parm->is_client_ip) {
-			if(user_parm->machine == CLIENT) {
-				my_dest_info->ip = user_parm->client_ip;
+		if(user_param->is_client_ip) {
+			if(user_param->machine == CLIENT) {
+				my_dest_info->ip = user_param->client_ip;
 			} else {
-				my_dest_info->ip = user_parm->server_ip;
+				my_dest_info->ip = user_param->server_ip;
 			}
 		}
 
-		if(user_parm->machine == CLIENT) {
-			rem_dest_info->ip = user_parm->server_ip;
-			my_dest_info->port = user_parm->client_port;
-			rem_dest_info->port = user_parm->server_port;
+		if(user_param->machine == CLIENT) {
+			rem_dest_info->ip = user_param->server_ip;
+			my_dest_info->port = user_param->client_port;
+			rem_dest_info->port = user_param->server_port;
 		}
 
-		if(user_parm->machine == SERVER && user_parm->duplex) {
-			rem_dest_info->ip = user_parm->client_ip;
-			my_dest_info->port = user_parm->server_port;
-			rem_dest_info->port = user_parm->client_port;
+		if(user_param->machine == SERVER && user_param->duplex) {
+			rem_dest_info->ip = user_param->client_ip;
+			my_dest_info->port = user_param->server_port;
+			rem_dest_info->port = user_param->client_port;
 		}
 	}
 	return 0;

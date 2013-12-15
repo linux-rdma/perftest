@@ -209,9 +209,9 @@ int check_add_port(char **service,int port,
  *
  * Parameters :
  *
- *	ib_devname - The name of the deivce requested or NULL for the first one.
+ *	ib_devname - The name of the device requested or NULL for the first one.
  *
- * Return Value : the deivce or NULL in case of failure.
+ * Return Value : the device or NULL in case of failure.
  */
 struct ibv_device* ctx_find_dev(const char *ib_devname);
 
@@ -249,7 +249,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
  * Return Value : SUCCESS, FAILURE.
  */
 int destroy_ctx(struct pingpong_context *ctx,
-				struct perftest_parameters *user_parm);
+				struct perftest_parameters *user_param);
 
 /* ctx_init
  *
@@ -311,7 +311,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
  *
  *	ctx     - Test Context.
  *  dest    - pingpong_dest struct of the remote side.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *  my_dest - pingpong_dest struct of this side.
  *
  * Return Value : SUCCESS, FAILURE.
@@ -319,7 +319,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
  */
 int ctx_connect(struct pingpong_context *ctx,
 				struct pingpong_dest *dest,
-				struct perftest_parameters *user_parm,
+				struct perftest_parameters *user_param,
 				struct pingpong_dest *my_dest);
 
 /* ctx_set_send_wqes.
@@ -331,7 +331,7 @@ int ctx_connect(struct pingpong_context *ctx,
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *  rem_dest   - pingpong_dest struct of the remote side.
  *
  */
@@ -348,7 +348,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *user_param);
@@ -362,7 +362,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
@@ -376,7 +376,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
@@ -390,7 +390,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
@@ -404,7 +404,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
@@ -418,7 +418,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  *
  */
 int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_param);
@@ -432,7 +432,7 @@ int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  * Parameters :
  *
  *	ctx     - Test Context.
- *	user_parm  - user_parameters struct for this test.
+ *	user_param  - user_parameters struct for this test.
  */
 int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
@@ -445,7 +445,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
  * Parameters :
  *
  *  ctx     - Test Context.
- *  user_parm  - user_parameters struct for this test.
+ *  user_param  - user_parameters struct for this test.
  */
 int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
@@ -458,7 +458,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  * Parameters :
  *
  *  ctx     - Test Context.
- *  user_parm  - user_parameters struct for this test.
+ *  user_param  - user_parameters struct for this test.
  */
 int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
@@ -599,6 +599,21 @@ void catch_alarm(int sig);
  */
 void catch_alarm_infintely(int sig) ;
 
+/* ctx_modify_dc_qp_to_init.
+ *
+ * Description :
+ *
+ *	Modifies the given QP to INIT state , according to attributes in param.
+ *  The relevent attributes are ib_port, connection_type and verb.
+ *
+ * Parameters :
+ *
+ *	qp     - The QP that will be moved to INIT.
+ *	param  - The parameters for the QP.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
 int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param);
 
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param);
