@@ -183,49 +183,77 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 	}
+	if (user_param.test_method == RUN_REGULAR) {
+		if (user_param.machine == CLIENT || user_param.duplex) {
+			ctx_set_send_wqes(&ctx,&user_param,NULL);
+		}
 
-	if (user_param.machine == CLIENT || user_param.duplex) {
-		ctx_set_send_wqes(&ctx,&user_param,NULL);
-	}
+		if (user_param.machine == SERVER || user_param.duplex) {
+			if (ctx_set_recv_wqes(&ctx,&user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+				return 1;
+			}
+		}
 
-	if (user_param.machine == SERVER || user_param.duplex) {
-		if (ctx_set_recv_wqes(&ctx,&user_param)) {
-			fprintf(stderr," Failed to post receive recv_wqes\n");
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 1;
+		if (user_param.mac_fwd) {
+
+			if(run_iter_fw(&ctx,&user_param)) {
+				DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+				return FAILURE;
+			}
+
+		} else if (user_param.duplex) {
+
+			if(run_iter_bi(&ctx,&user_param)) {
+				DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+				return FAILURE;
+			}
+
+		} else if (user_param.machine == CLIENT) {
+
+			if(run_iter_bw(&ctx,&user_param)) {
+				DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+				return FAILURE;
+			}
+
+		} else {
+
+			if(run_iter_bw_server(&ctx,&user_param)) {
+				DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+				return 17;
+			}
+		}
+
+		print_report_bw(&user_param,NULL);
+	} else if (user_param.test_method == RUN_INFINITELY) {
+
+		if (user_param.machine == CLIENT)
+			ctx_set_send_wqes(&ctx,&user_param,NULL);
+
+		else if (user_param.machine == SERVER) {
+
+			if (ctx_set_recv_wqes(&ctx,&user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				return 1;
+			}
+		}
+
+		if (user_param.machine == CLIENT) {
+
+			if(run_iter_bw_infinitely(&ctx,&user_param)) {
+				fprintf(stderr," Error occured while running infinitely! aborting ...\n");
+				return 1;
+			}
+
+		} else if (user_param.machine == SERVER) {
+
+			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
+				fprintf(stderr," Error occured while running infinitely on server! aborting ...\n");
+				return 1;
+			}
 		}
 	}
-
-	if (user_param.mac_fwd) {
-
-		if(run_iter_fw(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else if (user_param.duplex) {
-
-		if(run_iter_bi(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else if (user_param.machine == CLIENT) {
-
-		if(run_iter_bw(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-
-	} else {
-
-		if(run_iter_bw_server(&ctx,&user_param)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 17;
-		}
-	}
-
-	print_report_bw(&user_param,NULL);
 
 	if(user_param.machine == SERVER || user_param.duplex) {
 
