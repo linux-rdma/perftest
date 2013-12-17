@@ -48,7 +48,10 @@ if test $HAVE_XRCD = yes; then
 	AC_DEFINE([HAVE_XRCD], [1], [Enable XRCD feature])
 fi
 
-AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_DC=yes],[HAVE_DC=no])
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_DCT_CREATE_FLAGS_MASK;],[HAVE_DC=yes], [HAVE_DC=no])
 AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
 if test $HAVE_DC = yes; then
 	AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
@@ -70,13 +73,16 @@ if test $HAVE_SCIF = yes; then
         AC_DEFINE([HAVE_SCIF], [1], [Enable SCIF link Layer])
 fi
 
-AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_VERBS_EXP=yes],[HAVE_VERBS_EXP=no])
+AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_VERBS_EXP=yes],[HAVE_VERBS_EXP=no],[#include <infiniband/verbs.h>])
 AM_CONDITIONAL([HAVE_VERBS_EXP],[test "x$HAVE_VERBS_EXP" = "xyes"])
 if test $HAVE_VERBS_EXP = yes; then
         AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])
 fi
 
-AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_RSS_EXP=yes],[HAVE_RSS_EXP=no])
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ;],[HAVE_RSS_EXP=yes], [HAVE_RSS_EXP=no])
 AM_CONDITIONAL([HAVE_RSS_EXP],[test "x$HAVE_RSS_EXP" = "xyes"])
 if test $HAVE_RSS_EXP = yes; then
         AC_DEFINE([HAVE_RSS_EXP], [1], [Have RSS in verbs_exp header])
