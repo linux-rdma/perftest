@@ -262,7 +262,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	if (tst == BW)
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
 
-	if ( tst == BW )
+	if ( tst == BW ) {
 		printf("      --report-both ");
 		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
 
@@ -271,8 +271,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+	}
 
-		printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
+	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
 
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
@@ -1592,6 +1593,10 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	}
 
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f) * 1000000;
+	if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
+		fprintf(stderr,"Can't produce a report\n");
+		exit(1);
+	}
 
 	run_inf_bi_factor = (user_param->duplex && user_param->test_method == RUN_INFINITELY) ? (user_param->verb == SEND ? 1 : 2) : 1 ;
 	tsize = run_inf_bi_factor * user_param->size;
@@ -1709,6 +1714,11 @@ void print_report_lat (struct perftest_parameters *user_param)
 
     } else {
         cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+		if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
+			fprintf(stderr,"Can't produce a report\n");
+			exit(1);
+		}
+
         units = "usec";
     }
 
@@ -1749,6 +1759,11 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+	if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
+		fprintf(stderr,"Can't produce a report\n");
+		exit(1);
+	}
+
 	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
 	printf(REPORT_FMT_LAT_DUR,
 		user_param->size,
