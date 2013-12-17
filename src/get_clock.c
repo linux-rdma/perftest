@@ -137,6 +137,7 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 	FILE* f;
 	char buf[256];
 	double mhz = 0.0;
+	int print_flag = 0;
 
 	f = fopen("/proc/cpuinfo","r");
 	if (!f)
@@ -162,7 +163,8 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 			mhz = m;
 			continue;
 		}
-		if (mhz != m) {
+		if ((mhz != m) && (print_flag ==0)) {
+			print_flag = 1;
 			fprintf(stderr, "Conflicting CPU frequency values"
 				" detected: %lf != %lf\n", mhz, m);
 			if (no_cpu_freq_fail) {
