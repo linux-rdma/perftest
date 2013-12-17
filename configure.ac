@@ -73,7 +73,7 @@ if test $HAVE_SCIF = yes; then
         AC_DEFINE([HAVE_SCIF], [1], [Enable SCIF link Layer])
 fi
 
-AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_VERBS_EXP=yes],[HAVE_VERBS_EXP=no])
+AC_CHECK_HEADERS([infiniband/verbs_exp.h],[HAVE_VERBS_EXP=yes],[HAVE_VERBS_EXP=no],[#include <infiniband/verbs.h>])
 AM_CONDITIONAL([HAVE_VERBS_EXP],[test "x$HAVE_VERBS_EXP" = "xyes"])
 if test $HAVE_VERBS_EXP = yes; then
         AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])
