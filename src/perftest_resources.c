@@ -505,8 +505,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 		} else
 		#endif
 		if (ibv_destroy_qp(ctx->qp[i])) {
-				fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
-				test_result = 1;
+			fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
+			test_result = 1;
 		}
 	}
 
@@ -886,9 +886,11 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 
 		if (user_param->work_rdma_cm == OFF) {
+			#ifdef HAVE_RSS_EXP
 			if (i == 0 && user_param->use_rss)
 				init_flag = IBV_QP_GROUP_RSS;
 			else
+			#endif
 				init_flag = 0;
 			if(user_param->connection_type == DC) {
 				if ( !((!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
