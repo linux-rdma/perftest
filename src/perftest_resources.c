@@ -548,7 +548,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 
-	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel && user_param->work_rdma_cm == ON)) ) {
+	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel)) ) {
 		if (!(user_param->connection_type == DC && user_param->machine == SERVER)) {
 			if (ibv_destroy_cq(ctx->recv_cq)) {
 				fprintf(stderr, "failed to destroy CQ\n");
