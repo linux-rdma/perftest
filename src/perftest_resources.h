@@ -538,15 +538,15 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  *
  * Return Value : SUCCESS, FAILURE.
  */
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,uint64_t inc_size,int scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
 
 	if (verb == ATOMIC)
-		wr->wr.atomic.remote_addr += inc_size;
+		wr->wr.atomic.remote_addr += INC(size);
 
 	else
-		wr->wr.rdma.remote_addr += inc_size;
+		wr->wr.rdma.remote_addr += INC(size);
 
-	if ( ((scnt+1) % (cycle_buffer/ inc_size)) == 0) {
+	if ( ((scnt+1) % (cycle_buffer/ INC(size))) == 0) {
 
 		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
@@ -570,11 +570,11 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,uint64_t inc_size,
  *		prim_addr - The address of the original buffer.
  *		server_is_ud - Indication to weather we are in UD mode.
  */
-static __inline void increase_loc_addr(struct ibv_sge *sg,uint64_t inc_size,int rcnt,uint64_t prim_addr,int server_is_ud) {
+static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr,int server_is_ud) {
 
-	sg->addr  += inc_size;
+	sg->addr  += INC(size);
 
-	if ( ((rcnt+1) % (cycle_buffer/ inc_size)) == 0 )
+	if ( ((rcnt+1) % (cycle_buffer/ INC(size))) == 0 )
 		sg->addr = prim_addr;
 
 }
