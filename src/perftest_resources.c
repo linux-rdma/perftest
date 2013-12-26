@@ -232,7 +232,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 		.pkey_index = user_param->pkey_index,
 		.gid_index = 0, //user_param->gid_index,
 		.hop_limit = 1,
-		.create_flags = IBV_EXP_DCT_CREATE_FLAG_RCV_INLINE,
+		.inline_size = user_param->inline_recv_size,
 	};
 
 	ctx->dct[dct_index] = ibv_exp_create_dct(ctx->context, &dctattr);
