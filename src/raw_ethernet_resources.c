@@ -68,11 +68,13 @@ int check_flow_steering_support() {
 /******************************************************************************
  *
  ******************************************************************************/
-static void mac_from_gid(uint8_t   *mac, uint8_t *gid )
+static void mac_from_gid(uint8_t   *mac, uint8_t *gid, uint32_t port)
 {
     memcpy(mac, gid + 8, 3);
     memcpy(mac + 3, gid + 13, 3);
-    mac[0] ^= 2;
+    if(port==1) {
+	mac[0] ^= 2;
+    }
 }
 
 /******************************************************************************
@@ -501,7 +503,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		if(user_param->is_source_mac) {
 			mac_from_user(spec_info->eth.val.dst_mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac));
 		} else {
-			mac_from_gid(spec_info->eth.val.dst_mac, temp_gid.raw);
+			mac_from_gid(spec_info->eth.val.dst_mac, temp_gid.raw, user_param->ib_port);
 		}
 
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
@@ -556,7 +558,7 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 			mac_from_user(my_dest_info->mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac) );
 
 		} else {
-			mac_from_gid(my_dest_info->mac, temp_gid.raw );
+			mac_from_gid(my_dest_info->mac, temp_gid.raw, user_param->ib_port);
 		}
 
 		//set dest mac

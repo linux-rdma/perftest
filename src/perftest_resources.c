@@ -230,7 +230,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 		.flow_label = 0,
 		.mtu = user_param->curr_mtu,
 		.pkey_index = user_param->pkey_index,
-		.gid_index = 0, //user_param->gid_index,
+		.gid_index = user_param->gid_index,
 		.hop_limit = 1,
 		.inline_size = user_param->inline_recv_size,
 	};
