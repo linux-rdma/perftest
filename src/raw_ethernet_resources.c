@@ -209,8 +209,8 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 		char str_ip_d[INET_ADDRSTRLEN] = {0};
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 		spec_info = (struct ibv_flow_spec*)header_buff;
-		uint32_t dst_ip = ntohl(spec_info->ipv4.val.dst_ip);
-		uint32_t src_ip = ntohl(spec_info->ipv4.val.src_ip);
+		uint32_t dst_ip = spec_info->ipv4.val.dst_ip;
+		uint32_t src_ip = spec_info->ipv4.val.src_ip;
 		inet_ntop(AF_INET, &dst_ip, str_ip_d, INET_ADDRSTRLEN);
 		printf("spec_info - dst_ip   : %s\n",str_ip_d);
 		inet_ntop(AF_INET, &src_ip, str_ip_s, INET_ADDRSTRLEN);
@@ -222,8 +222,8 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 
-		printf("spec_info - dst_port : %d\n",spec_info->tcp_udp.val.dst_port);
-		printf("spec_info - src_port : %d\n",spec_info->tcp_udp.val.src_port);
+		printf("spec_info - dst_port : %d\n",ntohs(spec_info->tcp_udp.val.dst_port));
+		printf("spec_info - src_port : %d\n",ntohs(spec_info->tcp_udp.val.src_port));
 	}
 
 }
@@ -516,13 +516,13 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 
 			if(user_param->machine == SERVER) {
 
-				spec_info->ipv4.val.dst_ip = htonl(user_param->server_ip);
-				spec_info->ipv4.val.src_ip = htonl(user_param->client_ip);
+				spec_info->ipv4.val.dst_ip = user_param->server_ip;
+				spec_info->ipv4.val.src_ip = user_param->client_ip;
 
 			} else{
 
-				spec_info->ipv4.val.dst_ip = htonl(user_param->client_ip);
-				spec_info->ipv4.val.src_ip = htonl(user_param->server_ip);
+				spec_info->ipv4.val.dst_ip = user_param->client_ip;
+				spec_info->ipv4.val.src_ip = user_param->server_ip;
 			}
 
 			memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
@@ -533,17 +533,17 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
 			spec_info = (struct ibv_flow_spec*)header_buff;
-			spec_info->tcp_udp.type = IBV_FLOW_SPEC_UDP;
+			spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
 			spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
 
 			if(user_param->machine == SERVER) {
 
-				spec_info->tcp_udp.val.dst_port = user_param->server_port;
-				spec_info->tcp_udp.val.src_port = user_param->client_port;
+				spec_info->tcp_udp.val.dst_port = htons(user_param->server_port);
+				spec_info->tcp_udp.val.src_port = htons(user_param->client_port);
 
 			} else{
-				spec_info->tcp_udp.val.dst_port = user_param->client_port;
-				spec_info->tcp_udp.val.src_port = user_param->server_port;
+				spec_info->tcp_udp.val.dst_port = htons(user_param->client_port);
+				spec_info->tcp_udp.val.src_port = htons(user_param->server_port);
 			}
 
 			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
