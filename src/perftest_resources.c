@@ -705,7 +705,9 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	int only_dct = 0;
 	int tx_buffer_depth = user_param->tx_depth;
 
-	only_dct =  !(user_param->verb == SEND && !(user_param->connection_type == DC && (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT))));
+	if (user_param->connection_type == DC) {
+		only_dct = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
+	}
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
@@ -773,7 +775,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		return FAILURE;
 	}
 
-	if (only_dct == 0) {
+	if ((user_param->connection_type == DC && only_dct == 0) || ((user_param->verb == SEND && user_param->connection_type != DC))) {
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
