@@ -279,6 +279,16 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
 	}
+	if (verb == SEND && tst == BW) {
+		printf("      --rate_limit=<rate[pps]>");
+		printf(" Set the maximum rate of sent packages\n");
+		
+		printf("      --burst_size=<size>");
+		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
+		
+		printf("      --rate_units=<units>");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
+	}
 
 	putchar('\n');
 }
@@ -370,6 +380,10 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->raw_qos 	  = 0;
 	user_param->inline_recv_size = 0;
 	user_param->tcp = 0;
+	user_param->is_rate_limiting = 0;
+	user_param->burst_size = 0;
+	user_param->rate_limit = 0;
+	user_param->rate_units = MEGA_BYTE_PS;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -725,9 +739,32 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		exit(1);
 	}
 	#endif
-	if((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
-		user_param->srq_exists = 1;
 
+	if ((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
+		user_param->srq_exists = 1;
+	
+	if (user_param->burst_size > 0) {
+		if (user_param->is_rate_limiting == 0) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Can't enable burst mode when rate limiter is off\n");
+			exit(1);
+		}
+	}
+
+	if (user_param->is_rate_limiting == 1) {
+		if (user_param->tst != BW || user_param->verb != SEND || user_param->duplex ||user_param->test_type != DURATION) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Rate limiter exists only in Unidirectional SEND BW Duration tests for now\n");
+			exit(1);
+		}
+	
+		if (user_param->burst_size <= 0) { 	
+			printf(RESULT_LINE);
+			fprintf(stderr," Setting burst size to tx depth = %d\n",user_param->tx_depth);
+			user_param->burst_size = user_param->tx_depth;
+		}
+	}
+	
 	return;
 }
 
@@ -971,6 +1008,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int pkey_flag = 0;
 	static int inline_recv_flag = 0;
 	static int tcp_flag = 0;
+	static int burst_size_flag = 0;
+	static int rate_limit_flag = 0;
+	static int rate_units_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1034,7 +1074,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "reversed",       .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
 			{ .name = "inline_recv",    .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
-			{ .name = "tcp",			.has_arg = 0, .flag = &tcp_flag, .val = 1},
+			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
+			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
+			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
+			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1248,6 +1291,37 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if (inline_recv_flag) {
 					user_param->inline_recv_size = strtol(optarg,NULL,0);
 				}
+				if (rate_limit_flag) {
+					user_param->is_rate_limiting = 1;
+					user_param->rate_limit = strtol(optarg,NULL,0);
+					if (user_param->rate_limit < 0) {
+						fprintf(stderr, " Rate limit must be non-negative\n");
+						return FAILURE;
+					}
+					rate_limit_flag = 0;
+				}	
+				if (burst_size_flag) {
+					user_param->burst_size = strtol(optarg,NULL,0);
+					if (user_param->burst_size < 0) {
+						fprintf(stderr, " Burst size must be non-negative\n");
+						return FAILURE;
+					}
+					burst_size_flag = 0;
+				}
+				if (rate_units_flag) {
+					if (strcmp("M",optarg) == 0) {
+						user_param->rate_units = MEGA_BYTE_PS;
+					} else if (strcmp("g",optarg) == 0) {
+						user_param->rate_units = GIGA_BIT_PS;
+					} else if (strcmp("p",optarg) == 0) {
+						user_param->rate_units = PACKET_PS;
+					} else {
+						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
+						return FAILURE;
+					}
+					rate_units_flag = 0; 	
+				}
+
 				break;
 
 			default:
@@ -1627,6 +1701,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
 							|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
+
 }
 
 /******************************************************************************

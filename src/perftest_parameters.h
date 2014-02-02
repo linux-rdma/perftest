@@ -235,6 +235,9 @@ enum ctx_device {
 	SKYHAWK			= 9
 };
 
+// Units for rate limiter
+enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
+
 struct perftest_parameters {
 
 	int				port;
@@ -326,6 +329,11 @@ struct perftest_parameters {
 	//results limits
 	float min_bw_limit;
 	float min_msgRate_limit;
+	// Rate Limiter
+	int is_rate_limiting;
+	int rate_limit;
+	int burst_size;
+	enum rate_limiter_units rate_units;
 };
 
 struct report_options {
