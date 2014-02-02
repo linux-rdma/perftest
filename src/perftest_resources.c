@@ -774,7 +774,6 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
 	}
-
 	if ((user_param->connection_type == DC && only_dct == 0) || ((user_param->verb == SEND && user_param->connection_type != DC))) {
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
 		if (!ctx->recv_cq) {
@@ -1641,13 +1640,24 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
  ******************************************************************************/
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-    int                totscnt = 0;
-    int 	       	   totccnt = 0;
-    int                i = 0;
-    int                index,ne,tot_iters;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_wc 	   *wc = NULL;
+	int                totscnt = 0;
+	int 	       	   totccnt = 0;
+	int                i = 0;
+	int                index,ne,tot_iters;
+	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_wc 	   *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
+
+	/* Rate Limiter*/
+	int rate_limit_pps = 0;
+	double gap_time = 0;	//in usec
+	cycles_t gap_cycles = 0;	//in cycles
+	cycles_t gap_deadline = 0;
+	unsigned int number_of_bursts = 0;
+	int burst_iter = 0;
+	int is_sending_burst = 0;
+	int cpu_mhz = 0;
+	/**/
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -1674,13 +1684,50 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->test_type == ITERATIONS && user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
 
+	// If using rate limiter, calculate gap time between bursts
+	if (user_param->is_rate_limiting == 1) {
+		// Calculate rate limit in pps
+		switch (user_param->rate_units) {
+			case MEGA_BYTE_PS:
+				rate_limit_pps = ((double)(user_param->rate_limit) / user_param->size) * 1048576;		//1024^2
+				break;
+			case GIGA_BIT_PS:
+				rate_limit_pps = ((double)(user_param->rate_limit) / (user_param->size * 8)) * 1000000000;	//1000^3
+				break;
+			case PACKET_PS:
+				rate_limit_pps = user_param->rate_limit;
+				break;
+			default:
+				fprintf(stderr, " Failed: Unknown rate limit units\n");
+				return 1;
+		}
+		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+		if (cpu_mhz <= 0) {
+			fprintf(stderr, "Failed: couldn't acquire cpu frequency for rate limiter.\n");
+		}
+		number_of_bursts = rate_limit_pps / user_param->burst_size;
+		gap_time = 1000000 * (1.0 / number_of_bursts);
+		gap_cycles = cpu_mhz * gap_time;
+	}
+
 	// main loop for posting
 	while (totscnt < tot_iters  || totccnt < tot_iters || (user_param->test_type == DURATION && user_param->state != END_STATE) ) {
 
 		// main loop to run over all the qps and post each time n messages
 		for (index =0 ; index < num_of_qps ; index++) {
 
-			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth)) {
+			if (user_param->is_rate_limiting == 1 && is_sending_burst == 0) {
+				if (gap_deadline > get_cycles()) {
+					//Go right to cq polling until gap time is over.
+					continue;
+				}
+				gap_deadline = get_cycles() + gap_cycles;
+				is_sending_burst = 1;
+				burst_iter = 0;
+			}
+
+			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
+				!(user_param->is_rate_limiting && is_sending_burst == 0)) {
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
@@ -1705,11 +1752,18 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
+				burst_iter += user_param->post_list;
 
 				if (user_param->post_list == 1 &&
 				   (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1)))
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+
+				// Check if a full burst was sent.
+				if (user_param->is_rate_limiting == 1 && burst_iter >=  user_param->burst_size) {
+					is_sending_burst = 0;
+				}
 			}
+
 		}
 
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
