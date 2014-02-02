@@ -1859,6 +1859,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
+				burst_iter += user_param->post_list;
 
 				if (user_param->post_list == 1 &&
 				   (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1)))
@@ -1872,6 +1873,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 				}
 			}
+
 		}
 
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {

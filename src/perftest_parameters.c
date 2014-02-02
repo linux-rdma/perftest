@@ -315,6 +315,16 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("      --rate_units=<units>");
 		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
 	}
+	if (verb == SEND && tst == BW) {
+		printf("      --rate_limit=<rate[pps]>");
+		printf(" Set the maximum rate of sent packages\n");
+
+		printf("      --burst_size=<size>");
+		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
+
+		printf("      --rate_units=<units>");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
+	}
 
 	putchar('\n');
 }
@@ -1397,6 +1407,37 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if (inline_recv_flag) {
 					user_param->inline_recv_size = strtol(optarg,NULL,0);
 				}
+				if (rate_limit_flag) {
+					user_param->is_rate_limiting = 1;
+					user_param->rate_limit = strtol(optarg,NULL,0);
+					if (user_param->rate_limit < 0) {
+						fprintf(stderr, " Rate limit must be non-negative\n");
+						return FAILURE;
+					}
+					rate_limit_flag = 0;
+				}
+				if (burst_size_flag) {
+					user_param->burst_size = strtol(optarg,NULL,0);
+					if (user_param->burst_size < 0) {
+						fprintf(stderr, " Burst size must be non-negative\n");
+						return FAILURE;
+					}
+					burst_size_flag = 0;
+				}
+				if (rate_units_flag) {
+					if (strcmp("M",optarg) == 0) {
+						user_param->rate_units = MEGA_BYTE_PS;
+					} else if (strcmp("g",optarg) == 0) {
+						user_param->rate_units = GIGA_BIT_PS;
+					} else if (strcmp("p",optarg) == 0) {
+						user_param->rate_units = PACKET_PS;
+					} else {
+						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
+						return FAILURE;
+					}
+					rate_units_flag = 0;
+				}
+
 				break;
 
 			default:
