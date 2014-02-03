@@ -752,9 +752,9 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	}
 
 	if (user_param->is_rate_limiting == 1) {
-		if (user_param->tst != BW || user_param->verb != SEND || user_param->duplex ||user_param->test_type != DURATION) {
+		if (user_param->tst != BW || user_param->verb == ATOMIC || (user_param->verb == SEND && user_param->duplex)) {
 			printf(RESULT_LINE);
-			fprintf(stderr," Rate limiter exists only in Unidirectional SEND BW Duration tests for now\n");
+			fprintf(stderr," Rate limiter cann't be executed on non-BW, ATOMIC or bidirectional SEND tests\n");
 			exit(1);
 		}
 
@@ -1287,9 +1287,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 0: // required for long options to work.
 				if (pkey_flag) {
 					user_param->pkey_index = strtol(optarg,NULL,0);
+					pkey_flag = 0;
 				}
 				if (inline_recv_flag) {
 					user_param->inline_recv_size = strtol(optarg,NULL,0);
+					inline_recv_flag = 0;
 				}
 				if (rate_limit_flag) {
 					user_param->is_rate_limiting = 1;
