@@ -1746,15 +1746,17 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
-				burst_iter += user_param->post_list;
 
 				if (user_param->post_list == 1 &&
 				   (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1)))
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 
 				// Check if a full burst was sent.
-				if (user_param->is_rate_limiting == 1 && burst_iter >=  user_param->burst_size) {
-					is_sending_burst = 0;
+				if (user_param->is_rate_limiting == 1) {
+					burst_iter += user_param->post_list;
+					if (burst_iter >= user_param->burst_size) {
+						is_sending_burst = 0;
+					}
 				}
 			}
 			
