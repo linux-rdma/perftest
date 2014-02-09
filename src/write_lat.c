@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (user_param.machine == SERVER) {
+	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
 		printf("\n************************************\n");
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
@@ -214,8 +214,10 @@ int main(int argc, char *argv[]) {
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-	printf(RESULT_LINE);
-	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+		printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+	}
 
 	if (user_param.test_method == RUN_ALL) {
 
@@ -238,6 +240,8 @@ int main(int argc, char *argv[]) {
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
-	printf(RESULT_LINE);
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+	}
 	return 0;
 }
