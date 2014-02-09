@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (user_param.machine == SERVER) {
+	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
 		printf("\n************************************\n");
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
@@ -351,10 +351,11 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
-	
-	printf(RESULT_LINE);
-	printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+	}
 	if (user_param.test_method == RUN_ALL) {
 
 		if (user_param.connection_type == UD)
@@ -497,7 +498,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	printf(RESULT_LINE);
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+	}
+
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr," Failed to close connection between server and client\n");
 		fprintf(stderr," Trying to close this side resources\n");

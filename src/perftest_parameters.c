@@ -290,6 +290,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
 	}
 
+	printf("      --output=<units>");
+	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -384,6 +387,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->burst_size = 0;
 	user_param->rate_limit = 0;
 	user_param->rate_units = MEGA_BYTE_PS;
+	user_param->output = -1;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -765,6 +769,19 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
+	if (user_param->output != -1) {
+		if (user_param->tst == BW && !(user_param->output == OUTPUT_BW || user_param->output == OUTPUT_MR)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Output verbosity level for BW can be: bandwidth, message_rate\n");
+			exit(1);
+		}
+
+		if (user_param->tst == LAT && !(user_param->output == OUTPUT_LAT)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Output verbosity level for BW can be: bandwidth, message_rate\n");
+			exit(1);
+		}
+	}
 	return;
 }
 
@@ -1011,6 +1028,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int burst_size_flag = 0;
 	static int rate_limit_flag = 0;
 	static int rate_units_flag = 0;
+	static int verbosity_output_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1078,6 +1096,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
 			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
+			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1323,7 +1342,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					}
 					rate_units_flag = 0;
 				}
-
+				if (verbosity_output_flag) {
+					if (strcmp("bandwidth",optarg) == 0) {
+						user_param->output = OUTPUT_BW;
+					} else if (strcmp("message_rate",optarg) == 0) {
+						user_param->output = OUTPUT_MR;
+					} else if (strcmp("latency",optarg) == 0) {
+						user_param->output = OUTPUT_LAT;
+					} else {
+						fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
+						return FAILURE;
+					}
+					verbosity_output_flag = 0;
+				}
 				break;
 
 			default:
@@ -1528,6 +1559,9 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 	int temp = 0;
+
+	if (user_param->output != FULL_VERBOSITY)
+		return;
 
 	printf(RESULT_LINE);
 	printf("                    ");
@@ -1737,7 +1771,11 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 			user_param->is_msgrate_limit_passed = 1;
 	}
 
-	if (user_param->raw_qos)
+	if (user_param->output == OUTPUT_BW)
+		printf("%lf\n",bw_avg);
+	else if (user_param->output == OUTPUT_MR)
+		printf("%lf\n",msgRate_avg);
+	else if (user_param->raw_qos)
 		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 	else
 		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
@@ -1778,6 +1816,7 @@ void print_report_lat (struct perftest_parameters *user_param)
     cycles_t median;
 	cycles_t *delta = NULL;
     const char* units;
+	double latency;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	ALLOCATE(delta,cycles_t,user_param->iters - 1);
@@ -1815,13 +1854,19 @@ void print_report_lat (struct perftest_parameters *user_param)
 
     median = get_median(user_param->iters - 1, delta);
 
-    printf(REPORT_FMT_LAT,
-			(unsigned long)user_param->size,
-			user_param->iters,
-			delta[0] / cycles_to_units / rtt_factor,
-			delta[user_param->iters - 2] / cycles_to_units / rtt_factor,
-			median / cycles_to_units / rtt_factor);
+	latency = median / cycles_to_units / rtt_factor;
 
+	if (user_param->output == OUTPUT_LAT) {
+		printf("%lf\n",latency);
+	}
+	else {
+		printf(REPORT_FMT_LAT,
+				(unsigned long)user_param->size,
+				user_param->iters,
+				delta[0] / cycles_to_units / rtt_factor,
+				delta[user_param->iters - 2] / cycles_to_units / rtt_factor,
+				latency);
+	}
     free(delta);
 }
 
@@ -1833,6 +1878,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	int rtt_factor;
 	double cycles_to_units;
 	cycles_t test_sample_time;
+	double latency;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
@@ -1842,10 +1888,17 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	}
 
 	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
-	printf(REPORT_FMT_LAT_DUR,
-		user_param->size,
-		user_param->iters,
-		(((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters));
+	latency = (((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters);
+
+	if (user_param->output == OUTPUT_LAT) {
+		printf("%lf\n",latency);
+	}
+	else {
+		printf(REPORT_FMT_LAT_DUR,
+			user_param->size,
+			user_param->iters,
+			latency);
+	}
 }
 /******************************************************************************
  * End

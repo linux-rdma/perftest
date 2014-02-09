@@ -238,6 +238,9 @@ enum ctx_device {
 // Units for rate limiter
 enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 
+// Verbosity Levels for test report
+enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
+
 struct perftest_parameters {
 
 	int				port;
@@ -334,6 +337,7 @@ struct perftest_parameters {
 	int rate_limit;
 	int burst_size;
 	enum rate_limiter_units rate_units;
+	enum verbosity_level output;
 };
 
 struct report_options {
