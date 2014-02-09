@@ -695,12 +695,14 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
-	int exp_flags = 0;
 	int num_of_qps = user_param->num_of_qps / 2;
 	int init_flag = 0;
 	int only_dct = 0;
 	int tx_buffer_depth = user_param->tx_depth;
+	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_reg_mr_in reg_mr_exp_in;
+	int exp_flags = 0;
+	#endif
 
 	if (user_param->connection_type == DC) {
         	only_dct = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
@@ -721,8 +723,11 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	} else {
 		ctx->buf = NULL;
-		//flags |= (1 << 5);
+	#ifdef HAVE_VERBS_EXP
 		exp_flags = IBV_EXP_ACCESS_ALLOCATE_MR;
+	#else
+		flags |= (1 << 5);
+	#endif
 	}
 
 	// Allocating an event channel if requested.
@@ -755,13 +760,16 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	}
 
 	// Allocating Memory region and assigning our buffer to it.
-	//ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
+#ifdef HAVE_VERBS_EXP
 	reg_mr_exp_in.pd = ctx->pd;
 	reg_mr_exp_in.addr = ctx->buf;
 	reg_mr_exp_in.length = ctx->buff_size;
 	reg_mr_exp_in.access = flags;
 	reg_mr_exp_in.exp_access = exp_flags;
-	ctx->mr = ibv_exp_reg_mr(&reg_mr_exp_in); 
+	ctx->mr = ibv_exp_reg_mr(&reg_mr_exp_in);
+#else
+	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
+#endif
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return FAILURE;
@@ -991,7 +999,12 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_qp_attr attr;
+#else
+	struct ibv_qp_attr attr;
+#endif
+
 	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
 
 	static int portindex=0;  // for dual-port support
@@ -1026,9 +1039,17 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 
 	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
 	attr.dct_key = user_param->dct_key;
+#ifdef HAVE_VERBS_EXP
 	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY;
+#else
+	attr.comp_mask = IBV_QP_ATTR_DCT_KEY;
+#endif
 
+#ifdef HAVE_VERBS_EXP
 	if (ibv_exp_modify_qp(qp,&attr,flags)) {
+#else
+	if (ibv_modify_qp_ex(qp,&attr,flags)) {
+#endif
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return 1;
 	}
@@ -1234,7 +1255,11 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
  *
  ******************************************************************************/
 static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
+							#ifdef HAVE_VERBS_EXP
 								struct ibv_exp_qp_attr *attr,
+							#else
+								struct ibv_qp_attr_ex *attr,
+							#endif
 								struct perftest_parameters *user_param,
 								struct pingpong_dest *dest,
 								struct pingpong_dest *my_dest)
@@ -1249,8 +1274,11 @@ static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
 	attr->max_rd_atomic  = dest->out_reads;
 
 	flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
-
+#ifdef HAVE_VERBS_EXP
 	return ibv_exp_modify_qp(qp,attr,flags);
+#else
+	return ibv_modify_qp_ex(qp,attr,flags);
+#endif
 }
 #endif
 
@@ -1295,7 +1323,11 @@ int ctx_connect(struct pingpong_context *ctx,
 
 	int i;
 #ifdef HAVE_DC
+	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_qp_attr attr_ex;
+	#else
+	struct ibv_qp_attr_ex attr_ex;
+	#endif
 #endif
 	struct ibv_qp_attr attr;
 	int xrc_offset = 0;
