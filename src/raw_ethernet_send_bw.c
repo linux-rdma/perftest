@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
 
 	user_param.verb    = SEND;
 	user_param.tst     = BW;
-	user_param.version = VERSION;
+	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 	user_param.connection_type = RawEth;
 
 	if (check_flow_steering_support()) {

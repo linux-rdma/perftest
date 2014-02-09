@@ -1024,12 +1024,12 @@ int ctx_xchg_data_ethernet( struct perftest_comm *comm,
 				   void *rem_data,int size) {
 
 	if (comm->rdma_params->servername) {
-		if (ethernet_write_data(comm,(char*)my_data)) {
+		if (ethernet_write_data(comm, (char *) my_data, size)) {
 			fprintf(stderr," Unable to write to socket/rdam_cm\n");
 			return 1;
 		}
 
-		if (ethernet_read_data(comm,(char*)rem_data)) {
+		if (ethernet_read_data(comm, (char *) rem_data, size)) {
 			fprintf(stderr," Unable to read from socket/rdam_cm\n");
 			return 1;
 		}
@@ -1037,12 +1037,12 @@ int ctx_xchg_data_ethernet( struct perftest_comm *comm,
 	// Server side will wait for the client side to reach the write function.
 	} else {
 
-		if (ethernet_read_data(comm,(char*)rem_data)) {
+		if (ethernet_read_data(comm, (char *) rem_data, size)) {
 			fprintf(stderr," Unable to read to socket/rdam_cm\n");
 			return 1;
 		}
 
-		if (ethernet_write_data(comm,(char*)my_data)) {
+		if (ethernet_write_data(comm, (char *) my_data, size)) {
 			fprintf(stderr," Unable to write from socket/rdam_cm\n");
 			return 1;
 		}
@@ -1157,9 +1157,9 @@ int rdma_write_data(void *data,
 /******************************************************************************
  *
  ******************************************************************************/
-int ethernet_write_data(struct perftest_comm *comm, char* msg) {
+int ethernet_write_data(struct perftest_comm *comm, char *msg, size_t size) {
 
-		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
+		if (write(comm->rdma_params->sockfd, msg, size) != size) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send reports\n");
 			return 1;
@@ -1171,9 +1171,9 @@ int ethernet_write_data(struct perftest_comm *comm, char* msg) {
 /******************************************************************************
  *
  ******************************************************************************/
-int ethernet_read_data(struct perftest_comm *comm, char* recv_msg) {
+int ethernet_read_data(struct perftest_comm *comm, char *recv_msg, size_t size) {
 
-	if (read(comm->rdma_params->sockfd, recv_msg, sizeof recv_msg) != sizeof recv_msg) {
+	if (read(comm->rdma_params->sockfd, recv_msg, size) != size) {
 		fprintf(stderr, "ethernet_read_data: Couldn't read reports\n");
 		return 1;
 	}
@@ -1303,7 +1303,7 @@ int ctx_close_connection(struct perftest_comm *comm,
  ******************************************************************************/
 void exchange_versions(struct perftest_comm *user_comm, struct perftest_parameters *user_param) {
 
-	if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(float))) {
+	if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(user_param->rem_version))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
 	}
@@ -1324,7 +1324,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		}
 	} else {
 		curr_mtu = (int) (set_mtu(context,user_param->ib_port,user_param->mtu));
-		if ( atof(user_param->rem_version) >= 5.1) {
+		if (strverscmp(user_param->rem_version, "5.1") >= 0) {
 			sprintf(cur,"%d",curr_mtu);
 			if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
 				fprintf(stderr," Failed to exchange data between server and clients\n");

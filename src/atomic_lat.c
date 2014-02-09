@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
 	user_param.verb    = ATOMIC;
 	user_param.tst     = LAT;
 	user_param.r_flag  = &report;
-	user_param.version = VERSION;
+	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {

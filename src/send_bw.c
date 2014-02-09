@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
 
 	user_param.verb    = SEND;
 	user_param.tst     = BW;
-	user_param.version = VERSION;
+	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 
 	// Configure the parameters values according to user arguments or defalut values.
 	ret_parser = parser(&user_param,argv,argc);
