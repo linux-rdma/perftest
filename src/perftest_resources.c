@@ -803,6 +803,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 #else
 	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
 #endif
+
 	if (!ctx->mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
 		return FAILURE;
