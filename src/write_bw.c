@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
-	user_param.version = VERSION;
+	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 
 	// Configure the parameters values according to user arguments or default values.
 	ret_parser = parser(&user_param,argv,argc);
