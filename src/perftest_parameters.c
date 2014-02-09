@@ -326,6 +326,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
 	}
 
+	printf("      --output=<units>");
+	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -1437,7 +1440,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					}
 					rate_units_flag = 0;
 				}
-
+				if (verbosity_output_flag) {
+					if (strcmp("bandwidth",optarg) == 0) {
+						user_param->output = OUTPUT_BW;
+					} else if (strcmp("message_rate",optarg) == 0) {
+						user_param->output = OUTPUT_MR;
+					} else if (strcmp("latency",optarg) == 0) {
+						user_param->output = OUTPUT_LAT;
+					} else {
+						fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
+						return FAILURE;
+					}
+					verbosity_output_flag = 0;
+				}
 				break;
 
 			default:
