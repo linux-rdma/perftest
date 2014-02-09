@@ -193,6 +193,8 @@
 
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
+#define MAX_VERSION 16		// Reserve 15 bytes for version numbers
+
 // The Verb of the benchmark.
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
@@ -310,8 +312,8 @@ struct perftest_parameters {
 	TestMethod		test_type;
 	DurationStates	state;
 	int				sockfd;
-	const char		*version;
-	char		*rem_version;
+	char			version[MAX_VERSION];
+	char			rem_version[MAX_VERSION];
 	cycles_t		*tposted;
 	cycles_t		*tcompleted;
 	int				use_mcg;

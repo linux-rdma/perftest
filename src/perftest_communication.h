@@ -235,9 +235,10 @@ int ctx_xchg_data( struct perftest_comm *comm,
  *
  *  comm   - contains connections info
  *  msg    - message that will be sent
+ *  size   - size of the message
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ethernet_write_data(struct perftest_comm *comm, char* msg);
+int ethernet_write_data(struct perftest_comm *comm, char *msg, size_t size);
 
 /* ethernet_read_data .
  *
@@ -248,10 +249,11 @@ int ethernet_write_data(struct perftest_comm *comm, char* msg);
  * Parameters :
  *
  *  comm   - contains connections info
- *  recv_msg    - function will return, in this argument, the message from remote machine 
+ *  recv_msg    - function will return, in this argument, the message from remote machine
+ *  size   - size of the message
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ethernet_read_data(struct perftest_comm *comm, char* recv_msg);
+int ethernet_read_data(struct perftest_comm *comm, char *recv_msg, size_t size);;
 
 /* rdma_write_data .
  *

@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	*/
 	user_param.verb    = SEND;
 	user_param.tst     = LAT;
-	user_param.version = VERSION;
+	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 	user_param.connection_type = RawEth;
 	user_param.r_flag  = &report;
 
