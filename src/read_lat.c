@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (user_param.machine == SERVER) {
+	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
 		printf("\n************************************\n");
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
@@ -219,7 +219,9 @@ int main(int argc, char *argv[]) {
 		 	fprintf(stderr,"Failed to close connection between server and client\n");
 		 	return 1;
 		}
-		printf(RESULT_LINE);
+		if (user_param.output == FULL_VERBOSITY) {
+			printf(RESULT_LINE);
+		}
 		return 0; // destroy_ctx(&ctx,&user_param);
 
 	}
@@ -231,9 +233,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	printf(RESULT_LINE);
-	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
-
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+		printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+	}
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 	if (user_param.test_method == RUN_ALL) {
@@ -256,6 +259,8 @@ int main(int argc, char *argv[]) {
 	 	return 1;
 	}
 
-	printf(RESULT_LINE);
+	if (user_param.output == FULL_VERBOSITY) {
+		printf(RESULT_LINE);
+	}
 	return 0; // destroy_ctx(&ctx,&user_param);
 }

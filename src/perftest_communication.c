@@ -1233,6 +1233,8 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 
 	int is_there_mgid,local_mgid,remote_mgid;
 
+	if (comm->rdma_params->output != FULL_VERBOSITY)
+		return;
 	// First of all we print the basic format.
     printf(BASIC_ADDR_FMT,sideArray[comm->rdma_params->side],element->lid,element->qpn,element->psn);
 
