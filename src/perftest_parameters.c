@@ -782,6 +782,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 	}
+
 	return;
 }
 
