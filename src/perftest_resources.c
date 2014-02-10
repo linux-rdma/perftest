@@ -1874,7 +1874,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 				}
 			}
-
 		}
 
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
