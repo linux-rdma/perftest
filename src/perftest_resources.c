@@ -705,7 +705,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	#endif
 
 	if (user_param->connection_type == DC) {
-        	only_dct = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
+		only_dct = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
 	}
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
@@ -1675,12 +1675,12 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
  ******************************************************************************/
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-    	int                totscnt = 0;
-    	int 	       	   totccnt = 0;
-    	int                i = 0;
-    	int                index,ne,tot_iters;
-    	struct ibv_send_wr *bad_wr = NULL;
-    	struct ibv_wc 	   *wc = NULL;
+	int                totscnt = 0;
+	int 	       	   totccnt = 0;
+	int                i = 0;
+	int                index,ne,tot_iters;
+	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_wc 	   *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
 	/* Rate Limiter*/
@@ -1763,7 +1763,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) && 
 				!(user_param->is_rate_limiting && is_sending_burst == 0)) {
-				
+
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
@@ -1800,11 +1800,9 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 				}
 			}
-			
 		}
 
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
-			
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr, "Couldn't request CQ notification\n");
