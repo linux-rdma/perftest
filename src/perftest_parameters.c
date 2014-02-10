@@ -746,7 +746,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if ((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
-	
+
 	if (user_param->burst_size > 0) {
 		if (user_param->is_rate_limiting == 0) {
 			printf(RESULT_LINE);
@@ -761,8 +761,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			fprintf(stderr," Rate limiter cann't be executed on non-BW, ATOMIC or bidirectional SEND tests\n");
 			exit(1);
 		}
-	
-		if (user_param->burst_size <= 0) { 	
+
+		if (user_param->burst_size <= 0) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Setting burst size to tx depth = %d\n",user_param->tx_depth);
 			user_param->burst_size = user_param->tx_depth;
@@ -782,6 +782,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 	}
+
 	return;
 }
 
@@ -1320,7 +1321,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 						return FAILURE;
 					}
 					rate_limit_flag = 0;
-				}	
+				}
 				if (burst_size_flag) {
 					user_param->burst_size = strtol(optarg,NULL,0);
 					if (user_param->burst_size < 0) {
@@ -1340,7 +1341,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
 						return FAILURE;
 					}
-					rate_units_flag = 0; 	
+					rate_units_flag = 0;
 				}
 				if (verbosity_output_flag) {
 					if (strcmp("bandwidth",optarg) == 0) {
