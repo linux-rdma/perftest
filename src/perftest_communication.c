@@ -25,6 +25,22 @@ static const char *gidArray[]   = {"GID"  , "MGID"};
  *
  ******************************************************************************/
 
+double bswap_double(double x) {
+	union {
+	    double ddata;
+	    uint64_t u64data;
+	} d1, d2;
+
+	d1.ddata = x;
+	d2.u64data = bswap_64(d1.u64data);
+	return d2.ddata;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+
+
 static int post_one_recv_wqe(struct pingpong_context *ctx) {
 
 	struct ibv_recv_wr wr;
@@ -1202,27 +1218,42 @@ int ctx_xchg_data( struct perftest_comm *comm,
  ******************************************************************************/
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
 							struct bw_report_data *rem_bw_rep) {
+
+	struct bw_report_data temp;
+
+	temp.size = hton_long(my_bw_rep->size);
+	temp.iters = hton_int(my_bw_rep->iters);
+	temp.bw_peak = hton_double(my_bw_rep->bw_peak);
+	temp.bw_avg = hton_double(my_bw_rep->bw_avg);
+	temp.msgRate_avg = hton_double(my_bw_rep->msgRate_avg);
+
 	/*******************Exchange Reports*******************/
-        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->size),(void*)(&rem_bw_rep->size),sizeof(unsigned long))) {
-	        fprintf(stderr," Failed to exchange data between server and clients\n");
-                exit(1);
-        }
-        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->iters),(void*)(&rem_bw_rep->iters),sizeof(int))) {
+	if (ctx_xchg_data(comm, (void*) (&temp.size), (void*) (&rem_bw_rep->size), sizeof(unsigned long))) {
+		fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+	}
+	if (ctx_xchg_data(comm, (void*) (&temp.iters), (void*) (&rem_bw_rep->iters), sizeof(int))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
 	}	 
-        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_peak),(void*)(&rem_bw_rep->bw_peak),sizeof(double))) {
+	if (ctx_xchg_data(comm, (void*) (&temp.bw_peak), (void*) (&rem_bw_rep->bw_peak), sizeof(double))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
-        }
-        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->bw_avg),(void*)(&rem_bw_rep->bw_avg),sizeof(double))) {
+	}
+	if (ctx_xchg_data(comm, (void*) (&temp.bw_avg), (void*) (&rem_bw_rep->bw_avg), sizeof(double))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
-        }
-        if (ctx_xchg_data(comm,(void*)(&my_bw_rep->msgRate_avg),(void*)(&rem_bw_rep->msgRate_avg),sizeof(double))) {
+	}
+	if (ctx_xchg_data(comm, (void*) (&temp.msgRate_avg), (void*) (&rem_bw_rep->msgRate_avg), sizeof(double))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
-        }
+	}
+
+	rem_bw_rep->size = hton_long(rem_bw_rep->size);
+	rem_bw_rep->iters = hton_int(rem_bw_rep->iters);
+	rem_bw_rep->bw_peak = hton_double(rem_bw_rep->bw_peak);
+	rem_bw_rep->bw_avg = hton_double(rem_bw_rep->bw_avg);
+	rem_bw_rep->msgRate_avg = hton_double(rem_bw_rep->msgRate_avg);
 }
 
 /******************************************************************************
