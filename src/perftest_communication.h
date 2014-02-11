@@ -39,9 +39,40 @@
 #ifndef PERFTEST_COMMUNICATION_H
 #define PERFTEST_COMMUNICATION_H
 
+#include <netinet/in.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include "perftest_resources.h"
+
+//Macro for 64 bit variables to switch to/from net
+#if __BYTE_ORDER == __BIG_ENDIAN || __BYTE_ORDER == __LITTLE_ENDIAN
+#  if __BYTE_ORDER == __BIG_ENDIAN
+#    define ntoh_64(x) (x)
+#    define hton_64(x) (x)
+#    define ntoh_double(x) (x)
+#    define hton_double(x) (x)
+#  else
+#    define ntoh_64(x) bswap_64(x)
+#    define hton_64(x) bswap_64(x)
+#    define ntoh_double(x) bswap_double(x)
+#    define hton_double(x) bswap_double(x)
+#  endif
+#else
+#  error "Only BIG_ENDIAN and LITTLE_ENDIAN are supported."
+#endif
+
+// long is 64-bit in LP64 mode, 32-bit in LLP64 mode.
+#if defined(_LP64) || defined(__LP64__)
+#  define ntoh_long(x) ntoh_64(x)
+#  define hton_long(x) hton_64(x)
+#else
+#  define ntoh_long(x) ntohl(x)
+#  define hton_long(x) htonl(x)
+#endif
+
+// int is 32-bit in both LP64 and LLP64 modes.
+#define ntoh_int(x) (int) ntohl((uint32_t) (x))
+#define hton_int(x) (int) htonl((uint32_t) (x))
 
 #define KEY_MSG_SIZE 	 (59)   // Message size without gid.
 #define KEY_MSG_SIZE_GID (108)   // Message size with gid (MGID as well).
@@ -73,6 +104,18 @@ struct perftest_comm {
 	struct pingpong_context    *rdma_ctx;
 	struct perftest_parameters *rdma_params;
 };
+
+/* bswap_double
+ *
+ * Description : swap byte order for double.
+ *
+ * Parameters :
+ *  x -	input double variable
+ *
+ *  Return Value : double after byte order being swapped.
+ */
+double bswap_double(double x);
+
 
 /* create_comm_struct
  *
