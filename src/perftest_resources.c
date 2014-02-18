@@ -11,8 +11,8 @@
 #include "perftest_resources.h"
 
 
-static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_READ};
-static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
+static enum ibv_exp_wr_opcode opcode_verbs_array[] = {IBV_EXP_WR_SEND,IBV_EXP_WR_RDMA_WRITE,IBV_EXP_WR_RDMA_READ};
+static enum ibv_exp_wr_opcode opcode_atomic_array[] = {IBV_EXP_WR_ATOMIC_CMP_AND_SWP,IBV_EXP_WR_ATOMIC_FETCH_AND_ADD};
 struct perftest_parameters* duration_param;
 int cycle_buffer=4096;
 
@@ -152,7 +152,7 @@ static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perft
 	qp_init_attr.pd = ctx->pd;
 	qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
 
-	qp_init_attr.qp_type = IBV_QPT_DC_INI;
+	qp_init_attr.qp_type = IBV_EXP_QPT_DC_INI;
 	qp_init_attr.srq = NULL;
 	qp_init_attr.cap.max_send_wr  = user_param->tx_depth;
 	qp_init_attr.cap.max_send_sge = MAX_SEND_SGE;
@@ -282,12 +282,12 @@ static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct 
 	attr.pd = ctx->pd;
 
 	if (qp_index == 0) { //rss parent
-		attr.qpg.qpg_type = IBV_QPG_PARENT;
+		attr.qpg.qpg_type = IBV_EXP_QPG_PARENT;
 		attr.qpg.qpg_parent = NULL;
 		attr.qpg.parent_attrib.tss_child_count = 0;
 		attr.qpg.parent_attrib.rss_child_count = 2;
 	} else { //rss childs
-		attr.qpg.qpg_type = IBV_QPG_CHILD_RX;
+		attr.qpg.qpg_type = IBV_EXP_QPG_CHILD_RX;
 		attr.qpg.qpg_parent = ctx->qp[0];
 	}
 	qp = ibv_exp_create_qp(ctx->context,&attr);
@@ -407,7 +407,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 	#ifdef HAVE_DC
 	if (user_param->connection_type == DC)
-		ALLOCATE(ctx->dct,struct ibv_dct*,user_param->num_of_qps);
+		ALLOCATE(ctx->dct,struct ibv_exp_dct*,user_param->num_of_qps);
 	#endif
 
 	if ((user_param->tst == BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -431,13 +431,13 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
-		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
+		ALLOCATE(ctx->wr,struct ibv_exp_send_wr,user_param->num_of_qps*user_param->post_list);
 
 		if ((user_param->verb == SEND && user_param->connection_type == UD ) || user_param->connection_type == DC) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
 		if (user_param->connection_type == DC)
-			ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
+			ALLOCATE(ctx->wr,struct ibv_exp_send_wr,user_param->num_of_qps*user_param->post_list);
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
@@ -908,7 +908,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		if (user_param->work_rdma_cm == OFF) {
 			#ifdef HAVE_RSS_EXP
 			if (i == 0 && user_param->use_rss)
-				init_flag = IBV_QP_GROUP_RSS;
+				init_flag = IBV_EXP_QP_GROUP_RSS;
 			else
 			#endif
 				init_flag = 0;
@@ -1037,7 +1037,7 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 		case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	}
 
-	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
+	flags |= IBV_QP_ACCESS_FLAGS | IBV_EXP_QP_DC_KEY;
 	attr.dct_key = user_param->dct_key;
 #ifdef HAVE_VERBS_EXP
 	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY;
@@ -1422,7 +1422,7 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	}
 
 	for (i = 0; i < num_of_qps ; i++) {
-		memset(&ctx->wr[i],0,sizeof(struct ibv_send_wr));
+		memset(&ctx->wr[i],0,sizeof(struct ibv_exp_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
 		if (user_param->mac_fwd)
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size);
@@ -1470,10 +1470,10 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 			}
 
 			if (user_param->verb == ATOMIC)
-				ctx->wr[i*user_param->post_list + j].opcode = opcode_atomic_array[user_param->atomicType];
+				ctx->wr[i*user_param->post_list + j].exp_opcode = opcode_atomic_array[user_param->atomicType];
 
 			else
-				ctx->wr[i*user_param->post_list + j].opcode = opcode_verbs_array[user_param->verb];
+				ctx->wr[i*user_param->post_list + j].exp_opcode = opcode_verbs_array[user_param->verb];
 
 			if (user_param->verb == WRITE || user_param->verb == READ) {
 
@@ -1626,7 +1626,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
 	int ne,index,warmindex,warmupsession;
-	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_exp_send_wr *bad_wr = NULL;
 	struct ibv_wc wc;
 	struct ibv_wc *wc_for_cleaning = NULL;
 	int num_of_qps = user_param->num_of_qps;
@@ -1644,7 +1644,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 
 		for (warmindex = 0 ;warmindex < warmupsession ;warmindex += user_param->post_list) {
 
-            if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+            if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
                 fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
                 return 1;
             }
@@ -1679,7 +1679,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int 	       	   totccnt = 0;
 	int                i = 0;
 	int                index,ne,tot_iters;
-	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_exp_send_wr *bad_wr = NULL;
 	struct ibv_wc 	   *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
@@ -1772,7 +1772,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -1978,7 +1978,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 {
     	int i,j = 0;
     	int index = 0,ne;
-    	struct ibv_send_wr *bad_wr = NULL;
+    	struct ibv_exp_send_wr *bad_wr = NULL;
     	struct ibv_wc *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
@@ -2007,7 +2007,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 			while (ctx->scnt[index] < user_param->tx_depth) {
 
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -2100,7 +2100,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	struct ibv_wc *wc = NULL;
 	struct ibv_wc *wc_tx = NULL;
 	struct ibv_recv_wr *bad_wr_recv = NULL;
-	struct ibv_send_wr *bad_wr      = NULL;
+	struct ibv_exp_send_wr *bad_wr      = NULL;
 	int num_of_qps = user_param->num_of_qps;
 	// This is to ensure SERVER will not start to send packets before CLIENT start the test.
 	int before_first_rx = ON;
@@ -2152,7 +2152,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
 					break;
 
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -2279,7 +2279,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int 					poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
-	struct ibv_send_wr      *bad_wr = NULL;
+	struct ibv_exp_send_wr      *bad_wr = NULL;
 	struct ibv_wc           wc;
 
 	ctx->wr[0].sg_list->length = user_param->size;
@@ -2318,7 +2318,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 
 			*post_buf = (char)++scnt;
 
-			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+			if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return FAILURE;
 			}
@@ -2356,7 +2356,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 {
 	int scnt = 0;
 	int ne;
-	struct ibv_send_wr *bad_wr = NULL;
+	struct ibv_exp_send_wr *bad_wr = NULL;
 	struct ibv_wc wc;
 
 	ctx->wr[0].sg_list->length = user_param->size;
@@ -2376,7 +2376,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		if (user_param->test_type == ITERATIONS)
 			user_param->tposted[scnt++] = get_cycles();
 
-		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+		if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 			return 11;
 		}
@@ -2422,7 +2422,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	int				ne;
 	struct 			ibv_wc	wc;
 	struct 			ibv_recv_wr	*bad_wr_recv;
-	struct 			ibv_send_wr	*bad_wr;
+	struct 			ibv_exp_send_wr	*bad_wr;
 	int  			firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
@@ -2513,7 +2513,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				break;
 
 			//send the packet that's in index 0 on the buffer
-			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+			if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return FAILURE;
 			}
