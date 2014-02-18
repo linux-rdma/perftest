@@ -138,11 +138,11 @@ struct pingpong_context {
 	void						*buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
-	struct ibv_dct				**dct;
+	struct ibv_exp_dct			**dct;
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
-	struct ibv_send_wr			*wr;
+	struct ibv_exp_send_wr			*wr;
 	struct ibv_recv_wr			*rwr;
 	uint64_t					size;
 	uint64_t					*my_addr;
@@ -538,7 +538,7 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  *
  * Return Value : SUCCESS, FAILURE.
  */
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_rem_addr(struct ibv_exp_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
 
 	if (verb == ATOMIC)
 		wr->wr.atomic.remote_addr += INC(size);
