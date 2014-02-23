@@ -138,6 +138,7 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 	char buf[256];
 	double mhz = 0.0;
 	int print_flag = 0;
+	double delta;
 
 	f = fopen("/proc/cpuinfo","r");
 	if (!f)
@@ -163,7 +164,8 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 			mhz = m;
 			continue;
 		}
-		if ((mhz != m) && (print_flag ==0)) {
+		delta = mhz > m ? mhz - m : m - mhz;
+		if ((delta / mhz > 0.02) && (print_flag ==0)) {
 			print_flag = 1;
 			fprintf(stderr, "Conflicting CPU frequency values"
 				" detected: %lf != %lf\n", mhz, m);
@@ -190,7 +192,7 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 		return 0;
 
 	delta = proc > sample ? proc - sample : sample - proc;
-	if (delta / proc > 0.01) {
+	if (delta / proc > 0.02) {
 			fprintf(stderr, "Warning: measured timestamp frequency "
 					"%g differs from nominal %g MHz\n",
 					sample, proc);
