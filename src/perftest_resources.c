@@ -9,10 +9,16 @@
 #include <signal.h>
 
 #include "perftest_resources.h"
+#include "config.h"
 
-
+#ifdef HAVE_VERBS_EXP
 static enum ibv_exp_wr_opcode opcode_verbs_array[] = {IBV_EXP_WR_SEND,IBV_EXP_WR_RDMA_WRITE,IBV_EXP_WR_RDMA_READ};
 static enum ibv_exp_wr_opcode opcode_atomic_array[] = {IBV_EXP_WR_ATOMIC_CMP_AND_SWP,IBV_EXP_WR_ATOMIC_FETCH_AND_ADD};
+#else
+static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_READ};
+static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
+#endif
+
 struct perftest_parameters* duration_param;
 int cycle_buffer=4096;
 
@@ -151,8 +157,11 @@ static struct ibv_qp *ctx_dc_qp_create(struct pingpong_context *ctx,struct perft
 	qp_init_attr.cap.max_inline_data = user_param->inline_size;
 	qp_init_attr.pd = ctx->pd;
 	qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
-
+#ifdef HAVE_VERBS_EXP
 	qp_init_attr.qp_type = IBV_EXP_QPT_DC_INI;
+#else
+	qp_init_attr.qp_type = IBV_QPT_DC_INI;
+#endif
 	qp_init_attr.srq = NULL;
 	qp_init_attr.cap.max_send_wr  = user_param->tx_depth;
 	qp_init_attr.cap.max_send_sge = MAX_SEND_SGE;
@@ -282,12 +291,20 @@ static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct 
 	attr.pd = ctx->pd;
 
 	if (qp_index == 0) { //rss parent
+	#ifdef HAVE_VERBS_EXP
 		attr.qpg.qpg_type = IBV_EXP_QPG_PARENT;
+	#else
+		attr.qpg.qpg_type = IBV_QPG_PARENT;
+	#endif
 		attr.qpg.qpg_parent = NULL;
 		attr.qpg.parent_attrib.tss_child_count = 0;
 		attr.qpg.parent_attrib.rss_child_count = 2;
 	} else { //rss childs
+	#ifdef HAVE_VERBS_EXP
 		attr.qpg.qpg_type = IBV_EXP_QPG_CHILD_RX;
+	#else
+		attr.qpg.qpg_type = IBV_QPG_CHILD_RX;
+	#endif
 		attr.qpg.qpg_parent = ctx->qp[0];
 	}
 	qp = ibv_exp_create_qp(ctx->context,&attr);
@@ -406,8 +423,13 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
 
 	#ifdef HAVE_DC
-	if (user_param->connection_type == DC)
+	if (user_param->connection_type == DC) {
+	#ifdef HAVE_VERBS_EXP
 		ALLOCATE(ctx->dct,struct ibv_exp_dct*,user_param->num_of_qps);
+	#else
+		ALLOCATE(ctx->dct,struct ibv_dct*,user_param->num_of_qps);
+	#endif
+	}
 	#endif
 
 	if ((user_param->tst == BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -431,13 +453,21 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
 		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
+	#ifdef HAVE_VERBS_EXP
 		ALLOCATE(ctx->wr,struct ibv_exp_send_wr,user_param->num_of_qps*user_param->post_list);
-
+	#else
+		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
+	#endif
 		if ((user_param->verb == SEND && user_param->connection_type == UD ) || user_param->connection_type == DC) {
 			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
 		}
-		if (user_param->connection_type == DC)
+		if (user_param->connection_type == DC) {
+		#ifdef HAVE_VERBS_EXP
 			ALLOCATE(ctx->wr,struct ibv_exp_send_wr,user_param->num_of_qps*user_param->post_list);
+		#else
+			ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
+		#endif
+		}
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
@@ -912,8 +942,13 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 		if (user_param->work_rdma_cm == OFF) {
 			#ifdef HAVE_RSS_EXP
-			if (i == 0 && user_param->use_rss)
+			if (i == 0 && user_param->use_rss) {
+			#ifdef HAVE_VERBS_EXP
 				init_flag = IBV_EXP_QP_GROUP_RSS;
+			#else
+				init_flag = IBV_QP_GROUP_RSS;
+			#endif
+			}
 			else
 			#endif
 				init_flag = 0;
@@ -1041,8 +1076,11 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 		case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
 		case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	}
-
+#ifdef HAVE_VERBS_EXP
 	flags |= IBV_QP_ACCESS_FLAGS | IBV_EXP_QP_DC_KEY;
+#else
+	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
+#endif
 	attr.dct_key = user_param->dct_key;
 #ifdef HAVE_VERBS_EXP
 	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY;
@@ -1427,7 +1465,11 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 	}
 
 	for (i = 0; i < num_of_qps ; i++) {
+	#ifdef HAVE_VERBS_EXP
 		memset(&ctx->wr[i],0,sizeof(struct ibv_exp_send_wr));
+	#else
+		memset(&ctx->wr[i],0,sizeof(struct ibv_send_wr));
+	#endif
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
 		if (user_param->mac_fwd)
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size);
@@ -1474,12 +1516,20 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 				ctx->wr[i*user_param->post_list + j].send_flags = 0;
 			}
 
-			if (user_param->verb == ATOMIC)
+			if (user_param->verb == ATOMIC) {
+			#ifdef HAVE_VERBS_EXP
 				ctx->wr[i*user_param->post_list + j].exp_opcode = opcode_atomic_array[user_param->atomicType];
-
-			else
+			#else
+				ctx->wr[i*user_param->post_list + j].opcode = opcode_atomic_array[user_param->atomicType];
+			#endif
+			}
+			else {
+			#ifdef HAVE_VERBS_EXP
 				ctx->wr[i*user_param->post_list + j].exp_opcode = opcode_verbs_array[user_param->verb];
-
+			#else
+				ctx->wr[i*user_param->post_list + j].opcode = opcode_verbs_array[user_param->verb];
+			#endif
+			}
 			if (user_param->verb == WRITE || user_param->verb == READ) {
 
 				ctx->wr[i*user_param->post_list + j].wr.rdma.rkey = rem_dest[xrc_offset + i].rkey;
@@ -1632,7 +1682,11 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
 	int ne,index,warmindex,warmupsession;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr *bad_wr = NULL;
+#else
+	struct ibv_send_wr *bad_wr = NULL;
+#endif
 	struct ibv_wc wc;
 	struct ibv_wc *wc_for_cleaning = NULL;
 	int num_of_qps = user_param->num_of_qps;
@@ -1650,7 +1704,11 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 
 		for (warmindex = 0 ;warmindex < warmupsession ;warmindex += user_param->post_list) {
 
+		#ifdef HAVE_VERBS_EXP
             if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+		#else
+			if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+		#endif
                 fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
                 return 1;
             }
@@ -1685,7 +1743,11 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int 	       	   totccnt = 0;
 	int                i = 0;
 	int                index,ne,tot_iters;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr *bad_wr = NULL;
+#else
+	struct ibv_send_wr *bad_wr = NULL;
+#endif
 	struct ibv_wc 	   *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
@@ -1778,7 +1840,11 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
+			#ifdef HAVE_VERBS_EXP
 				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#else
+				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#endif
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -1982,10 +2048,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  ******************************************************************************/
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-    	int i,j = 0;
-    	int index = 0,ne;
+	int i,j = 0;
+	int index = 0,ne;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr *bad_wr = NULL;
-    	struct ibv_wc *wc = NULL;
+#else
+	struct ibv_send_wr *bad_wr = NULL;
+#endif
+	struct ibv_wc *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
@@ -2013,7 +2083,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 			while (ctx->scnt[index] < user_param->tx_depth) {
 
+			#ifdef HAVE_VERBS_EXP
 				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#else
+				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#endif
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -2106,7 +2180,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 	struct ibv_wc *wc = NULL;
 	struct ibv_wc *wc_tx = NULL;
 	struct ibv_recv_wr *bad_wr_recv = NULL;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr *bad_wr      = NULL;
+#else
+	struct ibv_send_wr *bad_wr      = NULL;
+#endif
 	int num_of_qps = user_param->num_of_qps;
 	// This is to ensure SERVER will not start to send packets before CLIENT start the test.
 	int before_first_rx = ON;
@@ -2158,7 +2236,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
 					break;
 
+			#ifdef HAVE_VERBS_EXP
 				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#else
+				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+			#endif
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
 					return 1;
 				}
@@ -2285,7 +2367,11 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int 					poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr      *bad_wr = NULL;
+#else
+	struct ibv_send_wr      *bad_wr = NULL;
+#endif
 	struct ibv_wc           wc;
 
 	ctx->wr[0].sg_list->length = user_param->size;
@@ -2323,8 +2409,11 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 				user_param->tposted[scnt] = get_cycles();
 
 			*post_buf = (char)++scnt;
-
+		#ifdef HAVE_VERBS_EXP
 			if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+		#else
+			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+		#endif
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return FAILURE;
 			}
@@ -2362,7 +2451,11 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 {
 	int scnt = 0;
 	int ne;
+#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr *bad_wr = NULL;
+#else
+	struct ibv_send_wr *bad_wr = NULL;
+#endif
 	struct ibv_wc wc;
 
 	ctx->wr[0].sg_list->length = user_param->size;
@@ -2382,7 +2475,11 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		if (user_param->test_type == ITERATIONS)
 			user_param->tposted[scnt++] = get_cycles();
 
+	#ifdef HAVE_VERBS_EXP
 		if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+	#else
+		if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+	#endif
 			fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 			return 11;
 		}
@@ -2428,7 +2525,11 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	int				ne;
 	struct 			ibv_wc	wc;
 	struct 			ibv_recv_wr	*bad_wr_recv;
+#ifdef HAVE_VERBS_EXP
 	struct 			ibv_exp_send_wr	*bad_wr;
+#else
+	struct          ibv_send_wr     *bad_wr;
+#endif
 	int  			firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
@@ -2519,7 +2620,11 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				break;
 
 			//send the packet that's in index 0 on the buffer
+		#ifdef HAVE_VERBS_EXP
 			if (ibv_exp_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+		#else
+			if (ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr)) {
+		#endif
 				fprintf(stderr, "Couldn't post send: scnt=%d\n",scnt);
 				return FAILURE;
 			}
