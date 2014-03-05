@@ -917,6 +917,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->tos         = DEF_TOS;
 	comm->rdma_params->use_xrc	   = user_param->use_xrc;
 	comm->rdma_params->connection_type	= user_param->connection_type;
+        comm->rdma_params->output      = user_param->output;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1263,7 +1264,6 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 							 struct perftest_comm *comm) {
 
 	int is_there_mgid,local_mgid,remote_mgid;
-
 	if (comm->rdma_params->output != FULL_VERBOSITY)
 		return;
 	// First of all we print the basic format.
