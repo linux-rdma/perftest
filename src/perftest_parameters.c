@@ -1017,7 +1017,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
  ******************************************************************************/
 int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
-	int c;
+	int c,size_len;
+	int size_factor = 1;
 	static int run_inf_flag = 0;
 	static int report_fmt_flag = 0;
 	static int srq_flag = 0;
@@ -1196,7 +1197,21 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					  return HELP_EXIT;
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
-			case 's': CHECK_VALUE(user_param->size,uint64_t,1,(UINT_MAX / 2),"Message size"); break;
+			case 's': size_len = (int)strlen(optarg);
+				  if (optarg[size_len-1] == 'K') {
+					optarg[size_len-1] = '\0';
+					size_factor = 1024;
+				  }
+				  if (optarg[size_len-1] == 'M') {
+					optarg[size_len-1] = '\0';
+					size_factor = 1024*1024;
+				  }
+				  user_param->size = (uint64_t)strtol(optarg, NULL, 0) * size_factor;
+				  if (user_param->size < 1 || user_param->size > (UINT_MAX / 2)) {
+					fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
+					return 1;
+				  }
+				  break;
 			case 'e': user_param->use_event = ON;
 				if (user_param->verb == WRITE) {
 					fprintf(stderr," Events feature not available on WRITE verb\n");
