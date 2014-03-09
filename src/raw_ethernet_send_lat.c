@@ -59,8 +59,8 @@ int main(int argc, char *argv[])
 	struct raw_ethernet_info	my_dest_info,rem_dest_info;
 	int							ret_parser;
 	struct perftest_parameters	user_param;
-	struct ibv_flow				*flow_create_result = NULL;
-	struct ibv_flow_attr		*flow_rules = NULL;
+	struct ibv_exp_flow				*flow_create_result = NULL;
+	struct ibv_exp_flow_attr		*flow_rules = NULL;
 	struct report_options       report;
 
 	//allocate memory space for user parameters
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
 
 
 	//attaching the qp to the spec
-	flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
+	flow_create_result = ibv_exp_create_flow(ctx.qp[0], flow_rules);
 	if (!flow_create_result){
 		perror("error");
 		fprintf(stderr, "Couldn't attach QP\n");
@@ -222,7 +222,7 @@ int main(int argc, char *argv[])
 
 
 	//destroy flow
-	if (ibv_destroy_flow(flow_create_result)) {
+	if (ibv_exp_destroy_flow(flow_create_result)) {
 		perror("error");
 		fprintf(stderr, "Couldn't Destory flow\n");
 		return FAILURE;
