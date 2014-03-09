@@ -33,7 +33,7 @@ AC_CHECK_LIB([rdmacm], [rdma_create_event_channel], [], AC_MSG_ERROR([librdmacm-
 AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad not found]))
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
 AC_TRY_LINK([#include <infiniband/verbs.h>],
-	[struct ibv_flow *t = ibv_create_flow(NULL,NULL);],[HAVE_RAW_ETH=yes], [HAVE_RAW_ETH=no])
+	[struct ibv_exp_flow *t = ibv_exp_create_flow(NULL,NULL);],[HAVE_RAW_ETH=yes], [HAVE_RAW_ETH=no])
 
 AM_CONDITIONAL([HAVE_RAW_ETH],[test "x$HAVE_RAW_ETH" = "xyes"])
 if test $HAVE_RAW_ETH = yes; then
