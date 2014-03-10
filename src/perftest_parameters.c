@@ -111,135 +111,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("\n");
 	printf("Options:\n");
 
-	printf("  -h, --help ");
-	printf(" Show this help screen.\n");
-
-	printf("  -p, --port=<port> ");
-	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
-
-	printf("  -d, --ib-dev=<dev> ");
-	printf(" Use IB device <dev> (default first device found)\n");
-
-	printf("  -R, --rdma_cm ");
-	printf(" Connect QPs with rdma_cm and run test on those QPs\n");
-
-	printf("  -T, --tos=<tos value> ");
-	printf(" Set <tos_value> to RDMA-CM QPs. availible only with -R flag. values 0-256 (default off)\n");
-
-	printf("  -z, --com_rdma_cm ");
-	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
-
-	printf("  -i, --ib-port=<port> ");
-	printf(" Use port <port> of IB device (default %d)\n",DEF_IB_PORT);
-
-	printf("  -m, --mtu=<mtu> ");
-	printf(" Mtu size : 256 - 4096 (default port mtu)\n");
-
 	if (verb != ATOMIC) {
-
-		printf("  -s, --size=<size> ");
-		printf(" Size of message to exchange (default %d)\n",tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
 
 		printf("  -a, --all ");
 		printf(" Run sizes from 2 till 2^23\n");
-	}
-
-	printf("  -n, --iters=<iters> ");
-	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
-
-	if (tst == BW) {
-
-		printf("  -t, --tx-depth=<dep> ");
-		printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
-	}
-
-	printf("  -u, --qp-timeout=<timeout> ");
-	printf(" QP timeout, timeout value is 4 usec * 2 ^(timeout), default %d\n",DEF_QP_TIME);
-
-	printf("  -S, --sl=<sl> ");
-	printf(" SL (default %d)\n",DEF_SL);
-
-	printf("  -x, --gid-index=<index> ");
-	printf(" Test uses GID with GID index (Default : IB - no gid . ETH - 0)\n");
-
-	printf("  -F, --CPU-freq ");
-	printf(" Do not fail even if cpufreq_ondemand module is loaded\n");
-
-	printf("  -V, --version ");
-	printf(" Display version number\n");
-
-	if (verb == SEND) {
-		printf("  -r, --rx-depth=<dep> ");
-		printf(" Rx queue size (default %d).",DEF_RX_SEND);
-		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
-
-		printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
-		printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
-	}
-
-	if (verb == WRITE) {
-		printf("  -c, --connection=<RC/XRC/UC/DC> ");
-		printf(" Connection type RC/XRC/UC/DC (default RC)\n");
-	}
-
-	if (verb != READ && verb != ATOMIC) {
-		printf("  -I, --inline_size=<size> ");
-		printf(" Max size of message to be sent in inline\n");
-	}
-
-	if (verb == READ || verb == ATOMIC) {
-		printf("  -c, --connection=<RC/XRC/DC> ");
-		printf(" Connection type RC/XRC/DC (default RC)\n");
-	}
-
-	if (tst == BW) {
-
-		printf("  -b, --bidirectional ");
-		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
-
-		printf("  -Q, --cq-mod ");
-		printf(" Generate Cqe only after <--cq-mod> completion\n");
-
-		printf("  -O, --dualport ");
-		printf(" Run test in dual-port mode.\n");
-
-		printf("  -D, --duration ");
-		printf(" Run test for a customized period of seconds.\n");
-
-		printf("  -f, --margin ");
-		printf(" measure results within margins. (default=2sec)\n");
-
-		printf("  -l, --post_list=<list size>");
-		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
-
-		printf("  -w, --limit_bw ");
-		printf(" Set verifier limit for bandwidth\n");
-
-		printf("  -y, --limit_msgrate ");
-		printf(" Set verifier limit for Msg Rate\n");
-	}
-
-	if (verb != WRITE) {
-		printf("  -e, --events ");
-		printf(" Sleep on CQ events (default poll)\n");
-	}
-
-	if (tst == BW) {
-		printf("  -N, --no peak-bw ");
-		printf(" Cancel peak-bw calculation (default with peak)\n");
-	}
-
-	if (verb == SEND) {
-		printf("  -g, --mcg=<num_of_qps> ");
-		printf(" Send messages to multicast group with <num_of_qps> qps attached to it.\n");
-
-		printf("  -M, --MGID=<multicast_gid> ");
-		printf(" In multicast, uses <multicast_gid> as the group MGID.\n");
-	}
-
-	if (verb == READ || verb == ATOMIC) {
-		printf("  -o, --outs=<num> ");
-		printf(" num of outstanding read/atom(default max of device)\n");
 	}
 
 	if (verb == ATOMIC) {
@@ -247,51 +122,196 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD} (default FETCH_AND_ADD)\n");
 	}
 
+	if (tst == BW) {
+		printf("  -b, --bidirectional ");
+		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
+	}
+
+	if (verb == SEND) {
+		printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
+		printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
+	} else 	if (verb == WRITE) {
+		printf("  -c, --connection=<RC/XRC/UC/DC> ");
+		printf(" Connection type RC/XRC/UC/DC (default RC)\n");
+	} else if (verb == READ || verb == ATOMIC) {
+		printf("  -c, --connection=<RC/XRC/DC> ");
+		printf(" Connection type RC/XRC/DC (default RC)\n");
+	}
+
 	if (tst == LAT) {
 		printf("  -C, --report-cycles ");
 		printf(" report times in cpu cycle units (default microseconds)\n");
+	}
 
+	printf("  -d, --ib-dev=<dev> ");
+	printf(" Use IB device <dev> (default first device found)\n");
+
+	printf("  -D, --duration ");
+	printf(" Run test for a customized period of seconds.\n");
+
+	if (verb != WRITE) {
+		printf("  -e, --events ");
+		printf(" Sleep on CQ events (default poll)\n");
+	}
+
+	printf("  -f, --margin ");
+	printf(" measure results within margins. (default=2sec)\n");
+
+	if (tst == BW) {
+		printf("  -F, --CPU-freq ");
+		printf(" Do not fail even if cpufreq_ondemand module is loaded\n");
+	}
+
+	if (verb == SEND) {
+		printf("  -g, --mcg=<num_of_qps> ");
+		printf(" Send messages to multicast group with <num_of_qps> qps attached to it.\n");
+	}
+
+	printf("  -h, --help ");
+	printf(" Show this help screen.\n");
+
+	if (tst == LAT) {
 		printf("  -H, --report-histogram ");
 		printf(" Print out all results (default print summary only)\n");
+	}
 
+	printf("  -i, --ib-port=<port> ");
+	printf(" Use port <port> of IB device (default %d)\n",DEF_IB_PORT);
+
+	if (verb != READ && verb != ATOMIC) {
+		printf("  -I, --inline_size=<size> ");
+		printf(" Max size of message to be sent in inline\n");
+	}
+
+	if (tst == BW) {
+		printf("  -l, --post_list=<list size>");
+		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
+	}
+
+	printf("  -m, --mtu=<mtu> ");
+	printf(" Mtu size : 256 - 4096 (default port mtu)\n");
+
+	if (verb == SEND) {
+		printf("  -M, --MGID=<multicast_gid> ");
+		printf(" In multicast, uses <multicast_gid> as the group MGID.\n");
+	}
+
+	printf("  -n, --iters=<iters> ");
+	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
+
+	if (tst == BW) {
+		printf("  -N, --no peak-bw ");
+		printf(" Cancel peak-bw calculation (default with peak)\n");
+	}
+
+	if (verb == READ || verb == ATOMIC) {
+		printf("  -o, --outs=<num> ");
+		printf(" num of outstanding read/atom(default max of device)\n");
+	}
+
+	if (tst == BW) {
+		printf("  -O, --dualport ");
+		printf(" Run test in dual-port mode.\n");
+	}
+
+	printf("  -p, --port=<port> ");
+	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
+
+	if (tst == BW) {
+		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
+	}
+
+	if (tst == BW) {
+		printf("  -Q, --cq-mod ");
+		printf(" Generate Cqe only after <--cq-mod> completion\n");
+	}
+
+	if (verb == SEND) {
+		printf("  -r, --rx-depth=<dep> ");
+		printf(" Rx queue size (default %d).",DEF_RX_SEND);
+		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
+	}
+
+	printf("  -R, --rdma_cm ");
+	printf(" Connect QPs with rdma_cm and run test on those QPs\n");
+
+	if (verb != ATOMIC) {
+		printf("  -s, --size=<size> ");
+		printf(" Size of message to exchange (default %d)\n",tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
+	}
+
+	printf("  -S, --sl=<sl> ");
+	printf(" SL (default %d)\n",DEF_SL);
+
+	if (tst == BW) {
+		printf("  -t, --tx-depth=<dep> ");
+		printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
+	}
+
+	printf("  -T, --tos=<tos value> ");
+	printf(" Set <tos_value> to RDMA-CM QPs. availible only with -R flag. values 0-256 (default off)\n");
+
+	printf("  -u, --qp-timeout=<timeout> ");
+	printf(" QP timeout, timeout value is 4 usec * 2 ^(timeout), default %d\n",DEF_QP_TIME);
+
+	if (tst == LAT) {
 		printf("  -U, --report-unsorted ");
 		printf(" (implies -H) print out unsorted results (default sorted)\n");
 	}
 
+	printf("  -V, --version ");
+	printf(" Display version number\n");
 
-	if (tst == BW)
-		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
+	if (tst == BW) {
+		printf("  -w, --limit_bw ");
+		printf(" Set verifier limit for bandwidth\n");
+	}
+	printf("  -x, --gid-index=<index> ");
+	printf(" Test uses GID with GID index (Default : IB - no gid . ETH - 0)\n");
 
-	if ( tst == BW ) {
-		printf("      --report-both ");
-		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
-
-		printf("      --run_infinitely ");
-		printf(" Run test forever, print results every <duration> seconds\n");
-
-		printf("      --report_gbits ");
-		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+	if (tst == BW) {
+		printf("  -y, --limit_msgrate ");
+		printf(" Set verifier limit for Msg Rate\n");
 	}
 
-	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
+	printf("  -z, --com_rdma_cm ");
+	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
+
+	//Long flags
+	putchar('\n');
 
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
 	}
-	if (verb == SEND && tst == BW) {
-		printf("      --rate_limit=<rate[pps]>");
-		printf(" Set the maximum rate of sent packages\n");
 
+	printf("      --output=<units>");
+	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
+
+	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
+
+	if ( tst == BW ) {
+		printf("      --report-both ");
+		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
+
+		printf("      --report_gbits ");
+		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+
+		printf("      --run_infinitely ");
+		printf(" Run test forever, print results every <duration> seconds\n");
+	}
+
+	if (verb == SEND && tst == BW) {
+		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
+
+		printf("      --rate_limit=<rate[pps]>");
+		printf(" Set the maximum rate of sent packages\n");
 
 		printf("      --rate_units=<units>");
 		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
 	}
-
-	printf("      --output=<units>");
-	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
 
 	putchar('\n');
 }
@@ -778,7 +798,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 		if (user_param->tst == LAT && !(user_param->output == OUTPUT_LAT)) {
 			printf(RESULT_LINE);
-			fprintf(stderr," Output verbosity level for BW can be: bandwidth, message_rate\n");
+			fprintf(stderr," Output verbosity level for LAT can be: latency\n");
 			exit(1);
 		}
 	}
