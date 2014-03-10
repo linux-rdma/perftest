@@ -193,9 +193,11 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 
 	delta = proc > sample ? proc - sample : sample - proc;
 	if (delta / proc > 0.02) {
+		#if !defined (__PPC__) && !defined (__PPC64__)
 			fprintf(stderr, "Warning: measured timestamp frequency "
 					"%g differs from nominal %g MHz\n",
 					sample, proc);
+		#endif
 			return sample;
 	}
 	return proc;
