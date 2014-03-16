@@ -297,6 +297,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
 
+		printf("      --reversed ");
+		printf(" Reverse traffic direction - Server send to client\n");
+
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds\n");
 	}
