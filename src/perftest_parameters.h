@@ -356,6 +356,7 @@ struct perftest_parameters {
 	enum verbosity_level output;
 	int cpu_util;
 	struct cpu_util_data cpu_util_data;
+	int latency_gap;
 };
 
 struct report_options {
