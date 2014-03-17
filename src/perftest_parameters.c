@@ -288,6 +288,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Max size of message to be sent in inline receive\n");
 	}
 
+	if (tst == LAT) {
+		printf("      --latency_gap=<delay_time> ");
+                printf(" delay time between each post send\n");
+	}
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
 
@@ -832,6 +836,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
+	if ( (user_param->latency_gap > 0) && user_param->tst != LAT ) {
+		printf(RESULT_LINE);
+		fprintf(stderr," Latency gap feature is only for latency tests\n");
+		exit(1);
+	}
 	return;
 }
 
