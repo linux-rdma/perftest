@@ -410,7 +410,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->use_rss = OFF;
 	user_param->srq_exists = OFF;
 	user_param->duration	= DEF_DURATION;
-	user_param->margin	= DEF_MARGIN;
+	user_param->margin	= DEF_INIT_MARGIN;
 	user_param->test_type	= ITERATIONS;
 	user_param->state	= START_STATE;
 	user_param->tos		= DEF_TOS;
@@ -840,6 +840,10 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		printf(RESULT_LINE);
 		fprintf(stderr," Latency gap feature is only for latency tests\n");
 		exit(1);
+	}
+
+	if ( user_param->test_type == DURATION && user_param->margin == DEF_INIT_MARGIN) {
+		user_param->margin = user_param->duration / 4;
 	}
 	return;
 }
