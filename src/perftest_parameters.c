@@ -1226,8 +1226,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				user_param->test_type = DURATION;
 				break;
 			case 'f': user_param->margin = strtol(optarg, NULL, 0);
- 				if (user_param->margin <= 0) {
-					fprintf(stderr," margin must be greater than 0.\n");
+ 				if (user_param->margin < 0) {
+					fprintf(stderr," margin must be positive.\n");
 					return 1;
 				} break;
 			case 'O':

@@ -1826,7 +1826,11 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		duration_param=user_param;
 		duration_param->state = START_STATE;
 		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
+		if (user_param->margin > 0 )
+			alarm(user_param->margin);
+		else
+			catch_alarm(0); //move to next state
+
 		user_param->iters = 0;
 	}
 
@@ -1836,7 +1840,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	tot_iters = user_param->iters*num_of_qps;
 
-	if (user_param->test_type == DURATION && user_param->state != START_STATE) {
+	if (user_param->test_type == DURATION && user_param->state != START_STATE && user_param->margin > 0) {
 		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
 		fprintf(stderr, "Please increase margin or decrease tx_depth\n");
 		return 1;
@@ -1988,7 +1992,10 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
 		user_param->iters=0;
 		duration_param->state = START_STATE;
 		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
+		if (user_param->margin > 0) 
+			alarm(user_param->margin);
+		else
+			catch_alarm(0);
 
 	} else if (user_param->tst == BW){
 		user_param->tposted[0] = get_cycles();
@@ -2784,7 +2791,11 @@ void catch_alarm(int sig) {
 			duration_param->state = STOP_SAMPLE_STATE;
 			duration_param->tcompleted[0] = get_cycles();
 			get_cpu_stats(duration_param,2);
-			alarm(duration_param->margin);
+			if (duration_param->margin > 0) 
+				alarm(duration_param->margin);
+			else
+				catch_alarm(0);
+
 			break;
 		case STOP_SAMPLE_STATE:
 			duration_param->state = END_STATE;
