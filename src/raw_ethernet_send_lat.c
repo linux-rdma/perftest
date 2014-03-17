@@ -183,11 +183,11 @@ int main(int argc, char *argv[])
 	//build ONE Raw Ethernet packets on ctx buffer
 	create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 
-	printf(RESULT_LINE); // "---" line
-	// choose the correct format to print
-	// (according  to the test: latency or latency with duration)
-	printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT :
-														RESULT_FMT_LAT_DUR);
+	if (user_param.output == FULL_VERBOSITY) {
+                printf(RESULT_LINE);
+                printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+                printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+        }
 
 	// Prepare IB resources for rtr(ready to read)/rts(ready to send)
 	if (user_param.work_rdma_cm == OFF) {
