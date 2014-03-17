@@ -112,6 +112,7 @@
 #define DEF_QKEY      0x11111111
 #define DEF_DURATION  (5)
 #define	DEF_MARGIN    (2)
+#define DEF_INIT_MARGIN (-1)
 #define DEF_INLINE    (-1)
 #define DEF_TOS       (-1)
 
