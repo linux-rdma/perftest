@@ -200,20 +200,27 @@ int main(int argc, char *argv[]) {
 	// For half duplex tests, server just waits for client to exit
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
+		if (user_param.output == FULL_VERBOSITY) {
+			printf(RESULT_LINE);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+		}
+
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr," Failed to exchange data between server and clients\n");
-			return FAILURE;
+                        fprintf(stderr," Failed to exchange data between server and clients\n");
+                        return FAILURE;
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
 		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
 
+		if (user_param.output == FULL_VERBOSITY) {
+	                printf(RESULT_LINE);
+		}
+
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			return 1;
-		}
-		if (user_param.output == FULL_VERBOSITY) {
-			printf(RESULT_LINE);
 		}
 
 		return destroy_ctx(&ctx,&user_param);
@@ -225,10 +232,10 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 	}
-
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 

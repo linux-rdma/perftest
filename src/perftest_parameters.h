@@ -154,22 +154,30 @@
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
 // The format of the results
-#define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
+#define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
 
-#define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]\n"
+#define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
 
-#define RESULT_FMT_QOS  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]\n"
+#define RESULT_FMT_QOS  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
 
-#define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]\n"
+#define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
 
 #define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]\n"
 
-// Result print format
-#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf\n"
+#define RESULT_EXT "\n"
 
-#define REPORT_FMT_EXT     " %-7lu    %d           %-7.6lf            %-7.6lf		   %-7.6lf\n"
+#define RESULT_EXT_CPU_UTIL "    CPU_Util[%%]\n"
+
+// Result print format
+#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf"
+
+#define REPORT_FMT_EXT     " %-7lu    %d           %-7.6lf            %-7.6lf		   %-7.6lf"
+
+#define REPORT_EXT	"\n"
+
+#define REPORT_EXT_CPU_UTIL	"		%-3.2f\n"
 
 #define REPORT_FMT_QOS " %-7lu    %d           %d           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
@@ -242,6 +250,12 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 
 // Verbosity Levels for test report
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
+
+struct cpu_util_data {
+	int enable;
+        long long ustat[2];
+        long long idle[2];
+};
 
 struct perftest_parameters {
 
@@ -340,6 +354,7 @@ struct perftest_parameters {
 	int burst_size;
 	enum rate_limiter_units rate_units;
 	enum verbosity_level output;
+	struct cpu_util_data cpu_util_data;
 };
 
 struct report_options {
