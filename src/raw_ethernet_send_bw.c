@@ -168,13 +168,14 @@ int main(int argc, char *argv[]) {
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 	}
 
-	printf(RESULT_LINE);//change the printing of the test
-
-	if (user_param.raw_qos)
-		printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
-	else
-		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-
+	if (user_param.output == FULL_VERBOSITY) {
+                printf(RESULT_LINE);
+		if (user_param.raw_qos)
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
+		else
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+	}
 	// Prepare IB resources for rtr/rts.
 	if (user_param.work_rdma_cm == OFF) {
 		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {

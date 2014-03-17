@@ -423,6 +423,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 		user_param->size = DEF_SIZE_ATOMIC;
 	}
 
+	user_param->cpu_util_data.enable = 0;
 }
 
  /******************************************************************************
@@ -597,6 +598,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			fprintf(stderr, "Duration mode currently doesn't support running on all sizes.\n");
 			exit(1);
 		}
+
+		user_param->cpu_util_data.enable = 1;
 	}
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
@@ -1706,6 +1709,17 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 
 }
 
+static float calc_cpu_util (struct perftest_parameters *user_param)
+{
+	long long ustat_diff, idle_diff;
+	ustat_diff = user_param->cpu_util_data.ustat[1] - user_param->cpu_util_data.ustat[0];
+	idle_diff = user_param->cpu_util_data.idle[1] - user_param->cpu_util_data.idle[0];
+	if ((ustat_diff + idle_diff) != 0)
+		return ((float)ustat_diff / (ustat_diff + idle_diff)) * 100;
+	else
+		return 0;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1818,6 +1832,8 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 	else
 		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	if (user_param->output == FULL_VERBOSITY)
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 }
 /******************************************************************************
  *
