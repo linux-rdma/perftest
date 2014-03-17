@@ -2590,7 +2590,9 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 #endif
 	int  			firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
-
+	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	int total_gap_cycles = user_param->latency_gap * cpu_mhz;
+	cycles_t end_cycle, start_gap=0;
 
 	if (user_param->connection_type != RawEth) {
 		ctx->wr[0].sg_list->length = user_param->size;
@@ -2662,6 +2664,14 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		}
 
 		if (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+			if (user_param->latency_gap) {
+				start_gap = get_cycles();
+				end_cycle = start_gap + total_gap_cycles;
+				while (get_cycles() < end_cycle) {
+					continue;
+				}
+			}
 
 			if (user_param->test_type == ITERATIONS)
 				user_param->tposted[scnt] = get_cycles();
