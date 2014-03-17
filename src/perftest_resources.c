@@ -2432,6 +2432,10 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 #endif
 	struct ibv_wc           wc;
 
+	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+        int total_gap_cycles = user_param->latency_gap * cpu_mhz;
+        cycles_t end_cycle, start_gap=0;
+
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags      = IBV_SEND_SIGNALED;
 
@@ -2462,6 +2466,14 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 		}
 
 		if (scnt < user_param->iters || user_param->test_type == DURATION) {
+
+			if (user_param->latency_gap) {
+				start_gap = get_cycles();
+				end_cycle = start_gap + total_gap_cycles;
+				while (get_cycles() < end_cycle) {
+					continue;
+				}
+			}
 
 			if (user_param->test_type == ITERATIONS)
 				user_param->tposted[scnt] = get_cycles();
@@ -2516,6 +2528,10 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 #endif
 	struct ibv_wc wc;
 
+	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	int total_gap_cycles = user_param->latency_gap * cpu_mhz;
+	cycles_t end_cycle, start_gap=0;
+
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 
@@ -2529,7 +2545,13 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	}
 
 	while (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-
+		if (user_param->latency_gap) {
+			start_gap = get_cycles();
+			end_cycle = start_gap + total_gap_cycles;
+			while (get_cycles() < end_cycle) {
+				continue;
+			}
+		}
 		if (user_param->test_type == ITERATIONS)
 			user_param->tposted[scnt++] = get_cycles();
 
