@@ -280,6 +280,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	//Long flags
 	putchar('\n');
 
+	printf("      --cpu_util ");
+	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
+
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
@@ -423,6 +426,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 		user_param->size = DEF_SIZE_ATOMIC;
 	}
 
+	user_param->cpu_util = 0;
 	user_param->cpu_util_data.enable = 0;
 }
 
@@ -598,8 +602,14 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			fprintf(stderr, "Duration mode currently doesn't support running on all sizes.\n");
 			exit(1);
 		}
+		if (user_param->cpu_util) {
+			user_param->cpu_util_data.enable = 1;
+		}
+	}
 
-		user_param->cpu_util_data.enable = 1;
+	if ( (user_param->test_type != DURATION) && user_param->cpu_util ) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " CPU Utilization works only with Duration mode.\n");
 	}
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
@@ -1057,6 +1067,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int rate_limit_flag = 0;
 	static int rate_units_flag = 0;
 	static int verbosity_output_flag = 0;
+	static int cpu_util_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1125,6 +1136,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
 			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
+			{ .name = "cpu_util",           .has_arg = 0, .flag = &cpu_util_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1432,6 +1444,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	if (is_reversed_flag) {
 		user_param->is_reversed = 1;
 	}
+
+	if (cpu_util_flag) {
+                user_param->cpu_util = 1;
+        }
 
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
@@ -1921,6 +1937,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 				delta[0] / cycles_to_units / rtt_factor,
 				delta[user_param->iters - 2] / cycles_to_units / rtt_factor,
 				latency);
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
     free(delta);
 }
@@ -1953,6 +1970,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 			user_param->size,
 			user_param->iters,
 			latency);
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 }
 /******************************************************************************

@@ -217,6 +217,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 		printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
 	if (user_param.test_method == RUN_ALL) {

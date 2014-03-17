@@ -412,6 +412,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 		printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);

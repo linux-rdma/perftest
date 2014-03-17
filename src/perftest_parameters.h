@@ -162,9 +162,9 @@
 
 #define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
 
-#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]\n"
+#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]"
 
-#define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]\n"
+#define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]  	"
 
 #define RESULT_EXT "\n"
 
@@ -177,14 +177,14 @@
 
 #define REPORT_EXT	"\n"
 
-#define REPORT_EXT_CPU_UTIL	"		%-3.2f\n"
+#define REPORT_EXT_CPU_UTIL	"	    %-3.2f\n"
 
 #define REPORT_FMT_QOS " %-7lu    %d           %d           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 // Result print format for latency tests.
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f\n"
+#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f"
 
-#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f\n"
+#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f"
 
 #define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
 	{ arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
@@ -354,6 +354,7 @@ struct perftest_parameters {
 	int burst_size;
 	enum rate_limiter_units rate_units;
 	enum verbosity_level output;
+	int cpu_util;
 	struct cpu_util_data cpu_util_data;
 };
 
