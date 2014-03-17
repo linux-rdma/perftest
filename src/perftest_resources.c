@@ -7,6 +7,8 @@
 #include <limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <string.h>
+#include <ctype.h>
 
 #include "perftest_resources.h"
 #include "config.h"
@@ -19,12 +21,71 @@ static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
 #endif
 
+#define CPU_UTILITY "/proc/stat"
+
 struct perftest_parameters* duration_param;
 int cycle_buffer=4096;
 
 /******************************************************************************
  * Beginning
  ******************************************************************************/
+static int next_word_string(char* input, char* output, int from_index)
+{
+    int i = from_index;
+    int j = 0;
+
+    while (input[i] != ' ') {
+	output[j] = input[i];
+	j++; i++;
+    }
+
+    output[j]=0;
+    return i+1;
+}
+
+static int get_n_word_string(char *input, char *output,int from_index, int iters)
+{
+    for (;iters > 0; iters--) {
+	from_index = next_word_string(input,output,from_index);
+    }
+
+    return from_index;
+}
+static void compress_spaces(char *str, char *dst)
+{
+    for (; *str; ++str) {
+        *dst++ = *str;
+
+        if (isspace(*str)) {
+            do ++str;
+
+            while (isspace(*str));
+
+            --str;
+        }
+    }
+
+    *dst = 0;
+}
+
+static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_index)
+{
+    char* file_name = CPU_UTILITY;
+    FILE *fp;
+    char line[100];
+    char tmp[100];
+    int index=0;
+    fp = fopen(file_name, "r");      //open file , read only
+
+    fgets(line,100,fp);
+    compress_spaces(line,line);
+    index=get_n_word_string(line,tmp,index,2); //skip first word
+    duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
+
+    index=get_n_word_string(line,tmp,index,3); //skip 2 stats
+    duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
+}
+
 static int check_for_contig_pages_support(struct ibv_context *context)
 {
 
@@ -2688,12 +2749,14 @@ void catch_alarm(int sig) {
 	switch (duration_param->state) {
 		case START_STATE:
 			duration_param->state = SAMPLE_STATE;
+			get_cpu_stats(duration_param,1);
 			duration_param->tposted[0] = get_cycles();
 			alarm(duration_param->duration - 2*(duration_param->margin));
 			break;
 		case SAMPLE_STATE:
 			duration_param->state = STOP_SAMPLE_STATE;
 			duration_param->tcompleted[0] = get_cycles();
+			get_cpu_stats(duration_param,2);
 			alarm(duration_param->margin);
 			break;
 		case STOP_SAMPLE_STATE:
