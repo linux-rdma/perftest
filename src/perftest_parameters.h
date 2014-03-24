@@ -358,6 +358,7 @@ struct perftest_parameters {
 	int cpu_util;
 	struct cpu_util_data cpu_util_data;
 	int latency_gap;
+	int retry_count;
 };
 
 struct report_options {
