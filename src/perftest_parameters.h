@@ -115,6 +115,7 @@
 #define DEF_INIT_MARGIN (-1)
 #define DEF_INLINE    (-1)
 #define DEF_TOS       (-1)
+#define DEF_RETRY_COUNT (7)
 
 // Optimal Values for Inline
 #define DEF_INLINE_WRITE (220)
