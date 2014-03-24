@@ -311,6 +311,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Run test forever, print results every <duration> seconds\n");
 	}
 
+        printf("      --retry_count=<value> ");
+        printf(" Set retry count value in rdma_cm mode\n");
+
 	if (verb == SEND && tst == BW) {
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
@@ -432,6 +435,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 
 	user_param->cpu_util = 0;
 	user_param->cpu_util_data.enable = 0;
+	user_param->retry_count = 0;
 }
 
  /******************************************************************************
@@ -1082,6 +1086,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int verbosity_output_flag = 0;
 	static int cpu_util_flag = 0;
 	static int latency_gap_flag = 0;
+	static int retry_count_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1151,7 +1156,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
 			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
 			{ .name = "cpu_util",           .has_arg = 0, .flag = &cpu_util_flag, .val = 1},
-			{ .name = "latency_gap",             .has_arg = 1, .flag = &latency_gap_flag, .val = 1},
+			{ .name = "latency_gap",        .has_arg = 1, .flag = &latency_gap_flag, .val = 1},
+			{ .name = "retry_count",        .has_arg = 1, .flag = &retry_count_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1432,6 +1438,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
                                         }
                                         latency_gap_flag = 0;
                                 }
+				if (retry_count_flag) {
+					user_param->retry_count = strtol(optarg,NULL,0);
+					if (user_param->retry_count < 0) {
+						fprintf(stderr, " Retry Count value must be positive\n");
+						return FAILURE;
+					}
+					retry_count_flag = 0;
+				}
 				break;
 
 			default:

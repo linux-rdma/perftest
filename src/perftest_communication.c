@@ -853,6 +853,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	if (user_param->connection_type == UD)
 		conn_param.qp_num = ctx->qp[0]->qp_num;
 
+	conn_param.retry_count = user_param->retry_count;
 	user_param->work_rdma_cm = temp;
 
 	if (user_param->work_rdma_cm == OFF) {
