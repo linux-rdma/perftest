@@ -448,7 +448,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 
 	user_param->cpu_util = 0;
 	user_param->cpu_util_data.enable = 0;
-	user_param->retry_count = 0;
+	user_param->retry_count = DEF_RETRY_COUNT;
 }
 
  /******************************************************************************
