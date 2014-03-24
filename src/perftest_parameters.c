@@ -1867,14 +1867,14 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {//bibw test, and not report-both printing
 		// Verify Limits
 		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > bw_avg)) )
-			user_param->is_bw_limit_passed = 0;
+			user_param->is_bw_limit_passed |= 0;
 		else
-			user_param->is_bw_limit_passed = 1;
+			user_param->is_bw_limit_passed |= 1;
 
 		if ( (user_param->is_limit_msgrate) && (user_param->limit_msgrate > msgRate_avg) )
-			user_param->is_msgrate_limit_passed = 0;
+			user_param->is_msgrate_limit_passed |= 0;
 		else
-			user_param->is_msgrate_limit_passed = 1;
+			user_param->is_msgrate_limit_passed |= 1;
 	}
 
 	if (user_param->output == OUTPUT_BW)
