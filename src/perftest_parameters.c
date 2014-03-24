@@ -163,8 +163,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	}
 
 	if (verb == SEND) {
-		printf("  -g, --mcg=<num_of_qps> ");
-		printf(" Send messages to multicast group with <num_of_qps> qps attached to it.\n");
+		printf("  -g, --mcg ");
+		printf(" Send messages to multicast group with 1 QP attached to it.\n");
 	}
 
 	printf("  -h, --help ");
