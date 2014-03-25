@@ -283,6 +283,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("      --cpu_util ");
 	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
 
+	printf("      --dont_xchg_versions ");
+	printf(" Do not exchange versions and MTU with other side \n");
+
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
@@ -449,6 +452,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->cpu_util = 0;
 	user_param->cpu_util_data.enable = 0;
 	user_param->retry_count = DEF_RETRY_COUNT;
+	user_param->dont_xchg_versions = 0;
 }
 
  /******************************************************************************
@@ -1100,6 +1104,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int cpu_util_flag = 0;
 	static int latency_gap_flag = 0;
 	static int retry_count_flag = 0;
+	static int dont_xchg_versions_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1171,6 +1176,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "cpu_util",           .has_arg = 0, .flag = &cpu_util_flag, .val = 1},
 			{ .name = "latency_gap",        .has_arg = 1, .flag = &latency_gap_flag, .val = 1},
 			{ .name = "retry_count",        .has_arg = 1, .flag = &retry_count_flag, .val = 1},
+			{ .name = "dont_xchg_versions",        .has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1531,6 +1537,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if (report_fmt_flag) {
 		user_param->report_fmt = GBS;
+	}
+
+	if (dont_xchg_versions_flag) {
+		user_param->dont_xchg_versions = 1;
 	}
 
 	if (report_both_flag) {
