@@ -360,6 +360,7 @@ struct perftest_parameters {
 	struct cpu_util_data cpu_util_data;
 	int latency_gap;
 	int retry_count;
+	int dont_xchg_versions;
 };
 
 struct report_options {
