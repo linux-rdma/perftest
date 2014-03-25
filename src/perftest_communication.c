@@ -1335,9 +1335,11 @@ int ctx_close_connection(struct perftest_comm *comm,
  ******************************************************************************/
 void exchange_versions(struct perftest_comm *user_comm, struct perftest_parameters *user_param) {
 
-	if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(user_param->rem_version))) {
-		fprintf(stderr," Failed to exchange data between server and clients\n");
-		exit(1);
+	if (!user_param->dont_xchg_versions) {
+		if (ctx_xchg_data(user_comm,(void*)(&user_param->version),(void*)(&user_param->rem_version),sizeof(user_param->rem_version))) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+		}
 	}
 }
 
@@ -1356,16 +1358,20 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		}
 	} else {
 		curr_mtu = (int) (set_mtu(context,user_param->ib_port,user_param->mtu));
-		if (strverscmp(user_param->rem_version, "5.1") >= 0) {
-			sprintf(cur,"%d",curr_mtu);
-			if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
-				fprintf(stderr," Failed to exchange data between server and clients\n");
-				exit(1);
+		if (!user_param->dont_xchg_versions) {
+			if (strverscmp(user_param->rem_version, "5.1") >= 0) {
+				sprintf(cur,"%d",curr_mtu);
+				if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
+					fprintf(stderr," Failed to exchange data between server and clients\n");
+					exit(1);
+				}
+				rem_mtu = (int) strtol(rem, (char **)NULL, 10);
+				user_param->curr_mtu = (enum ibv_mtu)((curr_mtu > rem_mtu) ? rem_mtu : curr_mtu);
+			} else {
+				user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
 			}
-			rem_mtu = (int) strtol(rem, (char **)NULL, 10);
-			user_param->curr_mtu = (enum ibv_mtu)((curr_mtu > rem_mtu) ? rem_mtu : curr_mtu);
 		} else {
-			user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
+                	user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
 		}
 	}
 
