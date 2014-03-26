@@ -1267,7 +1267,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.sl = 0;
 	}
 
-	flags |= IBV_QP_PATH_MTU | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
+	flags |= IBV_QP_PATH_MTU | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER | IBV_QP_AV;
 
 	attr->max_dest_rd_atomic = my_dest->out_reads;
 	attr->min_rnr_timer = 0;
