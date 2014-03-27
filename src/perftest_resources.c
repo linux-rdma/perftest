@@ -2276,7 +2276,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 			user_param->iters=0;
 			duration_param->state = START_STATE;
 			signal(SIGALRM, catch_alarm);
-			alarm(user_param->margin);
+
+			if (user_param->margin > 0 )
+	                        alarm(user_param->margin);
+        	        else
+                	        catch_alarm(0); //move to next state
 		}
 	}
 
@@ -2339,7 +2343,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 					user_param->iters=0;
 					duration_param->state = START_STATE;
 					signal(SIGALRM, catch_alarm);
-					alarm(user_param->margin);
+					if (user_param->margin > 0 )
+			                        alarm(user_param->margin);
+                			else
+			                        catch_alarm(0); //move to next state
 				}
 			}
 
