@@ -89,8 +89,16 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 
 static int check_for_contig_pages_support(struct ibv_context *context)
 {
-
 	int answer;
+#ifdef HAVE_VERBS_EXP
+	struct ibv_exp_device_attr attr;
+	if (ibv_exp_query_device(context,&attr)) {
+                fprintf(stderr, "Couldn't get device attributes\n");
+                return FAILURE;
+        }
+
+	answer = ( attr.device_cap_flags2 &= IBV_EXP_DEVICE_MR_ALLOCATE) ? SUCCESS : FAILURE;
+#else
 	struct ibv_device_attr attr;
 
 	if (ibv_query_device(context,&attr)) {
@@ -104,6 +112,7 @@ static int check_for_contig_pages_support(struct ibv_context *context)
 	 * Warning: this bit can represent others things in different devices.
 	 */
 	answer = attr.device_cap_flags & (1 << 23) ? SUCCESS : FAILURE;
+#endif
 	return answer;
 }
 
