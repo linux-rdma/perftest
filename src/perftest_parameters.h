@@ -259,6 +259,12 @@ struct cpu_util_data {
         long long idle[2];
 };
 
+struct check_alive_data {
+	int current_totrcnt;
+	int last_totrcnt;
+	int g_total_iters;
+};
+
 struct perftest_parameters {
 
 	int				port;
