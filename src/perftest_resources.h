@@ -603,6 +603,8 @@ static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint
  */
 void catch_alarm(int sig);
 
+void check_alive(int sig);
+
 /* catch_alarm.
  *
  * Description :
