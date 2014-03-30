@@ -24,6 +24,7 @@ static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV
 #define CPU_UTILITY "/proc/stat"
 
 struct perftest_parameters* duration_param;
+struct check_alive_data check_alive_data;
 int cycle_buffer=4096;
 
 /******************************************************************************
@@ -2284,18 +2285,23 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 	}
 
+	if (user_param->test_type == ITERATIONS) {
+                signal(SIGALRM, check_alive);
+                alarm(5);
+	}
+
+
 	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
 	tot_iters = user_param->iters*num_of_qps;
 	iters=user_param->iters;
+	check_alive_data.g_total_iters = tot_iters;
 
-	while ((user_param->test_type == DURATION && user_param->state != END_STATE) || totccnt < tot_iters || totrcnt < tot_iters) {
+	while ((user_param->test_type == DURATION && user_param->state != END_STATE) || totccnt < tot_iters || totrcnt < tot_iters ) {
 
 		for (index=0; index < num_of_qps; index++) {
-
 			while (before_first_rx == OFF && (ctx->scnt[index] < iters || user_param->test_type == DURATION) && ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
-
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 
@@ -2324,7 +2330,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 			}
 		}
-
 		if (user_param->use_event) {
 
 			if (ctx_notify_events(ctx->channel)) {
@@ -2332,7 +2337,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 				return 1;
 			}
 		}
-
 		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth,wc);
 		if (ne > 0) {
 
@@ -2357,6 +2361,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 				rcnt_for_qp[wc[i].wr_id]++;
 				totrcnt++;
+				check_alive_data.current_totrcnt = totrcnt;
 
 				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 					user_param->iters++;
@@ -2418,9 +2423,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
-		user_param->tcompleted[0] = get_cycles();
+	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS) {
+			user_param->tcompleted[0] = get_cycles();
+	}
 
+	check_alive_data.last_totrcnt=0;
 	free(rcnt_for_qp);
 	free(wc);
 	free(wc_tx);
@@ -2810,6 +2817,16 @@ void catch_alarm(int sig) {
 		default:
 			fprintf(stderr,"unknown state\n");
 	}
+}
+
+void check_alive(int sig) {
+	if (check_alive_data.current_totrcnt > check_alive_data.last_totrcnt) {
+		check_alive_data.last_totrcnt = check_alive_data.current_totrcnt;
+		alarm(5);
+	} else if (check_alive_data.current_totrcnt == check_alive_data.last_totrcnt && check_alive_data.current_totrcnt < check_alive_data.g_total_iters) {
+		fprintf(stderr,"In Deadlock, exiting..\nTotal Received=%d , Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
+		exit(1);
+	} 
 }
 
 /******************************************************************************
