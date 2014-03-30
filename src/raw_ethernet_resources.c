@@ -603,7 +603,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	struct ibv_wc	*wc = NULL;
 	struct ibv_wc	*wc_tx = NULL;
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
-#ifdef HAVE_VERBS_EXP
+#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
 	struct ibv_exp_send_wr	*bad_wr = NULL;
 #else
 	struct ibv_send_wr	*bad_wr = NULL;
@@ -649,17 +649,14 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					break;
 				switch_smac_dmac(ctx->wr[index*user_param->post_list].sg_list);
 
-				#ifdef HAVE_VERBS_EXP
-				if (ibv_exp_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
-					fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
-					return 1;
-				}
-				#else
-				if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+				#if defined(HAVE_VERBS_EXP)
+                                if ((*ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+                        	#else
+                                if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
+                        	#endif
                                         fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
                                         return 1;
                                 }
-				#endif
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
 					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->rx_buffer_addr[0],0);
 

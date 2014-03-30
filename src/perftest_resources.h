@@ -138,7 +138,7 @@ struct pingpong_context {
 	void						*buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
-#ifdef HAVE_VERBS_EXP
+#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
 	struct ibv_exp_dct			**dct;
 #else
 	struct ibv_dct				**dct;
@@ -146,7 +146,7 @@ struct pingpong_context {
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
-#ifdef HAVE_VERBS_EXP
+#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
 	struct ibv_exp_send_wr			*wr;
 #else
 	struct ibv_send_wr			*wr;
@@ -164,6 +164,14 @@ struct pingpong_context {
 #ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
 	int 						fd;
+#endif
+#if defined(HAVE_VERBS_EXP) 
+	#if defined(USE_VERBS_EXP)
+        drv_exp_post_send_func post_send_func_pointer;
+	#elif defined(HAVE_VERBS_EXP)
+        drv_post_send_func post_send_func_pointer;
+	#endif
+	drv_poll_cq_func poll_cq_func_pointer;
 #endif
 };
 
@@ -547,7 +555,7 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  * Return Value : SUCCESS, FAILURE.
  */
 
-#ifdef HAVE_VERBS_EXP
+#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
 static __inline void increase_rem_addr(struct ibv_exp_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
 #else
 static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
