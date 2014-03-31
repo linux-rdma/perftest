@@ -597,19 +597,20 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t	totrcnt    = 0;
 	int	i,index      = 0;
 	int	ne = 0;
+	int	err = 0;
 	int	*rcnt_for_qp = NULL;
 	int	tot_iters = 0;
 	int	iters = 0;
 	struct ibv_wc	*wc = NULL;
 	struct ibv_wc	*wc_tx = NULL;
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
-#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
-	struct ibv_exp_send_wr	*bad_wr = NULL;
-#else
+#if defined(HAVE_VERBS_EXP)
+	struct ibv_exp_send_wr	*bad_exp_wr = NULL;
+#endif
 	struct ibv_send_wr	*bad_wr = NULL;
 #endif
 	int	firstRx = 1;
-    int rwqe_sent = user_param->rx_depth;
+	int rwqe_sent = user_param->rx_depth;
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
@@ -639,8 +640,14 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			while (((ctx->scnt[index] < iters) || ((firstRx == OFF) && (user_param->test_type == DURATION)))&&
 					((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) && (rcnt_for_qp[index] - ctx->scnt[index] > 0)) {
 
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1))
-					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
+                                        #ifdef HAVE_VERBS_EXP
+                                        if (user_param->use_exp == 1)
+                                                ctx->exp_wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+                                        else
+                                        #endif
+                                                ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+                                }
 
 				if (user_param->noPeak == OFF)
 					user_param->tposted[totscnt] = get_cycles();
@@ -653,18 +660,30 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
                                 if ((*ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
 				#else
                                 if (ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr)) {
-				#endif
+                                #endif
                                         fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
                                         return 1;
                                 }
-				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2))
-					increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->rx_buffer_addr[0],0);
 
+				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
+					#ifdef HAVE_VERBS_EXP
+                                        if (user_param->use_exp == 1)
+	                                        increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+                                        else
+                                        #endif
+                                                increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+				}
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
 
-				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1)))
-					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1))){
+					#ifdef HAVE_VERBS_EXP
+                                        if (user_param->use_exp == 1)
+                                                ctx->exp_wr[index].send_flags |= IBV_SEND_SIGNALED;
+                                        else
+                                        #endif
+                                                ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+				}
 			}
 		}
 
