@@ -367,6 +367,7 @@ struct perftest_parameters {
 	int latency_gap;
 	int retry_count;
 	int dont_xchg_versions;
+	int use_exp;
 };
 
 struct report_options {

@@ -317,6 +317,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
         printf("      --retry_count=<value> ");
         printf(" Set retry count value in rdma_cm mode\n");
 
+	#ifdef HAVE_VERBS_EXP
+	printf("      --use_exp ");
+	printf(" Use Experimental verbs in data path. Default is OFF.\n");
+	#endif
+
 	if (verb == SEND && tst == BW) {
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
@@ -440,6 +445,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->cpu_util_data.enable = 0;
 	user_param->retry_count = DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions = 0;
+	user_param->use_exp = 0;
 }
 
  /******************************************************************************
@@ -841,6 +847,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		user_param->margin = user_param->duration / 4;
 	}
 	return;
+
+	#if defined(HAVE_VERBS_EXP) && defined(HAVE_DC)
+	if (user_param->connection_type == DC) {
+		user_param->use_exp = 1;
+	}
+	#endif
 }
 
 /******************************************************************************
@@ -1092,6 +1104,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int latency_gap_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
+	static int use_exp_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1164,6 +1177,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "latency_gap",        .has_arg = 1, .flag = &latency_gap_flag, .val = 1},
 			{ .name = "retry_count",        .has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",        .has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
+			#ifdef HAVE_VERBS_EXP
+			{ .name = "use_exp",           .has_arg = 0, .flag = &use_exp_flag, .val = 1},
+			#endif
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1484,6 +1500,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->dont_xchg_versions = 1;
 	}
 
+	if (use_exp_flag) {
+		user_param->use_exp = 1;
+	}
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}

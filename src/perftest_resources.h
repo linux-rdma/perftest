@@ -138,19 +138,16 @@ struct pingpong_context {
 	void						*buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
-#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
+#if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_dct			**dct;
-#else
-	struct ibv_dct				**dct;
 #endif
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
-#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
-	struct ibv_exp_send_wr			*wr;
-#else
-	struct ibv_send_wr			*wr;
+#if defined(HAVE_VERBS_EXP)
+	struct ibv_exp_send_wr			*exp_wr;
 #endif
+	struct ibv_send_wr			*wr;
 	struct ibv_recv_wr			*rwr;
 	uint64_t					size;
 	uint64_t					*my_addr;
@@ -166,11 +163,8 @@ struct pingpong_context {
 	int 						fd;
 #endif
 #if defined(HAVE_VERBS_EXP) 
-	#if defined(USE_VERBS_EXP)
-        drv_exp_post_send_func post_send_func_pointer;
-	#elif defined(HAVE_VERBS_EXP)
+        drv_exp_post_send_func exp_post_send_func_pointer;
         drv_post_send_func post_send_func_pointer;
-	#endif
 	drv_poll_cq_func poll_cq_func_pointer;
 #endif
 };
@@ -338,6 +332,41 @@ int ctx_connect(struct pingpong_context *ctx,
 				struct perftest_parameters *user_param,
 				struct pingpong_dest *my_dest);
 
+/* ctx_set_send_exp_wqes.
+ *
+ * Description :
+ *
+ *	Prepare the exp send work request templates for all QPs
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ *  rem_dest   - pingpong_dest struct of the remote side.
+ *
+ */
+void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
+					   struct perftest_parameters *user_param,
+					   struct pingpong_dest *rem_dest);
+
+
+/* ctx_set_send_regwqes.
+ *
+ * Description :
+ *
+ *	Prepare the regular send work request templates for all QPs
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ *  rem_dest   - pingpong_dest struct of the remote side.
+ *
+ */
+void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
+					   struct perftest_parameters *user_param,
+					   struct pingpong_dest *rem_dest);
+
 /* ctx_set_send_wqes.
  *
  * Description :
@@ -354,6 +383,7 @@ int ctx_connect(struct pingpong_context *ctx,
 void ctx_set_send_wqes(struct pingpong_context *ctx,
 					   struct perftest_parameters *user_param,
 					   struct pingpong_dest *rem_dest);
+
 
 /* ctx_set_recv_wqes.
  *
@@ -555,11 +585,26 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  * Return Value : SUCCESS, FAILURE.
  */
 
-#if defined(HAVE_VERBS_EXP) && defined(USE_VERBS_EXP)
-static __inline void increase_rem_addr(struct ibv_exp_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
-#else
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
+#if defined(HAVE_VERBS_EXP)
+static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
+
+	if (verb == ATOMIC)
+		wr->wr.atomic.remote_addr += INC(size);
+
+	else
+		wr->wr.rdma.remote_addr += INC(size);
+
+	if ( ((scnt+1) % (cycle_buffer/ INC(size))) == 0) {
+
+		if (verb == ATOMIC)
+			wr->wr.atomic.remote_addr = prim_addr;
+
+		else
+			wr->wr.rdma.remote_addr = prim_addr;
+	}
+}
 #endif
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
 
 	if (verb == ATOMIC)
 		wr->wr.atomic.remote_addr += INC(size);
