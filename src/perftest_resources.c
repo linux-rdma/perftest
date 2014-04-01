@@ -886,6 +886,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	reg_mr_exp_in.length = ctx->buff_size;
 	reg_mr_exp_in.access = flags;
 	reg_mr_exp_in.exp_access = exp_flags;
+	reg_mr_exp_in.comp_mask = 0;
 	if (ctx->is_contig_supported == SUCCESS){
 		ctx->mr = ibv_exp_reg_mr(&reg_mr_exp_in);
 	}
