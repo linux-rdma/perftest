@@ -846,13 +846,14 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	if ( user_param->test_type == DURATION && user_param->margin == DEF_INIT_MARGIN) {
 		user_param->margin = user_param->duration / 4;
 	}
-	return;
 
 	#if defined(HAVE_VERBS_EXP) && defined(HAVE_DC)
 	if (user_param->connection_type == DC) {
 		user_param->use_exp = 1;
 	}
 	#endif
+
+	return;
 }
 
 /******************************************************************************
