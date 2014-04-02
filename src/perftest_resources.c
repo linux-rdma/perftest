@@ -1164,14 +1164,16 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 		case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
 		case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	}
+
 #if defined(HAVE_VERBS_EXP)
-	flags |= IBV_QP_ACCESS_FLAGS | IBV_EXP_QP_DC_KEY;
+	flags |= IBV_QP_ACCESS_FLAGS; // | IBV_EXP_QP_DC_KEY;
 #else
 	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
 #endif
 	attr.dct_key = user_param->dct_key;
 #if defined(HAVE_VERBS_EXP)
-	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY;
+	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY | IBV_EXP_QP_ATTR_EXP_MASK;
+	attr.exp_attr_mask = IBV_EXP_QP_DC_KEY;
 #else
 	attr.comp_mask = IBV_QP_ATTR_DCT_KEY;
 #endif
@@ -1544,11 +1546,15 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 					   struct pingpong_dest *rem_dest) {
 
 	#ifdef HAVE_VERBS_EXP
-	if (user_param->use_exp == 1)
+	if (user_param->use_exp == 1) {
 		ctx_set_send_exp_wqes(ctx,user_param,rem_dest);
-	else
+	}
+	else {
 	#endif
 		ctx_set_send_reg_wqes(ctx,user_param,rem_dest);
+	#ifdef HAVE_VERBS_EXP
+	}
+	#endif
 }
 
 #ifdef HAVE_VERBS_EXP
