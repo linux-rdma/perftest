@@ -1126,20 +1126,25 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
+	int err;
 
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_qp_attr attr;
+	memset(&attr, 0, sizeof(struct ibv_exp_qp_attr));
 #else
 	struct ibv_qp_attr attr;
+	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 #endif
 
-	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
 
 	static int portindex=0;  // for dual-port support
+	memset(&attr, 0,sizeof(struct ibv_qp_attr));
 
-	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = user_param->pkey_index;
+	attr.qp_access_flags = 0;
+	attr.dct_key = user_param->dct_key;
 
 	if (user_param->duplex || user_param->tst == LAT) {
 		num_of_qps /= 2;
@@ -1158,31 +1163,19 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 
 		attr.port_num = user_param->ib_port;
 	}
-	switch (user_param->verb) {
-		case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
-		case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
-		case WRITE : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
-		case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
-	}
 
 #if defined(HAVE_VERBS_EXP)
-	flags |= IBV_QP_ACCESS_FLAGS; // | IBV_EXP_QP_DC_KEY;
+	attr.exp_attr_mask   = IBV_EXP_QP_DC_KEY;
+	attr.comp_mask       = IBV_EXP_QP_ATTR_DCT_KEY | IBV_EXP_QP_ATTR_EXP_MASK;
+	err = ibv_exp_modify_qp(qp,&attr,flags);
 #else
-	flags |= IBV_QP_ACCESS_FLAGS | IBV_QP_DC_KEY;
-#endif
-	attr.dct_key = user_param->dct_key;
-#if defined(HAVE_VERBS_EXP)
-	attr.comp_mask = IBV_EXP_QP_ATTR_DCT_KEY | IBV_EXP_QP_ATTR_EXP_MASK;
-	attr.exp_attr_mask = IBV_EXP_QP_DC_KEY;
-#else
+	flags |= IBV_QP_DC_KEY;
 	attr.comp_mask = IBV_QP_ATTR_DCT_KEY;
+	err = ibv_modify_qp(qp,&attr,flags);
 #endif
 
-#if defined(HAVE_VERBS_EXP)
-	if (ibv_exp_modify_qp(qp,&attr,flags)) {
-#else
-	if (ibv_modify_qp_ex(qp,&attr,flags)) {
-#endif
+
+	if (err) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return 1;
 	}
@@ -1300,7 +1293,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 
 	flags |= IBV_QP_PATH_MTU | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER | IBV_QP_AV;
 
-	attr->max_dest_rd_atomic = my_dest->out_reads;
+	attr->max_dest_rd_atomic = 1;
 	attr->min_rnr_timer = 0;
 	attr->dct_key = user_param->dct_key;
 	attr->path_mtu = user_param->curr_mtu;
