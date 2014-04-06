@@ -21,6 +21,8 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
 
+AC_ARG_VAR(CUDA_H_PATH, help-string)
+
 AC_ARG_ENABLE([verbs_exp],
 [AS_HELP_STRING([--disable-verbs_exp],
 [Disable Verbs Experimental])],
@@ -98,6 +100,13 @@ AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
 if [test $HAVE_DC = yes] && [test $HAVE_VERBS_EXP = yes]; then
         AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
 fi
+
+if [test "$CUDA_H_PATH" ]; then
+	AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA feature])
+	AC_DEFINE_UNQUOTED([CUDA_PATH], "$CUDA_H_PATH" , [Enable CUDA feature])
+	LIBS=$LIBS" -lcuda"
+fi
+
 
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])

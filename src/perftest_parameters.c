@@ -317,6 +317,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
         printf("      --retry_count=<value> ");
         printf(" Set retry count value in rdma_cm mode\n");
 
+	#ifdef HAVE_CUDA
+	printf("      --use_cuda ");
+	printf(" Use CUDA lib for GPU-Direct testing.\n");
+	#endif
+
 	#ifdef HAVE_VERBS_EXP
 	printf("      --use_exp ");
 	printf(" Use Experimental verbs in data path. Default is OFF.\n");
@@ -429,6 +434,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->rate_limit = 0;
 	user_param->rate_units = MEGA_BYTE_PS;
 	user_param->output = -1;
+	user_param->use_cuda = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -542,7 +548,6 @@ int set_eth_mtu(struct perftest_parameters *user_param) {
  *
  ******************************************************************************/
 static void force_dependecies(struct perftest_parameters *user_param) {
-
 
 	// Additional configuration and assignments.
 	if (user_param->test_type == ITERATIONS) {
@@ -853,6 +858,16 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	}
 	#endif
 
+	#ifdef HAVE_CUDA
+	if (user_param->use_cuda) {
+		if (user_param->tst != BW) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Perftest supports CUDA only in BW tests\n");
+			exit(1);
+		}
+	}
+	#endif
+
 	return;
 }
 
@@ -1106,6 +1121,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
 	static int use_exp_flag = 0;
+	static int use_cuda_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1181,6 +1197,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			#ifdef HAVE_VERBS_EXP
 			{ .name = "use_exp",           .has_arg = 0, .flag = &use_exp_flag, .val = 1},
 			#endif
+			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1503,6 +1520,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if (use_exp_flag) {
 		user_param->use_exp = 1;
+	}
+
+	if (use_cuda_flag) {
+		user_param->use_cuda = 1;
 	}
 	if (report_both_flag) {
 		user_param->report_both = 1;
