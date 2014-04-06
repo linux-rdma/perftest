@@ -175,6 +175,20 @@ int establish_connection(struct perftest_comm *comm);
 int rdma_client_connect(struct pingpong_context *ctx,
 						struct perftest_parameters *user_param);
 
+/* retry_rdma_connect .
+ *
+ * Description : Retries rdma_client_connect() because the listener may not be ready
+ *               when the rdma client attempts to connect
+ *
+ * Parameters :
+ *		ctx - An empty resources struct to fill the resources created for this QP.
+ *		user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int retry_rdma_connect(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param);
+
 /* rdma_server_connect .
  *
  * Description : Assinging a server to listen on a rdma_cm port and connect to it.

@@ -754,7 +754,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Unexpected CM event bl blka %d\n",event->event);
+		rdma_ack_cm_event(event);
+		fprintf(stderr, "Unexpected CM event bl blka %d\n", event->event);
 		return FAILURE;
 	}
 
@@ -786,7 +787,33 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 /******************************************************************************
  *
  ******************************************************************************/
-int rdma_server_connect(struct pingpong_context *ctx,
+int retry_rdma_connect(struct pingpong_context *ctx,
+			struct perftest_parameters *user_param) {
+	int i, max_retries = 10;
+	int delay = 100000; /* 100 millisec */
+
+	for (i = 0; i < max_retries; i++) {
+		if (create_rdma_resources(ctx,user_param)) {
+			fprintf(stderr," Unable to create rdma resources\n");
+			return FAILURE;
+	    	}
+		if (rdma_client_connect(ctx,user_param) == SUCCESS)
+			return SUCCESS;
+
+		if (destroy_rdma_resources(ctx,user_param)) {
+			fprintf(stderr,"Unable to destroy rdma resources\n");
+			return FAILURE;
+		}
+		usleep(delay);
+	}
+	fprintf(stderr,"Unable to connect (retries = %d)\n", max_retries);
+	return FAILURE;
+}
+
+/******************************************************************************
++ *
++ ******************************************************************************/
+ int rdma_server_connect(struct pingpong_context *ctx,
 						struct perftest_parameters *user_param) {
 
 	int temp;

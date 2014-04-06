@@ -306,20 +306,17 @@ int main(int argc, char *argv[]) {
 	// Create (if nessacery) the rdma_cm ids and channel.
 	if (user_param.work_rdma_cm == ON) {
 
-	    if (create_rdma_resources(&ctx,&user_param)) {
-			fprintf(stderr," Unable to create the rdma_resources\n");
-			return FAILURE;
-	    }
-
-  	    if (user_param.machine == CLIENT) {
-
-			if (rdma_client_connect(&ctx,&user_param)) {
+	    if (user_param.machine == CLIENT) {
+			if (retry_rdma_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
 
 		} else {
-
+    		if (create_rdma_resources(&ctx,&user_param)) {
+				fprintf(stderr," Unable to create the rdma_resources\n");
+				return FAILURE;
+    		}
 			if (rdma_server_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;

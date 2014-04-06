@@ -467,6 +467,21 @@ int create_rdma_resources(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
+int destroy_rdma_resources(struct pingpong_context *ctx,
+					struct perftest_parameters *user_param) {
+	int ret;
+	if (user_param->machine == CLIENT) {
+		ret = rdma_destroy_id(ctx->cm_id);	
+	} else {
+		ret = rdma_destroy_id(ctx->cm_id_control);	
+	}
+	rdma_destroy_event_channel(ctx->cm_channel);
+	return ret;
+}
+
+/******************************************************************************
++ *
++ ******************************************************************************/
 struct ibv_device* ctx_find_dev(const char *ib_devname) {
 
 	int num_of_device;
