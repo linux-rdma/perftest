@@ -240,6 +240,19 @@ struct ibv_device* ctx_find_dev(const char *ib_devname);
 int create_rdma_resources(struct pingpong_context *ctx,
                           struct perftest_parameters *user_param);
 
+/* destroy_rdma_resources
+ *
+ * Description : Destroys the rdma_cm_id and rdma_channel for the rdma_cm QPs.
+ *
+ * Parameters :
+ *	ctx - Resources sructure.
+ * 	user_param - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int destroy_rdma_resources(struct pingpong_context *ctx,
+                          struct perftest_parameters *user_param);
+
 /* alloc_ctx
  *
  * Description : allocate all perftest resources.
