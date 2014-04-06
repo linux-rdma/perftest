@@ -67,6 +67,10 @@
 #include <infiniband/verbs_exp.h>
 #endif
 
+#ifdef HAVE_CUDA
+#include CUDA_PATH
+#endif
+
 // Connection types available.
 #define RC  (0)
 #define UC  (1)
@@ -346,6 +350,7 @@ struct perftest_parameters {
 	int				buff_size;
 	int             pkey_index;
 	int				raw_qos;
+	int				use_cuda;
 	// New test params format pilot. will be used in all flags soon,.
 	enum ctx_test_method 	test_method;
 	enum ibv_transport_type transport_type;
