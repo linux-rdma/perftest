@@ -29,6 +29,107 @@ int cycle_buffer=4096;
 /******************************************************************************
  * Beginning
  ******************************************************************************/
+#ifdef HAVE_CUDA
+#define ASSERT(x)                                                       \
+    do                                                                  \
+        {                                                               \
+            if (!(x))                                                   \
+                {                                                       \
+                    fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                    /*exit(EXIT_FAILURE);*/                                 \
+                }                                                       \
+        } while (0)
+
+#define CUCHECK(stmt)                           \
+    do                                          \
+        {                                       \
+            CUresult result = (stmt);           \
+            ASSERT(CUDA_SUCCESS == result);     \
+        } while (0)
+
+/*----------------------------------------------------------------------------*/
+
+static CUdevice cuDevice;
+static CUcontext cuContext;
+
+static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+{
+	int ret = 0;
+	const size_t gpu_page_size = 64*1024;
+	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
+	printf("initializing CUDA\n");
+	CUresult error = cuInit(0);
+	if (error != CUDA_SUCCESS) {
+		printf("cuInit(0) returned %d\n", error);
+		exit(1);
+	}
+
+	int deviceCount = 0;
+	error = cuDeviceGetCount(&deviceCount);
+	if (error != CUDA_SUCCESS) {
+		printf("cuDeviceGetCount() returned %d\n", error);
+		exit(1);
+	}
+	// This function call returns 0 if there are no CUDA capable devices.
+	if (deviceCount == 0) {
+		printf("There are no available device(s) that support CUDA\n");
+		return 1;
+	} else if (deviceCount == 1)
+		printf("There is 1 device supporting CUDA\n");
+	else
+		printf("There are %d devices supporting CUDA, picking first...\n", deviceCount);
+
+	int devID = 0;
+	// pick up device with zero ordinal (default, or devID)
+	CUCHECK(cuDeviceGet(&cuDevice, devID));
+
+        char name[128];
+        CUCHECK(cuDeviceGetName(name, sizeof(name), devID));
+        printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), cuDevice, name);
+
+	printf("creating CUDA Ctx\n");
+	// Create context
+	error = cuCtxCreate(&cuContext, CU_CTX_MAP_HOST, cuDevice);
+	if (error != CUDA_SUCCESS) {
+		printf("cuCtxCreate() error=%d\n", error);
+		return 1;
+	}
+
+	printf("making it the current CUDA Ctx\n");
+	error = cuCtxSetCurrent(cuContext);
+	if (error != CUDA_SUCCESS) {
+		printf("cuCtxSetCurrent() error=%d\n", error);
+		return 1;
+	}
+
+	printf("cuMemAlloc() of a %d bytes GPU buffer\n", size);
+	CUdeviceptr d_A;
+	error = cuMemAlloc(&d_A, size);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemAlloc error=%d\n", error);
+		return 1;
+	}
+	printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A, d_A);
+	ctx->buf = (void*)d_A;
+
+	return 0;
+}
+
+static int pp_free_gpu(struct pingpong_context *ctx)
+{
+	int ret = 0;
+	CUdeviceptr d_A = (CUdeviceptr) ctx->buf;
+
+	printf("deallocating RX GPU buffer\n");
+	cuMemFree(d_A);
+	d_A = 0;
+
+	printf("destroying current CUDA Ctx\n");
+	CUCHECK(cuCtxDestroy(cuContext));
+
+	return ret;
+}
+#endif
 
 #if defined(HAVE_VERBS_EXP)
 static void get_verbs_pointers(struct pingpong_context *ctx) {
@@ -710,6 +811,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
+	#ifdef HAVE_CUDA
+		if (user_param->use_cuda) {
+			pp_free_gpu(ctx);
+		}
+		else
+	#endif
 	if (ctx->is_contig_supported == FAILURE)
 		free(ctx->buf);
 
@@ -845,26 +952,38 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
-	// Allocating buffer for data, in case driver not support contig pages.
-	if (ctx->is_contig_supported == FAILURE) {
-
-		ctx->buf = memalign(sysconf(_SC_PAGESIZE),ctx->buff_size);
-		if (!ctx->buf) {
+	#ifdef HAVE_CUDA
+	if (user_param->use_cuda) {
+		ctx->is_contig_supported = FAILURE;
+		if(pp_init_gpu(ctx, ctx->buff_size)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
-			exit(1);
+			return NULL;
 		}
-
-		memset(ctx->buf, 0,ctx->buff_size);
-
-	} else {
-		ctx->buf = NULL;
-	#if defined(HAVE_VERBS_EXP)
-		exp_flags = IBV_EXP_ACCESS_ALLOCATE_MR;
-	#else
-		flags |= (1 << 5);
-	#endif
 	}
+	else {
+	#endif
+		// Allocating buffer for data, in case driver not support contig pages.
+		if (ctx->is_contig_supported == FAILURE) {
 
+			ctx->buf = memalign(sysconf(_SC_PAGESIZE),ctx->buff_size);
+			if (!ctx->buf) {
+				fprintf(stderr, "Couldn't allocate work buf.\n");
+				exit(1);
+			}
+
+			memset(ctx->buf, 0,ctx->buff_size);
+
+		} else {
+			ctx->buf = NULL;
+		#if defined(HAVE_VERBS_EXP)
+			exp_flags = IBV_EXP_ACCESS_ALLOCATE_MR;
+		#else
+			flags |= (1 << 5);
+		#endif
+		}
+#ifdef HAVE_CUDA
+	}
+#endif
 	// Allocating an event channel if requested.
 	if (user_param->use_event) {
 		ctx->channel = ibv_create_comp_channel(ctx->context);
