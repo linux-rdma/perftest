@@ -1425,7 +1425,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
-	int flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PATH_MTU | IBV_EXP_QP_MAX_DEST_RD_ATOMIC | IBV_EXP_QP_AV;
+	int flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PATH_MTU | IBV_EXP_QP_AV;
 	attr->qp_state = IBV_QPS_RTR;
 	attr->ah_attr.src_path_bits = 0;
 
@@ -1460,7 +1460,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.sl = 0;
 	}
 
-	attr->max_dest_rd_atomic = 1;
+	attr->max_dest_rd_atomic = 0;
 	attr->min_rnr_timer = 0;
 	attr->dct_key = user_param->dct_key;
 	attr->path_mtu = user_param->curr_mtu;
