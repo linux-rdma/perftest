@@ -218,7 +218,7 @@ static int check_for_contig_pages_support(struct ibv_context *context)
                 fprintf(stderr, "Couldn't get device attributes\n");
                 return FAILURE;
         }
-	answer = ( attr.device_cap_flags2 &= IBV_EXP_DEVICE_MR_ALLOCATE) ? SUCCESS : FAILURE;
+	answer = ( attr.exp_device_cap_flags &= IBV_EXP_DEVICE_MR_ALLOCATE) ? SUCCESS : FAILURE;
 #else
 	struct ibv_device_attr attr;
 
@@ -390,7 +390,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 	else
 		port_num = user_param->ib_port;
 
-	dattr.comp_mask = IBV_EXP_DEVICE_ATTR_FLAGS2 |
+	dattr.comp_mask = IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS |
 		IBV_EXP_DEVICE_DC_RD_REQ |
 		IBV_EXP_DEVICE_DC_RD_RES;
 
@@ -399,11 +399,11 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 		printf("couldn't query device extended attributes\n");
 		return -1;
 	} else {
-		if (!(dattr.comp_mask & IBV_EXP_DEVICE_ATTR_FLAGS2)) {
+		if (!(dattr.comp_mask & IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS)) {
 			printf("no extended capability flgas\n");
 			return -1;
 		}
-		if (!(dattr.device_cap_flags2 & IBV_EXP_DEVICE_DC_TRANSPORT)) {
+		if (!(dattr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)) {
 			printf("DC transport not enabled\n");
 			return -1;
 		}
@@ -934,12 +934,12 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 	int num_of_qps = user_param->num_of_qps / 2;
-	int init_flag = 0;
+	uint64_t init_flag = 0;
 	int only_dct = 0;
 	int tx_buffer_depth = user_param->tx_depth;
 	#if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_reg_mr_in reg_mr_exp_in;
-	int exp_flags = 0;
+	uint64_t exp_flags = IBV_EXP_ACCESS_LOCAL_WRITE;
 	#endif
 
 	#ifdef HAVE_VERBS_EXP
@@ -976,7 +976,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		} else {
 			ctx->buf = NULL;
 		#if defined(HAVE_VERBS_EXP)
-			exp_flags = IBV_EXP_ACCESS_ALLOCATE_MR;
+			exp_flags |= IBV_EXP_ACCESS_ALLOCATE_MR;
 		#else
 			flags |= (1 << 5);
 		#endif
@@ -1002,15 +1002,26 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	if (user_param->verb == WRITE) {
 		flags |= IBV_ACCESS_REMOTE_WRITE;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
+		#endif
 
 	} else if (user_param->verb == READ) {
 		flags |= IBV_ACCESS_REMOTE_READ;
-
+		#ifdef HAVE_VERBS_EXP
+                exp_flags |= IBV_EXP_ACCESS_REMOTE_READ;
+                #endif
 	if (user_param->transport_type == IBV_TRANSPORT_IWARP)
 		flags |= IBV_ACCESS_REMOTE_WRITE;
+		#ifdef HAVE_VERBS_EXP
+                exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
+                #endif
 
 	} else if (user_param->verb == ATOMIC) {
 		flags |= IBV_ACCESS_REMOTE_ATOMIC;
+		#ifdef HAVE_VERBS_EXP
+                exp_flags |= IBV_EXP_ACCESS_REMOTE_ATOMIC;
+                #endif
 	}
 
 	// Allocating Memory region and assigning our buffer to it.
@@ -1018,7 +1029,6 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	reg_mr_exp_in.pd = ctx->pd;
 	reg_mr_exp_in.addr = ctx->buf;
 	reg_mr_exp_in.length = ctx->buff_size;
-	reg_mr_exp_in.access = flags;
 	reg_mr_exp_in.exp_access = exp_flags;
 	reg_mr_exp_in.comp_mask = 0;
 	if (ctx->is_contig_supported == SUCCESS){
@@ -1088,15 +1098,15 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	if (user_param->use_rss) {
 		struct ibv_exp_device_attr attr;
 
-		attr.comp_mask = IBV_EXP_DEVICE_ATTR_FLAGS2 |
+		attr.comp_mask = IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS |
 				 IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ;
 		if (ibv_exp_query_device(ctx->context, &attr)) {
 			fprintf(stderr, "Experimental ibv_exp_query_device.\n");
 			exit(1);
 		}
 
-		if (!((attr.device_cap_flags2 & IBV_EXP_DEVICE_QPG) &&
-		      (attr.device_cap_flags2 & IBV_EXP_DEVICE_UD_RSS) &&
+		if (!((attr.exp_device_cap_flags & IBV_EXP_DEVICE_QPG) &&
+		      (attr.exp_device_cap_flags & IBV_EXP_DEVICE_UD_RSS) &&
 		      (attr.comp_mask & IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ) &&
 		      (attr.max_rss_tbl_sz > 0))) {
 			fprintf(stderr, "RSS not supported .\n");
@@ -1259,16 +1269,17 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 	int err;
+	uint64_t flags;
 
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_qp_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_exp_qp_attr));
+	flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PKEY_INDEX | IBV_EXP_QP_PORT;
 #else
 	struct ibv_qp_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
+	flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
 #endif
-
-	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
 
 	static int portindex=0;  // for dual-port support
 	memset(&attr, 0,sizeof(struct ibv_qp_attr));
@@ -1297,8 +1308,9 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 	}
 
 #if defined(HAVE_VERBS_EXP)
-	attr.exp_attr_mask   = IBV_EXP_QP_DC_KEY;
-	attr.comp_mask       = IBV_EXP_QP_ATTR_DCT_KEY | IBV_EXP_QP_ATTR_EXP_MASK;
+	flags |= IBV_EXP_QP_DC_KEY;
+//	attr.exp_attr_mask   = IBV_EXP_QP_DC_KEY;
+//	attr.comp_mask       = IBV_EXP_QP_ATTR_DCT_KEY | IBV_EXP_QP_ATTR_EXP_MASK;
 	err = ibv_exp_modify_qp(qp,&attr,flags);
 #else
 	flags |= IBV_QP_DC_KEY;
@@ -1318,20 +1330,31 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
  /******************************************************************************
  *
  ******************************************************************************/
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int init_flag)  {
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag)  {
 
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	struct ibv_qp_attr attr;
-	int flags = init_flag | IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
-
+	#ifdef HAVE_VERBS_EXP
+	struct ibv_exp_qp_attr exp_attr;
+	#endif
+	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+	#ifdef HAVE_VERBS_EXP
+	uint64_t exp_flags = 0;
+	#endif
 	static int portindex=0;  // for dual-port support
+	int ret = 0;
 
 	memset(&attr, 0, sizeof(struct ibv_qp_attr));
 	attr.qp_state        = IBV_QPS_INIT;
-	attr.pkey_index      = user_param->pkey_index;;
+	attr.pkey_index      = user_param->pkey_index;
 
+	#ifdef HAVE_VERBS_EXP
+        memset(&exp_attr, 0, sizeof(struct ibv_exp_qp_attr));
+        exp_attr.qp_state        = attr.qp_state;
+        exp_attr.pkey_index      = attr.pkey_index;
+	#endif
 	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
@@ -1349,10 +1372,15 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 
 		attr.port_num = user_param->ib_port;
 	}
+	#ifdef HAVE_VERBS_EXP
+        exp_attr.port_num = attr.port_num;
+        #endif
 
 	if (user_param->connection_type == RawEth) {
-		flags = init_flag | IBV_QP_STATE | IBV_QP_PORT;
-
+		flags = IBV_QP_STATE | IBV_QP_PORT;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PORT;
+		#endif
 	} else if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
@@ -1367,7 +1395,14 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
 
-	if (ibv_modify_qp(qp,&attr,flags)) {
+	#ifdef HAVE_VERBS_EXP
+	if (init_flag != 0 && user_param->use_rss)
+		ret = ibv_exp_modify_qp(qp,&exp_attr,exp_flags);
+	else
+	#endif
+		ret = ibv_modify_qp(qp,&attr,flags);
+
+	if (ret) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return 1;
 	}
@@ -1388,7 +1423,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
-	int flags = IBV_QP_STATE;
+	int flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PATH_MTU | IBV_EXP_QP_MAX_DEST_RD_ATOMIC | IBV_EXP_QP_AV;
 	attr->qp_state = IBV_QPS_RTR;
 	attr->ah_attr.src_path_bits = 0;
 
@@ -1422,8 +1457,6 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.grh.hop_limit = 1;
 		attr->ah_attr.sl = 0;
 	}
-
-	flags |= IBV_QP_PATH_MTU | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_AV;
 
 	attr->max_dest_rd_atomic = 1;
 	attr->min_rnr_timer = 0;
@@ -1523,7 +1556,12 @@ static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
 								struct pingpong_dest *my_dest)
 {
 
-	int flags = IBV_QP_STATE;
+#if defined(HAVE_VERBS_EXP)
+       	int flags = IBV_EXP_QP_STATE | IBV_EXP_QP_TIMEOUT | IBV_EXP_QP_RETRY_CNT | IBV_EXP_QP_RNR_RETRY | IBV_EXP_QP_MAX_QP_RD_ATOMIC;
+#else
+	int flags = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC;
+#endif
+
 	attr->qp_state = IBV_QPS_RTS;
 
 	attr->timeout   = user_param->qp_timeout;
@@ -1531,7 +1569,6 @@ static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
 	attr->rnr_retry = 7;
 	attr->max_rd_atomic  = dest->out_reads;
 
-	flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
 #if defined(HAVE_VERBS_EXP)
 	return ibv_exp_modify_qp(qp,attr,flags);
 #else
@@ -1738,13 +1775,13 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 			ctx->exp_wr[i*user_param->post_list + j].wr_id   = i;
 
 			if (j == (user_param->post_list - 1)) {
-				ctx->exp_wr[i*user_param->post_list + j].send_flags = IBV_SEND_SIGNALED;
+				ctx->exp_wr[i*user_param->post_list + j].exp_send_flags = IBV_EXP_SEND_SIGNALED;
 				ctx->exp_wr[i*user_param->post_list + j].next = NULL;
 			}
 
 			else {
 				ctx->exp_wr[i*user_param->post_list + j].next = &ctx->exp_wr[i*user_param->post_list+j+1];
-				ctx->exp_wr[i*user_param->post_list + j].send_flags = 0;
+				ctx->exp_wr[i*user_param->post_list + j].exp_send_flags = 0;
 			}
 
 			if (user_param->verb == ATOMIC) {
@@ -1817,7 +1854,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 
 			if ((user_param->verb == SEND || user_param->verb == WRITE) && user_param->size <= user_param->inline_size)
-				ctx->exp_wr[i*user_param->post_list + j].send_flags |= IBV_SEND_INLINE;
+				ctx->exp_wr[i*user_param->post_list + j].exp_send_flags |= IBV_EXP_SEND_INLINE;
 
 		#ifdef HAVE_XRCD
 			if (user_param->use_xrc)
@@ -2194,7 +2231,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
-						ctx->exp_wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
 						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
@@ -2246,7 +2283,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				   (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
-						ctx->exp_wr[index].send_flags |= IBV_SEND_SIGNALED;
+						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
@@ -2464,7 +2501,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		for (j=0 ; j < user_param->post_list; j++) {
 			#ifdef HAVE_VERBS_EXP
 			if (user_param->use_exp == 1)
-				ctx->exp_wr[i*user_param->post_list +j].send_flags |= IBV_SEND_SIGNALED;
+				ctx->exp_wr[i*user_param->post_list +j].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 			else
 			#endif
 				ctx->wr[i*user_param->post_list +j].send_flags |= IBV_SEND_SIGNALED;
@@ -2640,7 +2677,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp ==1)
-						ctx->exp_wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
 						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
@@ -2679,7 +2716,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->post_list == 1 && (ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 || (user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1))) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
-						ctx->exp_wr[index].send_flags |= IBV_SEND_SIGNALED;
+						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
@@ -2816,9 +2853,9 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	#ifdef HAVE_VERBS_EXP
 	if (user_param->use_exp == 1) {
 		ctx->exp_wr[0].sg_list->length = user_param->size;
-		ctx->exp_wr[0].send_flags      = IBV_SEND_SIGNALED;
+		ctx->exp_wr[0].exp_send_flags      = IBV_EXP_SEND_SIGNALED;
 		if (user_param->size <= user_param->inline_size)
-			ctx->exp_wr[0].send_flags |= IBV_SEND_INLINE;
+			ctx->exp_wr[0].exp_send_flags |= IBV_EXP_SEND_INLINE;
 	} else {
 	#endif
 		ctx->wr[0].sg_list->length = user_param->size;
@@ -2926,7 +2963,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	#ifdef HAVE_VERBS_EXP
 	if (user_param->use_exp == 1) {
 		ctx->exp_wr[0].sg_list->length = user_param->size;
-		ctx->exp_wr[0].send_flags = IBV_SEND_SIGNALED;
+		ctx->exp_wr[0].exp_send_flags = IBV_EXP_SEND_SIGNALED;
 	} else {
 	#endif
 		ctx->wr[0].sg_list->length = user_param->size;
@@ -3024,7 +3061,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		#if defined(HAVE_VERBS_EXP)
 		if (user_param->use_exp == 1) {
 			ctx->exp_wr[0].sg_list->length = user_param->size;
-			ctx->exp_wr[0].send_flags = 0;
+			ctx->exp_wr[0].exp_send_flags = 0;
 		} else {
 		#endif
 			ctx->wr[0].sg_list->length = user_param->size;
@@ -3038,7 +3075,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	if (user_param->size <= user_param->inline_size) {
 		#if defined(HAVE_VERBS_EXP)
 		if (user_param->use_exp == 1)
-			ctx->exp_wr[0].send_flags |= IBV_SEND_INLINE;
+			ctx->exp_wr[0].exp_send_flags |= IBV_EXP_SEND_INLINE;
 		else
 		#endif
 			ctx->wr[0].send_flags |= IBV_SEND_INLINE;
@@ -3122,7 +3159,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				poll = 1;
 			#if defined(HAVE_VERBS_EXP)
 			if (user_param->use_exp == 1)
-				ctx->exp_wr[0].send_flags |= IBV_SEND_SIGNALED;
+				ctx->exp_wr[0].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 			else
 			#endif
 				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
@@ -3178,7 +3215,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 
 				#if defined(HAVE_VERBS_EXP)
 				if (user_param->use_exp == 1)
-					ctx->exp_wr[0].send_flags &= ~IBV_SEND_SIGNALED;
+					ctx->exp_wr[0].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 				else
 				#endif
 					ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
