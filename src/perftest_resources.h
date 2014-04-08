@@ -324,7 +324,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  * Return Value : SUCCESS, FAILURE.
  *
  */
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int init_flag);
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag);
 
 /* ctx_connect.
  *
