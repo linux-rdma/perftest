@@ -487,7 +487,6 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		memset(header_buff, 0,flow_rules_size);
 		*flow_rules = (struct ibv_exp_flow_attr*)header_buff;
 		attr_info = (struct ibv_exp_flow_attr*)header_buff;
-		attr_info->comp_mask = 0;
 		attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
 		attr_info->size = flow_rules_size;
 		attr_info->priority = 0;
