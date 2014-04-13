@@ -150,6 +150,7 @@
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
+#define MAX_INLINE_UD (884)
 
 // Raw etherent defines
 #define RAWETH_MIN_MSG_SIZE	(64)

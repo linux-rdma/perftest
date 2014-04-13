@@ -881,6 +881,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	}
 	#endif
 
+	if ( (user_param->connection_type == UD) && (user_param->inline_size > MAX_INLINE_UD) ) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
+		user_param->inline_size = MAX_INLINE_UD;
+	}
 	return;
 }
 
