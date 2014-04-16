@@ -327,7 +327,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf(" Use Experimental verbs in data path. Default is OFF.\n");
 	#endif
 
-	if (verb == SEND && tst == BW) {
+	if (tst == BW) {
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
