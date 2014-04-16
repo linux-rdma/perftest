@@ -214,6 +214,7 @@ static int check_for_contig_pages_support(struct ibv_context *context)
 	int answer;
 #ifdef HAVE_VERBS_EXP
 	struct ibv_exp_device_attr attr;
+	memset(&attr,0,sizeof attr);
 	if (ibv_exp_query_device(context,&attr)) {
                 fprintf(stderr, "Couldn't get device attributes\n");
                 return FAILURE;
