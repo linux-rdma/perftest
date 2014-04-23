@@ -225,12 +225,9 @@ Special feature detailed explanation in tests:
 
  2. Bidirectional support in ib_send_bw test, when running in UD or UC mode.
     In rare cases, the benchmark program may hang.
+    This release added a feature for hang detection, which will exit test in those situations.
 
- 3. RDMA CM is not working in RDMA Read benchmarks
-
- 4. Dual-port support currently works only with ib_write_bw
-
- 5. Different versions of perftest may not be compatible with each other.
+ 3. Different versions of perftest may not be compatible with each other.
     Please use the same perftest version on both sides to ensure consistency of benchmark results.
 
- 6. This version (5.0) won't work with previous versions of perftest.
+ 4. This version (5.2) won't work with previous versions of perftest.
