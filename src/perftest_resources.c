@@ -374,6 +374,8 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 	int port_num;
 
+	memset(&dattr,0,sizeof(struct ibv_exp_device_attr));
+
 	//in dc with bidirectional,
 	//there are send qps and recv qps. the actual number of send/recv qps
 	//is num_of_qps / 2.
@@ -444,6 +446,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 	}
 
 	struct ibv_exp_dct_attr dcqattr;
+	memset(&dcqattr,0,sizeof(struct ibv_exp_dct_attr));
 
 	err = ibv_exp_query_dct(ctx->dct[dct_index], &dcqattr);
 	if (err) {
@@ -935,7 +938,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 	int num_of_qps = user_param->num_of_qps / 2;
-	uint64_t init_flag = 0;
+	int init_flag = 0;
 	int only_dct = 0;
 	int tx_buffer_depth = user_param->tx_depth;
 	#if defined(HAVE_VERBS_EXP)
@@ -1178,7 +1181,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		if (user_param->work_rdma_cm == OFF) {
 			#ifdef HAVE_RSS_EXP
 			if (i == 0 && user_param->use_rss) {
-				init_flag = IBV_EXP_QP_GROUP_RSS;
+				init_flag = 1 << 21;  //should be IBV_EXP_QP_GROUP_RSS, but no support in driver
 			}
 			else
 			#endif
@@ -1331,19 +1334,13 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
  /******************************************************************************
  *
  ******************************************************************************/
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag)  {
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int init_flag)  {
 
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	struct ibv_qp_attr attr;
-	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_qp_attr exp_attr;
-	#endif
 	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
-	#ifdef HAVE_VERBS_EXP
-	uint64_t exp_flags = 0;
-	#endif
 	static int portindex=0;  // for dual-port support
 	int ret = 0;
 
@@ -1351,11 +1348,6 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = user_param->pkey_index;
 
-	#ifdef HAVE_VERBS_EXP
-        memset(&exp_attr, 0, sizeof(struct ibv_exp_qp_attr));
-        exp_attr.qp_state        = attr.qp_state;
-        exp_attr.pkey_index      = attr.pkey_index;
-	#endif
 	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
@@ -1373,15 +1365,9 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 
 		attr.port_num = user_param->ib_port;
 	}
-	#ifdef HAVE_VERBS_EXP
-        exp_attr.port_num = attr.port_num;
-        #endif
 
 	if (user_param->connection_type == RawEth) {
-		flags = IBV_QP_STATE | IBV_QP_PORT;
-		#ifdef HAVE_VERBS_EXP
-		exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PORT;
-		#endif
+		flags = init_flag | IBV_QP_STATE | IBV_QP_PORT;
 	} else if (user_param->connection_type == UD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
@@ -1396,13 +1382,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
 
-	#ifdef HAVE_VERBS_EXP
-	if (init_flag != 0 && user_param->use_rss)
-		ret = ibv_exp_modify_qp(qp,&exp_attr,exp_flags);
-	else
-	#endif
-		ret = ibv_modify_qp(qp,&attr,flags);
-
+	ret = ibv_modify_qp(qp,&attr,flags);
 	if (ret) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return 1;
