@@ -1,7 +1,7 @@
 	     Open Fabrics Enterprise Distribution (OFED)
-                Performance Tests README for OFED 2.0
+                Performance Tests README for OFED 2.2
 		  
-			  January 2013
+			  April 2014
 
 
 
@@ -231,3 +231,8 @@ Special feature detailed explanation in tests:
     Please use the same perftest version on both sides to ensure consistency of benchmark results.
 
  4. This version (5.2) won't work with previous versions of perftest.
+
+ 5. This perftest package won't compile on MLNX_OFED-2.1 due to API changes in MLNX_OFED-2.2
+    In order to compile it properly, please do:
+    ./configure --disable-verbs_exp
+    make
