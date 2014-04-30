@@ -236,3 +236,5 @@ Special feature detailed explanation in tests:
     In order to compile it properly, please do:
     ./configure --disable-verbs_exp
     make
+
+ 6. In te x390x platform virtualized environment the results shown by package test applications can be incorrect.

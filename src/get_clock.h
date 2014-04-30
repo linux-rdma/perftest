@@ -70,7 +70,14 @@ static inline cycles_t get_cycles()
 	asm volatile ("mov %0=ar.itc" : "=r" (ret));
 	return ret;
 }
-
+#elif defined(__s390x__)
+typedef unsigned long long cycles_t;
+static inline cycles_t get_cycles(void)
+{
+       cycles_t        clk;
+       asm volatile("stck %0" : "=Q" (clk) : : "cc");
+       return clk >> 2;
+}
 #else
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
 #include <asm/timex.h>
