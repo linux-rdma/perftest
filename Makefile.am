@@ -12,6 +12,9 @@
 #
 
 ACLOCAL_AMFLAGS= -I m4
+AM_CFLAGS = -g -Wall -O3
+AM_CPPFLAGS = -D_GNU_SOURCE
+
 noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c
 noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h
