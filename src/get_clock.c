@@ -132,6 +132,7 @@ static double sample_get_cpu_mhz(void)
 	return b;
 }
 
+#ifndef __s390x__
 static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 {
 	FILE* f;
@@ -180,10 +181,13 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 	fclose(f);
 	return mhz;
 }
-
+#endif
 
 double get_cpu_mhz(int no_cpu_freq_fail)
 {
+#ifdef __s390x__
+	return sample_get_cpu_mgz();
+#else
 	double sample, proc, delta;
 	sample = sample_get_cpu_mhz();
 	proc = proc_get_cpu_mhz(no_cpu_freq_fail);
@@ -201,4 +205,5 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 			return sample;
 	}
 	return proc;
+#endif
 }
