@@ -881,6 +881,7 @@ int retry_rdma_connect(struct pingpong_context *ctx,
 		conn_param.qp_num = ctx->qp[0]->qp_num;
 
 	conn_param.retry_count = user_param->retry_count;
+	conn_param.rnr_retry_count = 7;
 	user_param->work_rdma_cm = temp;
 
 	if (user_param->work_rdma_cm == OFF) {
