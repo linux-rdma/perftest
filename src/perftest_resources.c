@@ -798,6 +798,16 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
+	if (user_param->verb == SEND && user_param->work_rdma_cm == ON && ctx->send_rcredit) {
+		if (ibv_dereg_mr(ctx->credit_mr)) {
+			fprintf(stderr, "Failed to deregister send credit MR\n");
+			test_result = 1;
+		}
+		free(ctx->ctrl_buf);
+		free(ctx->ctrl_sge_list);
+		free(ctx->ctrl_wr);
+	}
+
 	if (ibv_dealloc_pd(ctx->pd)) {
 		fprintf(stderr, "failed to deallocate PD\n");
 		test_result = 1;
@@ -1128,7 +1138,6 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		}
 	}
 #endif
-
 	for (i=0; i < user_param->num_of_qps; i++) {
 
 		if(user_param->connection_type == DC) {
@@ -2075,6 +2084,92 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	return 0;
 }
 
+int ctx_alloc_credit(struct pingpong_context *ctx,
+			struct perftest_parameters *user_param,
+			struct pingpong_dest *my_dest)
+{
+	int buf_size = 2*user_param->num_of_qps*sizeof(uint32_t);
+	int flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
+	int i;
+
+	ALLOCATE(ctx->ctrl_buf,uint32_t,user_param->num_of_qps);
+	memset(&ctx->ctrl_buf[0],0,buf_size);
+
+	ctx->credit_buf = (uint32_t *)ctx->ctrl_buf + user_param->num_of_qps;
+	ctx->credit_cnt = user_param->rx_depth/3;
+
+	ctx->credit_mr = ibv_reg_mr(ctx->pd,ctx->ctrl_buf,buf_size,flags);
+	if (!ctx->credit_mr) {
+		fprintf(stderr, "Couldn't allocate MR\n");
+		return FAILURE;
+	}
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		my_dest[i].rkey  = ctx->credit_mr->rkey;
+		my_dest[i].vaddr = (uintptr_t)ctx->credit_buf + i*sizeof(uint32_t);
+	}
+	return 0;
+}
+
+/* Should be called after the remote keys have been exchanged */
+int ctx_set_credit_wqes(struct pingpong_context *ctx,
+			struct perftest_parameters *user_param,
+			struct pingpong_dest *rem_dest)
+{
+	int i;
+	ALLOCATE(ctx->ctrl_wr,struct ibv_send_wr,user_param->num_of_qps);
+	ALLOCATE(ctx->ctrl_sge_list,struct ibv_sge,user_param->num_of_qps);
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		memset(&ctx->ctrl_wr[i],0,sizeof(struct ibv_send_wr));
+
+		ctx->ctrl_sge_list[i].addr = (uintptr_t)ctx->ctrl_buf + (i*sizeof(uint32_t));
+		ctx->ctrl_sge_list[i].length = sizeof(uint32_t);
+		ctx->ctrl_sge_list[i].lkey = ctx->credit_mr->lkey;
+
+		ctx->ctrl_wr[i].opcode = IBV_WR_RDMA_WRITE;
+		ctx->ctrl_wr[i].sg_list = &ctx->ctrl_sge_list[i];
+		ctx->ctrl_wr[i].num_sge = 1;
+		ctx->ctrl_wr[i].wr_id = i;
+		ctx->ctrl_wr[i].send_flags = IBV_SEND_SIGNALED;
+		ctx->ctrl_wr[i].next = NULL;
+
+		ctx->ctrl_wr[i].wr.rdma.remote_addr = rem_dest[i].vaddr;
+		ctx->ctrl_wr[i].wr.rdma.rkey = rem_dest[i].rkey;
+	}
+	return 0;
+}
+
+static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	int i= 0, sne = 0;
+	struct ibv_wc *swc = NULL;
+
+	if (!send_cnt)
+		return 0;
+
+	ALLOCATE(swc,struct ibv_wc,user_param->tx_depth);
+	do {
+		sne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,swc);
+		if (sne > 0) {
+			for (i = 0; i < sne; i++) {
+				if (swc[i].status != IBV_WC_SUCCESS) {
+					fprintf(stderr, "Poll send CQ error status=%u qp %d\n",
+						swc[i].status,(int)swc[i].wr_id);
+					return 1;
+				}
+				send_cnt--;
+			}
+
+		} else if (sne < 0) {
+			fprintf(stderr, "Poll send CQ to clean credit failed ne=%d\n",sne);
+			return 1;
+		}
+	} while(send_cnt > 0);
+
+	free(swc);
+	return 0;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2236,9 +2331,14 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				burst_iter = 0;
 			}
 
-			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) && 
+			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
 				!(user_param->is_rate_limiting && is_sending_burst == 0)) {
 
+				if (ctx->send_rcredit) {
+					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
+					if (swindow >= user_param->rx_depth)
+						break;
+				}
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
@@ -2386,14 +2486,20 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	long                 *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
+	struct ibv_wc *swc = NULL;
+	long *scredit_for_qp = NULL;
+	int tot_scredit = 0;
 	int firstRx = 1;
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
 	ALLOCATE(rcnt_for_qp,long,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(long)*user_param->num_of_qps);
 
+	ALLOCATE(scredit_for_qp,long,user_param->num_of_qps);
+	memset(scredit_for_qp,0,sizeof(long)*user_param->num_of_qps);
 
 	if (user_param->use_rss)
 		tot_iters = user_param->iters*(user_param->num_of_qps-1);
@@ -2442,11 +2548,11 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							}
 
 						} else {
-
 							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%ld\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 								return 15;
 							}
+
 						}
 
 						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
@@ -2455,6 +2561,42 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 											  rcnt_for_qp[wc[i].wr_id] + size_per_qp,
 											  ctx->rx_buffer_addr[wc[i].wr_id],
 											  user_param->connection_type);
+						}
+					}
+
+					if (ctx->send_rcredit) {
+						int credit_cnt = rcnt_for_qp[wc[i].wr_id]%user_param->rx_depth;
+
+						if (credit_cnt%ctx->credit_cnt == 0) {
+							struct ibv_send_wr *bad_wr = NULL;
+							int sne = 0, j = 0;
+							ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
+
+							while (scredit_for_qp[wc[i].wr_id] == user_param->tx_depth) {
+								sne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,swc);
+								if (sne > 0) {
+									for (j = 0; j < sne; j++) {
+										if (swc[j].status != IBV_WC_SUCCESS) {
+											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
+												swc[j].status,(int)swc[j].wr_id,
+												rcnt_for_qp[swc[j].wr_id],scredit_for_qp[swc[j].wr_id]);
+											return 1;
+										}
+										scredit_for_qp[swc[j].wr_id]--;
+										tot_scredit--;
+									}
+								} else if (sne < 0) {
+									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
+									return 1;
+								}
+							}
+							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
+								fprintf(stderr,"Couldn't post send qp %d credit = %lu\n",
+									(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+								return 1;
+							}
+							scredit_for_qp[wc[i].wr_id]++;
+							tot_scredit++;
 						}
 					}
 				}
@@ -2467,10 +2609,13 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			return 1;
 		}
 	}
-
 	if (user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
+	if (ctx->send_rcredit) {
+		if (clean_scq_credit(tot_scredit, ctx, user_param))
+			return 1;
+	}
 	/*
 	if (user_param->use_rss) {
 		for (i = 1; i < user_param->num_of_qps; i++)
@@ -2479,6 +2624,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 	free(wc);
 	free(rcnt_for_qp);
+	free(swc);
+	free(scredit_for_qp);
 	return 0;
 }
 
@@ -2493,11 +2640,14 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_send_wr *bad_exp_wr = NULL;
 #endif
+	uint32_t *scnt_for_qp = NULL;
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_wc *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(scnt_for_qp,uint32_t,user_param->num_of_qps);
+	memset(scnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
 
 	duration_param=user_param;
 	signal(SIGALRM,catch_alarm_infintely);
@@ -2527,21 +2677,25 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		for (index =0 ; index < num_of_qps ; index++) {
 
 			while (ctx->scnt[index] < user_param->tx_depth) {
-
+				if (ctx->send_rcredit) {
+					uint32_t swindow = scnt_for_qp[index] + user_param->post_list - ctx->credit_buf[index];
+					if (swindow >= user_param->rx_depth)
+						break;
+				}
 				#if defined(HAVE_VERBS_EXP)
 				if (user_param->use_exp == 1)
-		            		err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
+					err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
 				else
 					err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             			#else
             				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             			#endif
 				if (err) {
-		            		fprintf(stderr,"Couldn't post send: %d scnt=%d \n",index,ctx->scnt[index]);
-            				return 1;
-        			}
-
+					fprintf(stderr,"Couldn't post send: %d scnt=%d \n",index,ctx->scnt[index]);
+					return 1;
+				}
 				ctx->scnt[index] += user_param->post_list;
+				scnt_for_qp[index] += user_param->post_list;
 			}
 		}
 
@@ -2570,11 +2724,25 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
  ******************************************************************************/
 int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
 
-	int 				i,ne;
+	int 			i,ne;
 	struct ibv_wc 		*wc          = NULL;
+	struct ibv_wc 		*swc         = NULL;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
+	uint32_t                *rcnt_for_qp = NULL;
+	uint32_t                *ccnt_for_qp = NULL;
+	int                     *scredit_for_qp = NULL;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
+
+	ALLOCATE(rcnt_for_qp,uint32_t,user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
+
+	ALLOCATE(ccnt_for_qp,uint32_t,user_param->num_of_qps);
+	memset(ccnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
+
+	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
+	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
 	while (1) {
 
@@ -2602,6 +2770,43 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 						fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
 						return 15;
 					}
+					if (ctx->send_rcredit) {
+						rcnt_for_qp[wc[i].wr_id]++;
+						scredit_for_qp[wc[i].wr_id]++;
+
+						if (scredit_for_qp[wc[i].wr_id] == ctx->credit_cnt) {
+							struct ibv_send_wr *bad_wr = NULL;
+							ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
+
+							while (ccnt_for_qp[wc[i].wr_id] == user_param->tx_depth) {
+								int sne, j = 0;
+
+								sne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,swc);
+								if (sne > 0) {
+									for (j = 0; j < sne; j++) {
+										if (swc[j].status != IBV_WC_SUCCESS) {
+											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%u scredit=%u\n",
+												swc[j].status,(int)swc[j].wr_id,
+												rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
+											return 1;
+										}
+										ccnt_for_qp[swc[j].wr_id]--;
+									}
+
+								} else if (sne < 0) {
+									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
+									return 1;
+								}
+							}
+							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
+								fprintf(stderr,"Couldn't post send qp %d credit=%u\n",
+											(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+								return 1;
+							}
+							ccnt_for_qp[wc[i].wr_id]++;
+							scredit_for_qp[wc[i].wr_id] = 0;
+						}
+					}
 				}
 			}
 
@@ -2624,9 +2829,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int i,index      = 0;
 	int ne = 0;
 	int err = 0;
-	int	*rcnt_for_qp = NULL;
+	long *rcnt_for_qp = NULL;
 	int tot_iters = 0;
 	int iters = 0;
+	int tot_scredit = 0;
+	int *scredit_for_qp = NULL;
 	struct ibv_wc *wc = NULL;
 	struct ibv_wc *wc_tx = NULL;
 	struct ibv_recv_wr *bad_wr_recv = NULL;
@@ -2640,14 +2847,16 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,long,user_param->num_of_qps);
+	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 
 	/* This is a very important point. Since this function do RX and TX
 	in the same time, we need to give some priority to RX to avoid
 	deadlock in UC/UD test scenarios (Recv WQEs depleted due to fast TX) */
 	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth);
 
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(long)*user_param->num_of_qps);
+	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
 	if (user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
@@ -2684,7 +2893,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 	while ((user_param->test_type == DURATION && user_param->state != END_STATE) || totccnt < tot_iters || totrcnt < tot_iters ) {
 
 		for (index=0; index < num_of_qps; index++) {
-			while (before_first_rx == OFF && (ctx->scnt[index] < iters || user_param->test_type == DURATION) && ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
+			while (before_first_rx == OFF && (ctx->scnt[index] < iters || user_param->test_type == DURATION) &&
+				((ctx->scnt[index] + scredit_for_qp[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
+				if (ctx->send_rcredit) {
+					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
+					if (swindow >= user_param->rx_depth)
+						break;
+				}
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp ==1)
@@ -2771,7 +2986,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 					user_param->iters++;
 
 				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
-
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
@@ -2781,7 +2995,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					} else {
 
 						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 							return 15;
 						}
 					}
@@ -2791,6 +3005,54 @@ int run_iter_bi(struct pingpong_context *ctx,
 										  user_param->size,
 										  rcnt_for_qp[wc[i].wr_id] + size_per_qp -1,
 										  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
+					}
+				}
+				if (ctx->send_rcredit) {
+					int credit_cnt = rcnt_for_qp[wc[i].wr_id]%user_param->rx_depth;
+
+					if (credit_cnt%ctx->credit_cnt == 0) {
+						int sne = 0;
+						struct ibv_wc credit_wc;
+						struct ibv_send_wr *bad_wr = NULL;
+						ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
+
+						while ((ctx->scnt[wc[i].wr_id] + scredit_for_qp[wc[i].wr_id] - ctx->ccnt[wc[i].wr_id]) >= user_param->tx_depth) {
+							sne = ibv_poll_cq(ctx->send_cq, 1, &credit_wc);
+							if (sne > 0) {
+								if (credit_wc.status != IBV_WC_SUCCESS) {
+									fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%d\n",
+										credit_wc.status,(int)credit_wc.wr_id,
+										rcnt_for_qp[credit_wc.wr_id],scredit_for_qp[credit_wc.wr_id]);
+										return 1;
+								}
+
+								if (credit_wc.opcode == IBV_WC_RDMA_WRITE) {
+									scredit_for_qp[credit_wc.wr_id]--;
+									tot_scredit--;
+								} else  {
+									totccnt += user_param->cq_mod;
+									ctx->ccnt[(int)credit_wc.wr_id] += user_param->cq_mod;
+
+									if (user_param->noPeak == OFF) {
+										if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+											user_param->tcompleted[tot_iters - 1] = get_cycles();
+										else
+											user_param->tcompleted[totccnt-1] = get_cycles();
+									}
+									if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+										user_param->iters += user_param->cq_mod;
+								}
+							} else if (sne < 0) {
+								fprintf(stderr, "Poll send CQ ne=%d\n",sne);
+								return 1;
+							}
+						}
+						if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
+							fprintf(stderr,"Couldn't post send: qp%lu credit=%lu\n",wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+							return 1;
+						}
+						scredit_for_qp[wc[i].wr_id]++;
+						tot_scredit++;
 					}
 				}
 			}
@@ -2806,19 +3068,28 @@ int run_iter_bi(struct pingpong_context *ctx,
 			for (i = 0; i < ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS)
 					 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
-				totccnt += user_param->cq_mod;
-				ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
 
-				if (user_param->noPeak == OFF) {
+				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
+					if (!ctx->send_rcredit) {
+						fprintf(stderr, "Polled RDMA_WRITE completion without recv credit request\n");
+						return 1;
+					}
+					scredit_for_qp[wc_tx[i].wr_id]--;
+					tot_scredit--;
+				} else  {
+					totccnt += user_param->cq_mod;
+					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
 
-					if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
-						user_param->tcompleted[tot_iters - 1] = get_cycles();
-					else
-						user_param->tcompleted[totccnt-1] = get_cycles();
+					if (user_param->noPeak == OFF) {
+
+						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+							user_param->tcompleted[tot_iters - 1] = get_cycles();
+						else
+							user_param->tcompleted[totccnt-1] = get_cycles();
+					}
+					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+						user_param->iters += user_param->cq_mod;
 				}
-
-				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
-					user_param->iters += user_param->cq_mod;
 			}
 
 		} else if (ne < 0) {
@@ -2831,8 +3102,14 @@ int run_iter_bi(struct pingpong_context *ctx,
 			user_param->tcompleted[0] = get_cycles();
 	}
 
+	if (ctx->send_rcredit) {
+		if (clean_scq_credit(tot_scredit, ctx, user_param))
+			return 1;
+	}
+
 	check_alive_data.last_totrcnt=0;
 	free(rcnt_for_qp);
+	free(scredit_for_qp);
 	free(wc);
 	free(wc_tx);
 	return 0;

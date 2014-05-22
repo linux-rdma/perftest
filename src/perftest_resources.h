@@ -158,6 +158,13 @@ struct pingpong_context {
 	int							*scnt;
 	int							*ccnt;
 	int							is_contig_supported;
+	uint32_t                                *ctrl_buf;
+	uint32_t                                *credit_buf;
+	struct ibv_mr                           *credit_mr;
+	struct ibv_sge                          *ctrl_sge_list;
+	struct ibv_send_wr                      *ctrl_wr;
+	int                                     send_rcredit;
+	int                                     credit_cnt;
 #ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
 	int 						fd;
@@ -412,6 +419,43 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
  */
 int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+/* ctx_alloc_credit
+ *
+ * Description :
+ *
+ * 	Allocate resources to support the credit exchange mechanism,
+ * 	which allows ib_send_bw to work with iWARP
+ *
+ * Parameters :
+ *
+ *	ctx        - test context
+ *  	user_param - user parameters struct for this test
+ *  	my_dest    - pingpong_dest struct of the this side
+ *
+ *  	my_dest is updated to store the credit buf vaddr and rkey
+ *  	which need to be exchanged with the remote side
+ *  	to enable RDMA WRITE op
+ */
+int ctx_alloc_credit(struct pingpong_context *ctx,
+				struct perftest_parameters *user_param,
+				struct pingpong_dest *my_dest);
+/* ctx_set_credit_wqes
+ *
+ * Description :
+ *
+ * 	Prepare the send credit work request templates for all QPs
+ * 	RDMA WRITE op is used for sending credit
+ * 	Credit exchange is necessary for ib_send_bw to work with iWARP
+ *
+ * Parameters :
+ *
+ *	ctx        - test context
+ *  	user_param - user parameters struct for this test
+ *  	rem_dest   - pingpong_dest struct of the remote side.
+ */
+int ctx_set_credit_wqes(struct pingpong_context *ctx,
+				struct perftest_parameters *user_param,
+				struct pingpong_dest *rem_dest);
 /* run_iter_bw.
  *
  * Description :
