@@ -225,6 +225,14 @@ int main(int argc, char *argv[]) {
 			printf(RESULT_LINE);
 		}
 
+		if (user_param.work_rdma_cm == ON) {
+			if (destroy_ctx(&ctx,&user_param)) {
+				fprintf(stderr, "Failed to destroy resources\n");
+				return 1;
+			}
+			return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+		}
+
 		return destroy_ctx(&ctx,&user_param);
 	}
 
@@ -354,6 +362,15 @@ int main(int argc, char *argv[]) {
 
 	free(my_dest);
 	free(rem_dest);
+
+	if (user_param.work_rdma_cm == ON) {
+		if (destroy_ctx(&ctx,&user_param)) {
+			fprintf(stderr, "Failed to destroy resources\n");
+			return 1;
+		}
+		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+	}
+
 	return destroy_ctx(&ctx,&user_param);
 }
 
