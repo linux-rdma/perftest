@@ -248,6 +248,9 @@ int main(int argc, char *argv[]) {
 	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
+	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
+		ctx.send_rcredit = 1;
+
 	// Allocating arrays needed for the test.
 	alloc_ctx(&ctx,&user_param);
 
@@ -285,6 +288,8 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
+	if (ctx.send_rcredit)
+		ctx_alloc_credit(&ctx,&user_param,my_dest);
 
 	for (i=0; i < user_param.num_of_qps; i++)
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
@@ -300,6 +305,11 @@ int main(int argc, char *argv[]) {
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
+	/* If credit for available recieve buffers is necessary,
+	 * the credit sending is done via RDMA WRITE ops and the ctx_hand_shake above
+	 * is used to exchange the rkeys and buf addresses for the RDMA WRITEs */
+	if (ctx.send_rcredit)
+		ctx_set_credit_wqes(&ctx,&user_param,rem_dest);
 
 	// Joining the Send side port the Mcast gid
 	if (user_param.use_mcg && (user_param.machine == CLIENT || user_param.duplex)) {
@@ -376,6 +386,12 @@ int main(int argc, char *argv[]) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
 				return 1;
+			}
+
+			if (ctx.send_rcredit) {
+				int j;
+				for (j = 0; j < user_param.num_of_qps; j++)
+					ctx.credit_buf[j] = 0;
 			}
 
 			if (user_param.duplex) {
