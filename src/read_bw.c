@@ -218,6 +218,15 @@ int main(int argc, char *argv[]) {
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
 		}
+
+		if (user_param.work_rdma_cm == ON) {
+			if (destroy_ctx(&ctx,&user_param)) {
+				fprintf(stderr, "Failed to destroy resources\n");
+				return 1;
+			}
+			return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+		}
+
 		return destroy_ctx(&ctx,&user_param);
 
 	}
@@ -346,6 +355,14 @@ int main(int argc, char *argv[]) {
 	if (!user_param.is_msgrate_limit_passed && (user_param.is_limit_bw == ON )) {
 		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
 		return 1;
+	}
+
+	if (user_param.work_rdma_cm == ON) {
+		if (destroy_ctx(&ctx,&user_param)) {
+			fprintf(stderr, "Failed to destroy resources\n");
+			return 1;
+		}
+		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 	}
 
 	return destroy_ctx(&ctx,&user_param);

@@ -700,6 +700,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
 
+	if (user_param->use_rdma_cm == ON)
+		rdma_disconnect(ctx->cm_id);
+
 	//in dc with bidirectional,
 	//there are send qps and recv qps. the actual number of send/recv qps
 	//is num_of_qps / 2.
@@ -807,7 +810,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->work_rdma_cm == OFF) {
+	if (user_param->use_rdma_cm == OFF) {
 
 		if (ibv_close_device(ctx->context)) {
 			fprintf(stderr, "failed to close device context\n");
