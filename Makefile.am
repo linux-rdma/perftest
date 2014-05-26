@@ -12,6 +12,7 @@
 #
 
 ACLOCAL_AMFLAGS= -I m4
+AUTOMAKE_OPTIONS= subdir-objects
 AM_CFLAGS = -g -Wall -O3
 AM_CPPFLAGS = -D_GNU_SOURCE
 
