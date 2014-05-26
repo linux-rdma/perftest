@@ -137,17 +137,16 @@ static void get_verbs_pointers(struct pingpong_context *ctx) {
 	ctx->exp_post_send_func_pointer = ibv_exp_get_provider_func(ctx->context,IBV_EXP_POST_SEND_FUNC);
 	if (!ctx->exp_post_send_func_pointer) {
 		fprintf(stderr, "Couldn't get ibv_exp_post_send pointer\n");
-		exit(1);
+		ctx->exp_post_send_func_pointer = &ibv_exp_post_send;
 	}
 	ctx->post_send_func_pointer = ibv_exp_get_provider_func(ctx->context,IBV_POST_SEND_FUNC);
 	if (!ctx->post_send_func_pointer) {
 		fprintf(stderr, "Couldn't get ibv_post_send pointer\n");
-		exit(1);
+		ctx->post_send_func_pointer = &ibv_post_send;
 	}
 	ctx->poll_cq_func_pointer = ibv_exp_get_provider_func(ctx->context,IBV_POLL_CQ_FUNC);
         if (!ctx->poll_cq_func_pointer) {
                 fprintf(stderr, "Couldn't get ibv_poll_cq pointer\n");
-                exit(1);
         }
 }
 #endif
