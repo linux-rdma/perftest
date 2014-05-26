@@ -191,7 +191,12 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 	double sample, proc, delta;
 	sample = sample_get_cpu_mhz();
 	proc = proc_get_cpu_mhz(no_cpu_freq_fail);
-
+	#ifdef __aarch64__
+	if (proc < 1) //no cpu_freq info in /proc/cpuinfo
+	{
+		proc = sample;
+	}
+	#endif
 	if (!proc || !sample)
 		return 0;
 
