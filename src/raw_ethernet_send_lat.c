@@ -54,14 +54,19 @@
 int main(int argc, char *argv[])
 {
 
-	struct ibv_device			*ib_dev = NULL;
+	struct ibv_device		*ib_dev = NULL;
 	struct pingpong_context		ctx;
 	struct raw_ethernet_info	my_dest_info,rem_dest_info;
-	int							ret_parser;
+	int				ret_parser;
 	struct perftest_parameters	user_param;
-	struct ibv_exp_flow				*flow_create_result = NULL;
-	struct ibv_exp_flow_attr		*flow_rules = NULL;
-	struct report_options       report;
+#ifdef HAVE_RAW_ETH_EXP
+	struct ibv_exp_flow		*flow_create_result = NULL;
+	struct ibv_exp_flow_attr	*flow_rules = NULL;
+#else
+	struct ibv_flow		*flow_create_result = NULL;
+	struct ibv_flow_attr	*flow_rules = NULL;
+#endif
+	struct report_options		report;
 
 	//allocate memory space for user parameters
 	memset(&ctx,		0, sizeof(struct pingpong_context));
@@ -173,7 +178,11 @@ int main(int argc, char *argv[])
 
 
 	//attaching the qp to the spec
+#ifdef HAVE_RAW_ETH_EXP
 	flow_create_result = ibv_exp_create_flow(ctx.qp[0], flow_rules);
+#else
+	flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
+#endif
 	if (!flow_create_result){
 		perror("error");
 		fprintf(stderr, "Couldn't attach QP\n");
@@ -222,7 +231,11 @@ int main(int argc, char *argv[])
 
 
 	//destroy flow
+#ifdef HAVE_RAW_ETH_EXP
 	if (ibv_exp_destroy_flow(flow_create_result)) {
+#else
+	if (ibv_destroy_flow(flow_create_result)) {
+#endif
 		perror("error");
 		fprintf(stderr, "Couldn't Destory flow\n");
 		return FAILURE;
