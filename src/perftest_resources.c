@@ -649,10 +649,10 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 		ALLOCATE(ctx->my_addr,uint64_t,user_param->num_of_qps);
 		ALLOCATE(ctx->rem_addr,uint64_t,user_param->num_of_qps);
-		ALLOCATE(ctx->scnt,int,user_param->num_of_qps);
-		ALLOCATE(ctx->ccnt,int,user_param->num_of_qps);
-		memset(ctx->scnt, 0, user_param->num_of_qps * sizeof (int));
-		memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (int));
+		ALLOCATE(ctx->scnt,uint64_t,user_param->num_of_qps);
+		ALLOCATE(ctx->ccnt,uint64_t,user_param->num_of_qps);
+		memset(ctx->scnt, 0, user_param->num_of_qps * sizeof (uint64_t));
+		memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (uint64_t));
 
 	} else if ((user_param->tst == BW ) && user_param->verb == SEND && user_param->machine == SERVER) {
 
@@ -2236,10 +2236,11 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
  ******************************************************************************/
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	int                totscnt = 0;
-	int 	       	   totccnt = 0;
+	uint64_t           totscnt = 0;
+	uint64_t       	   totccnt = 0;
 	int                i = 0;
-	int                index,ne,tot_iters;
+	int                index,ne;
+	uint64_t	   tot_iters;
 	int				   err = 0;
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_send_wr *bad_exp_wr = NULL;
@@ -2364,7 +2365,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
 				#endif
 				if (err) {
-            				fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
+            				fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
             				return 1;
         			}
 
@@ -2481,8 +2482,9 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int 				rcnt = 0;
-	int 				ne,i,tot_iters;
-	long                 *rcnt_for_qp = NULL;
+	int 				ne,i;
+	uint64_t			tot_iters;
+	uint64_t                *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  *bad_wr_recv = NULL;
 	struct ibv_wc *swc = NULL;
@@ -2494,8 +2496,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
-	ALLOCATE(rcnt_for_qp,long,user_param->num_of_qps);
-	memset(rcnt_for_qp,0,sizeof(long)*user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	ALLOCATE(scredit_for_qp,long,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(long)*user_param->num_of_qps);
@@ -2529,7 +2531,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 					if (wc[i].status != IBV_WC_SUCCESS) {
 
-						NOTIFY_COMP_ERROR_RECV(wc[i],(int)rcnt_for_qp[0]);
+						NOTIFY_COMP_ERROR_RECV(wc[i],rcnt_for_qp[0]);
 					}
 
 					rcnt_for_qp[wc[i].wr_id]++;
@@ -2639,14 +2641,14 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_send_wr *bad_exp_wr = NULL;
 #endif
-	uint32_t *scnt_for_qp = NULL;
+	uint64_t *scnt_for_qp = NULL;
 	struct ibv_send_wr *bad_wr = NULL;
 	struct ibv_wc *wc = NULL;
 	int num_of_qps = user_param->num_of_qps;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
-	ALLOCATE(scnt_for_qp,uint32_t,user_param->num_of_qps);
-	memset(scnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
+	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
+	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	duration_param=user_param;
 	signal(SIGALRM,catch_alarm_infintely);
@@ -2690,7 +2692,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
             				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             			#endif
 				if (err) {
-					fprintf(stderr,"Couldn't post send: %d scnt=%d \n",index,ctx->scnt[index]);
+					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
 					return 1;
 				}
 				ctx->scnt[index] += user_param->post_list;
@@ -2727,18 +2729,18 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_wc 		*swc         = NULL;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
-	uint32_t                *rcnt_for_qp = NULL;
-	uint32_t                *ccnt_for_qp = NULL;
+	uint64_t                *rcnt_for_qp = NULL;
+	uint64_t                *ccnt_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
-	ALLOCATE(rcnt_for_qp,uint32_t,user_param->num_of_qps);
-	memset(rcnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
-	ALLOCATE(ccnt_for_qp,uint32_t,user_param->num_of_qps);
-	memset(ccnt_for_qp,0,sizeof(uint32_t)*user_param->num_of_qps);
+	ALLOCATE(ccnt_for_qp,uint64_t,user_param->num_of_qps);
+	memset(ccnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
@@ -2784,7 +2786,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 								if (sne > 0) {
 									for (j = 0; j < sne; j++) {
 										if (swc[j].status != IBV_WC_SUCCESS) {
-											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%u scredit=%u\n",
+											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
 												swc[j].status,(int)swc[j].wr_id,
 												rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
 											return 1;
@@ -2798,7 +2800,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 								}
 							}
 							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
-								fprintf(stderr,"Couldn't post send qp %d credit=%u\n",
+								fprintf(stderr,"Couldn't post send qp %d credit=%lu\n",
 											(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 								return 1;
 							}
@@ -2828,9 +2830,9 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int i,index      = 0;
 	int ne = 0;
 	int err = 0;
-	long *rcnt_for_qp = NULL;
-	int tot_iters = 0;
-	int iters = 0;
+	uint64_t *rcnt_for_qp = NULL;
+	uint64_t tot_iters = 0;
+	uint64_t iters = 0;
 	int tot_scredit = 0;
 	int *scredit_for_qp = NULL;
 	struct ibv_wc *wc = NULL;
@@ -2846,7 +2848,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
-	ALLOCATE(rcnt_for_qp,long,user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 
 	/* This is a very important point. Since this function do RX and TX
@@ -2854,7 +2856,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	deadlock in UC/UD test scenarios (Recv WQEs depleted due to fast TX) */
 	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth);
 
-	memset(rcnt_for_qp,0,sizeof(long)*user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
 	if (user_param->noPeak == ON)
@@ -2922,7 +2924,7 @@ int run_iter_bi(struct pingpong_context *ctx,
             	err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             	#endif
 				if (err) {
-            				fprintf(stderr,"Couldn't post send: qp %d scnt=%d \n",index,ctx->scnt[index]);
+            				fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
             				return 1;
         			}
 
@@ -2974,7 +2976,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
-					NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
+					NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
 				}
 
 				rcnt_for_qp[wc[i].wr_id]++;
@@ -3066,7 +3068,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		if (ne > 0) {
 			for (i = 0; i < ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS)
-					 NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
+					 NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
 
 				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
 					if (!ctx->send_rcredit) {
@@ -3119,9 +3121,9 @@ int run_iter_bi(struct pingpong_context *ctx,
  ******************************************************************************/
 int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int                     scnt = 0;
-	int                     ccnt = 0;
-	int                     rcnt = 0;
+	uint64_t                scnt = 0;
+	uint64_t                ccnt = 0;
+	uint64_t                rcnt = 0;
 	int                     ne;
 	int						err = 0;
 	int 					poll_buf_offset = 0;
@@ -3199,7 +3201,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
         		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#endif
 			if (err) {
-        		fprintf(stderr,"Couldn't post send: scnt=%d\n",scnt);
+        		fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
         		return 1;
     		}
 		}
@@ -3234,7 +3236,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
  ******************************************************************************/
 int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int scnt = 0;
+	uint64_t scnt = 0;
 	int ne;
 	int err = 0;
 #if defined(HAVE_VERBS_EXP)
@@ -3288,7 +3290,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
     		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
     	#endif
 		if (err) {
-    		fprintf(stderr,"Couldn't post send: scnt=%d \n",scnt);
+    		fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
     		return 1;
 		}
 
@@ -3327,8 +3329,8 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  ******************************************************************************/
 int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int				scnt = 0; //sent packets counter
-	int				rcnt = 0; //received packets counter
+	uint64_t			scnt = 0; //sent packets counter
+	uint64_t			rcnt = 0; //received packets counter
 	int				poll = 0;
 	int				ne;
 	int				err = 0;
@@ -3411,14 +3413,14 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 						if (user_param->use_srq) {
 
 							if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc.wr_id,rcnt);
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.wr_id,rcnt);
 								return 1;
 							}
 
 						} else {
 
 							if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv: rcnt=%d\n",rcnt);
+								fprintf(stderr, "Couldn't post recv: rcnt=%lu\n",rcnt);
 								return 15;
 							}
 						}
@@ -3466,7 +3468,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
         		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#endif
 			if (err) {
-        		fprintf(stderr,"Couldn't post send: scnt=%d \n",scnt);
+        		fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
         		return 1;
     		}
 
