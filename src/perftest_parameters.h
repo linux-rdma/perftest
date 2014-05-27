@@ -178,15 +178,15 @@
 #define RESULT_EXT_CPU_UTIL "    CPU_Util[%%]\n"
 
 // Result print format
-#define REPORT_FMT     " %-7lu    %d           %-7.2lf            %-7.2lf		   %-7.6lf"
+#define REPORT_FMT     " %-7lu    %lu           %-7.2lf            %-7.2lf		   %-7.6lf"
 
-#define REPORT_FMT_EXT     " %-7lu    %d           %-7.6lf            %-7.6lf		   %-7.6lf"
+#define REPORT_FMT_EXT     " %-7lu    %lu           %-7.6lf            %-7.6lf		   %-7.6lf"
 
 #define REPORT_EXT	"\n"
 
 #define REPORT_EXT_CPU_UTIL	"	    %-3.2f\n"
 
-#define REPORT_FMT_QOS " %-7lu    %d           %d           %-7.2lf            %-7.2lf                  %-7.6lf\n"
+#define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 // Result print format for latency tests.
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f"
@@ -384,7 +384,7 @@ struct report_options {
 
 struct bw_report_data {
 	unsigned long size;
-	int iters;
+	uint64_t iters;
 	double bw_peak;
 	double bw_avg;
 	double msgRate_avg;
