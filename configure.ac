@@ -44,12 +44,28 @@ AC_CHECK_LIB([rdmacm], [rdma_create_event_channel], [], AC_MSG_ERROR([librdmacm-
 AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad not found]))
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
 AC_TRY_LINK([#include <infiniband/verbs.h>],
-	[struct ibv_exp_flow *t = ibv_exp_create_flow(NULL,NULL);],[HAVE_RAW_ETH=yes], [HAVE_RAW_ETH=no])
+	[struct ibv_exp_flow *t = ibv_exp_create_flow(NULL,NULL);],[HAVE_RAW_ETH_EXP=yes], [HAVE_RAW_ETH_EXP=no])
 
-AM_CONDITIONAL([HAVE_RAW_ETH],[test "x$HAVE_RAW_ETH" = "xyes"])
-if test $HAVE_RAW_ETH = yes; then
-	AC_DEFINE([HAVE_RAW_ETH], [1], [Enable RAW_ETH_TEST])
+AM_CONDITIONAL([HAVE_RAW_ETH_EXP],[test "x$HAVE_RAW_ETH_EXP" = "xyes"])
+if test $HAVE_RAW_ETH_EXP = yes; then
+	AC_DEFINE([HAVE_RAW_ETH_EXP], [1], [Enable RAW_ETH_TEST_EXP])
 fi
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_flow *t = ibv_create_flow(NULL,NULL);],[HAVE_RAW_ETH_REG=yes], [HAVE_RAW_ETH_REG=no])
+
+AM_CONDITIONAL([HAVE_RAW_ETH_REG],[test "x$HAVE_RAW_ETH_REG" = "xyes"])
+if test $HAVE_RAW_ETH_REG = yes; then
+	AC_DEFINE([HAVE_RAW_ETH_REG], [1], [Enable RAW_ETH_TEST_REG])
+fi
+
+AM_CONDITIONAL([HAVE_RAW_ETH],true)
+if [test $HAVE_RAW_ETH_REG = yes] || [test $HAVE_RAW_ETH_EXP = yes]; then
+	AC_DEFINE([HAVE_RAW_ETH], [1], [Enable RAW_ETH_TEST])
+else
+	AM_CONDITIONAL([HAVE_RAW_ETH],false)
+fi
+
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_xrcd *t = ibv_open_xrcd(NULL,NULL);],[HAVE_XRCD=yes], [HAVE_XRCD=no])

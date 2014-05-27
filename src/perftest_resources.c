@@ -2475,7 +2475,7 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
  ******************************************************************************/
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
-	int 				rcnt = 0;
+	uint64_t			rcnt = 0;
 	int 				ne,i;
 	uint64_t			tot_iters;
 	uint64_t                *rcnt_for_qp = NULL;
@@ -2538,7 +2538,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,rcnt);
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc[i].wr_id,rcnt);
 								return 1;
 							}
 

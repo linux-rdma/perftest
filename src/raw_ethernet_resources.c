@@ -34,7 +34,6 @@
  * $Id$
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -183,10 +182,15 @@ void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
  * print test specification
  ******************************************************************************/
 
+#ifdef HAVE_RAW_ETH_EXP
 void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters* user_param)
 {
 	struct ibv_exp_flow_spec* spec_info = NULL;
-
+#else
+void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param)
+{
+        struct ibv_flow_spec* spec_info = NULL;
+#endif
 	void* header_buff = (void*)flow_rules;
 
 	if (flow_rules == NULL) {
@@ -194,8 +198,13 @@ void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters*
 		return;
 	}
 
+#ifdef HAVE_RAW_ETH_EXP
 	header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
 	spec_info = (struct ibv_exp_flow_spec*)header_buff;
+#else
+        header_buff = header_buff + sizeof(struct ibv_flow_attr);
+        spec_info = (struct ibv_flow_spec*)header_buff;
+#endif
 	printf("MAC attached  : %02X:%02X:%02X:%02X:%02X:%02X\n",
 			spec_info->eth.val.dst_mac[0],
 			spec_info->eth.val.dst_mac[1],
@@ -207,8 +216,13 @@ void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters*
 	if (user_param->is_server_ip && user_param->is_client_ip) {
 		char str_ip_s[INET_ADDRSTRLEN] = {0};
 		char str_ip_d[INET_ADDRSTRLEN] = {0};
+#ifdef HAVE_RAW_ETH_EXP
 		header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
 		spec_info = (struct ibv_exp_flow_spec*)header_buff;
+#else
+                header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+                spec_info = (struct ibv_flow_spec*)header_buff;
+#endif
 		uint32_t dst_ip = spec_info->ipv4.val.dst_ip;
 		uint32_t src_ip = spec_info->ipv4.val.src_ip;
 		inet_ntop(AF_INET, &dst_ip, str_ip_d, INET_ADDRSTRLEN);
@@ -218,10 +232,13 @@ void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters*
 	}
 
 	if (user_param->is_server_port && user_param->is_client_port) {
-
+#ifdef HAVE_RAW_ETH_EXP
 		header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_ipv4);
 		spec_info = (struct ibv_exp_flow_spec*)header_buff;
-
+#else
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
+                spec_info = (struct ibv_flow_spec*)header_buff;
+#endif
 		printf("spec_info - dst_port : %d\n",ntohs(spec_info->tcp_udp.val.dst_port));
 		printf("spec_info - src_port : %d\n",ntohs(spec_info->tcp_udp.val.src_port));
 	}
@@ -441,12 +458,21 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
  ******************************************************************************/
 int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 {
+#ifdef HAVE_RAW_ETH_EXP
 	int tot_size = sizeof(struct ibv_exp_flow_attr);
 	tot_size += sizeof(struct ibv_exp_flow_spec_eth);
 	if (is_ip_header)
 		tot_size += sizeof(struct ibv_exp_flow_spec_ipv4);
 	if (is_udp_header)
 		tot_size += sizeof(struct ibv_exp_flow_spec_tcp_udp);
+#else
+        int tot_size = sizeof(struct ibv_flow_attr);
+        tot_size += sizeof(struct ibv_flow_spec_eth);
+        if (is_ip_header)
+                tot_size += sizeof(struct ibv_flow_spec_ipv4);
+        if (is_udp_header)
+                tot_size += sizeof(struct ibv_flow_spec_tcp_udp);
+#endif
 	return tot_size;
 }
 
@@ -454,7 +480,11 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
  int send_set_up_connection(
+#ifdef HAVE_RAW_ETH_EXP
 	struct ibv_exp_flow_attr **flow_rules,
+#else
+	struct ibv_flow_attr **flow_rules,
+#endif
 	struct pingpong_context *ctx,
 	struct perftest_parameters *user_param,
 	struct raw_ethernet_info* my_dest_info,
@@ -473,8 +503,13 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 	if (user_param->machine == SERVER || user_param->duplex) {
 
 		void* header_buff;
+#ifdef HAVE_RAW_ETH_EXP
 		struct ibv_exp_flow_spec* spec_info;
 		struct ibv_exp_flow_attr* attr_info;
+#else
+                struct ibv_flow_spec* spec_info;
+                struct ibv_flow_attr* attr_info;
+#endif
 		int flow_rules_size;
 
 		int is_ip = user_param->is_server_ip || user_param->is_client_ip;
@@ -485,18 +520,31 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		ALLOCATE(header_buff,uint8_t,flow_rules_size);
 
 		memset(header_buff, 0,flow_rules_size);
+	#ifdef HAVE_RAW_ETH_EXP
 		*flow_rules = (struct ibv_exp_flow_attr*)header_buff;
 		attr_info = (struct ibv_exp_flow_attr*)header_buff;
-		attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
+	#else
+                *flow_rules = (struct ibv_flow_attr*)header_buff;
+                attr_info = (struct ibv_flow_attr*)header_buff;
+	#endif
 		attr_info->size = flow_rules_size;
 		attr_info->priority = 0;
 		attr_info->num_of_specs = 1 + is_ip + is_port;
 		attr_info->port = user_param->ib_port;
 		attr_info->flags = 0;
+	#ifdef HAVE_RAW_ETH_EXP
+		attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
 		header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
 		spec_info = (struct ibv_exp_flow_spec*)header_buff;
 		spec_info->eth.type = IBV_EXP_FLOW_SPEC_ETH;
 		spec_info->eth.size = sizeof(struct ibv_exp_flow_spec_eth);
+	#else
+                attr_info->type = IBV_FLOW_ATTR_NORMAL;
+                header_buff = header_buff + sizeof(struct ibv_flow_attr);
+                spec_info = (struct ibv_flow_spec*)header_buff;
+                spec_info->eth.type = IBV_FLOW_SPEC_ETH;
+                spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
+	#endif
 		spec_info->eth.val.ether_type = 0;
 
 		if(user_param->is_source_mac) {
@@ -507,12 +555,17 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
 		if(user_param->is_server_ip || user_param->is_client_ip) {
-
+		#ifdef HAVE_RAW_ETH_EXP
 			header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
 			spec_info = (struct ibv_exp_flow_spec*)header_buff;
 			spec_info->ipv4.type = IBV_EXP_FLOW_SPEC_IPV4;
 			spec_info->ipv4.size = sizeof(struct ibv_exp_flow_spec_ipv4);
-
+		#else
+                        header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+                        spec_info = (struct ibv_flow_spec*)header_buff;
+                        spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
+                        spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
+		#endif
 			if(user_param->machine == SERVER) {
 
 				spec_info->ipv4.val.dst_ip = user_param->server_ip;
@@ -529,12 +582,17 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 		}
 
 		if(user_param->is_server_port && user_param->is_client_port) {
-
+		#ifdef HAVE_RAW_ETH_EXP
 			header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_ipv4);
 			spec_info = (struct ibv_exp_flow_spec*)header_buff;
 			spec_info->tcp_udp.type = (user_param->tcp) ? IBV_EXP_FLOW_SPEC_TCP : IBV_EXP_FLOW_SPEC_UDP;
 			spec_info->tcp_udp.size = sizeof(struct ibv_exp_flow_spec_tcp_udp);
-
+		#else
+			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
+                        spec_info = (struct ibv_flow_spec*)header_buff;
+                        spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
+                        spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
+		#endif
 			if(user_param->machine == SERVER) {
 
 				spec_info->tcp_udp.val.dst_port = htons(user_param->server_port);
@@ -772,4 +830,3 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	free(wc_tx);
 	return 0;
 }
-
