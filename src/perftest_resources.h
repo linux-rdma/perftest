@@ -96,12 +96,12 @@ extern int cycle_buffer;
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
-	  fprintf(stderr, "scnt=%d, ccnt=%d\n",scnt, ccnt);	return 1;}
+	  fprintf(stderr, "scnt=%lu, ccnt=%lu\n",scnt, ccnt);	return 1;}
 
 #define NOTIFY_COMP_ERROR_RECV(wc,rcnt)                     											    \
 	{ fprintf(stderr," Completion with error at server\n");      											\
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
-	  fprintf(stderr," rcnt=%d\n",rcnt); return 1;}
+	  fprintf(stderr," rcnt=%lu\n",rcnt); return 1;}
 
 // Macro to determine packet size in case of UD.
 // The UD addition is for the GRH .
@@ -149,15 +149,15 @@ struct pingpong_context {
 #endif
 	struct ibv_send_wr			*wr;
 	struct ibv_recv_wr			*rwr;
-	uint64_t					size;
-	uint64_t					*my_addr;
-	uint64_t					*rx_buffer_addr;
-	uint64_t					*rem_addr;
-	uint64_t					buff_size;
-	int							tx_depth;
-	int							*scnt;
-	int							*ccnt;
-	int							is_contig_supported;
+	uint64_t				size;
+	uint64_t				*my_addr;
+	uint64_t				*rx_buffer_addr;
+	uint64_t				*rem_addr;
+	uint64_t				buff_size;
+	int					tx_depth;
+	uint64_t				*scnt;
+	uint64_t				*ccnt;
+	int					is_contig_supported;
 	uint32_t                                *ctrl_buf;
 	uint32_t                                *credit_buf;
 	struct ibv_mr                           *credit_mr;
@@ -167,7 +167,7 @@ struct pingpong_context {
 	int                                     credit_cnt;
 #ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
-	int 						fd;
+	int 					fd;
 #endif
 #if defined(HAVE_VERBS_EXP)
 	#if defined(USE_VERBS_EXP)
@@ -645,7 +645,7 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  */
 
 #if defined(HAVE_VERBS_EXP)
-static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb) {
 
 	if (verb == ATOMIC)
 		wr->wr.atomic.remote_addr += INC(size);
@@ -663,7 +663,7 @@ static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,i
 	}
 }
 #endif
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb) {
 
 	if (verb == ATOMIC)
 		wr->wr.atomic.remote_addr += INC(size);
@@ -695,7 +695,7 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,int scnt,
  *		prim_addr - The address of the original buffer.
  *		server_is_ud - Indication to weather we are in UD mode.
  */
-static __inline void increase_loc_addr(struct ibv_sge *sg,int size,int rcnt,uint64_t prim_addr,int server_is_ud) {
+static __inline void increase_loc_addr(struct ibv_sge *sg,int size,uint64_t rcnt,uint64_t prim_addr,int server_is_ud) {
 
 	sg->addr  += INC(size);
 
