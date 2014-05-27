@@ -597,9 +597,9 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int	i,index      = 0;
 	int	ne = 0;
 	int	err = 0;
-	int	*rcnt_for_qp = NULL;
-	int	tot_iters = 0;
-	int	iters = 0;
+	uint64_t	*rcnt_for_qp = NULL;
+	uint64_t	tot_iters = 0;
+	uint64_t	iters = 0;
 	struct ibv_wc	*wc = NULL;
 	struct ibv_wc	*wc_tx = NULL;
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
@@ -613,9 +613,9 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
-	ALLOCATE(rcnt_for_qp,int,user_param->num_of_qps);
+	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
 
-	memset(rcnt_for_qp,0,sizeof(int)*user_param->num_of_qps);
+	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	tot_iters = user_param->iters*user_param->num_of_qps;
 	iters=user_param->iters;
@@ -708,7 +708,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				for (i = 0; i < ne; i++) {
 					if (wc[i].status != IBV_WC_SUCCESS) {
-						NOTIFY_COMP_ERROR_RECV(wc[i],(int)totrcnt);
+						NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
 					}
 
 					rcnt_for_qp[wc[i].wr_id]++;
@@ -724,7 +724,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
 					if (wc_tx[i].status != IBV_WC_SUCCESS)
-						NOTIFY_COMP_ERROR_SEND(wc_tx[i],(int)totscnt,(int)totccnt);
+						NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
 
 					totccnt += user_param->cq_mod;
 					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
@@ -747,7 +747,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
             while (rwqe_sent - totccnt < user_param->rx_depth) {    // Post more than buffer_size
     		    if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) { 
 					if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
-						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%d\n",0,rcnt_for_qp[0]);
+						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",0,rcnt_for_qp[0]);
 						return 15;
 					}
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
