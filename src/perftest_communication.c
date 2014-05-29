@@ -734,6 +734,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		conn_param.initiator_depth = user_param->out_reads;
 	}
 	user_param->work_rdma_cm = temp;
+	conn_param.retry_count = user_param->retry_count;
+        conn_param.rnr_retry_count = 7;
 
 	if (user_param->work_rdma_cm == OFF) {
 
