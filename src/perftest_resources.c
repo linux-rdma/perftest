@@ -3560,9 +3560,9 @@ void catch_alarm(int sig) {
 void check_alive(int sig) {
 	if (check_alive_data.current_totrcnt > check_alive_data.last_totrcnt) {
 		check_alive_data.last_totrcnt = check_alive_data.current_totrcnt;
-		alarm(5);
+		alarm(60);
 	} else if (check_alive_data.current_totrcnt == check_alive_data.last_totrcnt && check_alive_data.current_totrcnt < check_alive_data.g_total_iters) {
-		fprintf(stderr,"In Deadlock, exiting..\nTotal Received=%d , Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
+		fprintf(stderr,"Did not get Message for 120 Seconds, exiting..\nTotal Received=%d , Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
 		exit(1);
 	} 
 }
