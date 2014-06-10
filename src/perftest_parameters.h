@@ -287,6 +287,7 @@ struct perftest_parameters {
 	uint8_t			sl;
 	int				gid_index;
 	int				gid_index2;
+	int				use_gid_user;
 	uint8_t			source_mac[6];
 	uint8_t			dest_mac[6];
 	int				is_source_mac;
@@ -374,6 +375,7 @@ struct perftest_parameters {
 	int retry_count;
 	int dont_xchg_versions;
 	int use_exp;
+	int ipv6;
 };
 
 struct report_options {

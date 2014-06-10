@@ -21,6 +21,17 @@
 static const char *sideArray[]  = {"local", "remote"};
 static const char *gidArray[]   = {"GID"  , "MGID"};
 
+static inline int ipv6_addr_v4mapped(const struct in6_addr *a)
+{
+	return ((a->s6_addr32[0] | a->s6_addr32[1]) |
+		(a->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL ||
+		/* IPv4 encoded multicast addresses */
+		(a->s6_addr32[0] == htonl(0xff0e0000) &&
+		((a->s6_addr32[1] |
+		(a->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL));
+}
+
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -519,8 +530,11 @@ int set_up_connection(struct pingpong_context *ctx,
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	int i;
+	int is_ipv4;
+
 	union ibv_gid temp_gid;
 	union ibv_gid temp_gid2;
+	struct ibv_port_attr attr;
 
 	srand48(getpid() * time(NULL));
 
@@ -533,17 +547,59 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 
 	if (user_param->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
-			return -1;
+        	if (ibv_query_port(ctx->context,user_param->ib_port,&attr))
+	                return 0;
+
+		if (user_param->use_gid_user)
+		{
+			if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
+                                return -1;
+                        }
+		}
+		else
+		{
+			for (i=0 ; i < attr.gid_tbl_len; i++) {
+				if (ibv_query_gid(ctx->context,user_param->ib_port,i,&temp_gid)) {	
+					return -1;
+				}
+				is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid.raw);
+				if ( (user_param->ipv6 && !is_ipv4) || (!user_param->ipv6 && is_ipv4) )
+				{
+					user_param->gid_index = i;
+					break;
+				}
+			}
 		}
 	}
 
-	if (user_param->dualport==ON) { //dual port case
-		if (user_param->gid_index2 != -1) {
+	if (user_param->dualport==ON)  //dual port case
+	{
+		if (user_param->gid_index2 != -1)
+		{
+			if (ibv_query_port(ctx->context,user_param->ib_port2,&attr))
+				return 0;
+
+			if (user_param->use_gid_user)
+			{
 				if (ibv_query_gid(ctx->context,user_param->ib_port2,user_param->gid_index,&temp_gid2)) {
 					return -1;
 				}
 			}
+			else
+			{
+				for (i=0 ; i < attr.gid_tbl_len; i++) {
+					if (ibv_query_gid(ctx->context,user_param->ib_port2,i,&temp_gid2)) {
+						return -1;
+					}
+					is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid2.raw);
+					if ( (user_param->ipv6 && !is_ipv4) || (!user_param->ipv6 && is_ipv4) )
+					{
+						user_param->gid_index = i;
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
