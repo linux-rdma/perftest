@@ -284,11 +284,11 @@ int main(int argc, char *argv[]) {
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
 	}
-
 	//limit verifier
-	//TODO: check which value should I return
-	if ( !(user_param.is_msgrate_limit_passed && user_param.is_bw_limit_passed) )
-		return 1;
+	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
+                fprintf(stderr,"Error: BW result is below bw limit\n");
+                return 1;
+        }
 
 	printf(RESULT_LINE);
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
