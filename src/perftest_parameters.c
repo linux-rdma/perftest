@@ -397,6 +397,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->num_of_qps 	= DEF_NUM_QPS;
 	user_param->gid_index  	= DEF_GID_INDEX;
 	user_param->gid_index2  = DEF_GID_INDEX;
+	user_param->use_gid_user = 0;
 	user_param->inline_size = DEF_INLINE;
 	user_param->use_mcg     = OFF;
 	user_param->use_rdma_cm = OFF;
@@ -452,6 +453,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->retry_count = DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions = 0;
 	user_param->use_exp = 0;
+	user_param->ipv6 = 0;
 }
 
  /******************************************************************************
@@ -1127,6 +1129,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int dont_xchg_versions_flag = 0;
 	static int use_exp_flag = 0;
 	static int use_cuda_flag = 0;
+	static int ipv6_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1203,6 +1206,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "use_exp",           .has_arg = 0, .flag = &use_exp_flag, .val = 1},
 			#endif
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
+			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1228,7 +1232,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 				if (user_param->connection_type == RawEth)
 					user_param->raw_qos = 1;
 				break;
-			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); break;
+			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); 
+				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q':
 				if (user_param->tst != BW) {
@@ -1540,6 +1545,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if (cpu_util_flag) {
                 user_param->cpu_util = 1;
+        }
+
+	if (ipv6_flag) {
+                user_param->ipv6 = 1;
         }
 
 	if (optind == argc - 1) {
