@@ -782,7 +782,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
-
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel)) ) {
 		if (!(user_param->connection_type == DC && user_param->machine == SERVER)) {
 			if (ibv_destroy_cq(ctx->recv_cq)) {
@@ -818,7 +817,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 			test_result = 1;
 		}
 	}
-
 	if (user_param->use_rdma_cm == OFF) {
 
 		if (ibv_close_device(ctx->context)) {
@@ -853,7 +851,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
 	}
-
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
 		free(ctx->sge_list);
@@ -869,7 +866,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->recv_sge_list);
 		free(ctx->rwr);
 	}
-
 	return test_result;
 }
 
@@ -2880,7 +2876,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (user_param->test_type == ITERATIONS) {
                 signal(SIGALRM, check_alive);
-                alarm(5);
+                alarm(60);
 	}
 
 
