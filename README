@@ -239,3 +239,8 @@ Special feature detailed explanation in tests:
 
  6. In te x390x platform virtualized environment the results shown by package test applications can be incorrect.
 
+ 7. This release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
+    Currently, running dualport when port1-IB , port2-Ethernet will not work.
+
+ 8. Atomic Tests (ib_atomic_bw/lat) don't work on Connect-IB.
+ 
