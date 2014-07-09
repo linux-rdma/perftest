@@ -291,6 +291,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Max size of message to be sent in inline receive\n");
 	}
 
+	printf("      --ipv6 ");
+	printf(" Use IPv6 GID. Default is IPv4\n");
+
 	if (tst == LAT) {
 		printf("      --latency_gap=<delay_time> ");
                 printf(" delay time between each post send\n");
@@ -306,6 +309,9 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+
+		printf("      --report-per-port ");
+		printf(" Report BW data on both ports when running Dualport and Duration mode\n");
 
 		printf("      --reversed ");
 		printf(" Reverse traffic direction - Server send to client\n");
@@ -436,6 +442,8 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->rate_units = MEGA_BYTE_PS;
 	user_param->output = -1;
 	user_param->use_cuda = 0;
+	user_param->iters_per_port[0] = 0;
+	user_param->iters_per_port[1] = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted  = OFF;
@@ -454,6 +462,8 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->dont_xchg_versions = 0;
 	user_param->use_exp = 0;
 	user_param->ipv6 = 0;
+	user_param->report_per_port = 0;
+	user_param->use_odp = 0;
 }
 
  /******************************************************************************
@@ -875,6 +885,14 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		fprintf(stderr,"Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
 		user_param->inline_size = MAX_INLINE_UD;
 	}
+
+	if (user_param->report_per_port && (user_param->test_type != DURATION || !user_param->dualport))
+	{
+		printf(RESULT_LINE);
+		fprintf(stderr,"report per port feature work only with Duration and Dualport\n");
+		exit(1);
+	}
+
 	return;
 }
 
@@ -1130,6 +1148,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int use_exp_flag = 0;
 	static int use_cuda_flag = 0;
 	static int ipv6_flag = 0;
+	static int report_per_port_flag = 0;
+	static int odp_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1207,6 +1227,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			#endif
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
+			{ .name = "report-per-port",		.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
+			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1545,11 +1567,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if (cpu_util_flag) {
                 user_param->cpu_util = 1;
-        }
+	}
+
+	if (report_per_port_flag) {
+		user_param->report_per_port = 1;
+	}
 
 	if (ipv6_flag) {
                 user_param->ipv6 = 1;
-        }
+	}
+
+	if(odp_flag) {
+		user_param->use_odp = 1;
+	}
 
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
@@ -1887,8 +1917,15 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
 
 	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));
+
 	double bw_avg = ((double)tsize*num_of_calculated_iters * cycles_to_units) / (sum_of_test_cycles * format_factor);
 	double msgRate_avg = ((double)num_of_calculated_iters * cycles_to_units * run_inf_bi_factor) / (sum_of_test_cycles * 1000000);
+
+	double bw_avg_p1 = ((double)tsize*user_param->iters_per_port[0] * cycles_to_units) / (sum_of_test_cycles * format_factor);
+	double msgRate_avg_p1 = ((double)user_param->iters_per_port[0] * cycles_to_units * run_inf_bi_factor) / (sum_of_test_cycles * 1000000);
+
+	double bw_avg_p2 = ((double)tsize*user_param->iters_per_port[1] * cycles_to_units) / (sum_of_test_cycles * format_factor);
+	double msgRate_avg_p2 = ((double)user_param->iters_per_port[1] * cycles_to_units * run_inf_bi_factor) / (sum_of_test_cycles * 1000000);
 
 	peak_up = !(user_param->noPeak)*(cycles_t)tsize*(cycles_t)cycles_to_units;
 	peak_down = (cycles_t)opt_delta * format_factor;
@@ -1903,6 +1940,10 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->bw_peak = (double)peak_up/peak_down;
 	my_bw_rep->bw_avg = bw_avg;
 	my_bw_rep->msgRate_avg = msgRate_avg;
+	my_bw_rep->bw_avg_p1 = bw_avg_p1;
+	my_bw_rep->msgRate_avg_p1 = msgRate_avg_p1;
+	my_bw_rep->bw_avg_p2 = bw_avg_p2;
+	my_bw_rep->msgRate_avg_p2 = msgRate_avg_p2;
 	my_bw_rep->sl = user_param->sl;
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
@@ -1918,15 +1959,23 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
 {
 
-	double bw_peak     = my_bw_rep->bw_peak;
-	double bw_avg      = my_bw_rep->bw_avg;
-	double msgRate_avg = my_bw_rep->msgRate_avg;
+ 	double bw_peak     = my_bw_rep->bw_peak;
+ 	double bw_avg      = my_bw_rep->bw_avg;
+	double bw_avg_p1      = my_bw_rep->bw_avg_p1;
+	double bw_avg_p2      = my_bw_rep->bw_avg_p2;
+ 	double msgRate_avg = my_bw_rep->msgRate_avg;
+	double msgRate_avg_p1 = my_bw_rep->msgRate_avg_p1;
+	double msgRate_avg_p2 = my_bw_rep->msgRate_avg_p2;
 	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
 
 	if (rem_bw_rep != NULL) {
-		bw_peak     += rem_bw_rep->bw_peak;
-		bw_avg      += rem_bw_rep->bw_avg;
+ 		bw_peak     += rem_bw_rep->bw_peak;
+ 		bw_avg      += rem_bw_rep->bw_avg;
+		bw_avg_p1      += rem_bw_rep->bw_avg_p1;
+		bw_avg_p2      += rem_bw_rep->bw_avg_p2;
 		msgRate_avg += rem_bw_rep->msgRate_avg;
+		msgRate_avg_p1 += rem_bw_rep->msgRate_avg_p1;
+		msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
 	}
 
 	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {//bibw test, and not report-both printing
@@ -1948,6 +1997,8 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		printf("%lf\n",msgRate_avg);
 	else if (user_param->raw_qos)
 		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	else if (user_param->report_per_port)
+		printf(REPORT_FMT_PER_PORT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
 	else
 		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 	if (user_param->output == FULL_VERBOSITY)

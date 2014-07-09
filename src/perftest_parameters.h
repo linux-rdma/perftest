@@ -160,10 +160,16 @@
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
+#define RESULT_LINE_PER_PORT "-------------------------------------------------------------------------------------------------------------------------------------------------------------------\n"
+
 // The format of the results
 #define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
 
+#define RESULT_FMT_PER_PORT	" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]   BW Port1[MB/sec]   MsgRate Port1[Mpps]   BW Port2[MB/sec]   MsgRate Port2[Mpps]"
+
 #define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
+
+#define RESULT_FMT_G_PER_PORT	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]   BW Port1[Gb/sec]   MsgRate Port1[Mpps]   BW Port2[Gb/sec]   MsgRate Port2[Mpps]"
 
 #define RESULT_FMT_QOS  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
 
@@ -178,9 +184,11 @@
 #define RESULT_EXT_CPU_UTIL "    CPU_Util[%%]\n"
 
 // Result print format
-#define REPORT_FMT     " %-7lu    %lu           %-7.2lf            %-7.2lf		   %-7.6lf"
+#define REPORT_FMT     " %-7lu    %-10lu       %-7.2lf            %-7.2lf		   %-7.6lf"
 
-#define REPORT_FMT_EXT     " %-7lu    %lu           %-7.6lf            %-7.6lf		   %-7.6lf"
+#define REPORT_FMT_EXT     " %-7lu    %lu           %-7.6lf            %-7.6lf            %-7.6lf"
+
+#define REPORT_FMT_PER_PORT     " %-7lu    %-10lu     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
 
 #define REPORT_EXT	"\n"
 
@@ -282,6 +290,8 @@ struct perftest_parameters {
 	uint64_t		size;
 	uint64_t		dct_key;
 	int				iters;
+	uint64_t		iters_per_port[2];
+	uint64_t		*port_by_qp;
 	int				tx_depth;
 	uint8_t			qp_timeout;
 	uint8_t			sl;
@@ -376,6 +386,8 @@ struct perftest_parameters {
 	int dont_xchg_versions;
 	int use_exp;
 	int ipv6;
+	int report_per_port;
+	int use_odp;
 };
 
 struct report_options {
@@ -389,7 +401,11 @@ struct bw_report_data {
 	uint64_t iters;
 	double bw_peak;
 	double bw_avg;
+	double bw_avg_p1;
+	double bw_avg_p2;
 	double msgRate_avg;
+	double msgRate_avg_p1;
+	double msgRate_avg_p2;
 	int sl;
 };
 
