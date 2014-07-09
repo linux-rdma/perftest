@@ -197,8 +197,15 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {
-		printf(RESULT_LINE);
-		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		if (user_param.report_per_port) {
+			printf(RESULT_LINE_PER_PORT);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_PER_PORT : RESULT_FMT_G_PER_PORT));
+		}
+		else {
+			printf(RESULT_LINE);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		}
+
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
@@ -219,7 +226,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (user_param.output == FULL_VERBOSITY) {
-			printf(RESULT_LINE);
+			if (user_param.report_per_port)
+				printf(RESULT_LINE_PER_PORT);
+			else
+				printf(RESULT_LINE);
 		}
 
 		if (user_param.work_rdma_cm == ON) {
@@ -328,7 +338,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {
-		printf(RESULT_LINE);
+		if (user_param.report_per_port)
+			printf(RESULT_LINE_PER_PORT);
+		else
+			printf(RESULT_LINE);
 	}
 
 	// For half duplex tests, server just waits for client to exit

@@ -623,6 +623,8 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 	int tarr_size;
 
+	ALLOCATE(user_param->port_by_qp, uint64_t, user_param->num_of_qps);
+
 	tarr_size = (user_param->noPeak) ? 1 : user_param->iters*user_param->num_of_qps;
 	ALLOCATE(user_param->tposted,cycles_t,tarr_size);
 	memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
@@ -954,6 +956,9 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	uint64_t exp_flags = IBV_EXP_ACCESS_LOCAL_WRITE;
 	#endif
 
+	struct ibv_exp_device_attr dattr;
+	memset(&dattr, 0, sizeof(dattr));
+
 	#ifdef HAVE_VERBS_EXP
 	get_verbs_pointers(ctx);
 	#endif
@@ -964,6 +969,28 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
+	//ODP
+	if (user_param->use_odp) {
+		//ODP does not support contig pages
+		ctx->is_contig_supported = FAILURE;
+		exp_flags |= IBV_EXP_ACCESS_ON_DEMAND;
+
+		/*
+		dattr.comp_mask |= IBV_EXP_DEVICE_ATTR_ODP;
+		int ret = ibv_exp_query_device(ctx->context, &dattr);
+		if (ret) {
+			printf(" Couldn't query device for on-demand\
+			       paging capabilities.\n");
+		} else if (!(dattr.comp_mask & IBV_EXP_DEVICE_ATTR_ODP)) {
+			printf(" On-demand paging not supported by driver.\n");
+		} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps &
+			   IBV_EXP_ODP_SUPPORT_SEND)) {
+			printf(" Send is not supported for RC transport.\n");
+		} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps &
+			   IBV_EXP_ODP_SUPPORT_RECV)) {
+			printf(" Receive is not supported for RC transport.\n");
+		}*/
+	}
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		ctx->is_contig_supported = FAILURE;
@@ -1043,7 +1070,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	reg_mr_exp_in.length = ctx->buff_size;
 	reg_mr_exp_in.exp_access = exp_flags;
 	reg_mr_exp_in.comp_mask = 0;
-	if (ctx->is_contig_supported == SUCCESS){
+
+	if (ctx->is_contig_supported == SUCCESS || user_param->use_odp){
 		ctx->mr = ibv_exp_reg_mr(&reg_mr_exp_in);
 	}
 	else
@@ -1309,8 +1337,10 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 	if (user_param->dualport==ON) {
 		if (portindex % num_of_qps < num_of_qps_per_port) {
 	        attr.port_num = user_param->ib_port;
+			user_param->port_by_qp[portindex] = 0;
 		} else {
 			attr.port_num = user_param->ib_port2;
+			user_param->port_by_qp[portindex] = 1;
 		}
 		portindex++;
 
@@ -1376,8 +1406,10 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	if (user_param->dualport==ON) {
 		if (portindex % num_of_qps < num_of_qps_per_port) {
 	        attr.port_num = user_param->ib_port;
+			user_param->port_by_qp[portindex] = 0;
 		} else {
 			attr.port_num = user_param->ib_port2;
+			user_param->port_by_qp[portindex] = 1;
 		}
 		portindex++;
 
@@ -1519,7 +1551,8 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	if (user_param->connection_type != RawEth) {
 
 		attr->ah_attr.dlid = dest->lid;
-		if (user_param->gid_index == DEF_GID_INDEX) {
+		if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
+			|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX))) {
 
 			attr->ah_attr.is_global = 0;
 			attr->ah_attr.sl = user_param->sl;
@@ -1528,7 +1561,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 
 			attr->ah_attr.is_global  = 1;
 			attr->ah_attr.grh.dgid = dest->gid;
-			attr->ah_attr.grh.sgid_index = user_param->gid_index;
+			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
 			attr->ah_attr.grh.hop_limit = 1;
 			attr->ah_attr.sl = 0;
 		}
@@ -2434,7 +2467,13 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					}
 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					{
+						if (user_param->report_per_port) 
+						{
+							user_param->iters_per_port[user_param->port_by_qp[(int)wc[i].wr_id]] += user_param->cq_mod;
+						}
 						user_param->iters += user_param->cq_mod;
+					}
 				}
 
 			} else if (ne < 0) {
@@ -2533,8 +2572,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					rcnt_for_qp[wc[i].wr_id]++;
 					rcnt++;
 
-					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+ 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					{
+						if (user_param->report_per_port)
+						{
+							user_param->iters_per_port[user_param->port_by_qp[(int)wc[i].wr_id]]++;
+						}
 						user_param->iters++;
+					}
 
 					if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
 
@@ -2980,7 +3025,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 				check_alive_data.current_totrcnt = totrcnt;
 
 				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+				{
+					if (user_param->report_per_port)
+					{
+						user_param->iters_per_port[user_param->port_by_qp[(int)wc[i].wr_id]]++;
+					}
 					user_param->iters++;
+				}
 
 				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
 					if (user_param->use_srq) {
@@ -3084,8 +3135,15 @@ int run_iter_bi(struct pingpong_context *ctx,
 						else
 							user_param->tcompleted[totccnt-1] = get_cycles();
 					}
+
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					{
+						if (user_param->report_per_port)
+						{
+							user_param->iters_per_port[user_param->port_by_qp[(int)wc[i].wr_id]] += user_param->cq_mod;
+						}
 						user_param->iters += user_param->cq_mod;
+					}
 				}
 			}
 

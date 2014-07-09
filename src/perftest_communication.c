@@ -182,11 +182,9 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 static int ethernet_write_keys(struct pingpong_dest *my_dest,
 							   struct perftest_comm *comm) {
 
-    if (comm->rdma_params->gid_index == -1) {
+    if (my_dest->gid_index == -1) {
 
 		char msg[KEY_MSG_SIZE];
-
-
 
 		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
 				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr, my_dest->srqn);
@@ -228,7 +226,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 							  struct perftest_comm *comm)  {
 
-	if (comm->rdma_params->gid_index == -1) {
+	if (rem_dest->gid_index == -1) {
 
         int parsed;
 		char msg[KEY_MSG_SIZE];
@@ -611,13 +609,15 @@ int set_up_connection(struct pingpong_context *ctx,
 			// are for ib_port1 and the second half are for ib_port2
 			if (i % num_of_qps < num_of_qps_per_port) {
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
-
+				my_dest[i].gid_index = user_param->gid_index;
 			} else {
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port2);
+				my_dest[i].gid_index = user_param->gid_index2;
 			}
 		// single-port case
 		} else {
 			my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
+			my_dest[i].gid_index = user_param->gid_index;
 		}
 
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
@@ -640,6 +640,7 @@ int set_up_connection(struct pingpong_context *ctx,
 		} else
 			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
+/*
 		// We do not fail test upon lid above RoCE.
 		if ( (user_param->gid_index < 0) ||  ((user_param->gid_index2 < 0) && (user_param->dualport == ON))  ){
 			if (!my_dest[i].lid) {
@@ -647,6 +648,7 @@ int set_up_connection(struct pingpong_context *ctx,
 				return -1;
 			}
 		}
+*/
 	}
 
 	#ifdef HAVE_XRCD
@@ -994,6 +996,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->port		   = user_param->port;
 	comm->rdma_params->sockfd      = -1;
 	comm->rdma_params->gid_index   = user_param->gid_index;
+	comm->rdma_params->gid_index2 = user_param->gid_index2;
 	comm->rdma_params->use_rdma_cm = user_param->use_rdma_cm;
 	comm->rdma_params->servername  = user_param->servername;
 	comm->rdma_params->machine 	   = user_param->machine;
@@ -1004,7 +1007,8 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->tos         = DEF_TOS;
 	comm->rdma_params->use_xrc	   = user_param->use_xrc;
 	comm->rdma_params->connection_type	= user_param->connection_type;
-        comm->rdma_params->output      = user_param->output;
+	comm->rdma_params->output      = user_param->output;
+	comm->rdma_params->report_per_port = user_param->report_per_port;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1088,12 +1092,12 @@ int ctx_hand_shake(struct perftest_comm *comm,
 
 	}
 
+	rem_dest->gid_index = my_dest->gid_index;
 	if (comm->rdma_params->servername) {
 		if ((*write_func_ptr)(my_dest,comm)) {
 			fprintf(stderr," Unable to write to socket/rdam_cm\n");
 			return 1;
 		}
-
 		if ((*read_func_ptr)(rem_dest,comm)) {
 			fprintf(stderr," Unable to read from socket/rdam_cm\n");
 			return 1;
@@ -1106,7 +1110,6 @@ int ctx_hand_shake(struct perftest_comm *comm,
 			fprintf(stderr," Unable to read to socket/rdam_cm\n");
 			return 1;
 		}
-
 		if ((*write_func_ptr)(my_dest,comm)) {
 			fprintf(stderr," Unable to write from socket/rdam_cm\n");
 			return 1;
@@ -1313,7 +1316,11 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 	temp.iters = hton_int(my_bw_rep->iters);
 	temp.bw_peak = hton_double(my_bw_rep->bw_peak);
 	temp.bw_avg = hton_double(my_bw_rep->bw_avg);
+	temp.bw_avg_p1 = hton_double(my_bw_rep->bw_avg_p1);
+	temp.bw_avg_p2 = hton_double(my_bw_rep->bw_avg_p2);
 	temp.msgRate_avg = hton_double(my_bw_rep->msgRate_avg);
+	temp.msgRate_avg_p1 = hton_double(my_bw_rep->msgRate_avg_p1);
+	temp.msgRate_avg_p2 = hton_double(my_bw_rep->msgRate_avg_p2);
 
 	/*******************Exchange Reports*******************/
 	if (ctx_xchg_data(comm, (void*) (&temp.size), (void*) (&rem_bw_rep->size), sizeof(unsigned long))) {
@@ -1337,11 +1344,37 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 		exit(1);
 	}
 
+	//exchange data for report per port feature. should keep compatibility
+	if (comm->rdma_params->report_per_port)
+	{
+		if (ctx_xchg_data(comm, (void*) (&temp.bw_avg_p1), (void*) (&rem_bw_rep->bw_avg_p1), sizeof(double))) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+		}
+		if (ctx_xchg_data(comm, (void*) (&temp.msgRate_avg_p1), (void*) (&rem_bw_rep->msgRate_avg_p1), sizeof(double))) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+		}
+		if (ctx_xchg_data(comm, (void*) (&temp.bw_avg_p2), (void*) (&rem_bw_rep->bw_avg_p2), sizeof(double))) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+		}
+		if (ctx_xchg_data(comm, (void*) (&temp.msgRate_avg_p2), (void*) (&rem_bw_rep->msgRate_avg_p2), sizeof(double))) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			exit(1);
+		}
+	}
+
 	rem_bw_rep->size = hton_long(rem_bw_rep->size);
 	rem_bw_rep->iters = hton_int(rem_bw_rep->iters);
 	rem_bw_rep->bw_peak = hton_double(rem_bw_rep->bw_peak);
 	rem_bw_rep->bw_avg = hton_double(rem_bw_rep->bw_avg);
+	rem_bw_rep->bw_avg_p1 = hton_double(rem_bw_rep->bw_avg_p1);
+	rem_bw_rep->bw_avg_p2 = hton_double(rem_bw_rep->bw_avg_p2);
 	rem_bw_rep->msgRate_avg = hton_double(rem_bw_rep->msgRate_avg);
+	rem_bw_rep->msgRate_avg_p1 = hton_double(rem_bw_rep->msgRate_avg_p1);
+	rem_bw_rep->msgRate_avg_p2 = hton_double(rem_bw_rep->msgRate_avg_p2);
+
 }
 
 /******************************************************************************

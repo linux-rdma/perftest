@@ -360,10 +360,19 @@ int main(int argc, char *argv[]) {
     }
 
 	if (user_param.output == FULL_VERBOSITY) {
-		printf(RESULT_LINE);
-		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		if (user_param.report_per_port)
+		{
+			printf(RESULT_LINE_PER_PORT);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_PER_PORT : RESULT_FMT_G_PER_PORT));
+		}
+		else
+		{
+			printf(RESULT_LINE);
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		}
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
+
 	if (user_param.test_method == RUN_ALL) {
 
 		if (user_param.connection_type == UD)
@@ -515,7 +524,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {
-		printf(RESULT_LINE);
+		if (user_param.report_per_port)
+			printf(RESULT_LINE_PER_PORT);
+		else
+			printf(RESULT_LINE);
 	}
 
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
