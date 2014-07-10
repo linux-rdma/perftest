@@ -13,6 +13,7 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
+#include <asm/byteorder.h>
 
 #define INFO "INFO"
 #define TRACE "TRACE"
@@ -58,8 +59,13 @@ struct ETH_header {
 }__attribute__((packed));
 
 struct IP_V4_header{
-	uint8_t ihl:4;
-	uint8_t version:4;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+    uint8_t ihl:4;
+    uint8_t version:4;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+    uint8_t version:4;
+    uint8_t ihl:4;
+#endif
     uint8_t tos;
     uint16_t tot_len;
     uint16_t id;
