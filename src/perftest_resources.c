@@ -970,6 +970,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
 	//ODP
+	#ifdef HAVE_ODP
 	if (user_param->use_odp) {
 		//ODP does not support contig pages
 		ctx->is_contig_supported = FAILURE;
@@ -991,6 +992,8 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 			printf(" Receive is not supported for RC transport.\n");
 		}*/
 	}
+	#endif
+
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		ctx->is_contig_supported = FAILURE;
