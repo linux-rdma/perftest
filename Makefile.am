@@ -13,8 +13,6 @@
 
 ACLOCAL_AMFLAGS= -I m4
 AUTOMAKE_OPTIONS= subdir-objects
-AM_CFLAGS = -g -Wall -O3
-AM_CPPFLAGS = -D_GNU_SOURCE
 
 noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c
