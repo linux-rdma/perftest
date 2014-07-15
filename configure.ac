@@ -123,7 +123,7 @@ if [test "$CUDA_H_PATH" ]; then
 	LIBS=$LIBS" -lcuda"
 fi
 
-
+CFLAGS="-g -Wall -D_GNU_SOURCE -O3"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 AC_CONFIG_FILES([Makefile])
