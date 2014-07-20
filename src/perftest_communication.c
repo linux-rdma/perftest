@@ -340,6 +340,8 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	m_my_dest.qpn 		= htobe32(my_dest->qpn);
 	m_my_dest.psn 		= htobe32(my_dest->psn);
 	m_my_dest.rkey 		= htobe32(my_dest->rkey);
+	m_my_dest.srqn		= htobe32(my_dest->srqn);
+	m_my_dest.gid_index	= htobe32(my_dest->gid_index);
 	m_my_dest.vaddr		= htobe64(my_dest->vaddr);
 
 	for(i=0; i<16; i++) {
