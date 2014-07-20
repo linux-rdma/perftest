@@ -333,6 +333,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf(" Use Experimental verbs in data path. Default is OFF.\n");
 	#endif
 
+	#ifdef HAVE_ODP
+	printf("      --odp ");
+	printf(" Use On Demand Paging instead of Memory Registration.\n");
+	#endif
+
 	if (tst == BW) {
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
@@ -378,6 +383,9 @@ void usage_raw_ethernet(){
 
 		printf("  -v, --mac_fwd ");
 		printf(" run mac forwarding test \n");
+
+		printf("      --promiscuous");
+		printf(" run promiscuous mode.\n");
 
 		printf("      --tcp ");
 		printf(" send TCP Packets. must include IP and Ports information.\n");
@@ -464,6 +472,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->ipv6 = 0;
 	user_param->report_per_port = 0;
 	user_param->use_odp = 0;
+	user_param->use_promiscuous = 0;
 }
 
  /******************************************************************************
@@ -1150,6 +1159,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int ipv6_flag = 0;
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
+	static int use_promiscuous_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1229,6 +1239,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
 			{ .name = "report-per-port",		.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
+			{ .name = "promiscuous",		.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1579,6 +1590,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	if(odp_flag) {
 		user_param->use_odp = 1;
+	}
+
+	if (use_promiscuous_flag) {
+		user_param->use_promiscuous = 1;
 	}
 
 	if (optind == argc - 1) {
