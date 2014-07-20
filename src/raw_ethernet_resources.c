@@ -50,18 +50,21 @@
 struct perftest_parameters* duration_param;
 
 int check_flow_steering_support() {
-    char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
-    FILE *fp;
-    char line[3];
-    fp = fopen(file_name, "r");      //open file , read only
-    fgets(line,3,fp);
-    if (strcmp(line,"-7") && strcmp(line,"-1")) {
-	fprintf(stderr,"flow steering is not supported.\n");
-	fprintf(stderr,"please add to /etc/modprobe.d/mlnx.conf : options mlx4_core log_num_mgm_entry_size=-1\n");
-	fprintf(stderr,"and restart the driver: /etc/init.d/openibd restart \n");
-	return 1;
-    } 
-    return 0;
+	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
+	FILE *fp;
+	char line[3];
+	fp = fopen(file_name, "r");      //open file , read only
+	fgets(line,3,fp);
+
+	if (strcmp(line,"-7") && strcmp(line,"-1")) {
+		fprintf(stderr,"flow steering is not supported.\n");
+		fprintf(stderr,"please add to /etc/modprobe.d/mlnx.conf : options mlx4_core log_num_mgm_entry_size=-1\n");
+		fprintf(stderr,"and restart the driver: /etc/init.d/openibd restart \n");
+		return 1;
+	}
+
+	fclose(fp); 
+	return 0;
 }
 
 

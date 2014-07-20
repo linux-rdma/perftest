@@ -192,20 +192,22 @@ static void compress_spaces(char *str, char *dst)
 
 static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_index)
 {
-    char* file_name = CPU_UTILITY;
-    FILE *fp;
-    char line[100];
-    char tmp[100];
-    int index=0;
-    fp = fopen(file_name, "r");      //open file , read only
+	char* file_name = CPU_UTILITY;
+	FILE *fp;
+	char line[100];
+	char tmp[100];
+	int index=0;
+	fp = fopen(file_name, "r");      //open file , read only
 
-    fgets(line,100,fp);
-    compress_spaces(line,line);
-    index=get_n_word_string(line,tmp,index,2); //skip first word
-    duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
+	fgets(line,100,fp);
+	compress_spaces(line,line);
+	index=get_n_word_string(line,tmp,index,2); //skip first word
+	duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
 
-    index=get_n_word_string(line,tmp,index,3); //skip 2 stats
-    duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
+	index=get_n_word_string(line,tmp,index,3); //skip 2 stats
+	duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
+
+	fclose(fp);
 }
 
 static int check_for_contig_pages_support(struct ibv_context *context)
@@ -2172,9 +2174,9 @@ int ctx_set_credit_wqes(struct pingpong_context *ctx,
 
 static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int i= 0, sne = 0;
-	struct ibv_wc *swc = NULL;
-
+	int 		i= 0, sne = 0;
+	struct ibv_wc 	*swc = NULL;
+	int		return_value = 0;
 	if (!send_cnt)
 		return 0;
 
@@ -2186,19 +2188,22 @@ static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct per
 				if (swc[i].status != IBV_WC_SUCCESS) {
 					fprintf(stderr, "Poll send CQ error status=%u qp %d\n",
 						swc[i].status,(int)swc[i].wr_id);
-					return 1;
+					return_value = 1;
+					goto cleaning;
 				}
 				send_cnt--;
 			}
 
 		} else if (sne < 0) {
 			fprintf(stderr, "Poll send CQ to clean credit failed ne=%d\n",sne);
-			return 1;
+			return_value = 1;
+			goto cleaning;
 		}
 	} while(send_cnt > 0);
 
+cleaning:
 	free(swc);
-	return 0;
+	return return_value;
 }
 
 /******************************************************************************
@@ -2206,15 +2211,16 @@ static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct per
  ******************************************************************************/
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	int ne,index,warmindex,warmupsession;
-	int err = 0;
+	int 			ne,index,warmindex,warmupsession;
+	int 			err = 0;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr *bad_exp_wr = NULL;
+	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
 #endif
-	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_wc wc;
-	struct ibv_wc *wc_for_cleaning = NULL;
-	int num_of_qps = user_param->num_of_qps;
+	struct ibv_send_wr 	*bad_wr = NULL;
+	struct ibv_wc 		wc;
+	struct ibv_wc 		*wc_for_cleaning = NULL;
+	int 			num_of_qps = user_param->num_of_qps;
+	int			return_value = 0;
 
 	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
@@ -2230,16 +2236,17 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 		for (warmindex = 0 ;warmindex < warmupsession ;warmindex += user_param->post_list) {
 
 	    		#if defined(HAVE_VERBS_EXP)
-				if (user_param->use_exp == 1)
-            		err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
-				else
-					err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
+			if (user_param->use_exp == 1)
+            			err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
+			else
+				err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             	#else
             		err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
             	#endif
-				if (err) {
-            		fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
-            		return 1;
+			if (err) {
+            			fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
+            			return_value = 1;
+				goto cleaning;
         		}
 		}
 
@@ -2248,19 +2255,25 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 			ne = ibv_poll_cq(ctx->send_cq,1,&wc);
 			if (ne > 0) {
 
-				if (wc.status != IBV_WC_SUCCESS)
-					return 1;
+				if (wc.status != IBV_WC_SUCCESS) {
+					return_value = 1;
+					goto cleaning;
+				}
 
 				warmindex -= user_param->post_list;
 
-			} else if (ne < 0)
-				return 1;
+			} else if (ne < 0) {
+				return_value = 1;
+				goto cleaning;
+			}
 
 		} while (warmindex);
 
 	}
+
+cleaning:
 	free(wc_for_cleaning);
-	return 0;
+	return return_value;
 }
 
 /******************************************************************************
@@ -2268,28 +2281,29 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
  ******************************************************************************/
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param) {
 
-	uint64_t           totscnt = 0;
-	uint64_t       	   totccnt = 0;
-	int                i = 0;
-	int                index,ne;
-	uint64_t	   tot_iters;
-	int				   err = 0;
+	uint64_t           	totscnt = 0;
+	uint64_t       	   	totccnt = 0;
+	int                	i = 0;
+	int                	index,ne;
+	uint64_t	   	tot_iters;
+	int			err = 0;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr *bad_exp_wr = NULL;
+	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
 #endif
-	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_wc 	   *wc = NULL;
-	int num_of_qps = user_param->num_of_qps;
+	struct ibv_send_wr 	*bad_wr = NULL;
+	struct ibv_wc 	   	*wc = NULL;
+	int 			num_of_qps = user_param->num_of_qps;
 
 	/* Rate Limiter*/
-	int rate_limit_pps = 0;
-	double gap_time = 0;	//in usec
-	cycles_t gap_cycles = 0;	//in cycles
-	cycles_t gap_deadline = 0;
-	unsigned int number_of_bursts = 0;
-	int burst_iter = 0;
-	int is_sending_burst = 0;
-	int cpu_mhz = 0;
+	int 			rate_limit_pps = 0;
+	double 			gap_time = 0;	//in usec
+	cycles_t 		gap_cycles = 0;	//in cycles
+	cycles_t 		gap_deadline = 0;
+	unsigned int 		number_of_bursts = 0;
+	int 			burst_iter = 0;
+	int 			is_sending_burst = 0;
+	int 			cpu_mhz = 0;
+	int 			return_value = 0;
 	/**/
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
@@ -2315,7 +2329,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->test_type == DURATION && user_param->state != START_STATE && user_param->margin > 0) {
 		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
 		fprintf(stderr, "Please increase margin or decrease tx_depth\n");
-		return 1;
+		return_value = 1;
+		goto cleaning;
 	}
 
 	if (user_param->test_type == ITERATIONS && user_param->noPeak == ON)
@@ -2336,7 +2351,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				break;
 			default:
 				fprintf(stderr, " Failed: Unknown rate limit units\n");
-				return 1;
+				return_value = 1;
+				goto cleaning;
 		}
 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 		if (cpu_mhz <= 0) {
@@ -2398,7 +2414,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				#endif
 				if (err) {
             				fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-            				return 1;
+            				return_value = 1;
+					goto cleaning;
         			}
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
@@ -2446,7 +2463,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr, "Couldn't request CQ notification\n");
-					return 1;
+					return_value = 1;
+					goto cleaning;
 				}
 			}
 
@@ -2481,7 +2499,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n",ne);
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
 		}
 	}
@@ -2489,8 +2508,10 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
+cleaning:
+
 	free(wc);
-	return 0;
+	return return_value;
 }
 
 /******************************************************************************
@@ -2519,17 +2540,18 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
  ******************************************************************************/
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
-	uint64_t			rcnt = 0;
-	int 				ne,i;
-	uint64_t			tot_iters;
+	uint64_t		rcnt = 0;
+	int 			ne,i;
+	uint64_t		tot_iters;
 	uint64_t                *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
-	struct ibv_recv_wr  *bad_wr_recv = NULL;
-	struct ibv_wc *swc = NULL;
-	long *scredit_for_qp = NULL;
-	int tot_scredit = 0;
-	int firstRx = 1;
-	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	struct ibv_recv_wr  	*bad_wr_recv = NULL;
+	struct ibv_wc 		*swc = NULL;
+	long 			*scredit_for_qp = NULL;
+	int 			tot_scredit = 0;
+	int 			firstRx = 1;
+	int 			size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	int 			return_value = 0;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
@@ -2550,7 +2572,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 		if (user_param->use_event) {
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr ," Failed to notify events to CQ");
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
 		}
 
@@ -2589,13 +2612,15 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc[i].wr_id,rcnt);
-								return 1;
+								return_value = 1;
+								goto cleaning;
 							}
 
 						} else {
 							if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%ld\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-								return 15;
+								return_value = 15;
+								goto cleaning;
 							}
 
 						}
@@ -2625,20 +2650,23 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
 												swc[j].status,(int)swc[j].wr_id,
 												rcnt_for_qp[swc[j].wr_id],scredit_for_qp[swc[j].wr_id]);
-											return 1;
+											return_value = 1;
+											goto cleaning;
 										}
 										scredit_for_qp[swc[j].wr_id]--;
 										tot_scredit--;
 									}
 								} else if (sne < 0) {
 									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
-									return 1;
+									return_value = 1;
+									goto cleaning;
 								}
 							}
 							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
 								fprintf(stderr,"Couldn't post send qp %d credit = %lu\n",
 									(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-								return 1;
+								return_value = 1;
+								goto cleaning;
 							}
 							scredit_for_qp[wc[i].wr_id]++;
 							tot_scredit++;
@@ -2651,15 +2679,17 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 		if (ne < 0) {
 			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
-			return 1;
+			return_value = 1;
+			goto cleaning;
 		}
 	}
 	if (user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
+cleaning:
 	if (ctx->send_rcredit) {
 		if (clean_scq_credit(tot_scredit, ctx, user_param))
-			return 1;
+			return_value = 1;
 	}
 	/*
 	if (user_param->use_rss) {
@@ -2671,7 +2701,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	free(rcnt_for_qp);
 	free(swc);
 	free(scredit_for_qp);
-	return 0;
+	return return_value;
 }
 
 /******************************************************************************
@@ -2679,16 +2709,17 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
  ******************************************************************************/
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int i,j = 0;
-	int index = 0,ne;
-	int err = 0;
+	int 			i,j = 0;
+	int 			index = 0,ne;
+	int 			err = 0;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr *bad_exp_wr = NULL;
+	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
 #endif
-	uint64_t *scnt_for_qp = NULL;
-	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_wc *wc = NULL;
-	int num_of_qps = user_param->num_of_qps;
+	uint64_t		*scnt_for_qp = NULL;
+	struct ibv_send_wr 	*bad_wr = NULL;
+	struct ibv_wc 		*wc = NULL;
+	int 			num_of_qps = user_param->num_of_qps;
+	int 			return_value = 0;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -2737,7 +2768,8 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
             			#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
-					return 1;
+					return_value = 1;
+					goto cleaning;
 				}
 				ctx->scnt[index] += user_param->post_list;
 				scnt_for_qp[index] += user_param->post_list;
@@ -2759,9 +2791,15 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n",ne);
-			return 1;
+			return_value = 1;
+			goto cleaning;
 		}
 	}
+
+cleaning:
+	free(scnt_for_qp);
+	free(wc);
+	return return_value;
 }
 
 /******************************************************************************
@@ -2776,6 +2814,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	uint64_t                *rcnt_for_qp = NULL;
 	uint64_t                *ccnt_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
+	int 			return_value = 0;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
@@ -2799,21 +2838,24 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					fprintf(stderr,"A completion with Error in run_infinitely_bw_server function");
-					return 1;
+					return_value = 1;
+					goto cleaning;
 				}
 
 				if (user_param->use_srq) {
 
 					if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
-						return 1;
+						return_value = 1;
+						goto cleaning;
 					}
 
 				} else {
 
 					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
-						return 15;
+						return_value = 15;
+						goto cleaning;
 					}
 					if (ctx->send_rcredit) {
 						rcnt_for_qp[wc[i].wr_id]++;
@@ -2833,20 +2875,23 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
 												swc[j].status,(int)swc[j].wr_id,
 												rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
-											return 1;
+											return_value = 1;
+											goto cleaning;
 										}
 										ccnt_for_qp[swc[j].wr_id]--;
 									}
 
 								} else if (sne < 0) {
 									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
-									return 1;
+									return_value = 1;
+									goto cleaning;
 								}
 							}
 							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
 								fprintf(stderr,"Couldn't post send qp %d credit=%lu\n",
 											(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-								return 1;
+								return_value = 1;
+								goto cleaning;
 							}
 							ccnt_for_qp[wc[i].wr_id]++;
 							scredit_for_qp[wc[i].wr_id] = 0;
@@ -2857,9 +2902,18 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 		} else if (ne < 0) {
 			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
-			return 1;
+			return_value = 1;
+			goto cleaning;
 		}
 	}
+
+cleaning:
+	free(wc);
+	free(swc);
+	free(rcnt_for_qp);
+	free(ccnt_for_qp);
+	free(scredit_for_qp);
+	return return_value;
 }
 
 /******************************************************************************
@@ -2868,28 +2922,29 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 int run_iter_bi(struct pingpong_context *ctx,
 				struct perftest_parameters *user_param)  {
 
-	uint64_t totscnt    = 0;
-	uint64_t totccnt    = 0;
-	uint64_t totrcnt    = 0;
-	int i,index      = 0;
-	int ne = 0;
-	int err = 0;
-	uint64_t *rcnt_for_qp = NULL;
-	uint64_t tot_iters = 0;
-	uint64_t iters = 0;
-	int tot_scredit = 0;
-	int *scredit_for_qp = NULL;
-	struct ibv_wc *wc = NULL;
-	struct ibv_wc *wc_tx = NULL;
-	struct ibv_recv_wr *bad_wr_recv = NULL;
+	uint64_t 		totscnt    = 0;
+	uint64_t 		totccnt    = 0;
+	uint64_t 		totrcnt    = 0;
+	int 			i,index      = 0;
+	int 			ne = 0;
+	int 			err = 0;
+	uint64_t 		*rcnt_for_qp = NULL;
+	uint64_t 		tot_iters = 0;
+	uint64_t 		iters = 0;
+	int 			tot_scredit = 0;
+	int 			*scredit_for_qp = NULL;
+	struct ibv_wc 		*wc = NULL;
+	struct ibv_wc 		*wc_tx = NULL;
+	struct ibv_recv_wr 	*bad_wr_recv = NULL;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr *bad_exp_wr      = NULL;
+	struct ibv_exp_send_wr 	*bad_exp_wr      = NULL;
 #endif
-	struct ibv_send_wr *bad_wr      = NULL;
-	int num_of_qps = user_param->num_of_qps;
+	struct ibv_send_wr 	*bad_wr      = NULL;
+	int 			num_of_qps = user_param->num_of_qps;
 	// This is to ensure SERVER will not start to send packets before CLIENT start the test.
-	int before_first_rx = ON;
-	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	int 			before_first_rx = ON;
+	int 			size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	int 			return_value = 0;
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -2969,7 +3024,8 @@ int run_iter_bi(struct pingpong_context *ctx,
             	#endif
 				if (err) {
             				fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-            				return 1;
+            				return_value = 1;
+					goto cleaning;
         			}
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
@@ -2998,7 +3054,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
 		}
 		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth,wc);
@@ -3040,14 +3097,16 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
-							return 1;
+							return_value = 1;
+							goto cleaning;
 						}
 
 					} else {
 
 						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return 15;
+							return_value = 15;
+							goto cleaning;
 						}
 					}
 
@@ -3074,7 +3133,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 									fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%d\n",
 										credit_wc.status,(int)credit_wc.wr_id,
 										rcnt_for_qp[credit_wc.wr_id],scredit_for_qp[credit_wc.wr_id]);
-										return 1;
+										return_value = 1;
+										goto cleaning;
 								}
 
 								if (credit_wc.opcode == IBV_WC_RDMA_WRITE) {
@@ -3095,12 +3155,14 @@ int run_iter_bi(struct pingpong_context *ctx,
 								}
 							} else if (sne < 0) {
 								fprintf(stderr, "Poll send CQ ne=%d\n",sne);
-								return 1;
+								return_value = 1;
+								goto cleaning;
 							}
 						}
 						if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
 							fprintf(stderr,"Couldn't post send: qp%lu credit=%lu\n",wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return 1;
+							return_value = 1;
+							goto cleaning;
 						}
 						scredit_for_qp[wc[i].wr_id]++;
 						tot_scredit++;
@@ -3110,7 +3172,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
-			return FAILURE;
+			return_value = FAILURE;
+			goto cleaning;
 		}
 
 		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
@@ -3123,7 +3186,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
 					if (!ctx->send_rcredit) {
 						fprintf(stderr, "Polled RDMA_WRITE completion without recv credit request\n");
-						return 1;
+						return_value = 1;
+						goto cleaning;
 					}
 					scredit_for_qp[wc_tx[i].wr_id]--;
 					tot_scredit--;
@@ -3152,7 +3216,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
-			return FAILURE;
+			return_value = FAILURE;
+			goto cleaning;
 		}
 	}
 
@@ -3162,15 +3227,17 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (ctx->send_rcredit) {
 		if (clean_scq_credit(tot_scredit, ctx, user_param))
-			return 1;
+			return_value = 1;
+			goto cleaning;
 	}
 
+cleaning:
 	check_alive_data.last_totrcnt=0;
 	free(rcnt_for_qp);
 	free(scredit_for_qp);
 	free(wc);
 	free(wc_tx);
-	return 0;
+	return return_value;
 }
 
 /******************************************************************************
@@ -3182,19 +3249,19 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	uint64_t                ccnt = 0;
 	uint64_t                rcnt = 0;
 	int                     ne;
-	int						err = 0;
-	int 					poll_buf_offset = 0;
+	int			err = 0;
+	int 			poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr      *bad_exp_wr = NULL;
+	struct ibv_exp_send_wr  *bad_exp_wr = NULL;
 #endif
 	struct ibv_send_wr      *bad_wr = NULL;
 	struct ibv_wc           wc;
 
-	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
-        int total_gap_cycles = user_param->latency_gap * cpu_mhz;
-        cycles_t end_cycle, start_gap=0;
+	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+        int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
+        cycles_t 		end_cycle, start_gap=0;
 
 	#ifdef HAVE_VERBS_EXP
 	if (user_param->use_exp == 1) {
@@ -3249,18 +3316,18 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 				user_param->tposted[scnt] = get_cycles();
 
 			*post_buf = (char)++scnt;
-			#if defined(HAVE_VERBS_EXP)
+		#if defined(HAVE_VERBS_EXP)
 			if (user_param->use_exp == 1)
-        		err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
+        			err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
 			else
 				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#else
         		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#endif
 			if (err) {
-        		fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
-        		return 1;
-    		}
+        			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
+        			return 1;
+    			}
 		}
 
 		if (user_param->test_type == DURATION && user_param->state == END_STATE)
@@ -3293,18 +3360,18 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
  ******************************************************************************/
 int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	uint64_t scnt = 0;
-	int ne;
-	int err = 0;
+	uint64_t	scnt = 0;
+	int 		ne;
+	int		err = 0;
 #if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr *bad_exp_wr = NULL;
+	struct 		ibv_exp_send_wr *bad_exp_wr = NULL;
 #endif
-	struct ibv_send_wr *bad_wr = NULL;
-	struct ibv_wc wc;
+	struct 		ibv_send_wr *bad_wr = NULL;
+	struct 		ibv_wc wc;
 
-	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
-	int total_gap_cycles = user_param->latency_gap * cpu_mhz;
-	cycles_t end_cycle, start_gap=0;
+	int 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	int 		total_gap_cycles = user_param->latency_gap * cpu_mhz;
+	cycles_t 	end_cycle, start_gap=0;
 
 	#ifdef HAVE_VERBS_EXP
 	if (user_param->use_exp == 1) {
@@ -3340,15 +3407,15 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 
 		#if defined(HAVE_VERBS_EXP)
 		if (user_param->use_exp == 1)
-    		err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
+    			err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
 		else
 			err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
     	#else
     		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
     	#endif
 		if (err) {
-    		fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
-    		return 1;
+    			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
+	    		return 1;
 		}
 
 		if (user_param->test_type == DURATION && user_param->state == END_STATE)
@@ -3386,22 +3453,22 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  ******************************************************************************/
 int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	uint64_t			scnt = 0; //sent packets counter
-	uint64_t			rcnt = 0; //received packets counter
-	int				poll = 0;
-	int				ne;
-	int				err = 0;
-	struct 			ibv_wc	wc;
-	struct 			ibv_recv_wr	*bad_wr_recv;
+	uint64_t		scnt = 0; //sent packets counter
+	uint64_t		rcnt = 0; //received packets counter
+	int			poll = 0;
+	int			ne;
+	int			err = 0;
+	struct ibv_wc		wc;
+	struct ibv_recv_wr	*bad_wr_recv;
 #if defined(HAVE_VERBS_EXP)
-	struct 			ibv_exp_send_wr	*bad_exp_wr;
+	struct ibv_exp_send_wr	*bad_exp_wr;
 #endif
-	struct          ibv_send_wr     *bad_wr;
+	struct ibv_send_wr	*bad_wr;
 	int  			firstRx = 1;
-	int size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
-	int cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
-	int total_gap_cycles = user_param->latency_gap * cpu_mhz;
-	cycles_t end_cycle, start_gap=0;
+	int 			size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
+	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	int			total_gap_cycles = user_param->latency_gap * cpu_mhz;
+	cycles_t 		end_cycle, start_gap=0;
 
 	if (user_param->connection_type != RawEth) {
 		#if defined(HAVE_VERBS_EXP)
@@ -3516,19 +3583,18 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				break;
 
 			//send the packet that's in index 0 on the buffer
-			#if defined(HAVE_VERBS_EXP)
+		#if defined(HAVE_VERBS_EXP)
 			if (user_param->use_exp == 1)
-        		err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
+        			err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
 			else
 				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#else
         		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
         	#endif
 			if (err) {
-        		fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
-        		return 1;
-    		}
-
+        			fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
+        			return 1;
+    			}
 
 			if (poll == 1) {
 
