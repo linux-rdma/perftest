@@ -63,6 +63,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_RAW_ETH_EXP
 	struct ibv_exp_flow		*flow_create_result = NULL;
 	struct ibv_exp_flow_attr	*flow_rules = NULL;
+	struct ibv_exp_flow 		*flow_promisc = NULL;
 #else
 	struct ibv_flow			*flow_create_result = NULL;
 	struct ibv_flow_attr		*flow_rules = NULL;
@@ -171,6 +172,23 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Couldn't attach QP\n");
 			return FAILURE;
 		}
+
+	#ifdef HAVE_RAW_ETH_EXP
+		if (user_param.use_promiscuous) {
+			struct ibv_exp_flow_attr attr = {
+				.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
+				.num_of_specs = 0,
+				.port = user_param.ib_port,
+				.flags = 0
+			};
+
+			if ((flow_promisc = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
+				perror("error");
+				fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+			}
+		}
+	#endif
+
 	}
 
 	//build raw Ethernet packets on ctx buffer
@@ -267,6 +285,17 @@ int main(int argc, char *argv[]) {
 	}
 
 	if(user_param.machine == SERVER || user_param.duplex) {
+
+	#ifdef HAVE_RAW_ETH_EXP
+                if (user_param.use_promiscuous) {
+			if (ibv_exp_destroy_flow(flow_promisc)) {
+				perror("error");
+				fprintf(stderr, "Couldn't Destory promisc flow\n");
+				return FAILURE;
+			}
+		}
+	#endif
+
 	#ifdef HAVE_RAW_ETH_EXP
 		if (ibv_exp_destroy_flow(flow_create_result)) {
 	#else

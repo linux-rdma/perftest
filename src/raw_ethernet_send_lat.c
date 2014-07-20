@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
 #ifdef HAVE_RAW_ETH_EXP
 	struct ibv_exp_flow		*flow_create_result = NULL;
 	struct ibv_exp_flow_attr	*flow_rules = NULL;
+	struct ibv_exp_flow 		*flow_promisc = NULL;
 #else
 	struct ibv_flow		*flow_create_result = NULL;
 	struct ibv_flow_attr	*flow_rules = NULL;
@@ -189,6 +190,22 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+#ifdef HAVE_RAW_ETH_EXP
+	if (user_param.use_promiscuous) {
+		struct ibv_exp_flow_attr attr = {
+			.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
+			.num_of_specs = 0,
+			.port = user_param.ib_port,
+			.flags = 0
+		};
+
+		if ((flow_promisc = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
+			perror("error");
+			fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+		}
+	}
+#endif
+
 	//build ONE Raw Ethernet packets on ctx buffer
 	create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 
@@ -228,6 +245,16 @@ int main(int argc, char *argv[])
 	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) :
 										print_report_lat_duration(&user_param);
 
+	//destory promisc flow
+#ifdef HAVE_RAW_ETH_EXP
+	if (user_param.use_promiscuous) {
+		if (ibv_exp_destroy_flow(flow_promisc)) {
+			perror("error");
+			fprintf(stderr, "Couldn't Destory promisc flow\n");
+			return FAILURE;
+		}
+	}
+#endif
 
 
 	//destroy flow
