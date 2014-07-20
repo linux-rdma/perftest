@@ -1,7 +1,7 @@
 Source: perftest
 Section: net
 Priority: extra
-Maintainer: Ido Shamay <idos@dev.mellanox.co.il>
+Maintainer: Gil Rockah <gilr@dev.mellanox.co.il>
 Build-Depends: debhelper (>= 8.0.0), libibverbs-dev (>= 1.1.6), librdmacm-dev
 Standards-Version: 3.9.2
 Homepage: https://openfabrics.org/downloads/perftest/

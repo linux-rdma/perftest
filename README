@@ -1,5 +1,5 @@
 	     Open Fabrics Enterprise Distribution (OFED)
-                Performance Tests README for OFED 2.2
+                Performance Tests README for OFED 2.3
 		  
 			  April 2014
 
@@ -230,7 +230,7 @@ Special feature detailed explanation in tests:
  3. Different versions of perftest may not be compatible with each other.
     Please use the same perftest version on both sides to ensure consistency of benchmark results.
 
- 4. This version (5.2) won't work with previous versions of perftest.
+ 4. Version 5.2 won't work with previous versions of perftest.
 
  5. This perftest package won't compile on MLNX_OFED-2.1 due to API changes in MLNX_OFED-2.2
     In order to compile it properly, please do:
@@ -240,7 +240,7 @@ Special feature detailed explanation in tests:
  6. In te x390x platform virtualized environment the results shown by package test applications can be incorrect.
 
  7. This release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
-    Currently, running dualport when port1-IB , port2-Ethernet will not work.
+    Currently, running dualport when port1-IB , port2-Ethernet still not working.
 
  8. Atomic Tests (ib_atomic_bw/lat) don't work on Connect-IB.
  
