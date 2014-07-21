@@ -2475,6 +2475,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (wc[i].status != IBV_WC_SUCCESS)
 					{
 						NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
+						return_value = 1;
+						goto cleaning;
 					}
 					ctx->ccnt[(int)wc[i].wr_id] += user_param->cq_mod;
 					totccnt += user_param->cq_mod;
@@ -2593,6 +2595,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					if (wc[i].status != IBV_WC_SUCCESS) {
 
 						NOTIFY_COMP_ERROR_RECV(wc[i],rcnt_for_qp[0]);
+						return_value = 1;
+						goto cleaning;
 					}
 
 					rcnt_for_qp[wc[i].wr_id]++;
@@ -2783,8 +2787,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS)
+				{
 					NOTIFY_COMP_ERROR_SEND(wc[i],ctx->scnt[(int)wc[i].wr_id],ctx->scnt[(int)wc[i].wr_id]);
-
+					return_value = 1;
+					goto cleaning;
+				}
 				ctx->scnt[(int)wc[i].wr_id]--;
 				user_param->iters++;
 			}
@@ -3078,6 +3085,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
+					return_value = 1;
+					goto cleaning;
 				}
 
 				rcnt_for_qp[wc[i].wr_id]++;
@@ -3181,7 +3190,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 		if (ne > 0) {
 			for (i = 0; i < ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS)
-					 NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
+				{
+					NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
+					return_value = 1;
+					goto cleaning;
+				}
 
 				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
 					if (!ctx->send_rcredit) {
@@ -3340,7 +3353,10 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 			if(ne > 0) {
 
 				if (wc.status != IBV_WC_SUCCESS)
+				{
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
+					return 1;
+				}
 
 				ccnt++;
 				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
@@ -3432,9 +3448,11 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
 
 			if(ne > 0) {
-				if (wc.status != IBV_WC_SUCCESS)
+				if (wc.status != IBV_WC_SUCCESS) 
+				{
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
-
+					return 1;
+				}
 				if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 					user_param->iters++;
 
@@ -3524,8 +3542,10 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					}
 
 					if (wc.status != IBV_WC_SUCCESS)
+					{
 						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
-
+						return 1;
+					}
 					rcnt++;
 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
@@ -3621,8 +3641,10 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 
 				if (s_wc.status != IBV_WC_SUCCESS)
+				{
 					NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
-
+					return 1;
+				}
 				poll = 0;
 
 				#if defined(HAVE_VERBS_EXP)

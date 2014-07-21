@@ -249,7 +249,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 
 		char msg[KEY_MSG_SIZE_GID];
 		char *pstr = msg, *term;
-		char tmp[20];
+		char tmp[120];
 		int i;
 
 		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
