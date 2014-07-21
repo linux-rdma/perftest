@@ -60,6 +60,7 @@ int check_flow_steering_support() {
 		fprintf(stderr,"flow steering is not supported.\n");
 		fprintf(stderr,"please add to /etc/modprobe.d/mlnx.conf : options mlx4_core log_num_mgm_entry_size=-1\n");
 		fprintf(stderr,"and restart the driver: /etc/init.d/openibd restart \n");
+		fclose(fp);
 		return 1;
 	}
 
@@ -653,24 +654,25 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
  ******************************************************************************/
 int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	uint64_t	totscnt    = 0;
-	uint64_t	totccnt    = 0;
-	uint64_t	totrcnt    = 0;
-	int	i,index      = 0;
-	int	ne = 0;
-	int	err = 0;
-	uint64_t	*rcnt_for_qp = NULL;
-	uint64_t	tot_iters = 0;
-	uint64_t	iters = 0;
-	struct ibv_wc	*wc = NULL;
-	struct ibv_wc	*wc_tx = NULL;
+	uint64_t		totscnt    = 0;
+	uint64_t		totccnt    = 0;
+	uint64_t		totrcnt    = 0;
+	int			i,index      = 0;
+	int			ne = 0;
+	int			err = 0;
+	uint64_t		*rcnt_for_qp = NULL;
+	uint64_t		tot_iters = 0;
+	uint64_t		iters = 0;
+	struct ibv_wc		*wc = NULL;
+	struct ibv_wc		*wc_tx = NULL;
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
 #if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_send_wr	*bad_exp_wr = NULL;
 #endif
 	struct ibv_send_wr	*bad_wr = NULL;
-	int	firstRx = 1;
-    	int rwqe_sent = user_param->rx_depth;
+	int			firstRx = 1;
+    	int 			rwqe_sent = user_param->rx_depth;
+	int			return_value = 0;
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
@@ -728,7 +730,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
                                 #endif
 				if(err) {
                                         fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-                                        return 1;
+                                        return_value = 1;
+					goto cleaning;
                                 }
 
 				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
@@ -757,7 +760,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
 		}
 
@@ -783,7 +787,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
 		}
 		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
@@ -809,13 +814,15 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return 1;
+				return_value = 1;
+				goto cleaning;
 			}
             while (rwqe_sent - totccnt < user_param->rx_depth) {    // Post more than buffer_size
     		    if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) { 
 					if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",0,rcnt_for_qp[0]);
-						return 15;
+						return_value = 15;
+						goto cleaning;
 					}
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[0].sg_list,
@@ -834,8 +841,9 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
+cleaning:
 	free(rcnt_for_qp);
 	free(wc);
 	free(wc_tx);
-	return 0;
+	return return_value;
 }

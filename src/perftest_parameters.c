@@ -1897,6 +1897,8 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
 	long num_of_calculated_iters = user_param->iters;
+	int free_my_bw_rep = 0;
+
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
@@ -1946,6 +1948,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	peak_down = (cycles_t)opt_delta * format_factor;
 
 	if (my_bw_rep == NULL) {
+		free_my_bw_rep = 1;
 		ALLOCATE(my_bw_rep , struct bw_report_data , 1);
 		memset(my_bw_rep, 0, sizeof(struct bw_report_data));
 	}
@@ -1965,6 +1968,9 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 							|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 
+	if (free_my_bw_rep == 1) {
+		free(my_bw_rep);
+	}
 }
 
 /******************************************************************************
