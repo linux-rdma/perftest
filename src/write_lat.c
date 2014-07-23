@@ -195,6 +195,16 @@ int main(int argc, char *argv[]) {
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	};
 
+        if (user_param.work_rdma_cm == OFF)
+        {
+                if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0]))
+                {
+                        fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+                        fprintf(stderr," Please Try to use a different IP version.\n\n");
+                        return 1;
+                }
+        }
+
 	if (user_param.work_rdma_cm == OFF) {
 
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {

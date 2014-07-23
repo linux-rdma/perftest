@@ -420,6 +420,9 @@ void exchange_versions (struct perftest_comm *user_comm, struct perftest_paramet
  */
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm);
 
+int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
+                                         struct pingpong_dest *rem_dest);
+
 #endif /* PERFTEST_COMMUNICATION_H */
 
 

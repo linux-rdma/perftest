@@ -305,6 +305,17 @@ int main(int argc, char *argv[]) {
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
+
+        if (user_param.work_rdma_cm == OFF)
+        {
+                if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0]))
+                {
+                        fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+                        fprintf(stderr," Please Try to use a different IP version.\n\n");
+                        return 1;
+                }
+        }
+
 	/* If credit for available recieve buffers is necessary,
 	 * the credit sending is done via RDMA WRITE ops and the ctx_hand_shake above
 	 * is used to exchange the rkeys and buf addresses for the RDMA WRITEs */
