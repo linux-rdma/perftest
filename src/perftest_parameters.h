@@ -147,6 +147,7 @@
 #define MAX_QP_MCAST  (56)
 #define MIN_RX	      (1)
 #define MAX_RX	      (16384)
+#define UC_MAX_RX     (16000)
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)

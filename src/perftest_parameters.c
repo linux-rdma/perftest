@@ -580,6 +580,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		if (user_param->verb == SEND && user_param->rx_depth > user_param->iters) {
 			user_param->rx_depth = user_param->iters;
 		}
+
+		if (user_param->connection_type == UD || user_param->connection_type == UC)
+		{
+			user_param->rx_depth = (user_param->iters < UC_MAX_RX) ? user_param->iters : UC_MAX_RX;
+		} 
 	}
 
 	if (user_param->cq_mod > user_param->tx_depth) {
