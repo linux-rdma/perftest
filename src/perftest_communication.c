@@ -1118,7 +1118,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
 		}
 	}
 
-    return 0;
+	return 0;
 }
 
 
@@ -1521,6 +1521,20 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 	return SUCCESS;
 }
 
+int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
+                                         struct pingpong_dest *rem_dest)
+{
+	int gid_type1, gid_type2;
+
+	//ipv4 - 1 , ipv6 - 0
+	gid_type1 = ipv6_addr_v4mapped((struct in6_addr *)my_dest->gid.raw);
+	gid_type2 = ipv6_addr_v4mapped((struct in6_addr *)rem_dest->gid.raw);
+
+	if (gid_type1 != gid_type2)
+		return 1;
+
+	return 0;
+}
 /******************************************************************************
  * End
  ******************************************************************************/

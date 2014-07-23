@@ -1557,7 +1557,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 
 		attr->ah_attr.dlid = dest->lid;
 		if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
-			|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX))) {
+			|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX) && user_param->dualport)) {
 
 			attr->ah_attr.is_global = 0;
 			attr->ah_attr.sl = user_param->sl;
@@ -2686,6 +2686,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			return_value = 1;
 			goto cleaning;
 		}
+
 	}
 	if (user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
@@ -2985,6 +2986,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	}
 
 	if (user_param->test_type == ITERATIONS) {
+		check_alive_data.is_events = user_param->use_event;
                 signal(SIGALRM, check_alive);
                 alarm(60);
 	}
@@ -3183,6 +3185,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 			fprintf(stderr, "poll CQ failed %d\n", ne);
 			return_value = FAILURE;
 			goto cleaning;
+		}
+		else if (ne == 0) {
+			if (check_alive_data.to_exit)
+			{
+				return_value = 0;
+				goto cleaning;
+			}
 		}
 
 		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
@@ -3708,7 +3717,15 @@ void check_alive(int sig) {
 		alarm(60);
 	} else if (check_alive_data.current_totrcnt == check_alive_data.last_totrcnt && check_alive_data.current_totrcnt < check_alive_data.g_total_iters) {
 		fprintf(stderr,"Did not get Message for 120 Seconds, exiting..\nTotal Received=%d , Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
-		exit(1);
+
+		if (check_alive_data.is_events)
+		{ // Can't report BW, as we are stuck in event_loop
+			exit(0);
+		}
+		else
+		{ // exit nice from run_iter function and report known bw/mr
+			check_alive_data.to_exit = 1;
+		}
 	} 
 }
 

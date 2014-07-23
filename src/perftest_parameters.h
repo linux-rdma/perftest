@@ -277,6 +277,8 @@ struct check_alive_data {
 	int current_totrcnt;
 	int last_totrcnt;
 	int g_total_iters;
+	int to_exit;
+	int is_events;
 };
 
 struct perftest_parameters {
