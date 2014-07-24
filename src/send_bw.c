@@ -414,8 +414,8 @@ int main(int argc, char *argv[]) {
 					ctx.credit_buf[j] = 0;
 			}
 
-			if (user_param.duplex) {
-
+			if (user_param.duplex)
+			{
 				if(run_iter_bi(&ctx,&user_param))
 					return 17;
 
@@ -438,10 +438,14 @@ int main(int argc, char *argv[]) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
 				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                         }
-
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
 				return 1;
+			}
+
+			//Check if last iteration ended well in UC/UD
+			if (user_param.check_alive_exited) {
+				break;
 			}
 		}
 
@@ -551,7 +555,6 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr,"Couldn't Destory all SEND resources\n");
 		return FAILURE;
 	}
-
 	if (user_param.work_rdma_cm == ON)
 		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
 			fprintf(stderr,"Failed to destroy resources\n");
