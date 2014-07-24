@@ -95,7 +95,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (user_param.use_rss)
-		user_param.num_of_qps = 3; //parent rss and 2 child_rx
+	{
+		//if num_of_qps is not even, set it to 2.
+		//need to add a check if num_of_qps is in 2^n form.
+		if (user_param.num_of_qps % 2)
+		{
+			user_param.num_of_qps = 2;
+		}
+
+		//add another one for rss parent QP
+		user_param.num_of_qps += 1; //parent rss + 2^n child_rx
+	}
+
 	// Finding the IB device selected (or default if no selected).
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
@@ -160,6 +171,28 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	//build raw Ethernet packets on ctx buffer
+	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd){
+		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
+	}
+
+	if (user_param.output == FULL_VERBOSITY) {
+                printf(RESULT_LINE);
+		if (user_param.raw_qos)
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
+		else
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+	}
+	// Prepare IB resources for rtr/rts.
+	if (user_param.work_rdma_cm == OFF) {
+		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {
+			fprintf(stderr," Unable to Connect the HCA's through the link\n");
+			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+			return 1;
+		}
+	}
+
 	//attaching the qp to the spec
 	if(user_param.machine == SERVER || user_param.duplex) {
 	#ifdef HAVE_RAW_ETH_EXP
@@ -191,27 +224,6 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	//build raw Ethernet packets on ctx buffer
-	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd){
-		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
-	}
-
-	if (user_param.output == FULL_VERBOSITY) {
-                printf(RESULT_LINE);
-		if (user_param.raw_qos)
-			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
-		else
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-	}
-	// Prepare IB resources for rtr/rts.
-	if (user_param.work_rdma_cm == OFF) {
-		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {
-			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return 1;
-		}
-	}
 	if (user_param.test_method == RUN_REGULAR) {
 		if (user_param.machine == CLIENT || user_param.duplex) {
 			ctx_set_send_wqes(&ctx,&user_param,NULL);

@@ -719,7 +719,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->connection_type == RawEth) {
 
-		if (user_param->num_of_qps > 1) {
+		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
 			printf(RESULT_LINE);
 			fprintf(stdout," Raw Ethernet test supports only 1 QP for now\n");
 			exit(1);
