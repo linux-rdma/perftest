@@ -703,7 +703,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
 
-	if (user_param->use_rdma_cm == ON)
+	if (user_param->work_rdma_cm == ON)
 		rdma_disconnect(ctx->cm_id);
 
 	//in dc with bidirectional,
