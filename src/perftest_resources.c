@@ -495,7 +495,7 @@ static struct ibv_qp *ctx_rss_eth_qp_create(struct pingpong_context *ctx,struct 
 	#endif
 		attr.qpg.qpg_parent = NULL;
 		attr.qpg.parent_attrib.tss_child_count = 0;
-		attr.qpg.parent_attrib.rss_child_count = 2;
+		attr.qpg.parent_attrib.rss_child_count = user_param->num_of_qps - 1;
 	} else { //rss childs
 	#if defined(HAVE_VERBS_EXP)
 		attr.qpg.qpg_type = IBV_EXP_QPG_CHILD_RX;
