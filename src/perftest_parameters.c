@@ -473,6 +473,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->report_per_port = 0;
 	user_param->use_odp = 0;
 	user_param->use_promiscuous = 0;
+	user_param->check_alive_exited = 0;
 }
 
  /******************************************************************************

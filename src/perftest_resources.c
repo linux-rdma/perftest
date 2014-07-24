@@ -2569,6 +2569,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	else
 		tot_iters = user_param->iters*user_param->num_of_qps;
 
+	if (user_param->test_type == ITERATIONS) {
+		check_alive_data.is_events = user_param->use_event;
+                signal(SIGALRM, check_alive);
+                alarm(60);
+	}
+
+	check_alive_data.g_total_iters = tot_iters;
+
 	while (rcnt < tot_iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 		if (user_param->use_event) {
@@ -2601,6 +2609,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 					rcnt_for_qp[wc[i].wr_id]++;
 					rcnt++;
+					check_alive_data.current_totrcnt = rcnt;
 
  					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
 					{
@@ -2681,11 +2690,23 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 		} while (ne > 0);
 
-		if (ne < 0) {
+		if (ne < 0)
+		{
 			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
 			return_value = 1;
 			goto cleaning;
 		}
+		else if (ne == 0)
+		{
+			if (check_alive_data.to_exit)
+			{
+				user_param->check_alive_exited = 1;
+				return_value = 0;
+				goto cleaning;
+			}
+		}
+
+
 
 	}
 	if (user_param->test_type == ITERATIONS)
@@ -2696,12 +2717,15 @@ cleaning:
 		if (clean_scq_credit(tot_scredit, ctx, user_param))
 			return_value = 1;
 	}
+
 	/*
+	//print rcnt per rss child qp.
 	if (user_param->use_rss) {
 		for (i = 1; i < user_param->num_of_qps; i++)
 			fprintf(stderr,"child %d count = %ld\n",i,rcnt_for_qp[i]);
 	}*/
 
+	check_alive_data.last_totrcnt=0;
 	free(wc);
 	free(rcnt_for_qp);
 	free(swc);
@@ -3189,6 +3213,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		else if (ne == 0) {
 			if (check_alive_data.to_exit)
 			{
+				user_param->check_alive_exited = 1;
 				return_value = 0;
 				goto cleaning;
 			}
@@ -3716,10 +3741,11 @@ void check_alive(int sig) {
 		check_alive_data.last_totrcnt = check_alive_data.current_totrcnt;
 		alarm(60);
 	} else if (check_alive_data.current_totrcnt == check_alive_data.last_totrcnt && check_alive_data.current_totrcnt < check_alive_data.g_total_iters) {
-		fprintf(stderr,"Did not get Message for 120 Seconds, exiting..\nTotal Received=%d , Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
+		fprintf(stderr," Did not get Message for 120 Seconds, exiting..\n Total Received=%d, Total Iters Required=%d\n",check_alive_data.current_totrcnt, check_alive_data.g_total_iters);
 
 		if (check_alive_data.is_events)
 		{ // Can't report BW, as we are stuck in event_loop
+			fprintf(stderr," Due to this issue, Perftest cannot produce a report when in event mode.\n");
 			exit(0);
 		}
 		else

@@ -393,6 +393,7 @@ struct perftest_parameters {
 	int 				report_per_port;
 	int 				use_odp;
 	int				use_promiscuous;
+	int				check_alive_exited;
 };
 
 struct report_options {
