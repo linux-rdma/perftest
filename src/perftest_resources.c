@@ -3336,8 +3336,11 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 		duration_param=user_param;
 		duration_param->state = START_STATE;
 		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
 		user_param->iters = 0;
+		if (user_param->margin > 0)
+                        alarm(user_param->margin);
+                else
+                        catch_alarm(0);
 	}
 
 	/* Done with setup. Start the test. */
@@ -3440,8 +3443,11 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		duration_param=user_param;
 		duration_param->state = START_STATE;
 		signal(SIGALRM, catch_alarm);
-		alarm(user_param->margin);
 		user_param->iters = 0;
+		if (user_param->margin > 0)
+			alarm(user_param->margin);
+		else
+			catch_alarm(0);
 	}
 
 	while (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
