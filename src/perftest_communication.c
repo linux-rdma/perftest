@@ -21,6 +21,11 @@
 static const char *sideArray[]  = {"local", "remote"};
 static const char *gidArray[]   = {"GID"  , "MGID"};
 
+static inline int valid_mtu_size(int mtu_size)
+{
+	return !(mtu_size < IBV_MTU_256 || mtu_size > IBV_MTU_4096);
+}
+
 static inline int ipv6_addr_v4mapped(const struct in6_addr *a)
 {
 	return ((a->s6_addr32[0] | a->s6_addr32[1]) |
@@ -1471,6 +1476,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 	int curr_mtu=0, rem_mtu=0;
 	char cur[2];
 	char rem[2];
+	int size_of_cur;
 
 	if (user_param->connection_type == RawEth) {
 		if (set_eth_mtu(user_param) != 0 ) {
@@ -1482,12 +1488,16 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		if (!user_param->dont_xchg_versions) {
 			if (strverscmp(user_param->rem_version, "5.1") >= 0) {
 				sprintf(cur,"%d",curr_mtu);
-				if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(char[2]))) {
+
+				//fix a buffer overflow issue in ppc.
+				size_of_cur = (strverscmp(user_param->rem_version, "5.31") >= 0) ? sizeof(char[2]) : sizeof(int);
+
+				if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),size_of_cur)) {
 					fprintf(stderr," Failed to exchange data between server and clients\n");
 					exit(1);
 				}
 				rem_mtu = (int) strtol(rem, (char **)NULL, 10);
-				user_param->curr_mtu = (enum ibv_mtu)((curr_mtu > rem_mtu) ? rem_mtu : curr_mtu);
+				user_param->curr_mtu = (enum ibv_mtu)((valid_mtu_size(rem_mtu) && (curr_mtu > rem_mtu)) ? rem_mtu : curr_mtu);
 			} else {
 				user_param->curr_mtu = (enum ibv_mtu)(curr_mtu);
 			}
