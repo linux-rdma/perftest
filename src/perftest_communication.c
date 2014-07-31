@@ -1482,7 +1482,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		if (!user_param->dont_xchg_versions) {
 			if (strverscmp(user_param->rem_version, "5.1") >= 0) {
 				sprintf(cur,"%d",curr_mtu);
-				if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(int))) {
+				if (ctx_xchg_data(user_comm,(void*)(cur),(void*)(rem),sizeof(char[2]))) {
 					fprintf(stderr," Failed to exchange data between server and clients\n");
 					exit(1);
 				}
