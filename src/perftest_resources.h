@@ -66,7 +66,6 @@
 
 #include "perftest_parameters.h"
 
-#define CACHE_LINE_SIZE     (64)
 #define NUM_OF_RETRIES		(10)
 
 
@@ -90,8 +89,6 @@
 #define CLIENT_FD "/tmp/xrc_domain_client"
 #endif
 
-//global variables
-extern int cycle_buffer;
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
@@ -110,15 +107,15 @@ extern int cycle_buffer;
 // Macro to define the buffer size (according to "Nahalem" chip set).
 // for small message size (under 4K) , we allocate 4K buffer , and the RDMA write
 // verb will write in cycle on the buffer. this improves the BW in "Nahalem" systems.
-#define BUFF_SIZE(size) ((size < cycle_buffer) ? (cycle_buffer) : (size))
+#define BUFF_SIZE(size,cycle_buffer) ((size < cycle_buffer) ? (cycle_buffer) : (size))
 
 // UD addition to the buffer.
-#define IF_UD_ADD(type) ((type == UD) ? (CACHE_LINE_SIZE) : (0))
+#define IF_UD_ADD(type,cache_line_size) ((type == UD) ? (cache_line_size) : (0))
 
 // Macro that defines the adress where we write in RDMA.
 // If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
-#define INC(size) ((size > CACHE_LINE_SIZE) ? ((size%CACHE_LINE_SIZE == 0) ?  \
-	       (size) : (CACHE_LINE_SIZE*(size/CACHE_LINE_SIZE+1))) : (CACHE_LINE_SIZE))
+#define INC(size,cache_line_size) ((size > cache_line_size) ? ((size%cache_line_size == 0) ?  \
+	       (size) : (cache_line_size*(size/cache_line_size+1))) : (cache_line_size))
 
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
 
@@ -165,6 +162,8 @@ struct pingpong_context {
 	struct ibv_send_wr                      *ctrl_wr;
 	int                                     send_rcredit;
 	int                                     credit_cnt;
+	int					cache_line_size;
+	int					cycle_buffer;
 #ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
 	int 					fd;
@@ -644,15 +643,15 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
  */
 
 #if defined(HAVE_VERBS_EXP)
-static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer) {
 
 	if (verb == ATOMIC)
-		wr->wr.atomic.remote_addr += INC(size);
+		wr->wr.atomic.remote_addr += INC(size,cache_line_size);
 
 	else
-		wr->wr.rdma.remote_addr += INC(size);
+		wr->wr.rdma.remote_addr += INC(size,cache_line_size);
 
-	if ( ((scnt+1) % (cycle_buffer/ INC(size))) == 0) {
+	if ( ((scnt+1) % (cycle_buffer/ INC(size,cache_line_size))) == 0) {
 
 		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
@@ -662,15 +661,15 @@ static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,u
 	}
 }
 #endif
-static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb) {
+static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer) {
 
 	if (verb == ATOMIC)
-		wr->wr.atomic.remote_addr += INC(size);
+		wr->wr.atomic.remote_addr += INC(size,cache_line_size);
 
 	else
-		wr->wr.rdma.remote_addr += INC(size);
+		wr->wr.rdma.remote_addr += INC(size,cache_line_size);
 
-	if ( ((scnt+1) % (cycle_buffer/ INC(size))) == 0) {
+	if ( ((scnt+1) % (cycle_buffer/ INC(size,cache_line_size))) == 0) {
 
 		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
@@ -694,11 +693,11 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t 
  *		prim_addr - The address of the original buffer.
  *		server_is_ud - Indication to weather we are in UD mode.
  */
-static __inline void increase_loc_addr(struct ibv_sge *sg,int size,uint64_t rcnt,uint64_t prim_addr,int server_is_ud) {
+static __inline void increase_loc_addr(struct ibv_sge *sg,int size,uint64_t rcnt,uint64_t prim_addr,int server_is_ud, int cache_line_size, int cycle_buffer) {
 
-	sg->addr  += INC(size);
+	sg->addr  += INC(size,cache_line_size);
 
-	if ( ((rcnt+1) % (cycle_buffer/ INC(size))) == 0 )
+	if ( ((rcnt+1) % (cycle_buffer/ INC(size,cache_line_size))) == 0 )
 		sg->addr = prim_addr;
 
 }
