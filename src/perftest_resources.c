@@ -24,7 +24,6 @@ static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV
 
 struct perftest_parameters* duration_param;
 struct check_alive_data check_alive_data;
-int cycle_buffer=4096;
 
 /******************************************************************************
  * Beginning
@@ -625,6 +624,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 
 	int tarr_size;
 
+	ctx->cycle_buffer = user_param->cycle_buffer;
+	ctx->cache_line_size = user_param->cache_line_size;
+
 	ALLOCATE(user_param->port_by_qp, uint64_t, user_param->num_of_qps);
 
 	tarr_size = (user_param->noPeak) ? 1 : user_param->iters*user_param->num_of_qps;
@@ -683,14 +685,14 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->rx_buffer_addr,uint64_t,user_param->num_of_qps);
 	}
     if (user_param->mac_fwd == ON ) 
-        cycle_buffer = user_param->size * user_param->rx_depth;
+        ctx->cycle_buffer = user_param->size * user_param->rx_depth;
 
 	ctx->size = user_param->size;
-	ctx->buff_size = BUFF_SIZE(ctx->size)*2*user_param->num_of_qps;
+	ctx->buff_size = BUFF_SIZE(ctx->size,ctx->cycle_buffer)*2*user_param->num_of_qps;
 
     user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
-		ctx->buff_size += CACHE_LINE_SIZE;
+		ctx->buff_size += ctx->cache_line_size;
 }
 
 /******************************************************************************
@@ -1870,9 +1872,9 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->exp_wr[i],0,sizeof(struct ibv_exp_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
+		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 		if (user_param->mac_fwd)
-			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size);
+			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->verb == WRITE || user_param->verb == READ)
 			ctx->exp_wr[i*user_param->post_list].wr.rdma.remote_addr   = rem_dest[xrc_offset + i].vaddr;
@@ -1884,7 +1886,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
+			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 			if (user_param->verb != SEND)
 				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
@@ -1898,8 +1900,9 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 				ctx->sge_list[i*user_param->post_list +j].addr = ctx->sge_list[i*user_param->post_list + (j-1)].addr;
 
-				if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2))
-					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,j-1,ctx->my_addr[i],0);
+				if ((user_param->tst == BW ) && user_param->size <= (ctx->cycle_buffer / 2))
+					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,
+									j-1,ctx->my_addr[i],0,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 
 			ctx->exp_wr[i*user_param->post_list + j].sg_list = &ctx->sge_list[i*user_param->post_list + j];
@@ -1930,8 +1933,9 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 					ctx->exp_wr[i*user_param->post_list + j].wr.rdma.remote_addr = ctx->exp_wr[i*user_param->post_list + (j-1)].wr.rdma.remote_addr;
 
-					if ((user_param->tst == BW) && user_param->size <= (cycle_buffer / 2))
-						increase_exp_rem_addr(&ctx->exp_wr[i*user_param->post_list + j],user_param->size,j-1,ctx->rem_addr[i],WRITE);
+					if ((user_param->tst == BW) && user_param->size <= (ctx->cycle_buffer / 2))
+						increase_exp_rem_addr(&ctx->exp_wr[i*user_param->post_list + j],user_param->size,
+												j-1,ctx->rem_addr[i],WRITE,ctx->cache_line_size,ctx->cycle_buffer);
 				}
 
 			} else if (user_param->verb == ATOMIC) {
@@ -1942,7 +1946,8 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 					ctx->exp_wr[i*user_param->post_list + j].wr.atomic.remote_addr = ctx->exp_wr[i*user_param->post_list + j-1].wr.atomic.remote_addr;
 					if ((user_param->tst == BW))
-						increase_exp_rem_addr(&ctx->exp_wr[i*user_param->post_list + j],user_param->size,j-1,ctx->rem_addr[i],ATOMIC);
+						increase_exp_rem_addr(&ctx->exp_wr[i*user_param->post_list + j],user_param->size,
+												j-1,ctx->rem_addr[i],ATOMIC,ctx->cache_line_size,ctx->cycle_buffer);
 				}
 
 				if (user_param->atomicType == FETCH_AND_ADD)
@@ -2015,9 +2020,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->wr[i],0,sizeof(struct ibv_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
+		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 		if (user_param->mac_fwd)
-			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size);
+			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->verb == WRITE || user_param->verb == READ)
 			ctx->wr[i*user_param->post_list].wr.rdma.remote_addr   = rem_dest[xrc_offset + i].vaddr;
@@ -2029,7 +2034,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size));
+			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 			if (user_param->verb != SEND)
 				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
@@ -2043,8 +2048,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 				ctx->sge_list[i*user_param->post_list +j].addr = ctx->sge_list[i*user_param->post_list + (j-1)].addr;
 
-				if ((user_param->tst == BW ) && user_param->size <= (cycle_buffer / 2))
-					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,j-1,ctx->my_addr[i],0);
+				if ((user_param->tst == BW ) && user_param->size <= (ctx->cycle_buffer / 2))
+					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,
+									j-1,ctx->my_addr[i],0,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 
 			ctx->wr[i*user_param->post_list + j].sg_list = &ctx->sge_list[i*user_param->post_list + j];
@@ -2075,8 +2081,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.rdma.remote_addr = ctx->wr[i*user_param->post_list + (j-1)].wr.rdma.remote_addr;
 
-					if ((user_param->tst == BW) && user_param->size <= (cycle_buffer / 2))
-						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,j-1,ctx->rem_addr[i],WRITE);
+					if ((user_param->tst == BW) && user_param->size <= (ctx->cycle_buffer / 2))
+						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,
+											j-1,ctx->rem_addr[i],WRITE,ctx->cache_line_size,ctx->cycle_buffer);
 				}
 
 			} else if (user_param->verb == ATOMIC) {
@@ -2087,7 +2094,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.atomic.remote_addr = ctx->wr[i*user_param->post_list + j-1].wr.atomic.remote_addr;
 					if ((user_param->tst == BW))
-						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,j-1,ctx->rem_addr[i],ATOMIC);
+						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,
+											j-1,ctx->rem_addr[i],ATOMIC,ctx->cache_line_size,ctx->cycle_buffer);
 				}
 
 				if (user_param->atomicType == FETCH_AND_ADD)
@@ -2150,10 +2158,10 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	}
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 
-		ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf + (num_of_qps + k)*BUFF_SIZE(ctx->size);
+		ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf + (num_of_qps + k)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->connection_type == UD)
-			ctx->recv_sge_list[i].addr += (CACHE_LINE_SIZE - UD_ADDITION);
+			ctx->recv_sge_list[i].addr += (ctx->cache_line_size - UD_ADDITION);
 
 		ctx->recv_sge_list[i].length = SIZE(user_param->connection_type,user_param->size,1);
 		ctx->recv_sge_list[i].lkey   = ctx->mr->lkey;
@@ -2183,13 +2191,13 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 			}
 
-			if ((user_param->tst == BW) && user_param->size <= (cycle_buffer / 2)) {
+			if ((user_param->tst == BW) && user_param->size <= (ctx->cycle_buffer / 2)) {
 
 				increase_loc_addr(&ctx->recv_sge_list[i],
 								  user_param->size,
 								  j,
 								  ctx->rx_buffer_addr[i],
-								  user_param->connection_type);
+								  user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 		}
 	}
@@ -2497,21 +2505,27 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					goto cleaning;
         			}
 
-				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
+				if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
 						#ifdef HAVE_VERBS_EXP
 						if (user_param->use_exp == 1)
-							increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+							increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,
+											ctx->scnt[index],ctx->my_addr[index],0,ctx->cache_line_size,ctx->cycle_buffer);
 						else
 						#endif
-							increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+							increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],
+													ctx->my_addr[index],0,ctx->cache_line_size,ctx->cycle_buffer);
 
 						if (user_param->verb != SEND) {
 							#ifdef HAVE_VERBS_EXP
 							if (user_param->use_exp == 1)
-								increase_exp_rem_addr(&ctx->exp_wr[index],user_param->size,ctx->scnt[index],ctx->rem_addr[index],user_param->verb);
+								increase_exp_rem_addr(&ctx->exp_wr[index],user_param->size,
+										ctx->scnt[index],ctx->rem_addr[index],user_param->verb,ctx->cache_line_size,
+																		ctx->cycle_buffer);
 							else
 							#endif
-								increase_rem_addr(&ctx->wr[index],user_param->size,ctx->scnt[index],ctx->rem_addr[index],user_param->verb);
+								increase_rem_addr(&ctx->wr[index],user_param->size,
+										ctx->scnt[index],ctx->rem_addr[index],user_param->verb,ctx->cache_line_size,
+																		ctx->cycle_buffer);
 						}
 				}
 
@@ -2717,12 +2731,12 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 						}
 
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
+						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
 							increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 											  user_param->size,
 											  rcnt_for_qp[wc[i].wr_id] + size_per_qp,
 											  ctx->rx_buffer_addr[wc[i].wr_id],
-											  user_param->connection_type);
+											  user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 						}
 					}
 
@@ -3140,13 +3154,15 @@ int run_iter_bi(struct pingpong_context *ctx,
 					goto cleaning;
         			}
 
-				if (user_param->post_list == 1 && user_param->size <= (cycle_buffer / 2)) {
+				if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
-						increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+						increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,ctx->scnt[index],
+												ctx->my_addr[index],0,ctx->cache_line_size,ctx->cycle_buffer);
 					else
 					#endif
-						increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],ctx->my_addr[index],0);
+						increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],
+												ctx->my_addr[index],0,ctx->cache_line_size,ctx->cycle_buffer);
 				}
 
 				ctx->scnt[index] += user_param->post_list;
@@ -3224,11 +3240,12 @@ int run_iter_bi(struct pingpong_context *ctx,
 						}
 					}
 
-					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (cycle_buffer / 2)) {
+					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 										  user_param->size,
 										  rcnt_for_qp[wc[i].wr_id] + size_per_qp -1,
-										  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type);
+										  ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type,
+										  ctx->cache_line_size,ctx->cycle_buffer);
 					}
 				}
 				if (ctx->send_rcredit) {
@@ -3408,7 +3425,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
 	post_buf = (char*)ctx->buf + user_param->size - 1;
-	poll_buf = (char*)ctx->buf + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size) + user_param->size - 1;
+	poll_buf = (char*)ctx->buf + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size,ctx->cycle_buffer) + user_param->size - 1;
 
 	// Duration support in latency tests.
 	if (user_param->test_type == DURATION) {

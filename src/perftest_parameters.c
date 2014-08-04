@@ -99,7 +99,27 @@ int check_if_valid_udp_port(int udp_port)
 {
 	return ON;
 }
+/******************************************************************************
+  get cache line size from system
+ ******************************************************************************/
+static int get_cache_line_size()
+{
+	int size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	if (size == 0)
+	{
+		char* file_name = "/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size";
+		FILE *fp;
+		char line[10];
+		fp = fopen(file_name, "r");      //open file , read only
+		fgets(line,10,fp);
+		size = atoi(line);
+	}
 
+	if (size <= 0)
+		size = 64;
+
+	return size;
+}
 /******************************************************************************
  *
  ******************************************************************************/
@@ -476,6 +496,9 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->check_alive_exited = 0;
 	user_param->raw_mcast = 0;
 	user_param->masked_atomics = 0;
+	user_param->cache_line_size = get_cache_line_size();
+	user_param->cycle_buffer = sysconf(_SC_PAGESIZE);
+
 }
 
  /******************************************************************************

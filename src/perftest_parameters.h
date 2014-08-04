@@ -396,6 +396,8 @@ struct perftest_parameters {
 	int				check_alive_exited;
 	int				raw_mcast;
 	int				masked_atomics;
+	int				cycle_buffer;
+	int				cache_line_size;
 };
 
 struct report_options {

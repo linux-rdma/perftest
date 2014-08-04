@@ -633,7 +633,7 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		// Each qp gives his receive buffer address .
 		my_dest[i].out_reads = user_param->out_reads;
-		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size);
+		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->dualport==ON) {
 
@@ -1031,7 +1031,7 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_ctx->context = NULL;
 
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
-		comm->rdma_ctx->buff_size = cycle_buffer;
+		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
 			fprintf(stderr," Unable to create the resources needed by comm struct\n");
