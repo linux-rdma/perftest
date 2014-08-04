@@ -37,29 +37,29 @@ ib_send_lat_SOURCES = src/send_lat.c src/multicast_resources.c src/multicast_res
 ib_send_lat_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH)
 
 ib_write_lat_SOURCES = src/write_lat.c
-ib_write_lat_LDADD = libperftest.a 
+ib_write_lat_LDADD = libperftest.a $(LIBMATH) 
 
 ib_write_bw_SOURCES = src/write_bw.c
-ib_write_bw_LDADD = libperftest.a
+ib_write_bw_LDADD = libperftest.a $(LIBMATH)
 
 ib_read_lat_SOURCES = src/read_lat.c
-ib_read_lat_LDADD = libperftest.a
+ib_read_lat_LDADD = libperftest.a $(LIBMATH)
 
 ib_read_bw_SOURCES = src/read_bw.c
-ib_read_bw_LDADD = libperftest.a
+ib_read_bw_LDADD = libperftest.a $(LIBMATH)
 
 ib_atomic_lat_SOURCES = src/atomic_lat.c
-ib_atomic_lat_LDADD = libperftest.a
+ib_atomic_lat_LDADD = libperftest.a $(LIBMATH)
 
 ib_atomic_bw_SOURCES = src/atomic_bw.c
-ib_atomic_bw_LDADD = libperftest.a
+ib_atomic_bw_LDADD = libperftest.a $(LIBMATH)
 
 if HAVE_RAW_ETH
 raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
-raw_ethernet_bw_LDADD = libperftest.a
+raw_ethernet_bw_LDADD = libperftest.a $(LIBMATH)
 
 raw_ethernet_lat_SOURCES = src/raw_ethernet_send_lat.c
-raw_ethernet_lat_LDADD = libperftest.a
+raw_ethernet_lat_LDADD = libperftest.a $(LIBMATH)
 
 else 
 raw_ethernet_bw_SOURCES =

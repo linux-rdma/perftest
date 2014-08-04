@@ -475,6 +475,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->use_promiscuous = 0;
 	user_param->check_alive_exited = 0;
 	user_param->raw_mcast = 0;
+	user_param->masked_atomics = 0;
 }
 
  /******************************************************************************
@@ -718,6 +719,11 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
+	if(user_param->verb == ATOMIC && user_param->use_odp) {
+		printf(RESULT_LINE);
+		fprintf(stderr," ODP does not support ATOMICS for now\n");
+		exit(1);
+	}
 	if (user_param->connection_type == RawEth) {
 
 		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
@@ -962,7 +968,7 @@ const char *link_layer_str(uint8_t link_layer) {
 /******************************************************************************
  *
  ******************************************************************************/
-static enum ctx_device ib_dev_name(struct ibv_context *context) {
+enum ctx_device ib_dev_name(struct ibv_context *context) {
 
 	enum ctx_device dev_fname = UNKNOWN;
 	struct ibv_device_attr attr;
