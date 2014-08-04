@@ -496,8 +496,14 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->check_alive_exited = 0;
 	user_param->raw_mcast = 0;
 	user_param->masked_atomics = 0;
+
 	user_param->cache_line_size = get_cache_line_size();
+
 	user_param->cycle_buffer = sysconf(_SC_PAGESIZE);
+	if (user_param->cycle_buffer <= 0)
+	{
+		user_param->cycle_buffer = 4096;
+	}
 
 }
 
