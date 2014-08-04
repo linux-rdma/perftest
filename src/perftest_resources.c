@@ -1210,6 +1210,14 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 				fprintf(stderr," Unable to create Inline Recv QP.\n");
 				return FAILURE;
 			}
+		} else if (user_param->masked_atomics == 1) {
+			#ifdef HAVE_MASKED_ATOMICS
+			ctx->qp[i] = ctx_atomic_qp_create(ctx,user_param);
+			#endif
+			if (ctx->qp[i] == NULL) {
+				fprintf(stderr," Unable to create Masked Atomic QP.\n");
+				return FAILURE;
+			}
 		} else {
 			ctx->qp[i] = ctx_qp_create(ctx,user_param);
 			if (ctx->qp[i] == NULL) {
@@ -1303,6 +1311,70 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	}
 	return qp;
 }
+
+
+#ifdef HAVE_MASKED_ATOMICS
+/******************************************************************************
+ *
+ ******************************************************************************/
+struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
+							 struct perftest_parameters *user_param) {
+
+	struct ibv_exp_qp_init_attr	attr;
+	struct ibv_qp* qp = NULL;
+	struct ibv_exp_device_attr dev_attr;
+
+	memset(&dev_attr, 0, sizeof(dev_attr));
+
+	dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
+
+	if (ibv_exp_query_device(ctx->context, &dev_attr)) {
+		fprintf(stderr, "ibv_exp_query_device failed\n");
+		exit(1);
+	}
+
+	memset(&attr, 0, sizeof(struct ibv_exp_qp_init_attr));
+	attr.pd = ctx->pd;
+	attr.send_cq = ctx->send_cq;
+	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
+	attr.cap.max_send_wr  = user_param->tx_depth;
+	attr.cap.max_send_sge = MAX_SEND_SGE;
+	attr.cap.max_inline_data = user_param->inline_size;
+	attr.max_atomic_arg = pow(2,dev_attr.ext_atom.log_max_atomic_inline);
+	attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+	attr.comp_mask = IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS | IBV_EXP_QP_INIT_ATTR_PD;
+	attr.comp_mask |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
+
+	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+		attr.srq = ctx->srq;
+		attr.cap.max_recv_wr  = 0;
+		attr.cap.max_recv_sge = 0;
+	} else {
+		attr.srq = NULL;
+		attr.cap.max_recv_wr  = user_param->rx_depth;
+		attr.cap.max_recv_sge = MAX_RECV_SGE;
+	}
+
+	switch (user_param->connection_type) {
+
+		case RC : attr.qp_type = IBV_QPT_RC; break;
+		case UC : attr.qp_type = IBV_QPT_UC; break;
+		case UD : attr.qp_type = IBV_QPT_UD; break;
+#ifdef HAVE_XRCD
+		case XRC : attr.qp_type = IBV_QPT_XRC; break;
+#endif
+#ifdef HAVE_RAW_ETH
+		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
+#endif
+		default:  fprintf(stderr, "Unknown connection type \n");
+			return NULL;
+	}
+
+	qp = ibv_exp_create_qp(ctx->context, &attr);
+
+	return qp;
+}
+#endif
 
 #ifdef HAVE_DC
 
@@ -1430,7 +1502,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	if (user_param->connection_type == RawEth) {
 		flags = IBV_QP_STATE | IBV_QP_PORT;
                 #ifdef HAVE_VERBS_EXP
-                exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PORT;
+                exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PKEY_INDEX;
                 #endif
 
 	} else if (user_param->connection_type == UD) {
@@ -1447,15 +1519,22 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
 
-        #ifdef HAVE_VERBS_EXP
-        if (init_flag != 0 && user_param->use_rss)
-                ret = ibv_exp_modify_qp(qp,&exp_attr,exp_flags);
-        else
-        #endif
-                ret = ibv_modify_qp(qp,&attr,flags);
+	if (user_param->masked_atomics)
+	{
+		exp_attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
+		exp_flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PKEY_INDEX | IBV_EXP_QP_PORT | IBV_EXP_QP_ACCESS_FLAGS;
+	}
+
+	#ifdef HAVE_VERBS_EXP
+	if ( (init_flag != 0 && user_param->use_rss) || user_param->masked_atomics ) {
+			ret = ibv_exp_modify_qp(qp,&exp_attr,exp_flags);
+	}
+	else
+	#endif
+			ret = ibv_modify_qp(qp,&attr,flags);
 
 	if (ret) {
-		fprintf(stderr, "Failed to modify QP to INIT\n");
+		fprintf(stderr, "Failed to modify QP to INIT, ret=%d\n",ret);
 		return 1;
 	}
 	return 0;

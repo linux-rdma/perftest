@@ -395,6 +395,7 @@ struct perftest_parameters {
 	int				use_promiscuous;
 	int				check_alive_exited;
 	int				raw_mcast;
+	int				masked_atomics;
 };
 
 struct report_options {
@@ -555,5 +556,10 @@ enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu);
  * Return Value : MTU size
  */
 int set_eth_mtu(struct perftest_parameters *user_param);
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+enum ctx_device ib_dev_name(struct ibv_context *context);
 
 #endif /* PERFTEST_RESOURCES_H */

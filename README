@@ -242,5 +242,3 @@ Special feature detailed explanation in tests:
  7. This release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
     Currently, running dualport when port1-IB , port2-Ethernet still not working.
 
- 8. Atomic Tests (ib_atomic_bw/lat) don't work on Connect-IB.
- 

@@ -97,6 +97,12 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	if (ib_dev_name(ctx.context) == CONNECTIB)
+	{
+		user_param.masked_atomics = 1;
+		user_param.use_exp = 1;
+	}
+
 	// See if MTU and link type are valid and supported.
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");

@@ -113,6 +113,15 @@ fi
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS;],[HAVE_MASKED_ATOMICS=yes], [HAVE_MASKED_ATOMICS=no])
+AM_CONDITIONAL([HAVE_MASKED_ATOMICS],[test "x$HAVE_MASKED_ATOMICS" = "xyes"])
+if [test $HAVE_MASKED_ATOMICS = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_MASKED_ATOMICS], [1], [Have MASKED ATOMICS in verbs_exp header])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
         [int x = IBV_EXP_DEVICE_ATTR_RSS_TBL_SZ;],[HAVE_RSS_EXP=yes], [HAVE_RSS_EXP=no])
 AM_CONDITIONAL([HAVE_RSS_EXP],[test "x$HAVE_RSS_EXP" = "xyes"])
 if [test $HAVE_RSS_EXP = yes] && [test $HAVE_VERBS_EXP = yes]; then
