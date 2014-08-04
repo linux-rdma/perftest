@@ -1472,6 +1472,43 @@ void exchange_versions(struct perftest_comm *user_comm, struct perftest_paramete
 /******************************************************************************
  *
  ******************************************************************************/
+void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters *user_param)
+{
+	int rem_cycle_buffer = 0;
+	int rem_cache_line_size = 0;
+
+	//keep compatibility between older versions, without this feature.
+	if ( !(atof(user_param->rem_version) >= 5.32) )
+	{
+		return;
+	}
+
+	if (!user_param->dont_xchg_versions) {
+		if (ctx_xchg_data(user_comm,(void*)(&user_param->cycle_buffer),(void*)(&rem_cycle_buffer),sizeof(user_param->cycle_buffer))) {
+			fprintf(stderr," Failed to exchange Page Size data between server and client\n");
+			exit(1);
+		}
+		if (ctx_xchg_data(user_comm,(void*)(&user_param->cache_line_size),(void*)(&rem_cache_line_size),sizeof(user_param->cache_line_size))) {
+			fprintf(stderr," Failed to exchange Cache Line Size data between server and client\n");
+			exit(1);
+		}
+	}
+
+	//take the max and update user_param
+	user_param->cycle_buffer = (rem_cycle_buffer > user_param->cycle_buffer) ? rem_cycle_buffer : user_param->cycle_buffer;
+	user_param->cache_line_size = (rem_cache_line_size > user_param->cache_line_size) ? rem_cache_line_size : user_param->cache_line_size;
+
+	//update user_comm as well
+	if (user_param->use_rdma_cm)
+	{
+		user_comm->rdma_ctx->buff_size = user_param->cycle_buffer;
+	}
+
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm) {
 	int curr_mtu=0, rem_mtu=0;
 	char cur[2];
