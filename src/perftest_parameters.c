@@ -474,6 +474,7 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->use_odp = 0;
 	user_param->use_promiscuous = 0;
 	user_param->check_alive_exited = 0;
+	user_param->raw_mcast = 0;
 }
 
  /******************************************************************************
@@ -731,7 +732,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		if(user_param->machine == CLIENT && user_param->is_dest_mac == OFF) {
+		if(user_param->machine == CLIENT && user_param->is_dest_mac == OFF && !user_param->raw_mcast) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
 			exit(1);
@@ -759,6 +760,12 @@ static void force_dependecies(struct perftest_parameters *user_param) {
             user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
             fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
         }
+
+		if (user_param->raw_mcast && user_param->duplex)
+		{
+			printf(" Multicast feature works on unidirectional traffic only\n");
+			exit(1);
+		}
 
 	}
 
@@ -1169,6 +1176,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
 	static int use_promiscuous_flag = 0;
+	static int raw_mcast_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1249,6 +1257,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			{ .name = "report-per-port",		.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
 			{ .name = "promiscuous",		.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
+			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
             { 0 }
         };
         c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1605,6 +1614,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 		user_param->use_promiscuous = 1;
 	}
 
+	if (raw_mcast_flag) {
+		user_param->raw_mcast = 1;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
