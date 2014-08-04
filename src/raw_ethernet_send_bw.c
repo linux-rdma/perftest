@@ -69,6 +69,8 @@ int main(int argc, char *argv[]) {
 	struct ibv_flow_attr		*flow_rules = NULL;
 #endif	
 
+	union ibv_gid mgid;
+
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
 	memset(&user_param, 0 , sizeof(struct perftest_parameters));
@@ -92,6 +94,26 @@ int main(int argc, char *argv[]) {
 		}
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return 1;
+	}
+
+	//Multicast stuff
+	if (user_param.raw_mcast)
+	{
+		//Transform IPv4 to Multicast MAC
+		user_param.dest_mac[0] = 0x01;
+		user_param.dest_mac[1] = 0x00;
+		user_param.dest_mac[2] = 0x5e;
+		user_param.dest_mac[3] = (user_param.server_ip >> 8) & 0x7f;
+		user_param.dest_mac[4] = (user_param.server_ip >> 16) & 0xff;
+		user_param.dest_mac[5] = (user_param.server_ip >> 24) & 0xff;
+
+		/* Build up MGID (128bits, 16bytes) */
+		memset (&mgid, 0, sizeof (union ibv_gid));
+		memcpy (&mgid.raw[10], &user_param.dest_mac[0], 6);
+
+		//Multicast send so no response UDP port
+		user_param.client_port = 0;
+
 	}
 
 	if (user_param.use_rss)
@@ -138,7 +160,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if(user_param.machine == SERVER || user_param.duplex) {
+	if ( !user_param.raw_mcast && (user_param.machine == SERVER || user_param.duplex)) {
 		print_spec(flow_rules,&user_param);
 	}
 
@@ -176,14 +198,6 @@ int main(int argc, char *argv[]) {
 		create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
 	}
 
-	if (user_param.output == FULL_VERBOSITY) {
-                printf(RESULT_LINE);
-		if (user_param.raw_qos)
-			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
-		else
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-	}
 	// Prepare IB resources for rtr/rts.
 	if (user_param.work_rdma_cm == OFF) {
 		if (ctx_connect(&ctx,NULL,&user_param,NULL)) {
@@ -193,35 +207,65 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (user_param.raw_mcast)
+	{
+		if (user_param.machine == SERVER)
+		{	
+			//join Multicast group by MGID
+			ibv_attach_mcast(ctx.qp[0], &mgid, 0);
+			printf(PERF_RAW_MGID_FMT,"MGID",
+				mgid.raw[0], mgid.raw[1],
+				mgid.raw[2], mgid.raw[3],
+			    mgid.raw[4], mgid.raw[5],
+			    mgid.raw[6], mgid.raw[7],
+			   	mgid.raw[8], mgid.raw[9],
+			    mgid.raw[10],mgid.raw[11],
+			    mgid.raw[12],mgid.raw[13],
+				mgid.raw[14],mgid.raw[15]);
+		}
+	}
+	else
+	{
+		fprintf(stderr,"Attaching QP to flow rule\n");
 	//attaching the qp to the spec
-	if(user_param.machine == SERVER || user_param.duplex) {
-	#ifdef HAVE_RAW_ETH_EXP
-		flow_create_result = ibv_exp_create_flow(ctx.qp[0], flow_rules);
-	#else
-		flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
-	#endif
-		if (!flow_create_result){
-			perror("error");
-			fprintf(stderr, "Couldn't attach QP\n");
-			return FAILURE;
-		}
-
-	#ifdef HAVE_RAW_ETH_EXP
-		if (user_param.use_promiscuous) {
-			struct ibv_exp_flow_attr attr = {
-				.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
-				.num_of_specs = 0,
-				.port = user_param.ib_port,
-				.flags = 0
-			};
-
-			if ((flow_promisc = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
+		if(user_param.machine == SERVER || user_param.duplex) {
+		#ifdef HAVE_RAW_ETH_EXP
+			flow_create_result = ibv_exp_create_flow(ctx.qp[0], flow_rules);
+		#else
+			flow_create_result = ibv_create_flow(ctx.qp[0], flow_rules);
+		#endif
+			if (!flow_create_result){
 				perror("error");
-				fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+				fprintf(stderr, "Couldn't attach QP\n");
+				return FAILURE;
 			}
-		}
-	#endif
 
+		#ifdef HAVE_RAW_ETH_EXP
+			if (user_param.use_promiscuous) {
+				struct ibv_exp_flow_attr attr = {
+					.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
+					.num_of_specs = 0,
+					.port = user_param.ib_port,
+					.flags = 0
+				};
+
+				if ((flow_promisc = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
+					perror("error");
+					fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+				}
+			}
+		#endif
+
+		}
+	}
+
+	if (user_param.output == FULL_VERBOSITY) {
+                printf(RESULT_LINE);
+		if (user_param.raw_qos)
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
+		else
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
 	if (user_param.test_method == RUN_REGULAR) {
@@ -298,26 +342,37 @@ int main(int argc, char *argv[]) {
 
 	if(user_param.machine == SERVER || user_param.duplex) {
 
-	#ifdef HAVE_RAW_ETH_EXP
-                if (user_param.use_promiscuous) {
-			if (ibv_exp_destroy_flow(flow_promisc)) {
-				perror("error");
-				fprintf(stderr, "Couldn't Destory promisc flow\n");
-				return FAILURE;
+		if (user_param.raw_mcast)
+		{
+			if (ibv_detach_mcast(ctx.qp[0], &mgid,0))
+			{
+					perror("error");
+					fprintf(stderr,"Couldn't leave multicast group\n");
 			}
 		}
-	#endif
+		else
+		{
+			#ifdef HAVE_RAW_ETH_EXP
+			if (user_param.use_promiscuous) {
+				if (ibv_exp_destroy_flow(flow_promisc)) {
+					perror("error");
+					fprintf(stderr, "Couldn't Destory promisc flow\n");
+					return FAILURE;
+				}
+			}
+			#endif
 
-	#ifdef HAVE_RAW_ETH_EXP
-		if (ibv_exp_destroy_flow(flow_create_result)) {
-	#else
-		if (ibv_destroy_flow(flow_create_result)) {
-	#endif
-			perror("error");
-			fprintf(stderr, "Couldn't Destory flow\n");
-			return FAILURE;
+			#ifdef HAVE_RAW_ETH_EXP
+			if (ibv_exp_destroy_flow(flow_create_result)) {
+			#else
+			if (ibv_destroy_flow(flow_create_result)) {
+			#endif
+				perror("error");
+				fprintf(stderr, "Couldn't Destory flow\n");
+				return FAILURE;
+			}
+			free(flow_rules);
 		}
-		free(flow_rules);
 	}
 
 	if (destroy_ctx(&ctx, &user_param)) {

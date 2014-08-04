@@ -100,6 +100,9 @@
 // The print format of a global address or a multicast address.
 #define PERF_GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
 
+// The print format of a global address or a multicast address.
+#define PERF_RAW_MGID_FMT " %s: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n"
+
 struct perftest_comm {
 	struct pingpong_context    *rdma_ctx;
 	struct perftest_parameters *rdma_params;

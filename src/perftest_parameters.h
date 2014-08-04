@@ -394,6 +394,7 @@ struct perftest_parameters {
 	int 				use_odp;
 	int				use_promiscuous;
 	int				check_alive_exited;
+	int				raw_mcast;
 };
 
 struct report_options {
