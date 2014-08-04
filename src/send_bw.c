@@ -234,6 +234,8 @@ int main(int argc, char *argv[]) {
 
 	exchange_versions(&user_comm, &user_param);
 
+	check_sys_data(&user_comm, &user_param);
+
 	// See if MTU and link type are valid and supported.
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
