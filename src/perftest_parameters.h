@@ -120,6 +120,8 @@
 #define DEF_INLINE    (-1)
 #define DEF_TOS       (-1)
 #define DEF_RETRY_COUNT (7)
+#define DEF_CACHE_LINE_SIZE (64)
+#define DEF_PAGE_SIZE (4096)
 
 // Optimal Values for Inline
 #define DEF_INLINE_WRITE (220)

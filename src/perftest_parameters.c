@@ -111,12 +111,17 @@ static int get_cache_line_size()
 		FILE *fp;
 		char line[10];
 		fp = fopen(file_name, "r");      //open file , read only
+		if (fp == NULL)
+		{
+			return DEF_CACHE_LINE_SIZE;
+		}
 		fgets(line,10,fp);
 		size = atoi(line);
+		fclose(fp);
 	}
 
 	if (size <= 0)
-		size = 64;
+		size = DEF_CACHE_LINE_SIZE;
 
 	return size;
 }
@@ -498,11 +503,10 @@ static void init_perftest_params(struct perftest_parameters *user_param) {
 	user_param->masked_atomics = 0;
 
 	user_param->cache_line_size = get_cache_line_size();
-
 	user_param->cycle_buffer = sysconf(_SC_PAGESIZE);
 	if (user_param->cycle_buffer <= 0)
 	{
-		user_param->cycle_buffer = 4096;
+		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
 
 }
