@@ -207,6 +207,8 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 			fprintf(stderr, "Warning: measured timestamp frequency "
 					"%g differs from nominal %g MHz\n",
 					sample, proc);
+			if (!no_cpu_freq_fail)
+				fprintf(stderr, "         Add --CPU-freq flag to show report\n");
 		#endif
 			return sample;
 	}

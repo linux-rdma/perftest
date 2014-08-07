@@ -182,10 +182,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -f, --margin ");
 	printf(" measure results within margins. (default=2sec)\n");
 
-	if (tst == BW) {
-		printf("  -F, --CPU-freq ");
-		printf(" Do not fail even if cpufreq_ondemand module is loaded\n");
-	}
+	printf("  -F, --CPU-freq ");
+	printf(" Do not fail even if cpufreq_ondemand module is loaded\n");
 
 	if (verb == SEND) {
 		printf("  -g, --mcg ");
