@@ -958,12 +958,10 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	#if defined(HAVE_VERBS_EXP)
 	struct ibv_exp_reg_mr_in reg_mr_exp_in;
 	uint64_t exp_flags = IBV_EXP_ACCESS_LOCAL_WRITE;
-	#endif
-
 	struct ibv_exp_device_attr dattr;
+
 	memset(&dattr, 0, sizeof(dattr));
 
-	#ifdef HAVE_VERBS_EXP
 	get_verbs_pointers(ctx);
 	#endif
 
@@ -1521,11 +1519,13 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
 
+	#ifdef HAVE_MASKED_ATOMICS
 	if (user_param->masked_atomics)
 	{
 		exp_attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
 		exp_flags = IBV_EXP_QP_STATE | IBV_EXP_QP_PKEY_INDEX | IBV_EXP_QP_PORT | IBV_EXP_QP_ACCESS_FLAGS;
 	}
+	#endif
 
 	#ifdef HAVE_VERBS_EXP
 	if ( (init_flag != 0 && user_param->use_rss) || user_param->masked_atomics ) {
