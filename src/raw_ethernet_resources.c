@@ -199,6 +199,11 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 #endif
 	void* header_buff = (void*)flow_rules;
 
+	if (user_param->output != FULL_VERBOSITY)
+	{
+		return;
+	}
+
 	if (flow_rules == NULL) {
 		printf("error : spec is NULL\n");
 		return;
@@ -364,6 +369,11 @@ void print_tcp_header(struct TCP_header* tcp_header)
 
 void print_pkt(void* pkt,struct perftest_parameters *user_param)
 {
+
+	if (user_param->output != FULL_VERBOSITY)
+	{
+		return;
+	}
 
 	if(NULL == pkt)
 	{
