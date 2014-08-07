@@ -278,7 +278,9 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	printf(RESULT_LINE);
+	if (user_param.output == FULL_VERBOSITY)
+		printf(RESULT_LINE);
+
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
 

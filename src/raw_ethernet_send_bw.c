@@ -226,8 +226,7 @@ int main(int argc, char *argv[]) {
 	}
 	else
 	{
-		fprintf(stderr,"Attaching QP to flow rule\n");
-	//attaching the qp to the spec
+		//attaching the qp to the spec
 		if(user_param.machine == SERVER || user_param.duplex) {
 		#ifdef HAVE_RAW_ETH_EXP
 			flow_create_result = ibv_exp_create_flow(ctx.qp[0], flow_rules);
@@ -386,7 +385,9 @@ int main(int argc, char *argv[]) {
                 return 1;
         }
 
-	printf(RESULT_LINE);
+	if (user_param.output == FULL_VERBOSITY)
+		printf(RESULT_LINE);
+
 	DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 	return 0;
 }
