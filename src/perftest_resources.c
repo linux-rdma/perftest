@@ -1102,7 +1102,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
 	}
-	if ((user_param->connection_type == DC && only_dct == 0) || ((user_param->verb == SEND && user_param->connection_type != DC))) {
+	if ((user_param->connection_type == DC && only_dct == 0) || (user_param->verb == SEND)){
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth*user_param->num_of_qps,NULL,ctx->channel,0);
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
