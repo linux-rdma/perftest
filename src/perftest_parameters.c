@@ -1340,7 +1340,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 					fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
 					return 1;
 				} break;
-			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg));
+			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
 			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
 				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
 					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
