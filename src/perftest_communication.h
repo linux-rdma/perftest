@@ -400,7 +400,7 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm, void *my_data, void *rem_dat
  * Return Value : 0 upon success. -1 if it fails.
  */
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
-                                                        struct bw_report_data *rem_bw_rep);
+                                                        struct bw_report_data *rem_bw_rep, float remote_version);
 														
 /* exchange_versions.
  *

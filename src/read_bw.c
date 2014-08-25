@@ -227,7 +227,7 @@ int main(int argc, char *argv[]) {
 			return FAILURE;
 		}
 
-		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
 			print_report_bw(&user_param,&my_bw_rep);
 
 			if (user_param.duplex) {
-				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                 	}
 		}
@@ -321,7 +321,7 @@ int main(int argc, char *argv[]) {
 		print_report_bw(&user_param,&my_bw_rep);
 
 		if (user_param.duplex) {
-			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
                 }
 
@@ -365,7 +365,7 @@ int main(int argc, char *argv[]) {
 			return FAILURE;
 		}
 
-		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep);
+		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 	}
 
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
