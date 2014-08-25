@@ -1315,12 +1315,18 @@ int ctx_xchg_data( struct perftest_comm *comm,
  *
  ******************************************************************************/
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
-							struct bw_report_data *rem_bw_rep) {
+							struct bw_report_data *rem_bw_rep, float remote_version) {
 
 	struct bw_report_data temp;
+	int size;
 
 	temp.size = hton_long(my_bw_rep->size);
-	temp.iters = hton_long(my_bw_rep->iters);
+
+	if ( remote_version >= 5.33 )
+		temp.iters = hton_long(my_bw_rep->iters);
+	else
+		temp.iters = hton_int(my_bw_rep->iters);
+
 	temp.bw_peak = hton_double(my_bw_rep->bw_peak);
 	temp.bw_avg = hton_double(my_bw_rep->bw_avg);
 	temp.bw_avg_p1 = hton_double(my_bw_rep->bw_avg_p1);
@@ -1334,7 +1340,10 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 			exit(1);
 	}
-	if (ctx_xchg_data(comm, (void*) (&temp.iters), (void*) (&rem_bw_rep->iters), sizeof(uint64_t))) {
+
+	size = (remote_version >= 5.33) ? sizeof(uint64_t) : sizeof(int);
+
+	if (ctx_xchg_data(comm, (void*) (&temp.iters), (void*) (&rem_bw_rep->iters), size)) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
 	}	 
@@ -1373,7 +1382,12 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 	}
 
 	rem_bw_rep->size = hton_long(rem_bw_rep->size);
-	rem_bw_rep->iters = hton_long(rem_bw_rep->iters);
+
+	if ( remote_version >= 5.33 )
+		rem_bw_rep->iters = hton_long(rem_bw_rep->iters);
+	else
+		rem_bw_rep->iters = hton_int(rem_bw_rep->iters);
+
 	rem_bw_rep->bw_peak = hton_double(rem_bw_rep->bw_peak);
 	rem_bw_rep->bw_avg = hton_double(rem_bw_rep->bw_avg);
 	rem_bw_rep->bw_avg_p1 = hton_double(rem_bw_rep->bw_avg_p1);
