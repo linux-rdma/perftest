@@ -691,7 +691,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
-	tot_iters = user_param->iters*user_param->num_of_qps;
+	tot_iters = (uint64_t)user_param->iters*user_param->num_of_qps;
 	iters=user_param->iters;
 
 	if (user_param->noPeak == ON)
