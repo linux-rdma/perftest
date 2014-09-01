@@ -1008,8 +1008,7 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
 	#endif
 		// Allocating buffer for data, in case driver not support contig pages.
 		if (ctx->is_contig_supported == FAILURE) {
-
-			ctx->buf = memalign(sysconf(_SC_PAGESIZE),ctx->buff_size);
+			ctx->buf = memalign(user_param->cycle_buffer,ctx->buff_size);
 			if (!ctx->buf) {
 				fprintf(stderr, "Couldn't allocate work buf.\n");
 				exit(1);
@@ -1399,7 +1398,6 @@ int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_
 #endif
 
 	static int portindex=0;  // for dual-port support
-	memset(&attr, 0,sizeof(struct ibv_qp_attr));
 
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = user_param->pkey_index;
@@ -2411,7 +2409,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
-	tot_iters = user_param->iters*num_of_qps;
+	tot_iters = (uint64_t)user_param->iters*num_of_qps;
 
 	if (user_param->test_type == DURATION && user_param->state != START_STATE && user_param->margin > 0) {
 		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
@@ -2658,9 +2656,9 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	memset(scredit_for_qp,0,sizeof(long)*user_param->num_of_qps);
 
 	if (user_param->use_rss)
-		tot_iters = user_param->iters*(user_param->num_of_qps-1);
+		tot_iters = (uint64_t)user_param->iters*(user_param->num_of_qps-1);
 	else
-		tot_iters = user_param->iters*user_param->num_of_qps;
+		tot_iters = (uint64_t)user_param->iters*user_param->num_of_qps;
 
 	if (user_param->test_type == ITERATIONS) {
 		check_alive_data.is_events = user_param->use_event;
@@ -3112,7 +3110,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
-	tot_iters = user_param->iters*num_of_qps;
+	tot_iters = (uint64_t)user_param->iters*num_of_qps;
 	iters=user_param->iters;
 	check_alive_data.g_total_iters = tot_iters;
 
@@ -3369,9 +3367,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 	}
 
 	if (ctx->send_rcredit) {
-		if (clean_scq_credit(tot_scredit, ctx, user_param))
+		if (clean_scq_credit(tot_scredit, ctx, user_param)) {
 			return_value = 1;
 			goto cleaning;
+		}
 	}
 
 cleaning:

@@ -1056,7 +1056,11 @@ enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
 	struct ibv_port_attr port_attr;
 	enum ibv_mtu curr_mtu;
 
-	ibv_query_port(context,ib_port,&port_attr);
+	if (ibv_query_port(context,ib_port,&port_attr))
+	{
+		fprintf(stderr," Error when trying to query port\n");
+		exit(1);
+	}
 
 	// User did not ask for specific mtu.
 	if (user_mtu == 0) {
