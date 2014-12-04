@@ -260,7 +260,8 @@ enum ctx_device {
 	CHELSIO_T4 		= 6,
 	CHELSIO_T5 		= 7,
 	CONNECTX3_PRO		= 8,
-	SKYHAWK			= 9
+	SKYHAWK			= 9,
+	CONNECTX4		= 10
 };
 
 // Units for rate limiter
