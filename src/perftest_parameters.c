@@ -107,7 +107,14 @@ static int get_cache_line_size()
 	int size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
 	if (size == 0)
 	{
-		char* file_name = "/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size";
+		#if defined(__sparc__) && defined(__arch64__)
+		char* file_name =
+			"/sys/devices/system/cpu/cpu0/l2_cache_line_size";
+		#else
+		char* file_name =
+			"/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size";
+		#endif
+
 		FILE *fp;
 		char line[10];
 		fp = fopen(file_name, "r");      //open file , read only
