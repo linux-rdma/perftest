@@ -22,6 +22,7 @@ AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
 
 AC_ARG_VAR(CUDA_H_PATH, help-string)
+AC_ARG_VAR(RANLIB, ranlib tool)
 
 AC_ARG_ENABLE([verbs_exp],
 [AS_HELP_STRING([--disable-verbs_exp],
@@ -37,6 +38,7 @@ AC_PROG_CXX
 AM_PROG_AS
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
+AC_PROG_RANLIB
 AC_HEADER_STDC
 AC_CHECK_HEADERS([infiniband/verbs.h],,[AC_MSG_ERROR([ibverbs header files not found])])
 AC_CHECK_LIB([ibverbs], [ibv_get_device_list], [], [AC_MSG_ERROR([libibverbs not found])])

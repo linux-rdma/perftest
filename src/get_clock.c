@@ -44,6 +44,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
 #include "get_clock.h"
 
 #ifndef DEBUG
@@ -154,6 +155,23 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 #elif defined (__PPC__) || defined (__PPC64__)
 		/* PPC has a different format as well */
 		rc = sscanf(buf, "clock : %lf", &m);
+#elif defined (__sparc__) && defined (__arch64__)
+		/*
+		* on sparc the /proc/cpuinfo lines that hold
+		* the cpu freq in HZ are as follow:
+		* Cpu{cpu-num}ClkTck      : 00000000a9beeee4
+		*/
+		int i;
+		char *s;
+		unsigned val;
+
+		s = strstr(buf, "ClkTck\t: ");
+		if (!s)
+			continue;
+		s += (strlen("ClkTck\t: ") - strlen("0x"));
+		strncpy(s, "0x", strlen("0x"));
+		rc = sscanf(s, "%x", &val);
+		m = val/1000000;
 #else
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
 #endif
