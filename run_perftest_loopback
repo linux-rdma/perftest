@@ -1,0 +1,33 @@
+#!/bin/sh
+# trivial script to launch a loopback test on the same device
+# example: run_perftest_loopback 0 1 ib_write_bw -s 10
+
+if [ $# -lt 4 ] ; then
+	echo ""
+        echo "Usage: run_perftest_loopback <server_core> <client_core> <loopback case ={SAME_PORT,PORT_TO_PORT}> <test command>"
+	echo "example: run_perftest_loopback 0 1 SAME_PORT ib_write_bw -s 10"
+        exit 3
+fi
+
+server_core=$1
+client_core=$2
+loopback_scenario=$3
+
+if [[ $loopback_scenario == "PORT_TO_PORT" ]]
+then
+	port1_flag="-i 1"
+	port2_flag="-i 2"
+fi
+
+shift 3
+
+taskset -c $server_core $* $port1_flag &
+#give server time to start
+sleep 1
+
+taskset -c $client_core $* $port2_flag localhost
+
+status=$?
+
+wait
+exit $status
