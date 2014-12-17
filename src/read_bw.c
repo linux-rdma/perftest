@@ -45,10 +45,10 @@
 /******************************************************************************
  *
  ******************************************************************************/
-int main(int argc, char *argv[]) {
-
+int main(int argc, char *argv[])
+{
 	int                        ret_parser,i = 0;
-	struct ibv_device		   *ib_dev = NULL;
+	struct ibv_device	   *ib_dev = NULL;
 	struct pingpong_context    ctx;
 	struct pingpong_dest       *my_dest = NULL;
 	struct pingpong_dest       *rem_dest = NULL;
@@ -80,20 +80,20 @@ int main(int argc, char *argv[]) {
 	if (!ib_dev)
 		return 7;
 
-	// Getting the relevant context from the device
+	/* Getting the relevant context from the device */
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return 1;
 	}
 
-	// See if MTU and link type are valid and supported.
+	/* See if MTU and link type are valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
 
-	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
+	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
 		printf("************************************\n");
 	}
 
-	// Initialize the connection and print the local data.
+	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return FAILURE;
@@ -115,13 +115,13 @@ int main(int argc, char *argv[]) {
 
 	check_sys_data(&user_comm, &user_param);
 
-	// See if MTU and link type are valid and supported.
+	/* See if MTU and link type are valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
 
-	// Print basic test information.
+	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
 
 	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
@@ -129,10 +129,10 @@ int main(int argc, char *argv[]) {
 	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
-	// Allocating arrays needed for the test.
+	/* Allocating arrays needed for the test. */
 	alloc_ctx(&ctx,&user_param);
 
-	// Create (if nessacery) the rdma_cm ids and channel.
+	/* Create (if nessacery) the rdma_cm ids and channel. */
 	if (user_param.work_rdma_cm == ON) {
 
 		if (user_param.machine == CLIENT) {
@@ -142,10 +142,10 @@ int main(int argc, char *argv[]) {
 			}
 
 		} else {
-    		if (create_rdma_resources(&ctx,&user_param)) {
+			if (create_rdma_resources(&ctx,&user_param)) {
 				fprintf(stderr," Unable to create the rdma_resources\n");
 				return FAILURE;
-    		}
+			}
 			if (rdma_server_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
@@ -153,21 +153,20 @@ int main(int argc, char *argv[]) {
 		}
 
 	} else {
-
-		// create all the basic IB resources.
-	    if (ctx_init(&ctx,&user_param)) {
+		/* create all the basic IB resources. */
+		if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
-	    }
+		}
 	}
 
-	// Set up the Connection.
+	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return FAILURE;
 	}
 
-	// Print this machine QP information
+	/* Print this machine QP information */
 	for (i=0; i < user_param.num_of_qps; i++)
 		ctx_print_pingpong_data(&my_dest[i],&user_comm);
 
@@ -175,7 +174,7 @@ int main(int argc, char *argv[]) {
 
 	for (i=0; i < user_param.num_of_qps; i++) {
 
-		// shaking hands and gather the other side info.
+		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
@@ -183,15 +182,13 @@ int main(int argc, char *argv[]) {
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
-        if (user_param.work_rdma_cm == OFF)
-        {
-                if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0]))
-                {
-                        fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
-                        fprintf(stderr," Please Try to use a different IP version.\n\n");
-                        return 1;
-                }
-        }
+	if (user_param.work_rdma_cm == OFF) {
+		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
+			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+			fprintf(stderr," Please Try to use a different IP version.\n\n");
+			return 1;
+		}
+	}
 
 	if (user_param.work_rdma_cm == OFF) {
 
@@ -201,11 +198,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// An additional handshake is required after moving qp to RTR.
+	/* An additional handshake is required after moving qp to RTR. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-        fprintf(stderr,"Failed to exchange data between server and clients\n");
-        return 1;
-    }
+		fprintf(stderr,"Failed to exchange data between server and clients\n");
+		return 1;
+	}
 
 	if (user_param.output == FULL_VERBOSITY) {
 		if (user_param.report_per_port) {
@@ -219,7 +216,7 @@ int main(int argc, char *argv[]) {
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
-	// For half duplex tests, server just waits for client to exit
+	/* For half duplex tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -268,8 +265,8 @@ int main(int argc, char *argv[]) {
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 			if(perform_warm_up(&ctx,&user_param)) {
-					fprintf(stderr,"Problems with warm up\n");
-					return 1;
+				fprintf(stderr,"Problems with warm up\n");
+				return 1;
 			}
 
 			if(user_param.duplex) {
@@ -294,7 +291,7 @@ int main(int argc, char *argv[]) {
 			if (user_param.duplex) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
-                	}
+			}
 		}
 
 	} else if (user_param.test_method == RUN_REGULAR) {
@@ -302,16 +299,16 @@ int main(int argc, char *argv[]) {
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if(perform_warm_up(&ctx,&user_param)) {
-					fprintf(stderr,"Problems with warm up\n");
-					return 1;
-			}
+			fprintf(stderr,"Problems with warm up\n");
+			return 1;
+		}
 
 		if(user_param.duplex) {
-				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-					return 1;
-				}
+			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+				return 1;
 			}
+		}
 
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
@@ -323,7 +320,7 @@ int main(int argc, char *argv[]) {
 		if (user_param.duplex) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
-                }
+		}
 
 		if (user_param.report_both && user_param.duplex) {
 			printf(RESULT_LINE);
@@ -357,7 +354,7 @@ int main(int argc, char *argv[]) {
 			printf(RESULT_LINE);
 	}
 
-	// For half duplex tests, server just waits for client to exit
+	/* For half duplex tests, server just waits for client to exit */
 	if (user_param.machine == CLIENT && !user_param.duplex) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {

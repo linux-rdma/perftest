@@ -27,46 +27,40 @@ static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
  *		*addr - pointer to output array
  *
  * Return Value : SUCCESS, FAILURE.
-******************************************************************************/
+ ******************************************************************************/
 static int parse_mac_from_str(char *mac, u_int8_t *addr)
 {
 	char tmpMac[MAC_LEN+1];
 	char *tmpField;
 	int fieldNum = 0;
 
-	if (strlen(mac) != MAC_LEN)
-	{
+	if (strlen(mac) != MAC_LEN) {
 		fprintf(stderr, "invalid MAC length\n");
 		return FAILURE;
 	}
-	if (addr == NULL)
-	{
+	if (addr == NULL) {
 		fprintf(stderr, "invalid  output addr array\n");
 		return FAILURE;
 	}
 
 	strcpy(tmpMac, mac);
 	tmpField = strtok(tmpMac, ":");
-	while (tmpField != NULL && fieldNum < MAC_ARR_LEN)
-	{
-	  char *chk;
-	  int tmpVal;
-	  tmpVal = strtoul(tmpField, &chk, HEX_BASE);
-	  if (tmpVal > 0xff)
-	  {
-		fprintf(stderr, "field %d value %X out of range\n", fieldNum, tmpVal);
-		return FAILURE;
-	  }
-	  if (*chk != 0)
-	  {
-		fprintf(stderr, "Non-digit character %c (%0x) detected in field %d\n", *chk, *chk, fieldNum);
-		return FAILURE;
-	  }
-	  addr[fieldNum++] = (u_int8_t) tmpVal;
-	  tmpField = strtok(NULL, ":");
+	while (tmpField != NULL && fieldNum < MAC_ARR_LEN) {
+		char *chk;
+		int tmpVal;
+		tmpVal = strtoul(tmpField, &chk, HEX_BASE);
+		if (tmpVal > 0xff) {
+			fprintf(stderr, "field %d value %X out of range\n", fieldNum, tmpVal);
+			return FAILURE;
+		}
+		if (*chk != 0) {
+			fprintf(stderr, "Non-digit character %c (%0x) detected in field %d\n", *chk, *chk, fieldNum);
+			return FAILURE;
+		}
+		addr[fieldNum++] = (u_int8_t) tmpVal;
+		tmpField = strtok(NULL, ":");
 	}
-	if (tmpField != NULL || fieldNum != MAC_ARR_LEN)
-	{
+	if (tmpField != NULL || fieldNum != MAC_ARR_LEN) {
 		fprintf(stderr, "MAC address longer than six fields\n");
 		return FAILURE;
 	}
@@ -77,8 +71,8 @@ static int parse_mac_from_str(char *mac, u_int8_t *addr)
   parse_ip_from_str.
  *
  * Description : Convert from presentation format of an Internet number in nuffer
-   starting at CP to the binary network format and store result for
-   interface type AF in buffer starting at BUF.
+ starting at CP to the binary network format and store result for
+ interface type AF in buffer starting at BUF.
  *
  *  Parameters :
  *		*ip - char* ip string.
@@ -105,8 +99,7 @@ int check_if_valid_udp_port(int udp_port)
 static int get_cache_line_size()
 {
 	int size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
-	if (size == 0)
-	{
+	if (size == 0) {
 		#if defined(__sparc__) && defined(__arch64__)
 		char* file_name =
 			"/sys/devices/system/cpu/cpu0/l2_cache_line_size";
@@ -117,9 +110,8 @@ static int get_cache_line_size()
 
 		FILE *fp;
 		char line[10];
-		fp = fopen(file_name, "r");      //open file , read only
-		if (fp == NULL)
-		{
+		fp = fopen(file_name, "r");
+		if (fp == NULL) {
 			return DEF_CACHE_LINE_SIZE;
 		}
 		fgets(line,10,fp);
@@ -135,8 +127,8 @@ static int get_cache_line_size()
 /******************************************************************************
  *
  ******************************************************************************/
-static void usage(const char *argv0,VerbType verb,TestType tst)	{
-
+static void usage(const char *argv0,VerbType verb,TestType tst)
+{
 	printf("Usage:\n");
 	printf("  %s            start a server and wait for connection\n", argv0);
 	printf("  %s <host>     connect to server at <host>\n", argv0);
@@ -144,7 +136,6 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("Options:\n");
 
 	if (verb != ATOMIC) {
-
 		printf("  -a, --all ");
 		printf(" Run sizes from 2 till 2^23\n");
 	}
@@ -230,8 +221,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
 
 	if (tst == BW) {
-		printf("  -N, --no peak-bw ");
-		printf(" Cancel peak-bw calculation (default with peak)\n");
+		printf("  -N, --noPeak");
+		printf(" Cancel peak-bw calculation (default with peak up to iters=20000)\n");
 	}
 
 	if (verb == READ || verb == ATOMIC) {
@@ -307,7 +298,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 	printf("  -z, --com_rdma_cm ");
 	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
 
-	//Long flags
+	/*Long flags*/
 	putchar('\n');
 
 	printf("      --cpu_util ");
@@ -326,10 +317,10 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 
 	if (tst == LAT) {
 		printf("      --latency_gap=<delay_time> ");
-                printf(" delay time between each post send\n");
+		printf(" delay time between each post send\n");
 	}
 	printf("      --output=<units>");
-	printf(" Set verbosity output level: bandwidth , message_rate, latency_typical \n");
+	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
 
 	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
 
@@ -350,8 +341,8 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf(" Run test forever, print results every <duration> seconds\n");
 	}
 
-        printf("      --retry_count=<value> ");
-        printf(" Set retry count value in rdma_cm mode\n");
+	printf("      --retry_count=<value> ");
+	printf(" Set retry count value in rdma_cm mode\n");
 
 	#ifdef HAVE_CUDA
 	printf("      --use_cuda ");
@@ -373,11 +364,11 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
 
-		printf("      --rate_limit=<rate[pps]>");
-		printf(" Set the maximum rate of sent packages\n");
+		printf("      --rate_limit=<rate>");
+		printf(" Set the maximum rate of sent packages. default unit is [pps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p)\n");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is pps (p)\n");
 	}
 
 	putchar('\n');
@@ -385,141 +376,140 @@ static void usage(const char *argv0,VerbType verb,TestType tst)	{
 /******************************************************************************
   usage
  ******************************************************************************/
-void usage_raw_ethernet(){
-		printf("  Raw Ethernet options :\n");
-		printf("  -B, --source_mac ");
-		printf(" source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID)\n");
+void usage_raw_ethernet()
+{
+	printf("  Raw Ethernet options :\n");
+	printf("  -B, --source_mac ");
+	printf(" source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID)\n");
 
-		printf("  -E, --dest_mac ");
-		printf(" destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
+	printf("  -E, --dest_mac ");
+	printf(" destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
 
-		printf("  -J, --dest_ip ");
-		printf(" destination ip address by this format X.X.X.X (using to send packets with IP header)\n");
+	printf("  -J, --dest_ip ");
+	printf(" destination ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
-		printf("  -j, --source_ip ");
-		printf(" source ip address by this format X.X.X.X (using to send packets with IP header)\n");
+	printf("  -j, --source_ip ");
+	printf(" source ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
-		printf("  -K, --dest_port ");
-		printf(" destination port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
+	printf("  -K, --dest_port ");
+	printf(" destination port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
 
-		printf("  -k, --source_port ");
-		printf(" source port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
+	printf("  -k, --source_port ");
+	printf(" source port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
 
-		printf("  -Z, --server ");
-		printf(" choose server side for the current machine (--server/--client must be selected )\n");
+	printf("  -Z, --server ");
+	printf(" choose server side for the current machine (--server/--client must be selected )\n");
 
-		printf("  -P, --client ");
-		printf(" choose client side for the current machine (--server/--client must be selected)\n");
+	printf("  -P, --client ");
+	printf(" choose client side for the current machine (--server/--client must be selected)\n");
 
-		printf("  -v, --mac_fwd ");
-		printf(" run mac forwarding test \n");
+	printf("  -v, --mac_fwd ");
+	printf(" run mac forwarding test \n");
 
-		printf("      --promiscuous");
-		printf(" run promiscuous mode.\n");
+	printf("      --promiscuous");
+	printf(" run promiscuous mode.\n");
 
-		printf("      --tcp ");
-		printf(" send TCP Packets. must include IP and Ports information.\n");
+	printf("      --tcp ");
+	printf(" send TCP Packets. must include IP and Ports information.\n");
 
-		printf("\n");
+	printf("\n");
 
 }
 /******************************************************************************
  *
  ******************************************************************************/
-static void init_perftest_params(struct perftest_parameters *user_param) {
-
-	user_param->port       	= DEF_PORT;
-	user_param->ib_port    	= DEF_IB_PORT;
-	user_param->ib_port2	= DEF_IB_PORT2;
-	user_param->size       	= (user_param->tst == BW ) ? DEF_SIZE_BW : DEF_SIZE_LAT;
-	user_param->tx_depth   	= (user_param->tst == BW ) ? DEF_TX_BW : DEF_TX_LAT;
-	user_param->qp_timeout 	= DEF_QP_TIME;
-	user_param->test_method = RUN_REGULAR;
-	user_param->cpu_freq_f 	= OFF;
-	user_param->connection_type = (user_param->connection_type == RawEth) ? RawEth : RC;
-	user_param->use_event  	= OFF;
-	user_param->num_of_qps 	= DEF_NUM_QPS;
-	user_param->gid_index  	= DEF_GID_INDEX;
-	user_param->gid_index2  = DEF_GID_INDEX;
-	user_param->use_gid_user = 0;
-	user_param->inline_size = DEF_INLINE;
-	user_param->use_mcg     = OFF;
-	user_param->use_rdma_cm = OFF;
-	user_param->work_rdma_cm = OFF;
-	user_param->rx_depth    = user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
-	user_param->duplex	= OFF;
-	user_param->noPeak	= OFF;
-	user_param->cq_mod	= DEF_CQ_MOD;
-	user_param->iters = (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
-	user_param->dualport	= OFF;
-	user_param->post_list	= 1;
-	user_param->use_srq = OFF;
-	user_param->use_xrc = OFF;
-	user_param->use_rss = OFF;
-	user_param->srq_exists = OFF;
-	user_param->duration	= DEF_DURATION;
-	user_param->margin	= DEF_INIT_MARGIN;
-	user_param->test_type	= ITERATIONS;
-	user_param->state	= START_STATE;
-	user_param->tos		= DEF_TOS;
-	user_param->mac_fwd	= OFF;
-	user_param->report_fmt = MBS;
-	user_param->report_both = OFF;
-	user_param->is_reversed = OFF;
-	user_param->is_limit_bw = OFF;
-	user_param->limit_bw = 0;
-	user_param->is_limit_msgrate = OFF;
-	user_param->limit_msgrate = 0;
-	user_param->pkey_index    = 0;
-	user_param->raw_qos 	  = 0;
-	user_param->inline_recv_size = 0;
-	user_param->tcp = 0;
-	user_param->is_rate_limiting = 0;
-	user_param->burst_size = 0;
-	user_param->rate_limit = 0;
-	user_param->rate_units = MEGA_BYTE_PS;
-	user_param->output = -1;
-	user_param->use_cuda = 0;
-	user_param->iters_per_port[0] = 0;
-	user_param->iters_per_port[1] = 0;
+static void init_perftest_params(struct perftest_parameters *user_param)
+{
+	user_param->port		= DEF_PORT;
+	user_param->ib_port		= DEF_IB_PORT;
+	user_param->ib_port2		= DEF_IB_PORT2;
+	user_param->size		= (user_param->tst == BW ) ? DEF_SIZE_BW : DEF_SIZE_LAT;
+	user_param->tx_depth		= (user_param->tst == BW ) ? DEF_TX_BW : DEF_TX_LAT;
+	user_param->qp_timeout		= DEF_QP_TIME;
+	user_param->test_method		= RUN_REGULAR;
+	user_param->cpu_freq_f		= OFF;
+	user_param->connection_type	= (user_param->connection_type == RawEth) ? RawEth : RC;
+	user_param->use_event		= OFF;
+	user_param->num_of_qps		= DEF_NUM_QPS;
+	user_param->gid_index		= DEF_GID_INDEX;
+	user_param->gid_index2		= DEF_GID_INDEX;
+	user_param->use_gid_user	= 0;
+	user_param->inline_size		= DEF_INLINE;
+	user_param->use_mcg		= OFF;
+	user_param->use_rdma_cm		= OFF;
+	user_param->work_rdma_cm	= OFF;
+	user_param->rx_depth		= user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
+	user_param->duplex		= OFF;
+	user_param->noPeak		= OFF;
+	user_param->cq_mod		= DEF_CQ_MOD;
+	user_param->iters		= (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
+	user_param->dualport		= OFF;
+	user_param->post_list		= 1;
+	user_param->use_srq		= OFF;
+	user_param->use_xrc		= OFF;
+	user_param->use_rss		= OFF;
+	user_param->srq_exists		= OFF;
+	user_param->duration		= DEF_DURATION;
+	user_param->margin		= DEF_INIT_MARGIN;
+	user_param->test_type		= ITERATIONS;
+	user_param->state		= START_STATE;
+	user_param->tos			= DEF_TOS;
+	user_param->mac_fwd		= OFF;
+	user_param->report_fmt		= MBS;
+	user_param->report_both		= OFF;
+	user_param->is_reversed		= OFF;
+	user_param->is_limit_bw		= OFF;
+	user_param->limit_bw		= 0;
+	user_param->is_limit_msgrate	= OFF;
+	user_param->limit_msgrate	= 0;
+	user_param->pkey_index		= 0;
+	user_param->raw_qos		= 0;
+	user_param->inline_recv_size	= 0;
+	user_param->tcp			= 0;
+	user_param->is_rate_limiting	= 0;
+	user_param->burst_size		= 0;
+	user_param->rate_limit		= 0;
+	user_param->rate_units		= MEGA_BYTE_PS;
+	user_param->output		= -1;
+	user_param->use_cuda		= 0;
+	user_param->iters_per_port[0]	= 0;
+	user_param->iters_per_port[1]	= 0;
 
 	if (user_param->tst == LAT) {
-		user_param->r_flag->unsorted  = OFF;
-		user_param->r_flag->histogram = OFF;
-		user_param->r_flag->cycles    = OFF;
+		user_param->r_flag->unsorted	= OFF;
+		user_param->r_flag->histogram	= OFF;
+		user_param->r_flag->cycles	= OFF;
 	}
 
 	if (user_param->verb == ATOMIC) {
-		user_param->atomicType = FETCH_AND_ADD;
-		user_param->size = DEF_SIZE_ATOMIC;
+		user_param->atomicType	= FETCH_AND_ADD;
+		user_param->size	= DEF_SIZE_ATOMIC;
 	}
 
-	user_param->cpu_util = 0;
-	user_param->cpu_util_data.enable = 0;
-	user_param->retry_count = DEF_RETRY_COUNT;
-	user_param->dont_xchg_versions = 0;
-	user_param->use_exp = 0;
-	user_param->ipv6 = 0;
-	user_param->report_per_port = 0;
-	user_param->use_odp = 0;
-	user_param->use_promiscuous = 0;
-	user_param->check_alive_exited = 0;
-	user_param->raw_mcast = 0;
-	user_param->masked_atomics = 0;
+	user_param->cpu_util			= 0;
+	user_param->cpu_util_data.enable	= 0;
+	user_param->retry_count			= DEF_RETRY_COUNT;
+	user_param->dont_xchg_versions		= 0;
+	user_param->use_exp			= 0;
+	user_param->ipv6			= 0;
+	user_param->report_per_port		= 0;
+	user_param->use_odp			= 0;
+	user_param->use_promiscuous		= 0;
+	user_param->check_alive_exited		= 0;
+	user_param->raw_mcast			= 0;
+	user_param->masked_atomics		= 0;
+	user_param->cache_line_size		= get_cache_line_size();
+	user_param->cycle_buffer		= sysconf(_SC_PAGESIZE);
 
-	user_param->cache_line_size = get_cache_line_size();
-
-	user_param->cycle_buffer = sysconf(_SC_PAGESIZE);
-	if (user_param->cycle_buffer <= 0)
-	{
+	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
 
 }
 
- /******************************************************************************
-  *
-  ******************************************************************************/
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx) 
 {
 	int idx = 0;
@@ -546,16 +536,16 @@ static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
 /******************************************************************************
  *
  ******************************************************************************/
-static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
-
+static void change_conn_type(int *cptr,VerbType verb,const char *optarg)
+{
 	if (strcmp(connStr[0],optarg)==0)
 		*cptr = RC;
 
 	else if (strcmp(connStr[1],optarg)==0) {
 		*cptr = UC;
 		if (verb == READ || verb == ATOMIC) {
-			  fprintf(stderr," UC connection not possible in READ/ATOMIC verbs\n");
-			  exit(1);
+			fprintf(stderr," UC connection not possible in READ/ATOMIC verbs\n");
+			exit(1);
 		}
 
 	} else if (strcmp(connStr[2],optarg)==0)  {
@@ -568,31 +558,31 @@ static void change_conn_type(int *cptr,VerbType verb,const char *optarg) {
 		*cptr = RawEth;
 
 	} else if(strcmp(connStr[4],optarg)==0) {
-#ifdef HAVE_XRCD
+		#ifdef HAVE_XRCD
 		*cptr = XRC;
-#else
+		#else
 		fprintf(stderr," XRC not detected in libibverbs\n");
 		exit(1);
-#endif
+		#endif
 	} else if (strcmp(connStr[5],optarg)==0) {
-#ifdef HAVE_DC
+		#ifdef HAVE_DC
 		*cptr = DC;
-#else
+		#else
 		fprintf(stderr," DC not detected in libibverbs\n");
 		exit(1);
-#endif
+		#endif
 	} else {
 		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n");
 		exit(1);
 	}
 }
 /******************************************************************************
-  *
-  ******************************************************************************/
-int set_eth_mtu(struct perftest_parameters *user_param) {
-
+ *
+ ******************************************************************************/
+int set_eth_mtu(struct perftest_parameters *user_param)
+{
 	if (user_param->mtu == 0) {
-		user_param->mtu = 1518;//1500
+		user_param->mtu = 1518;
 	}
 
 	if(user_param->mtu >= MIN_MTU_RAW_ETERNET && user_param->mtu <= MAX_MTU_RAW_ETERNET) {
@@ -610,9 +600,9 @@ int set_eth_mtu(struct perftest_parameters *user_param) {
 /******************************************************************************
  *
  ******************************************************************************/
-static void force_dependecies(struct perftest_parameters *user_param) {
-
-	// Additional configuration and assignments.
+static void force_dependecies(struct perftest_parameters *user_param)
+{
+	/*Additional configuration and assignments.*/
 	if (user_param->test_type == ITERATIONS) {
 
 		if (user_param->tx_depth > user_param->iters) {
@@ -623,10 +613,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			user_param->rx_depth = user_param->iters;
 		}
 
-		if (user_param->connection_type == UD || user_param->connection_type == UC)
-		{
-			if (user_param->rx_depth == DEF_RX_SEND)
-			{
+		if (user_param->connection_type == UD || user_param->connection_type == UC) {
+			if (user_param->rx_depth == DEF_RX_SEND) {
 				user_param->rx_depth = (user_param->iters < UC_MAX_RX) ? user_param->iters : UC_MAX_RX;
 			}
 		} 
@@ -680,14 +668,15 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if (user_param->test_type==DURATION) {
 
-		// When working with Duration, iters=0 helps us to satisfy loop cond. in run_iter_bw.
-		// We also use it for "global" counter of packets.
+		/* When working with Duration, iters=0 helps us to satisfy loop cond. in run_iter_bw.
+		We also use it for "global" counter of packets.
+		*/
 		user_param->iters = 0;
 		user_param->noPeak = ON;
 
 		if (user_param->use_event) {
 			printf(RESULT_LINE);
-		    fprintf(stderr,"Duration mode doesn't work with events.\n");
+			fprintf(stderr,"Duration mode doesn't work with events.\n");
 			exit(1);
 		}
 
@@ -707,7 +696,13 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	}
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
-			user_param->gid_index = 0;
+		user_param->gid_index = 0;
+	}
+
+	if (user_param->verb == ATOMIC && user_param->connection_type == DC) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " ATOMIC tests don't support DC transport\n");
+		exit(1);
 	}
 
 	if (user_param->work_rdma_cm) {
@@ -783,31 +778,24 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 			exit(1);
 		}
 
-		// if((user_param->is_server_ip == ON && user_param->is_client_ip == OFF) || (user_param->is_server_ip == OFF && user_param->is_client_ip == ON)) {
-			// printf(RESULT_LINE);
-			// fprintf(stderr," Invalid Command line.\n if you would like to send IP header,\n you must enter server&client ip addresses --server_ip X.X.X.X --client_ip X.X.X.X\n");
-			// exit(1);
-		// }
-
 		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
 			exit(1);
 		}
 
-		// Mac forwarding dependencies
+		/* Mac forwarding dependencies */
 		if (user_param->duplex == OFF && user_param->mac_fwd == ON) {
 			printf("mac_fwd should run in duplex mode only. changing to duplex mode.\n");
 			user_param->duplex = ON;
 		}
-        if (user_param->mac_fwd == ON && user_param->cq_mod >= user_param->rx_depth) {
-            fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
-            user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
-            fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
-        }
+		if (user_param->mac_fwd == ON && user_param->cq_mod >= user_param->rx_depth) {
+			fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
+			user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
+			fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
+		}
 
-		if (user_param->raw_mcast && user_param->duplex)
-		{
+		if (user_param->raw_mcast && user_param->duplex) {
 			printf(" Multicast feature works on unidirectional traffic only\n");
 			exit(1);
 		}
@@ -817,7 +805,7 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
 
-	// Run infinitely dependencies
+	/* Run infinitely dependencies */
 	if (user_param->test_method == RUN_INFINITELY) {
 		user_param->noPeak = ON;
 		user_param->test_type = DURATION;
@@ -841,8 +829,9 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 		}
 	}
 
-	//raw ethernet send latency
-	//client and server must enter the destination mac
+	/*raw ethernet send latency
+	client and server must enter the destination mac
+	*/
 	if (user_param->connection_type == RawEth && user_param->tst == LAT && user_param->verb == SEND) {
 
 		if (user_param-> is_dest_mac == OFF) {
@@ -856,9 +845,8 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 	if (user_param->connection_type == DC && !user_param->use_srq)
 		user_param->use_srq = 1;
 
-	// XRC Part
+	/* XRC Part */
 	if (user_param->connection_type == XRC) {
-
 		if (user_param->work_rdma_cm == ON) {
 			printf(RESULT_LINE);
 			fprintf(stderr," XRC does not support RDMA_CM\n");
@@ -952,25 +940,35 @@ static void force_dependecies(struct perftest_parameters *user_param) {
 
 	if ( (user_param->connection_type == UD) && (user_param->inline_size > MAX_INLINE_UD) ) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
+		fprintf(stderr, "Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
 		user_param->inline_size = MAX_INLINE_UD;
 	}
 
-	if (user_param->report_per_port && (user_param->test_type != DURATION || !user_param->dualport))
-	{
+	if (user_param->report_per_port && (user_param->test_type != DURATION || !user_param->dualport)) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"report per port feature work only with Duration and Dualport\n");
+		fprintf(stderr, "report per port feature work only with Duration and Dualport\n");
 		exit(1);
 	}
 
+	if (user_param->verb == SEND && (user_param->rx_depth % 2 == 1))
+		user_param->rx_depth += 1; 
+
+	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF)
+		user_param->noPeak = ON;
+
+	if (!(user_param->duration > 2*user_param->margin)) {
+		printf(RESULT_LINE);
+		fprintf(stderr, "please check that DURATION > 2*MARGIN\n");
+		exit(1);
+	}
 	return;
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-const char *transport_str(enum ibv_transport_type type) {
-
+const char *transport_str(enum ibv_transport_type type)
+{
 	switch (type) {
 		case IBV_TRANSPORT_IB:
 			return "IB";
@@ -986,29 +984,29 @@ const char *transport_str(enum ibv_transport_type type) {
 /******************************************************************************
  *
  ******************************************************************************/
-const char *link_layer_str(uint8_t link_layer) {
-
+const char *link_layer_str(uint8_t link_layer)
+{
 	switch (link_layer) {
 
-        case IBV_LINK_LAYER_UNSPECIFIED:
-        case IBV_LINK_LAYER_INFINIBAND:
+		case IBV_LINK_LAYER_UNSPECIFIED:
+		case IBV_LINK_LAYER_INFINIBAND:
 			return "IB";
-        case IBV_LINK_LAYER_ETHERNET:
+		case IBV_LINK_LAYER_ETHERNET:
 			return "Ethernet";
 		#ifdef HAVE_SCIF
 		case IBV_LINK_LAYER_SCIF:
 			return "SCIF";
 		#endif
-        default:
-		    return "Unknown";
-    }
+		default:
+			return "Unknown";
+	}
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-enum ctx_device ib_dev_name(struct ibv_context *context) {
-
+enum ctx_device ib_dev_name(struct ibv_context *context)
+{
 	enum ctx_device dev_fname = UNKNOWN;
 	struct ibv_device_attr attr;
 
@@ -1026,8 +1024,9 @@ enum ctx_device ib_dev_name(struct ibv_context *context) {
 			default : dev_fname = UNKNOWN; break;
 		}
 
-	// Assuming it's Mellanox HCA or unknown.
-	// If you want Inline support in other vendor devices, please send patch to idos@dev.mellanox.co.il
+		/* Assuming it's Mellanox HCA or unknown.
+		If you want Inline support in other vendor devices, please send patch to gilr@dev.mellanox.co.il
+		*/
 	} else {
 
 		switch (attr.vendor_part_id) {
@@ -1060,40 +1059,37 @@ enum ctx_device ib_dev_name(struct ibv_context *context) {
 /******************************************************************************
  *
  ******************************************************************************/
-enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
-
+enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu)
+{
 	struct ibv_port_attr port_attr;
 	enum ibv_mtu curr_mtu;
 
-	if (ibv_query_port(context,ib_port,&port_attr))
-	{
+	if (ibv_query_port(context,ib_port,&port_attr)) {
 		fprintf(stderr," Error when trying to query port\n");
 		exit(1);
 	}
 
-	// User did not ask for specific mtu.
+	/* User did not ask for specific mtu. */
 	if (user_mtu == 0) {
 		enum ctx_device current_dev = ib_dev_name(context);
 		curr_mtu = port_attr.active_mtu;
-		//CX3_PRO and CX3 have a HW bug in 4K MTU, so we're forcing it to be 2K MTU
+		/* CX3_PRO and CX3 have a HW bug in 4K MTU, so we're forcing it to be 2K MTU */
 		if (curr_mtu == IBV_MTU_4096 && (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3))
 			curr_mtu = IBV_MTU_2048;
 	}
 
 	else {
-
 		switch (user_mtu) {
-
 			case 256  :	curr_mtu = IBV_MTU_256;	 break;
 			case 512  : curr_mtu = IBV_MTU_512;	 break;
 			case 1024 :	curr_mtu = IBV_MTU_1024; break;
 			case 2048 :	curr_mtu = IBV_MTU_2048; break;
 			case 4096 :	curr_mtu = IBV_MTU_4096; break;
 			default   :
-				fprintf(stderr," Invalid MTU - %d \n",user_mtu);
-				fprintf(stderr," Please choose mtu from {256,512,1024,2048,4096}\n");
-				fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
-				curr_mtu = port_attr.active_mtu;
+					fprintf(stderr," Invalid MTU - %d \n",user_mtu);
+					fprintf(stderr," Please choose mtu from {256,512,1024,2048,4096}\n");
+					fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
+					curr_mtu = port_attr.active_mtu;
 		}
 
 		if (curr_mtu > port_attr.active_mtu) {
@@ -1108,8 +1104,8 @@ enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu) {
 /******************************************************************************
  *
  ******************************************************************************/
-static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
-
+static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port)
+{
 	struct ibv_port_attr port_attr;
 	uint8_t curr_link;
 
@@ -1120,27 +1116,25 @@ static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port) {
 
 	if (port_attr.state != IBV_PORT_ACTIVE) {
 		fprintf(stderr," Port number %d state is %s\n"
-					  ,ib_port
-					  ,portStates[port_attr.state]);
+				,ib_port
+				,portStates[port_attr.state]);
 		return LINK_FAILURE;
 	}
 
 	curr_link = port_attr.link_layer;
 	if (!strcmp(link_layer_str(curr_link),"Unknown")) {
-			fprintf(stderr," Unable to determine link layer \n");
-			return LINK_FAILURE;
+		fprintf(stderr," Unable to determine link layer \n");
+		return LINK_FAILURE;
 	}
-	//return curr_link;
-	//printf("link_layer: %d\n",port_attr.link_layer);
+
 	return port_attr.link_layer;
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
-
-
+static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads)
+{
 	int max_reads = 0;
 	struct ibv_device_attr attr;
 
@@ -1164,9 +1158,8 @@ static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads) {
 /******************************************************************************
  *
  ******************************************************************************/
-static void ctx_set_max_inline(struct ibv_context *context,struct perftest_parameters *user_param) {
-
-
+static void ctx_set_max_inline(struct ibv_context *context,struct perftest_parameters *user_param)
+{
 	enum ctx_device current_dev = ib_dev_name(context);
 
 	if (current_dev == UNKNOWN || current_dev == DEVICE_ERROR) {
@@ -1187,7 +1180,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
 				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
-					((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
+					    ((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
 				default   : user_param->inline_size = 0;
 			}
 
@@ -1201,8 +1194,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
-int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
-
+int parser(struct perftest_parameters *user_param,char *argv[], int argc)
+{
 	int c,size_len;
 	int size_factor = 1;
 	static int run_inf_flag = 0;
@@ -1236,87 +1229,88 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 
 	while (1) {
 		static const struct option long_options[] = {
-			{ .name = "port",           .has_arg = 1, .val = 'p' },
-			{ .name = "ib-dev",         .has_arg = 1, .val = 'd' },
-			{ .name = "ib-port",        .has_arg = 1, .val = 'i' },
-			{ .name = "mtu",            .has_arg = 1, .val = 'm' },
-			{ .name = "size",           .has_arg = 1, .val = 's' },
-			{ .name = "iters",          .has_arg = 1, .val = 'n' },
-			{ .name = "tx-depth",       .has_arg = 1, .val = 't' },
-			{ .name = "qp-timeout",     .has_arg = 1, .val = 'u' },
-			{ .name = "sl",             .has_arg = 1, .val = 'S' },
-			{ .name = "gid-index",      .has_arg = 1, .val = 'x' },
-			{ .name = "all",            .has_arg = 0, .val = 'a' },
-			{ .name = "CPU-freq",       .has_arg = 0, .val = 'F' },
-			{ .name = "connection",     .has_arg = 1, .val = 'c' },
-			{ .name = "qp",             .has_arg = 1, .val = 'q' },
-			{ .name = "events",         .has_arg = 0, .val = 'e' },
-			{ .name = "inline_size",    .has_arg = 1, .val = 'I' },
-			{ .name = "outs",           .has_arg = 1, .val = 'o' },
-			{ .name = "mcg",            .has_arg = 0, .val = 'g' },
-			{ .name = "comm_rdma_cm",   .has_arg = 0, .val = 'z' },
-			{ .name = "rdma_cm",   	    .has_arg = 0, .val = 'R' },
-			{ .name = "tos",            .has_arg = 1, .val = 'T' },
-			{ .name = "help",           .has_arg = 0, .val = 'h' },
-			{ .name = "MGID",           .has_arg = 1, .val = 'M' },
-			{ .name = "rx-depth",       .has_arg = 1, .val = 'r' },
-			{ .name = "bidirectional",  .has_arg = 0, .val = 'b' },
-			{ .name = "cq-mod",  	    .has_arg = 1, .val = 'Q' },
-			{ .name = "noPeak",         .has_arg = 0, .val = 'N' },
-			{ .name = "version",        .has_arg = 0, .val = 'V' },
-			{ .name = "report-cycles",  .has_arg = 0, .val = 'C' },
-			{ .name = "report-histogrm",.has_arg = 0, .val = 'H' },
-			{ .name = "report-unsorted",.has_arg = 0, .val = 'U' },
-			{ .name = "atomic_type",    .has_arg = 1, .val = 'A' },
-			{ .name = "dualport",       .has_arg = 0, .val = 'O' },
-			{ .name = "post_list",      .has_arg = 1, .val = 'l' },
-			{ .name = "duration",       .has_arg = 1, .val = 'D' },
-			{ .name = "margin",         .has_arg = 1, .val = 'f' },
-			{ .name = "source_mac",     .has_arg = 1, .val = 'B' },
-			{ .name = "dest_mac",       .has_arg = 1, .val = 'E' },
-			{ .name = "dest_ip",        .has_arg = 1, .val = 'J' },
-			{ .name = "source_ip",      .has_arg = 1, .val = 'j' },
-			{ .name = "dest_port", 		.has_arg = 1, .val = 'K' },
-			{ .name = "source_port",    .has_arg = 1, .val = 'k' },
-			{ .name = "limit_bw",       .has_arg = 1, .val = 'w' },
-			{ .name = "limit_msgrate",  .has_arg = 1, .val = 'y' },
-			{ .name = "server",         .has_arg = 0, .val = 'Z' },
-			{ .name = "client",         .has_arg = 0, .val = 'P' },
-			{ .name = "mac_fwd",        .has_arg = 0, .val = 'v' },
-			{ .name = "use_rss",        .has_arg = 0, .val = 'G' },
-			{ .name = "run_infinitely", .has_arg = 0, .flag = &run_inf_flag, .val = 1 },
-			{ .name = "report_gbits",   .has_arg = 0, .flag = &report_fmt_flag, .val = 1},
-			{ .name = "use-srq",        .has_arg = 0, .flag = &srq_flag, .val = 1},
-			{ .name = "report-both",    .has_arg = 0, .flag = &report_both_flag, .val = 1},
-			{ .name = "reversed",       .has_arg = 0, .flag = &is_reversed_flag, .val = 1},
-			{ .name = "pkey_index",     .has_arg = 1, .flag = &pkey_flag, .val = 1},
-			{ .name = "inline_recv",    .has_arg = 1, .flag = &inline_recv_flag, .val = 1},
+			{ .name = "port",		.has_arg = 1, .val = 'p' },
+			{ .name = "ib-dev",		.has_arg = 1, .val = 'd' },
+			{ .name = "ib-port",		.has_arg = 1, .val = 'i' },
+			{ .name = "mtu",		.has_arg = 1, .val = 'm' },
+			{ .name = "size",		.has_arg = 1, .val = 's' },
+			{ .name = "iters",		.has_arg = 1, .val = 'n' },
+			{ .name = "tx-depth",		.has_arg = 1, .val = 't' },
+			{ .name = "qp-timeout",		.has_arg = 1, .val = 'u' },
+			{ .name = "sl",			.has_arg = 1, .val = 'S' },
+			{ .name = "gid-index",		.has_arg = 1, .val = 'x' },
+			{ .name = "all",		.has_arg = 0, .val = 'a' },
+			{ .name = "CPU-freq",		.has_arg = 0, .val = 'F' },
+			{ .name = "connection",		.has_arg = 1, .val = 'c' },
+			{ .name = "qp",			.has_arg = 1, .val = 'q' },
+			{ .name = "events",		.has_arg = 0, .val = 'e' },
+			{ .name = "inline_size",	.has_arg = 1, .val = 'I' },
+			{ .name = "outs",		.has_arg = 1, .val = 'o' },
+			{ .name = "mcg",		.has_arg = 0, .val = 'g' },
+			{ .name = "comm_rdma_cm",	.has_arg = 0, .val = 'z' },
+			{ .name = "rdma_cm",		.has_arg = 0, .val = 'R' },
+			{ .name = "tos",		.has_arg = 1, .val = 'T' },
+			{ .name = "help",		.has_arg = 0, .val = 'h' },
+			{ .name = "MGID",		.has_arg = 1, .val = 'M' },
+			{ .name = "rx-depth",		.has_arg = 1, .val = 'r' },
+			{ .name = "bidirectional",	.has_arg = 0, .val = 'b' },
+			{ .name = "cq-mod",		.has_arg = 1, .val = 'Q' },
+			{ .name = "noPeak",		.has_arg = 0, .val = 'N' },
+			{ .name = "version",		.has_arg = 0, .val = 'V' },
+			{ .name = "report-cycles",	.has_arg = 0, .val = 'C' },
+			{ .name = "report-histogrm",	.has_arg = 0, .val = 'H' },
+			{ .name = "report-unsorted",	.has_arg = 0, .val = 'U' },
+			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
+			{ .name = "dualport",		.has_arg = 0, .val = 'O' },
+			{ .name = "post_list",		.has_arg = 1, .val = 'l' },
+			{ .name = "duration",		.has_arg = 1, .val = 'D' },
+			{ .name = "margin",		.has_arg = 1, .val = 'f' },
+			{ .name = "source_mac",		.has_arg = 1, .val = 'B' },
+			{ .name = "dest_mac",		.has_arg = 1, .val = 'E' },
+			{ .name = "dest_ip",		.has_arg = 1, .val = 'J' },
+			{ .name = "source_ip",		.has_arg = 1, .val = 'j' },
+			{ .name = "dest_port",		.has_arg = 1, .val = 'K' },
+			{ .name = "source_port",	.has_arg = 1, .val = 'k' },
+			{ .name = "limit_bw",		.has_arg = 1, .val = 'w' },
+			{ .name = "limit_msgrate",	.has_arg = 1, .val = 'y' },
+			{ .name = "server",		.has_arg = 0, .val = 'Z' },
+			{ .name = "client",		.has_arg = 0, .val = 'P' },
+			{ .name = "mac_fwd",		.has_arg = 0, .val = 'v' },
+			{ .name = "use_rss",		.has_arg = 0, .val = 'G' },
+			{ .name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
+			{ .name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
+			{ .name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
+			{ .name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
+			{ .name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
+			{ .name = "pkey_index",		.has_arg = 1, .flag = &pkey_flag, .val = 1},
+			{ .name = "inline_recv",	.has_arg = 1, .flag = &inline_recv_flag, .val = 1},
 			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
 			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
 			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
 			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
-			{ .name = "cpu_util",           .has_arg = 0, .flag = &cpu_util_flag, .val = 1},
-			{ .name = "latency_gap",        .has_arg = 1, .flag = &latency_gap_flag, .val = 1},
-			{ .name = "retry_count",        .has_arg = 1, .flag = &retry_count_flag, .val = 1},
-			{ .name = "dont_xchg_versions",        .has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
-			#ifdef HAVE_VERBS_EXP
-			{ .name = "use_exp",           .has_arg = 0, .flag = &use_exp_flag, .val = 1},
-			#endif
+			{ .name = "cpu_util",		.has_arg = 0, .flag = &cpu_util_flag, .val = 1},
+			{ .name = "latency_gap",	.has_arg = 1, .flag = &latency_gap_flag, .val = 1},
+			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
+			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
-			{ .name = "report-per-port",		.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
+			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
-			{ .name = "promiscuous",		.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
+			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
 			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
-            { 0 }
-        };
-        c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
+			#ifdef HAVE_VERBS_EXP
+			{ .name = "use_exp",		.has_arg = 0, .flag = &use_exp_flag, .val = 1},
+			#endif
 
-        if (c == -1)
+			{ 0 }
+		};
+		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
+
+		if (c == -1)
 			break;
 
-        switch (c) {
+		switch (c) {
 
 			case 'p': user_param->port = strtol(optarg, NULL, 0); break;
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
@@ -1327,288 +1321,281 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 			case 'T': CHECK_VALUE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS"); break;
 			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
 			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
-				if (user_param->sl > MAX_SL) {
-					fprintf(stderr," Only %d Service levels\n",MAX_SL);
-					return 1;
-				}
-				if (user_param->connection_type == RawEth)
-					user_param->raw_qos = 1;
-				break;
+				  if (user_param->sl > MAX_SL) {
+					  fprintf(stderr," Only %d Service levels\n",MAX_SL);
+					  return 1;
+				  }
+				  if (user_param->connection_type == RawEth)
+					  user_param->raw_qos = 1;
+				  break;
 			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); 
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q':
-				if (user_param->tst != BW) {
-					fprintf(stderr," Multiple QPs only available on bw tests\n");
-					return 1;
-				}
-				CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
-				break;
+				  if (user_param->tst != BW) {
+					  fprintf(stderr," Multiple QPs only available on bw tests\n");
+					  return 1;
+				  }
+				  CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
+				  break;
 			case 'I': CHECK_VALUE(user_param->inline_size,int,0,MAX_INLINE,"Max inline");
-				if (user_param->verb == READ || user_param->verb ==ATOMIC) {
-					fprintf(stderr," Inline feature not available on READ/Atomic verbs\n");
-					return 1;
-				} break;
+				  if (user_param->verb == READ || user_param->verb ==ATOMIC) {
+					  fprintf(stderr," Inline feature not available on READ/Atomic verbs\n");
+					  return 1;
+				  } break;
 			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
-				if (user_param->verb != READ && user_param->verb != ATOMIC) {
-					fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
-					return 1;
-				} break;
+				  if (user_param->verb != READ && user_param->verb != ATOMIC) {
+					  fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
+					  return 1;
+				  } break;
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
 			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
-				if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
-					fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
-					return 1;
-				} break;
+				  if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
+					  fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
+					  return 1;
+				  } break;
 			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation"); break;
 			case 'A':
-				if (user_param->verb != ATOMIC) {
-					fprintf(stderr," You are not running the atomic_lat/bw test!\n");
-					fprintf(stderr," To change the atomic action type, you must run one of the atomic tests\n");
-					return 1;
-				}
+				  if (user_param->verb != ATOMIC) {
+					  fprintf(stderr," You are not running the atomic_lat/bw test!\n");
+					  fprintf(stderr," To change the atomic action type, you must run one of the atomic tests\n");
+					  return 1;
+				  }
 
-				if (strcmp(atomicTypesStr[0],optarg)==0)
-					user_param->atomicType = CMP_AND_SWAP;
+				  if (strcmp(atomicTypesStr[0],optarg)==0)
+					  user_param->atomicType = CMP_AND_SWAP;
 
-				else if (strcmp(atomicTypesStr[1],optarg)==0)
-					user_param->atomicType = FETCH_AND_ADD;
+				  else if (strcmp(atomicTypesStr[1],optarg)==0)
+					  user_param->atomicType = FETCH_AND_ADD;
 
-				else {
-					fprintf(stderr," Invalid Atomic type! please choose from {CMP_AND_SWAP,FETCH_AND_ADD}\n");
-					exit(1);
-				}
-				break;
+				  else {
+					  fprintf(stderr," Invalid Atomic type! please choose from {CMP_AND_SWAP,FETCH_AND_ADD}\n");
+					  exit(1);
+				  }
+				  break;
 			case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
 			case 'D': user_param->duration = strtol(optarg, NULL, 0);
-				if (user_param->duration <= 0) {
-						fprintf(stderr," Duration period must be greater than 0\n");
-						return 1;
-				}
-				user_param->test_type = DURATION;
-				break;
+				  if (user_param->duration <= 0) {
+					  fprintf(stderr," Duration period must be greater than 0\n");
+					  return 1;
+				  }
+				  user_param->test_type = DURATION;
+				  break;
 			case 'f': user_param->margin = strtol(optarg, NULL, 0);
- 				if (user_param->margin < 0) {
-					fprintf(stderr," margin must be positive.\n");
-					return 1;
-				} break;
+				  if (user_param->margin < 0) {
+					  fprintf(stderr," margin must be positive.\n");
+					  return 1;
+				  } break;
 			case 'O':
-				user_param->ib_port  = DEF_IB_PORT;
-				user_param->ib_port2 = DEF_IB_PORT2;
-				user_param->dualport = ON;
-				break;
+				  user_param->ib_port  = DEF_IB_PORT;
+				  user_param->ib_port2 = DEF_IB_PORT2;
+				  user_param->dualport = ON;
+				  break;
 			case 'a': user_param->test_method = RUN_ALL; break;
 			case 'F': user_param->cpu_freq_f = ON; break;
 			case 'V': printf("Version: %s\n",user_param->version); return VERSION_EXIT;
 			case 'h': usage(argv[0],user_param->verb,user_param->tst);
-					  if(user_param->connection_type == RawEth)
-					  {
-						 usage_raw_ethernet();
-					  }
-					  return HELP_EXIT;
+				  if(user_param->connection_type == RawEth) {
+					  usage_raw_ethernet();
+				  }
+				  return HELP_EXIT;
 			case 'z': user_param->use_rdma_cm = ON; break;
 			case 'R': user_param->work_rdma_cm = ON; break;
 			case 's': size_len = (int)strlen(optarg);
 				  if (optarg[size_len-1] == 'K') {
-				  	optarg[size_len-1] = '\0';
-					size_factor = 1024;
+					  optarg[size_len-1] = '\0';
+					  size_factor = 1024;
 				  }
 				  if (optarg[size_len-1] == 'M') {
-				  	optarg[size_len-1] = '\0';
-					size_factor = 1024*1024;
+					  optarg[size_len-1] = '\0';
+					  size_factor = 1024*1024;
 				  }
 				  user_param->size = (uint64_t)strtol(optarg, NULL, 0) * size_factor;
 				  if (user_param->size < 1 || user_param->size > (UINT_MAX / 2)) {
-				  	fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
-					return 1;
+					  fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
+					  return 1;
 				  }	
 				  break;
 			case 'e': user_param->use_event = ON;
-				if (user_param->verb == WRITE) {
-					fprintf(stderr," Events feature not available on WRITE verb\n");
-					return 1;
-				} break;
+				  if (user_param->verb == WRITE) {
+					  fprintf(stderr," Events feature not available on WRITE verb\n");
+					  return 1;
+				  } break;
 			case 'b': user_param->duplex = ON;
-				if (user_param->tst == LAT) {
-					fprintf(stderr," Bidirectional is only available in BW test\n");
-					return 1;
-				} break;
+				  if (user_param->tst == LAT) {
+					  fprintf(stderr," Bidirectional is only available in BW test\n");
+					  return 1;
+				  } break;
 			case 'N': user_param->noPeak = ON;
-				if (user_param->tst == LAT) {
-					fprintf(stderr," NoPeak only valid for BW tests\n");
-					return 1;
-				} break;
+				  if (user_param->tst == LAT) {
+					  fprintf(stderr," NoPeak only valid for BW tests\n");
+					  return 1;
+				  } break;
 			case 'C':
-				if (user_param->tst != LAT) {
-					fprintf(stderr," Availible only on Latency tests\n");
-					return 1;
-				}
-				user_param->r_flag->cycles = ON;
-				break;
+				  if (user_param->tst != LAT) {
+					  fprintf(stderr," Availible only on Latency tests\n");
+					  return 1;
+				  }
+				  user_param->r_flag->cycles = ON;
+				  break;
 			case 'g': user_param->use_mcg = ON;
-				if (user_param->verb != SEND) {
-					fprintf(stderr," MultiCast feature only available on SEND verb\n");
-					return 1;
-				} break;
+				  if (user_param->verb != SEND) {
+					  fprintf(stderr," MultiCast feature only available on SEND verb\n");
+					  return 1;
+				  } break;
 			case 'H':
-				if (user_param->tst != LAT) {
-					fprintf(stderr," Availible only on Latency tests\n");
-					return 1;
-				}
-				user_param->r_flag->histogram = ON;
-				break;
-				case 'U':
-				if (user_param->tst != LAT) {
-					fprintf(stderr," Availible only on Latency tests\n");
-					return 1;
-				}
-				user_param->r_flag->unsorted = ON;
-				break;
+				  if (user_param->tst != LAT) {
+					  fprintf(stderr," Availible only on Latency tests\n");
+					  return 1;
+				  }
+				  user_param->r_flag->histogram = ON;
+				  break;
+			case 'U':
+				  if (user_param->tst != LAT) {
+					  fprintf(stderr," Availible only on Latency tests\n");
+					  return 1;
+				  }
+				  user_param->r_flag->unsorted = ON;
+				  break;
 			case 'B':
-				user_param->is_source_mac = ON;
-				if(parse_mac_from_str(optarg, user_param->source_mac))
-					return FAILURE;
-				break;
+				  user_param->is_source_mac = ON;
+				  if(parse_mac_from_str(optarg, user_param->source_mac))
+					  return FAILURE;
+				  break;
 			case 'E':
-				user_param->is_dest_mac = ON;
-				if(parse_mac_from_str(optarg, user_param->dest_mac))
-					return FAILURE;
-				break;
+				  user_param->is_dest_mac = ON;
+				  if(parse_mac_from_str(optarg, user_param->dest_mac))
+					  return FAILURE;
+				  break;
 			case 'J':
-				user_param->is_server_ip = ON;
-				if(1 != parse_ip_from_str(optarg, &(user_param->server_ip)))
-				{
-					fprintf(stderr," Invalid server IP address\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_server_ip = ON;
+				  if(1 != parse_ip_from_str(optarg, &(user_param->server_ip))) {
+					  fprintf(stderr," Invalid server IP address\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'j':
-				user_param->is_client_ip = ON;
-				if(1 != parse_ip_from_str(optarg, &(user_param->client_ip)))
-				{
-					fprintf(stderr," Invalid client IP address\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_client_ip = ON;
+				  if(1 != parse_ip_from_str(optarg, &(user_param->client_ip))) {
+					  fprintf(stderr," Invalid client IP address\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'K':
-				user_param->is_server_port = ON;
-				user_param->server_port = strtol(optarg, NULL, 0);
-				if(OFF == check_if_valid_udp_port(user_param->server_port))
-				{
-					fprintf(stderr," Invalid server UDP port\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_server_port = ON;
+				  user_param->server_port = strtol(optarg, NULL, 0);
+				  if(OFF == check_if_valid_udp_port(user_param->server_port)) {
+					  fprintf(stderr," Invalid server UDP port\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'k':
-				user_param->is_client_port = ON;
-				user_param->client_port = strtol(optarg, NULL, 0);
-				if(OFF == check_if_valid_udp_port(user_param->client_port))
-				{
-					fprintf(stderr," Invalid client UDP port\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_client_port = ON;
+				  user_param->client_port = strtol(optarg, NULL, 0);
+				  if(OFF == check_if_valid_udp_port(user_param->client_port)) {
+					  fprintf(stderr," Invalid client UDP port\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'w':
-				user_param->is_limit_bw = ON;
-				user_param->limit_bw = strtof(optarg,NULL);
-				if (user_param->limit_bw < 0) {
-
-					fprintf(stderr, " Invalid Minimum BW Limit\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_limit_bw = ON;
+				  user_param->limit_bw = strtof(optarg,NULL);
+				  if (user_param->limit_bw < 0) {
+					  fprintf(stderr, " Invalid Minimum BW Limit\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'y':
-				user_param->is_limit_msgrate = ON;
-				user_param->limit_msgrate = strtof(optarg,NULL);
-				if (user_param->limit_msgrate < 0) {
-
-					fprintf(stderr, " Invalid Minimum msgRate Limit\n");
-					return FAILURE;
-				}
-				break;
+				  user_param->is_limit_msgrate = ON;
+				  user_param->limit_msgrate = strtof(optarg,NULL);
+				  if (user_param->limit_msgrate < 0) {
+					  fprintf(stderr, " Invalid Minimum msgRate Limit\n");
+					  return FAILURE;
+				  }
+				  break;
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
 			case 'v': user_param->mac_fwd = ON; break;
 			case 'G': user_param->use_rss = ON; break;
-			case 0: // required for long options to work.
-				if (pkey_flag) {
-					user_param->pkey_index = strtol(optarg,NULL,0);
-					pkey_flag = 0;
-				}
-				if (inline_recv_flag) {
-					user_param->inline_recv_size = strtol(optarg,NULL,0);
-					inline_recv_flag = 0;
-				}
-				if (rate_limit_flag) {
-					user_param->is_rate_limiting = 1;
-					user_param->rate_limit = strtol(optarg,NULL,0);
-					if (user_param->rate_limit < 0) {
-						fprintf(stderr, " Rate limit must be non-negative\n");
-						return FAILURE;
-					}
-					rate_limit_flag = 0;
-				}
-				if (burst_size_flag) {
-					user_param->burst_size = strtol(optarg,NULL,0);
-					if (user_param->burst_size < 0) {
-						fprintf(stderr, " Burst size must be non-negative\n");
-						return FAILURE;
-					}
-					burst_size_flag = 0;
-				}
-				if (rate_units_flag) {
-					if (strcmp("M",optarg) == 0) {
-						user_param->rate_units = MEGA_BYTE_PS;
-					} else if (strcmp("g",optarg) == 0) {
-						user_param->rate_units = GIGA_BIT_PS;
-					} else if (strcmp("p",optarg) == 0) {
-						user_param->rate_units = PACKET_PS;
-					} else {
-						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
-						return FAILURE;
-					}
-					rate_units_flag = 0;
-				}
-				if (verbosity_output_flag) {
-					if (strcmp("bandwidth",optarg) == 0) {
-						user_param->output = OUTPUT_BW;
-					} else if (strcmp("message_rate",optarg) == 0) {
-						user_param->output = OUTPUT_MR;
-					} else if (strcmp("latency",optarg) == 0) {
-						user_param->output = OUTPUT_LAT;
-					} else {
-						fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
-						return FAILURE;
-					}
-					verbosity_output_flag = 0;
-				}
-				if (latency_gap_flag) {
-					user_param->latency_gap = strtol(optarg,NULL,0);
-					if (user_param->latency_gap < 0) {
-                                                fprintf(stderr, " Latency gap time must be non-negative\n");
-                                                return FAILURE;
-                                        }
-                                        latency_gap_flag = 0;
-                                }
-				if (retry_count_flag) {
-					user_param->retry_count = strtol(optarg,NULL,0);
-					if (user_param->retry_count < 0) {
-						fprintf(stderr, " Retry Count value must be positive\n");
-						return FAILURE;
-					}
-					retry_count_flag = 0;
-				}
-				break;
+			case 0: /* required for long options to work. */
+				  if (pkey_flag) {
+					  user_param->pkey_index = strtol(optarg,NULL,0);
+					  pkey_flag = 0;
+				  }
+				  if (inline_recv_flag) {
+					  user_param->inline_recv_size = strtol(optarg,NULL,0);
+					  inline_recv_flag = 0;
+				  }
+				  if (rate_limit_flag) {
+					  user_param->is_rate_limiting = 1;
+					  user_param->rate_limit = strtol(optarg,NULL,0);
+					  if (user_param->rate_limit < 0) {
+						  fprintf(stderr, " Rate limit must be non-negative\n");
+						  return FAILURE;
+					  }
+					  rate_limit_flag = 0;
+				  }
+				  if (burst_size_flag) {
+					  user_param->burst_size = strtol(optarg,NULL,0);
+					  if (user_param->burst_size < 0) {
+						  fprintf(stderr, " Burst size must be non-negative\n");
+						  return FAILURE;
+					  }
+					  burst_size_flag = 0;
+				  }
+				  if (rate_units_flag) {
+					  if (strcmp("M",optarg) == 0) {
+						  user_param->rate_units = MEGA_BYTE_PS;
+					  } else if (strcmp("g",optarg) == 0) {
+						  user_param->rate_units = GIGA_BIT_PS;
+					  } else if (strcmp("p",optarg) == 0) {
+						  user_param->rate_units = PACKET_PS;
+					  } else {
+						  fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
+						  return FAILURE;
+					  }
+					  rate_units_flag = 0;
+				  }
+				  if (verbosity_output_flag) {
+					  if (strcmp("bandwidth",optarg) == 0) {
+						  user_param->output = OUTPUT_BW;
+					  } else if (strcmp("message_rate",optarg) == 0) {
+						  user_param->output = OUTPUT_MR;
+					  } else if (strcmp("latency",optarg) == 0) {
+						  user_param->output = OUTPUT_LAT;
+					  } else {
+						  fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
+						  return FAILURE;
+					  }
+					  verbosity_output_flag = 0;
+				  }
+				  if (latency_gap_flag) {
+					  user_param->latency_gap = strtol(optarg,NULL,0);
+					  if (user_param->latency_gap < 0) {
+						  fprintf(stderr, " Latency gap time must be non-negative\n");
+						  return FAILURE;
+					  }
+					  latency_gap_flag = 0;
+				  }
+				  if (retry_count_flag) {
+					  user_param->retry_count = strtol(optarg,NULL,0);
+					  if (user_param->retry_count < 0) {
+						  fprintf(stderr, " Retry Count value must be positive\n");
+						  return FAILURE;
+					  }
+					  retry_count_flag = 0;
+				  }
+				  break;
 
 			default:
-				fprintf(stderr," Invalid Command or flag.\n");
-				fprintf(stderr," Please check command line and run again.\n\n");
-				usage(argv[0],user_param->verb,user_param->tst);
-				if(user_param->connection_type == RawEth) {
-					usage_raw_ethernet();
-				}
-				return 1;
-		 }
+				  fprintf(stderr," Invalid Command or flag.\n");
+				  fprintf(stderr," Please check command line and run again.\n\n");
+				  usage(argv[0],user_param->verb,user_param->tst);
+				  if(user_param->connection_type == RawEth) {
+					  usage_raw_ethernet();
+				  }
+				  return 1;
+		}
 	}
 
 	if (tcp_flag) {
@@ -1640,13 +1627,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}
-	
+
 	if (is_reversed_flag) {
 		user_param->is_reversed = 1;
 	}
 
 	if (cpu_util_flag) {
-                user_param->cpu_util = 1;
+		user_param->cpu_util = 1;
 	}
 
 	if (report_per_port_flag) {
@@ -1654,7 +1641,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	}
 
 	if (ipv6_flag) {
-                user_param->ipv6 = 1;
+		user_param->ipv6 = 1;
 	}
 
 	if(odp_flag) {
@@ -1679,7 +1666,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	if(user_param->connection_type != RawEth)
 		user_param->machine = user_param->servername ? CLIENT : SERVER;
 
-	//fan-in addition
+	/* fan-in addition */
 	if (user_param->is_reversed) {
 		if (user_param->machine == SERVER)
 			user_param->machine = CLIENT;
@@ -1688,14 +1675,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc) {
 	}
 
 	force_dependecies(user_param);
-    return 0;
+	return 0;
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param) {
-
+int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param)
+{
 	user_param->transport_type = context->device->transport_type;
 	user_param->link_type = set_link_layer(context,user_param->ib_port);
 
@@ -1705,7 +1692,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	}
 
 	if (user_param->link_type == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index == -1) {
-			user_param->gid_index = 0;
+		user_param->gid_index = 0;
 	}
 
 	if (user_param->connection_type == RawEth) {
@@ -1723,7 +1710,6 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		user_param->curr_mtu = set_mtu(context,user_param->ib_port,user_param->mtu);
 	}
 
-	// in case of dual-port mode
 	if (user_param->dualport==ON) {
 
 		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
@@ -1736,7 +1722,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		}
 	}
 
-	// Compute Max inline size with pre found statistics values
+	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
@@ -1752,7 +1738,8 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 		}
 		user_param->size = MTU_SIZE(user_param->curr_mtu);
 	}
-	//checking msg size in raw ethernet
+
+	/* checking msg size in raw ethernet */
 	if (user_param->connection_type == RawEth){
 		if (user_param->size > user_param->curr_mtu) {
 			fprintf(stderr," Max msg size in RawEth is MTU %d\n",user_param->curr_mtu);
@@ -1776,8 +1763,8 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 /******************************************************************************
  *
  ******************************************************************************/
-int check_link(struct ibv_context *context,struct perftest_parameters *user_param) {
-
+int check_link(struct ibv_context *context,struct perftest_parameters *user_param)
+{
 	user_param->transport_type = context->device->transport_type;
 	user_param->link_type = set_link_layer(context,user_param->ib_port);
 
@@ -1787,7 +1774,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 	}
 
 	if (user_param->link_type == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index == -1) {
-			user_param->gid_index = 0;
+		user_param->gid_index = 0;
 	}
 
 	if (user_param->connection_type == RawEth) {
@@ -1798,9 +1785,8 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 		}
 	}
 
-	// in case of dual-port mode
+	/* in case of dual-port mode */
 	if (user_param->dualport==ON) {
-
 		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
 		if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
 			user_param->gid_index2 = 1;
@@ -1811,7 +1797,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 		}
 	}
 
-	// Compute Max inline size with pre found statistics values
+	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
@@ -1833,8 +1819,8 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 /******************************************************************************
  *
  ******************************************************************************/
-void ctx_print_test_info(struct perftest_parameters *user_param) {
-
+void ctx_print_test_info(struct perftest_parameters *user_param)
+{
 	int temp = 0;
 
 	if (user_param->output != FULL_VERBOSITY)
@@ -1903,9 +1889,9 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	printf(" Mtu             : %lu[B]\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
 	printf(" Link type       : %s\n" ,link_layer_str(user_param->link_type));
 
-    //we use the receive buffer only for mac forwarding.
-    if (user_param->mac_fwd == ON)
-    	printf(" Buffer size     : %d[B]\n" ,user_param->buff_size/2);
+	/* we use the receive buffer only for mac forwarding. */
+	if (user_param->mac_fwd == ON)
+		printf(" Buffer size     : %d[B]\n" ,user_param->buff_size/2);
 
 	if (user_param->gid_index != DEF_GID_INDEX)
 		printf(" Gid index       : %d\n" ,user_param->gid_index);
@@ -1928,8 +1914,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param) {
 	if (user_param->work_rdma_cm) {
 
 		if (user_param->tos != DEF_TOS) {
-                        printf(" \tTOS    : %d",user_param->tos);
-                }
+			printf(" \tTOS    : %d",user_param->tos);
+		}
 
 		if (user_param->machine == SERVER) {
 			putchar('\n');
@@ -1949,6 +1935,7 @@ static float calc_cpu_util (struct perftest_parameters *user_param)
 	long long ustat_diff, idle_diff;
 	ustat_diff = user_param->cpu_util_data.ustat[1] - user_param->cpu_util_data.ustat[0];
 	idle_diff = user_param->cpu_util_data.idle[1] - user_param->cpu_util_data.idle[0];
+
 	if ((ustat_diff + idle_diff) != 0)
 		return ((float)ustat_diff / (ustat_diff + idle_diff)) * 100;
 	else
@@ -1958,8 +1945,8 @@ static float calc_cpu_util (struct perftest_parameters *user_param)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep) {
-
+void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep)
+{
 	double cycles_to_units,sum_of_test_cycles;
 	int location_arr;
 	int opt_completed = 0;
@@ -1979,7 +1966,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 		num_of_qps /= 2;
 
 	if (user_param->noPeak == OFF) {
-		/* Find the peak bandwidth unless asked not to in command line*/
+		/* Find the peak bandwidth unless asked not to in command line */
 		for (i = 0; i < user_param->iters * num_of_qps; ++i) {
 			for (j = i; j < user_param->iters * num_of_qps; ++j) {
 				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
@@ -2002,7 +1989,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	tsize = run_inf_bi_factor * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : num_of_qps;
 	location_arr = (user_param->noPeak) ? 0 : user_param->iters*num_of_qps - 1;
-	//support in GBS format
+	/* support in GBS format */
 	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
 
 	sum_of_test_cycles = ((double)(user_param->tcompleted[location_arr] - user_param->tposted[0]));
@@ -2037,7 +2024,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->sl = user_param->sl;
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
-							|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
+			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 
 	if (free_my_bw_rep == 1) {
@@ -2052,18 +2039,18 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
 {
 
- 	double bw_peak     = my_bw_rep->bw_peak;
- 	double bw_avg      = my_bw_rep->bw_avg;
+	double bw_peak     = my_bw_rep->bw_peak;
+	double bw_avg      = my_bw_rep->bw_avg;
 	double bw_avg_p1      = my_bw_rep->bw_avg_p1;
 	double bw_avg_p2      = my_bw_rep->bw_avg_p2;
- 	double msgRate_avg = my_bw_rep->msgRate_avg;
+	double msgRate_avg = my_bw_rep->msgRate_avg;
 	double msgRate_avg_p1 = my_bw_rep->msgRate_avg_p1;
 	double msgRate_avg_p2 = my_bw_rep->msgRate_avg_p2;
 	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
 
 	if (rem_bw_rep != NULL) {
- 		bw_peak     += rem_bw_rep->bw_peak;
- 		bw_avg      += rem_bw_rep->bw_avg;
+		bw_peak     += rem_bw_rep->bw_peak;
+		bw_avg      += rem_bw_rep->bw_avg;
 		bw_avg_p1      += rem_bw_rep->bw_avg_p1;
 		bw_avg_p2      += rem_bw_rep->bw_avg_p2;
 		msgRate_avg += rem_bw_rep->msgRate_avg;
@@ -2071,8 +2058,8 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
 	}
 
-	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {//bibw test, and not report-both printing
-		// Verify Limits
+	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {
+		/* Verify Limits */
 		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > bw_avg)) )
 			user_param->is_bw_limit_passed |= 0;
 		else
@@ -2102,10 +2089,10 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
  ******************************************************************************/
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
-    if ((n - 1) % 2)
-        return(delta[n / 2] + delta[n / 2 - 1]) / 2;
-    else
-        return delta[n / 2];
+	if ((n - 1) % 2)
+		return(delta[n / 2] + delta[n / 2 - 1]) / 2;
+	else
+		return delta[n / 2];
 }
 
 /******************************************************************************
@@ -2113,12 +2100,12 @@ static inline cycles_t get_median(int n, cycles_t delta[])
  ******************************************************************************/
 static int cycles_compare(const void *aptr, const void *bptr)
 {
-    const cycles_t *a = aptr;
-    const cycles_t *b = bptr;
-    if (*a < *b) return -1;
-    if (*a > *b) return 1;
-    return 0;
+	const cycles_t *a = aptr;
+	const cycles_t *b = bptr;
+	if (*a < *b) return -1;
+	if (*a > *b) return 1;
 
+	return 0;
 }
 
 /******************************************************************************
@@ -2127,49 +2114,49 @@ static int cycles_compare(const void *aptr, const void *bptr)
 void print_report_lat (struct perftest_parameters *user_param)
 {
 
-    int i;
+	int i;
 	int rtt_factor;
 	double cycles_to_units;
-    cycles_t median;
+	cycles_t median;
 	cycles_t *delta = NULL;
-    const char* units;
+	const char* units;
 	double latency;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	ALLOCATE(delta,cycles_t,user_param->iters - 1);
 
-    for (i = 0; i < user_param->iters - 1; ++i)
-        delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
+	for (i = 0; i < user_param->iters - 1; ++i)
+		delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
 
-    if (user_param->r_flag->cycles) {
-        cycles_to_units = 1;
-        units = "cycles";
+	if (user_param->r_flag->cycles) {
+		cycles_to_units = 1;
+		units = "cycles";
 
-    } else {
-        cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
+	} else {
+		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
 		if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
 			fprintf(stderr,"Can't produce a report\n");
 			exit(1);
 		}
 
-        units = "usec";
-    }
+		units = "usec";
+	}
 
-    if (user_param->r_flag->unsorted) {
-        printf("#, %s\n", units);
-        for (i = 0; i < user_param->iters - 1; ++i)
-		    printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
-    }
+	if (user_param->r_flag->unsorted) {
+		printf("#, %s\n", units);
+		for (i = 0; i < user_param->iters - 1; ++i)
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+	}
 
-    qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
+	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
 
-    if (user_param->r_flag->histogram) {
-        printf("#, %s\n", units);
-        for (i = 0; i < user_param->iters - 1; ++i)
-            printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
-    }
+	if (user_param->r_flag->histogram) {
+		printf("#, %s\n", units);
+		for (i = 0; i < user_param->iters - 1; ++i)
+			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+	}
 
-    median = get_median(user_param->iters - 1, delta);
+	median = get_median(user_param->iters - 1, delta);
 
 	latency = median / cycles_to_units / rtt_factor;
 
@@ -2185,7 +2172,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 				latency);
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
-    free(delta);
+	free(delta);
 }
 
 /******************************************************************************
@@ -2213,9 +2200,9 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	}
 	else {
 		printf(REPORT_FMT_LAT_DUR,
-			user_param->size,
-			user_param->iters,
-			latency);
+				user_param->size,
+				user_param->iters,
+				latency);
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 }

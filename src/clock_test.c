@@ -15,8 +15,7 @@ int main()
 	}
 
 	printf("Type CTRL-C to cancel.\n");
-	for(;;)
-	{
+	for (;;) {
 		c1 = get_cycles();
 		sleep(1);
 		c2 = get_cycles();

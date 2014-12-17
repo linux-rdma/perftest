@@ -47,13 +47,13 @@
  *
  ******************************************************************************/
 static int set_mcast_group(struct pingpong_context *ctx,
-						   struct perftest_parameters *user_param,
-						   struct mcast_parameters *mcg_params) {
-
+		struct perftest_parameters *user_param,
+		struct mcast_parameters *mcg_params)
+{
 	struct ibv_port_attr port_attr;
 
 	if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&mcg_params->port_gid)) {
-			return 1;
+		return 1;
 	}
 
 	if (ibv_query_pkey(ctx->context,user_param->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
@@ -68,7 +68,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->ib_port = user_param->ib_port;
 
 	if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
-		// Request for Mcast group create registery in SM.
+		/* Request for Mcast group create registery in SM. */
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
 			fprintf(stderr,"Couldn't Register the Mcast group on the SM\n");
 			return 1;
@@ -81,10 +81,10 @@ static int set_mcast_group(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static int send_set_up_connection(struct pingpong_context *ctx,
-								  struct perftest_parameters *user_param,
-								  struct pingpong_dest *my_dest,
-								  struct mcast_parameters *mcg_params,
-								  struct perftest_comm *comm)
+		struct perftest_parameters *user_param,
+		struct pingpong_dest *my_dest,
+		struct mcast_parameters *mcg_params,
+		struct perftest_comm *comm)
 {
 	int i;
 
@@ -120,9 +120,9 @@ static int send_set_up_connection(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 static int send_destroy_ctx(
-	struct pingpong_context *ctx,
-	struct perftest_parameters *user_param,
-	struct mcast_parameters *mcg_params)
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		struct mcast_parameters *mcg_params)
 {
 	int i;
 	if (user_param->use_mcg) {
@@ -136,7 +136,7 @@ static int send_destroy_ctx(
 			}
 		}
 
-		// Removal Request for Mcast group in SM if needed.
+		/* Removal Request for Mcast group in SM if needed. */
 		if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
 			if (join_multicast_group(SUBN_ADM_METHOD_DELETE,mcg_params)) {
 				fprintf(stderr,"Couldn't Unregister the Mcast group on the SM\n");
@@ -150,8 +150,8 @@ static int send_destroy_ctx(
 /******************************************************************************
  *
  ******************************************************************************/
-int main(int argc, char *argv[]) {
-
+int main(int argc, char *argv[])
+{
 	struct ibv_device		*ib_dev = NULL;
 	struct pingpong_context  	ctx;
 	struct pingpong_dest	 	*my_dest  = NULL;
@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
 	user_param.tst     = BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 
-	// Configure the parameters values according to user arguments or defalut values.
+	/* Configure the parameters values according to user arguments or defalut values. */
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
@@ -183,14 +183,14 @@ int main(int argc, char *argv[]) {
 	if((user_param.connection_type == DC || user_param.use_xrc) && user_param.duplex) {
 		user_param.num_of_qps *= 2;
 	}
-	//Checking that the user did not run with RawEth. for this we have raw_etherent_bw test.
+	/* Checking that the user did not run with RawEth. for this we have raw_etherent_bw test. */
 	if (user_param.connection_type == RawEth) {
 		fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
 		fprintf(stderr," For this we have raw_ethernet_bw test in this package.\n");
 		return FAILURE;
 	}
 
-	// Finding the IB device selected (or defalut if no selected).
+	/* Finding the IB device selected (or defalut if no selected). */
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.use_mcg)
 		GET_STRING(mcg_params.ib_devname,ibv_get_device_name(ib_dev));
 
-	// Getting the relevant context from the device
+	/* Getting the relevant context from the device */
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
@@ -208,13 +208,13 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	// See if MTU and link type are valid and supported.
+	/* See if MTU and link type are valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
 
-	// copy the relevant user parameters to the comm struct + creating rdma_cm resources.
+	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		return 1;
@@ -226,7 +226,7 @@ int main(int argc, char *argv[]) {
 		printf("************************************\n");
 	}
 
-	// Initialize the connection and print the local data.
+	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		return FAILURE;
@@ -236,13 +236,13 @@ int main(int argc, char *argv[]) {
 
 	check_sys_data(&user_comm, &user_param);
 
-	// See if MTU and link type are valid and supported.
+	/* See if MTU and link type are valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
 
-	// Print basic test information.
+	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
 
 	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
@@ -253,23 +253,23 @@ int main(int argc, char *argv[]) {
 	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
 		ctx.send_rcredit = 1;
 
-	// Allocating arrays needed for the test.
+	/* Allocating arrays needed for the test. */
 	alloc_ctx(&ctx,&user_param);
 
-	// Create (if nessacery) the rdma_cm ids and channel.
+	/* Create (if nessacery) the rdma_cm ids and channel. */
 	if (user_param.work_rdma_cm == ON) {
 
-	    if (user_param.machine == CLIENT) {
+		if (user_param.machine == CLIENT) {
 			if (retry_rdma_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
 			}
 
 		} else {
-    		if (create_rdma_resources(&ctx,&user_param)) {
+			if (create_rdma_resources(&ctx,&user_param)) {
 				fprintf(stderr," Unable to create the rdma_resources\n");
 				return FAILURE;
-    		}
+			}
 			if (rdma_server_connect(&ctx,&user_param)) {
 				fprintf(stderr,"Unable to perform rdma_client function\n");
 				return FAILURE;
@@ -278,18 +278,19 @@ int main(int argc, char *argv[]) {
 
 	} else {
 
-		// create all the basic IB resources (data buffer, PD, MR, CQ and events channel)
-	    if (ctx_init(&ctx,&user_param)) {
+		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
+		if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
 			return FAILURE;
-	    }
+		}
 	}
 
-	// Set up the Connection.
+	/* Set up the Connection. */
 	if (send_set_up_connection(&ctx,&user_param,my_dest,&mcg_params,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
+
 	if (ctx.send_rcredit)
 		ctx_alloc_credit(&ctx,&user_param,my_dest);
 
@@ -299,7 +300,7 @@ int main(int argc, char *argv[]) {
 	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
 
-		// shaking hands and gather the other side info.
+		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return 1;
@@ -308,23 +309,22 @@ int main(int argc, char *argv[]) {
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
-        if (user_param.work_rdma_cm == OFF)
-        {
-                if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0]))
-                {
-                        fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
-                        fprintf(stderr," Please Try to use a different IP version.\n\n");
-                        return 1;
-                }
-        }
+	if (user_param.work_rdma_cm == OFF) {
+		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
+			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+			fprintf(stderr," Please Try to use a different IP version.\n\n");
+			return 1;
+		}
+	}
 
 	/* If credit for available recieve buffers is necessary,
 	 * the credit sending is done via RDMA WRITE ops and the ctx_hand_shake above
-	 * is used to exchange the rkeys and buf addresses for the RDMA WRITEs */
+	 * is used to exchange the rkeys and buf addresses for the RDMA WRITEs
+	 */
 	if (ctx.send_rcredit)
 		ctx_set_credit_wqes(&ctx,&user_param,rem_dest);
 
-	// Joining the Send side port the Mcast gid
+	/* Joining the Send side port the Mcast gid */
 	if (user_param.use_mcg && (user_param.machine == CLIENT || user_param.duplex)) {
 
 		memcpy(mcg_params.mgid.raw, rem_dest[0].gid.raw, 16);
@@ -340,46 +340,44 @@ int main(int argc, char *argv[]) {
 		 * what happened before this fix was client reaching the post_send
 		 * code segment in about 350 ns from here, and the switch(es) dropped
 		 * the packet because join request wasn't finished.
-		*/
+		 */
 		usleep(50000);
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
 
-		// Prepare IB resources for rtr/rts.
+		/* Prepare IB resources for rtr/rts. */
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return 1;
 		}
 	}
 
-	// shaking hands and gather the other side info.
+	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
 		return 1;
 	}
 
-    if (user_param.use_event) {
+	if (user_param.use_event) {
 
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-            return 1;
-        }
+			return 1;
+		}
 
 		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-            return 1;
-        }
-    }
+			return 1;
+		}
+	}
 
 	if (user_param.output == FULL_VERBOSITY) {
-		if (user_param.report_per_port)
-		{
+		if (user_param.report_per_port) {
 			printf(RESULT_LINE_PER_PORT);
 			printf((user_param.report_fmt == MBS ? RESULT_FMT_PER_PORT : RESULT_FMT_G_PER_PORT));
 		}
-		else
-		{
+		else {
 			printf(RESULT_LINE);
 			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 		}
@@ -389,7 +387,7 @@ int main(int argc, char *argv[]) {
 	if (user_param.test_method == RUN_ALL) {
 
 		if (user_param.connection_type == UD)
-		   size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
+			size_max_pow =  (int)UD_MSG_2_EXP(MTU_SIZE(user_param.curr_mtu)) + 1;
 
 		for (i = 1; i < size_max_pow ; ++i) {
 
@@ -416,8 +414,7 @@ int main(int argc, char *argv[]) {
 					ctx.credit_buf[j] = 0;
 			}
 
-			if (user_param.duplex)
-			{
+			if (user_param.duplex) {
 				if(run_iter_bi(&ctx,&user_param))
 					return 17;
 
@@ -439,13 +436,13 @@ int main(int argc, char *argv[]) {
 			if (user_param.duplex && user_param.test_type != DURATION) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
-                        }
+			}
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
 				return 1;
 			}
 
-			//Check if last iteration ended well in UC/UD
+			/* Check if last iteration ended well in UC/UD */
 			if (user_param.check_alive_exited) {
 				break;
 			}
@@ -552,15 +549,16 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr," Trying to close this side resources\n");
 	}
 
-	// Destory all test resources, including Mcast if exists
+	/* Destory all test resources, including Mcast if exists */
 	if (send_destroy_ctx(&ctx,&user_param,&mcg_params)) {
 		fprintf(stderr,"Couldn't Destory all SEND resources\n");
 		return FAILURE;
 	}
-	if (user_param.work_rdma_cm == ON)
+	if (user_param.work_rdma_cm == ON) {
 		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
 			fprintf(stderr,"Failed to destroy resources\n");
 			return 1;
+		}
 	}
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
@@ -575,4 +573,3 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-
