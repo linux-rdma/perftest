@@ -1,7 +1,7 @@
 	     Open Fabrics Enterprise Distribution (OFED)
-                Performance Tests README for OFED 2.3
-		  
-			  April 2014
+                Performance Tests README for OFED 2.4
+
+			  December 2014
 
 
 
@@ -125,70 +125,70 @@ Client:		./<test name> <options> <server IP address>
 
 Common Options to all tests:
 ----------------------------
-  -h, --help                        Display this help message screen
-  -p, --port=<port>                 Listen on/connect to port <port> (default: 18515)
-  -R, --rdma_cm                     Connect QPs with rdma_cm and run test on those QPs
-  -z, --com_rdma_cm                 Communicate with rdma_cm module to exchange data - use regular QPs
-  -m, --mtu=<mtu>                   QP Mtu size (default: active_mtu from ibv_devinfo)
-  -c, --connection=<RC/UC/UD/XRC>   Connection type RC/UC/UD/XRC (default RC)
-  -d, --ib-dev=<dev>                Use IB device <dev> (default: first device found)
-  -i, --ib-port=<port>              Use network port <port> of IB device (default: 1)
-  -s, --size=<size>                 Size of message to exchange (default: 1)
-  -a, --all                         Run sizes from 2 till 2^23
-  -n, --iters=<iters>               Number of exchanges (at least 100, default: 1000)
-  -x, --gid-index=<index>           Test uses GID with GID index taken from command
-  -V, --version                     Display version number
-  -e, --events                      Sleep on CQ events (default poll)
-  -F, --CPU-freq                    Do not fail even if cpufreq_ondemand module
-  -I, --inline_size=<size>          Max size of message to be sent in inline mode
-  -u, --qp-timeout=<timeout>        QP timeout = (4 uSec)*(2^timeout) (default: 14)
-  -S, --sl=<sl>                     Service Level (default 0)
-  -r, --rx-depth=<dep>              Receive queue depth (default 600)
+  -h, --help				Display this help message screen
+  -p, --port=<port>			Listen on/connect to port <port> (default: 18515)
+  -R, --rdma_cm				Connect QPs with rdma_cm and run test on those QPs
+  -z, --com_rdma_cm			Communicate with rdma_cm module to exchange data - use regular QPs
+  -m, --mtu=<mtu>			QP Mtu size (default: active_mtu from ibv_devinfo)
+  -c, --connection=<RC/UC/UD/XRC/DC>	Connection type RC/UC/UD/XRC/DC (default RC).
+  -d, --ib-dev=<dev>			Use IB device <dev> (default: first device found)
+  -i, --ib-port=<port>			Use network port <port> of IB device (default: 1)
+  -s, --size=<size>			Size of message to exchange (default: 1)
+  -a, --all				Run sizes from 2 till 2^23
+  -n, --iters=<iters>			Number of exchanges (at least 100, default: 1000)
+  -x, --gid-index=<index>		Test uses GID with GID index taken from command
+  -V, --version				Display version number
+  -e, --events				Sleep on CQ events (default poll)
+  -F, --CPU-freq			Do not fail even if cpufreq_ondemand module
+  -I, --inline_size=<size>		Max size of message to be sent in inline mode
+  -u, --qp-timeout=<timeout>		QP timeout = (4 uSec)*(2^timeout) (default: 14)
+  -S, --sl=<sl>				Service Level (default 0)
+  -r, --rx-depth=<dep>			Receive queue depth (default 600)
 
 Options for latency tests:
 --------------------------
 
-  -C, --report-cycles           Report times in CPU cycle units
-  -H, --report-histogram        Print out all results (Default: summary only)
-  -U, --report-unsorted  		Print out unsorted results (default sorted)
+  -C, --report-cycles			Report times in CPU cycle units
+  -H, --report-histogram		Print out all results (Default: summary only)
+  -U, --report-unsorted			Print out unsorted results (default sorted)
 
 Options for BW tests:
 ---------------------
 
-  -b, --bidirectional           Measure bidirectional bandwidth (default uni)
-  -N, --no peak-bw             	Cancel peak-bw calculation (default with peak-bw)
-  -Q, --cq-mod  				Generate Cqe only after <cq-mod> completion
-  -t, --tx-depth=<dep>          Size of tx queue (default: 128)
-  -O, --dualport				Run test in dual-port mode (2 QPs). Both ports must be active (default OFF)
+  -b, --bidirectional			Measure bidirectional bandwidth (default uni)
+  -N, --no peak-bw			Cancel peak-bw calculation (default with peak-bw)
+  -Q, --cq-mod				Generate Cqe only after <cq-mod> completion
+  -t, --tx-depth=<dep>			Size of tx queue (default: 128)
+  -O, --dualport			Run test in dual-port mode (2 QPs). Both ports must be active (default OFF)
   -D, --duration=<sec> 			Run test for <sec> period of seconds
   -f, --margin=<sec> 			When in Duration, measure results within margins (default: 2)
-  -l, --post_list=<list size>   Post list of WQEs of <list size> size (instead of single post)
+  -l, --post_list=<list size>		Post list of WQEs of <list size> size (instead of single post)
   -q, --qp=<num of qp's>		Num of QPs running in the process (default: 1)
       --run_infinitely			Run test until interrupted by user, print results every 5 seconds
 
 SEND tests (ib_send_lat or ib_send_bw) flags: 
 ---------------------------------------------
 
-  -r, --rx-depth=<dep>          Size of receive queue (default: 512 in BW test)
+  -r, --rx-depth=<dep>			Size of receive queue (default: 512 in BW test)
   -g, --mcg=<num_of_qps> 		Send messages to multicast group with <num_of_qps> qps attached to it
-  -M, --MGID=<multicast_gid>    In multicast, uses <multicast_gid> as the group MGID
+  -M, --MGID=<multicast_gid>		In multicast, uses <multicast_gid> as the group MGID
 
 ATOMIC tests (ib_atomic_lat or ib_atomic_bw) flags: 
 ---------------------------------------------------
 
-  -A, --atomic_type=<type>	type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD}
+  -A, --atomic_type=<type>		type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD}
   -o, --outs=<num>			Number of outstanding read/atomic requests - also on READ tests
 
 Options for raw_ethernet_send_bw:
 ---------------------------------
-  -B, --source_mac              source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID)
-  -E, --dest_mac                destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered
-  -J, --server_ip               server ip address by this format X.X.X.X (using to send packets with IP header)
-  -j, --client_ip               client ip address by this format X.X.X.X (using to send packets with IP header)
-  -K, --server_port             server udp port number (using to send packets with UPD header)
-  -k, --client_port             client udp port number (using to send packets with UDP header)
-  -Z, --server                  choose server side for the current machine (--server/--client must be selected)
-  -P, --client                  choose client side for the current machine (--server/--client must be selected)
+  -B, --source_mac			source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID)
+  -E, --dest_mac			destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered
+  -J, --server_ip			server ip address by this format X.X.X.X (using to send packets with IP header)
+  -j, --client_ip			client ip address by this format X.X.X.X (using to send packets with IP header)
+  -K, --server_port			server udp port number (using to send packets with UPD header)
+  -k, --client_port			client udp port number (using to send packets with UDP header)
+  -Z, --server				choose server side for the current machine (--server/--client must be selected)
+  -P, --client				choose client side for the current machine (--server/--client must be selected)
 
 ----------------------------------------------
 Special feature detailed explanation in tests:
@@ -225,12 +225,12 @@ Special feature detailed explanation in tests:
 
  2. Bidirectional support in ib_send_bw test, when running in UD or UC mode.
     In rare cases, the benchmark program may hang.
-    This release added a feature for hang detection, which will exit test in those situations.
+    perftest-2.3 release includes a feature for hang detection, which will exit test after 2 mins in those situations.
 
  3. Different versions of perftest may not be compatible with each other.
     Please use the same perftest version on both sides to ensure consistency of benchmark results.
 
- 4. Version 5.2 won't work with previous versions of perftest.
+ 4. Test version 5.3 and above won't work with previous versions of perftest.
 
  5. This perftest package won't compile on MLNX_OFED-2.1 due to API changes in MLNX_OFED-2.2
     In order to compile it properly, please do:
@@ -239,6 +239,7 @@ Special feature detailed explanation in tests:
 
  6. In te x390x platform virtualized environment the results shown by package test applications can be incorrect.
 
- 7. This release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
+ 7. perftest-2.3 release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
     Currently, running dualport when port1-IB , port2-Ethernet still not working.
 
+ 8. for postlist, tests will not finish correctly when using iterations and num_iters/poslist_val has a remainder.

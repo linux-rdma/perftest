@@ -59,22 +59,22 @@ struct ETH_header {
 }__attribute__((packed));
 
 struct IP_V4_header{
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-    uint8_t ihl:4;
-    uint8_t version:4;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-    uint8_t version:4;
-    uint8_t ihl:4;
-#endif
-    uint8_t tos;
-    uint16_t tot_len;
-    uint16_t id;
-    uint16_t frag_off;
-    uint8_t ttl;
-    uint8_t protocol;
-    uint16_t check;
-    uint32_t saddr;
-    uint32_t daddr;
+	#if defined(__LITTLE_ENDIAN_BITFIELD)
+	uint8_t		ihl:4;
+	uint8_t		version:4;
+	#elif defined(__BIG_ENDIAN_BITFIELD)
+	uint8_t		version:4;
+	uint8_t		ihl:4;
+	#endif
+	uint8_t		tos;
+	uint16_t 	tot_len;
+	uint16_t	id;
+	uint16_t	frag_off;
+	uint8_t		ttl;
+	uint8_t		protocol;
+	uint16_t	check;
+	uint32_t	saddr;
+	uint32_t	daddr;
 }__attribute__((packed));
 
 struct UDP_header {
@@ -85,16 +85,16 @@ struct UDP_header {
 }__attribute__((packed));
 
 struct TCP_header {
-       uint16_t        th_sport;               /* source port */
-       uint16_t        th_dport;               /* destination port */
-       uint32_t        th_seq;
-       uint32_t        th_ack;
-       uint8_t         th_rsv:4;
-       uint8_t         th_doff:4;
-       uint8_t         th_falgs;
-       uint16_t        th_window;
-       uint16_t        th_check;
-       uint16_t        th_urgptr;
+	uint16_t        th_sport;               /* source port */
+	uint16_t        th_dport;               /* destination port */
+	uint32_t        th_seq;
+	uint32_t        th_ack;
+	uint8_t         th_rsv:4;
+	uint8_t         th_doff:4;
+	uint8_t         th_falgs;
+	uint16_t        th_window;
+	uint16_t        th_check;
+	uint16_t        th_urgptr;
 }__attribute__((packed));
 
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
@@ -124,13 +124,13 @@ int check_flow_steering_support();
  *		sizePkt - size of the requested packet
  */
 void build_pkt_on_buffer(struct ETH_header* eth_header,
-						 struct raw_ethernet_info *my_dest_info,
-						 struct raw_ethernet_info *rem_dest_info,
-						 struct perftest_parameters *user_param,
-						 uint16_t eth_type,
-						 uint16_t ip_next_protocol,
-						 int print_flag,
-						 int sizePkt);
+		struct raw_ethernet_info *my_dest_info,
+		struct raw_ethernet_info *rem_dest_info,
+		struct perftest_parameters *user_param,
+		uint16_t eth_type,
+		uint16_t ip_next_protocol,
+		int print_flag,
+		int sizePkt);
 
 /*  create_raw_eth_pkt
  * 	Description: build raw Ethernet packet by user arguments
@@ -142,19 +142,19 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
  *				ctx - Test Context.
  *				my_dest_info - ethernet information of me
  *				rem_dest_info - ethernet information of the remote
-*/
+ */
 void create_raw_eth_pkt( struct perftest_parameters *user_param,
-						 struct pingpong_context 	*ctx ,
-						 struct raw_ethernet_info	*my_dest_info,
-						 struct raw_ethernet_info	*rem_dest_info);
+		struct pingpong_context 	*ctx ,
+		struct raw_ethernet_info	*my_dest_info,
+		struct raw_ethernet_info	*rem_dest_info);
 
 /*calc_flow_rules_size
-* Description: calculate the size of the flow(size of headers - ib, ethernet and ip/udp if available)
-* Parameters:
-*				is_ip_header - if ip header is exist, count the header's size
-*				is_udp_header - if udp header is exist, count the header's size
-*
-*/
+ * Description: calculate the size of the flow(size of headers - ib, ethernet and ip/udp if available)
+ * Parameters:
+ *				is_ip_header - if ip header is exist, count the header's size
+ *				is_udp_header - if udp header is exist, count the header's size
+ *
+ */
 int calc_flow_rules_size(int is_ip_header,int is_udp_header);
 
 /* send_set_up_connection
@@ -167,18 +167,18 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header);
  *				my_dest_info - ethernet information of me
  *				rem_dest_info - ethernet information of the remote
  *
-*/
+ */
 
 int send_set_up_connection(
-#ifdef HAVE_RAW_ETH_EXP
-	struct ibv_exp_flow_attr **flow_rules,
-#else
-	struct ibv_flow_attr **flow_rules,
-#endif
-	struct pingpong_context *ctx,
-	struct perftest_parameters *user_param,
-	struct raw_ethernet_info* my_dest_info,
-	struct raw_ethernet_info* rem_dest_info);
+		#ifdef HAVE_RAW_ETH_EXP
+		struct ibv_exp_flow_attr **flow_rules,
+		#else
+		struct ibv_flow_attr **flow_rules,
+		#endif
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		struct raw_ethernet_info* my_dest_info,
+		struct raw_ethernet_info* rem_dest_info);
 
 /* gen_ip_header .
 
@@ -238,7 +238,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  * Parameters :
  *
  *  sg     - sg->addr is pointer to the buffer.
-*/
+ */
 static __inline void switch_smac_dmac(struct ibv_sge *sg)
 {
 	struct ETH_header* eth_header;
@@ -249,4 +249,4 @@ static __inline void switch_smac_dmac(struct ibv_sge *sg)
 	memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
 }
 
-#endif //RAW_ETHERNET_RESOURCES_H
+#endif /* RAW_ETHERNET_RESOURCES_H */

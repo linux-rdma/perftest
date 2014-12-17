@@ -59,8 +59,8 @@
 #define USECSTART 100
 
 /*
- Use linear regression to calculate cycles per microsecond.
- http://en.wikipedia.org/wiki/Linear_regression#Parameter_estimation
+   Use linear regression to calculate cycles per microsecond.
+http://en.wikipedia.org/wiki/Linear_regression#Parameter_estimation
 */
 static double sample_get_cpu_mhz(void)
 {
@@ -91,7 +91,7 @@ static double sample_get_cpu_mhz(void)
 				return 0;
 			}
 		} while ((tv2.tv_sec - tv1.tv_sec) * 1000000 +
-			(tv2.tv_usec - tv1.tv_usec) < USECSTART + i * USECSTEP);
+				(tv2.tv_usec - tv1.tv_usec) < USECSTART + i * USECSTEP);
 
 		x[i] = (tv2.tv_sec - tv1.tv_sec) * 1000000 +
 			tv2.tv_usec - tv1.tv_usec;
@@ -149,18 +149,18 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 		double m;
 		int rc;
 
-#if defined (__ia64__)
+		#if defined (__ia64__)
 		/* Use the ITC frequency on IA64 */
 		rc = sscanf(buf, "itc MHz : %lf", &m);
-#elif defined (__PPC__) || defined (__PPC64__)
+		#elif defined (__PPC__) || defined (__PPC64__)
 		/* PPC has a different format as well */
 		rc = sscanf(buf, "clock : %lf", &m);
-#elif defined (__sparc__) && defined (__arch64__)
+		#elif defined (__sparc__) && defined (__arch64__)
 		/*
-		* on sparc the /proc/cpuinfo lines that hold
-		* the cpu freq in HZ are as follow:
-		* Cpu{cpu-num}ClkTck      : 00000000a9beeee4
-		*/
+		 * on sparc the /proc/cpuinfo lines that hold
+		 * the cpu freq in HZ are as follow:
+		 * Cpu{cpu-num}ClkTck      : 00000000a9beeee4
+		 */
 		int i;
 		char *s;
 		unsigned val;
@@ -172,9 +172,9 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 		strncpy(s, "0x", strlen("0x"));
 		rc = sscanf(s, "%x", &val);
 		m = val/1000000;
-#else
+		#else
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
-#endif
+		#endif
 
 		if (rc != 1)
 			continue;
@@ -187,16 +187,17 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 		if ((delta / mhz > 0.02) && (print_flag ==0)) {
 			print_flag = 1;
 			fprintf(stderr, "Conflicting CPU frequency values"
-				" detected: %lf != %lf\n", mhz, m);
+					" detected: %lf != %lf\n", mhz, m);
 			if (no_cpu_freq_fail) {
 				fprintf(stderr, "Test integrity may be harmed !\n");
-			}else{
+			} else {
 				fclose(f);
 				return 0.0;
 			}
 			continue;
 		}
 	}
+
 	fclose(f);
 	return mhz;
 }
@@ -204,17 +205,15 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 
 double get_cpu_mhz(int no_cpu_freq_fail)
 {
-#ifdef __s390x__
+	#ifdef __s390x__
 	return sample_get_cpu_mgz();
-#else
+	#else
 	double sample, proc, delta;
 	sample = sample_get_cpu_mhz();
 	proc = proc_get_cpu_mhz(no_cpu_freq_fail);
 	#ifdef __aarch64__
-	if (proc < 1) //no cpu_freq info in /proc/cpuinfo
-	{
+	if (proc < 1)
 		proc = sample;
-	}
 	#endif
 	if (!proc || !sample)
 		return 0;
@@ -222,13 +221,13 @@ double get_cpu_mhz(int no_cpu_freq_fail)
 	delta = proc > sample ? proc - sample : sample - proc;
 	if (delta / proc > 0.02) {
 		#if !defined (__PPC__) && !defined (__PPC64__)
-			fprintf(stderr, "Warning: measured timestamp frequency "
-					"%g differs from nominal %g MHz\n",
-					sample, proc);
-			if (!no_cpu_freq_fail)
-				fprintf(stderr, "         Add --CPU-freq flag to show report\n");
+		fprintf(stderr, "Warning: measured timestamp frequency "
+				"%g differs from nominal %g MHz\n",
+				sample, proc);
+		if (!no_cpu_freq_fail)
+			fprintf(stderr, "         Add --CPU-freq flag to show report\n");
 		#endif
-			return sample;
+		return sample;
 	}
 	return proc;
 #endif

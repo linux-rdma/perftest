@@ -44,63 +44,63 @@
 #include <rdma/rdma_cma.h>
 #include "perftest_resources.h"
 
-//Macro for 64 bit variables to switch to/from net
+/* Macro for 64 bit variables to switch to/from net */
 #if __BYTE_ORDER == __BIG_ENDIAN || __BYTE_ORDER == __LITTLE_ENDIAN
-#  if __BYTE_ORDER == __BIG_ENDIAN
-#    define ntoh_64(x) (x)
-#    define hton_64(x) (x)
-#    define ntoh_double(x) (x)
-#    define hton_double(x) (x)
-#  else
-#    define ntoh_64(x) bswap_64(x)
-#    define hton_64(x) bswap_64(x)
-#    define ntoh_double(x) bswap_double(x)
-#    define hton_double(x) bswap_double(x)
-#  endif
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define ntoh_64(x) (x)
+#define hton_64(x) (x)
+#define ntoh_double(x) (x)
+#define hton_double(x) (x)
 #else
-#  error "Only BIG_ENDIAN and LITTLE_ENDIAN are supported."
+#define ntoh_64(x) bswap_64(x)
+#define hton_64(x) bswap_64(x)
+#define ntoh_double(x) bswap_double(x)
+#define hton_double(x) bswap_double(x)
+#endif
+#else
+#error "Only BIG_ENDIAN and LITTLE_ENDIAN are supported."
 #endif
 
-// long is 64-bit in LP64 mode, 32-bit in LLP64 mode.
+/* long is 64-bit in LP64 mode, 32-bit in LLP64 mode. */
 #if defined(_LP64) || defined(__LP64__)
-#  define ntoh_long(x) ntoh_64(x)
-#  define hton_long(x) hton_64(x)
+#define ntoh_long(x) ntoh_64(x)
+#define hton_long(x) hton_64(x)
 #else
-#  define ntoh_long(x) ntohl(x)
-#  define hton_long(x) htonl(x)
+#define ntoh_long(x) ntohl(x)
+#define hton_long(x) htonl(x)
 #endif
 
-// int is 32-bit in both LP64 and LLP64 modes.
+/* int is 32-bit in both LP64 and LLP64 modes. */
 #define ntoh_int(x) (int) ntohl((uint32_t) (x))
 #define hton_int(x) (int) htonl((uint32_t) (x))
 
-#define KEY_MSG_SIZE 	 (59)   // Message size without gid.
-#define KEY_MSG_SIZE_GID (108)   // Message size with gid (MGID as well).
+#define KEY_MSG_SIZE 	 (59)   /* Message size without gid. */
+#define KEY_MSG_SIZE_GID (108)   /* Message size with gid (MGID as well). */
 #define SYNC_SPEC_ID	 (5)
 
-// The Format of the message we pass through sockets , without passing Gid.
+/* The Format of the message we pass through sockets , without passing Gid. */
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016Lx:%08x"
 
-// The Format of the message we pass through sockets (With Gid).
+/* The Format of the message we pass through sockets (With Gid). */
 #define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016Lx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%08x:"
 
-// The Basic print format for all verbs.
+/* The Basic print format for all verbs. */
 #define BASIC_ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x"
 
-// Addition format string for READ - the outstanding reads.
+/* Addition format string for READ - the outstanding reads. */
 #define READ_FMT       " OUT %#04x"
 
-// The print format of the pingpong_dest element for RDMA verbs.
+/* The print format of the pingpong_dest element for RDMA verbs. */
 #define RDMA_FMT       " RKey %#08x VAddr %#016Lx"
 
-// The print number of SRQ in case of XRC
+/* The print number of SRQ in case of XRC */
 #define XRC_FMT 	   " SRQn %#08x"
 #define DC_FMT         " SRQn %#08x"
 
-// The print format of a global address or a multicast address.
+/* The print format of a global address or a multicast address. */
 #define PERF_GID_FMT " %s: %02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d:%02d\n"
 
-// The print format of a global address or a multicast address.
+/* The print format of a global address or a multicast address. */
 #define PERF_RAW_MGID_FMT " %s: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n"
 
 struct perftest_comm {
@@ -131,7 +131,7 @@ double bswap_double(double x);
  * Return Value : SUCCESS,FAILURE.
  */
 int create_comm_struct (struct perftest_comm *comm,
-						struct perftest_parameters *user_param);
+		struct perftest_parameters *user_param);
 
 
 /* set_up_connection .
@@ -147,8 +147,8 @@ int create_comm_struct (struct perftest_comm *comm,
  * Return Value : SUCCESS,FAILURE.
  */
 int set_up_connection(struct pingpong_context *ctx,
-					  struct perftest_parameters *user_param,
-					  struct pingpong_dest *my_dest);
+		struct perftest_parameters *user_param,
+		struct pingpong_dest *my_dest);
 
 /* establish_connection .
  *
@@ -176,7 +176,7 @@ int establish_connection(struct perftest_comm *comm);
  * Return Value : SUCCESS,FAILURE.
  */
 int rdma_client_connect(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param);
+		struct perftest_parameters *user_param);
 
 /* retry_rdma_connect .
  *
@@ -190,7 +190,7 @@ int rdma_client_connect(struct pingpong_context *ctx,
  * Return Value : SUCCESS,FAILURE.
  */
 int retry_rdma_connect(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param);
+		struct perftest_parameters *user_param);
 
 /* rdma_server_connect .
  *
@@ -203,7 +203,7 @@ int retry_rdma_connect(struct pingpong_context *ctx,
  * Return Value : SUCCESS,FAILURE.
  */
 int rdma_server_connect(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param);
+		struct perftest_parameters *user_param);
 /* ctx_hand_shake .
  *
  * Description :
@@ -223,8 +223,8 @@ int rdma_server_connect(struct pingpong_context *ctx,
  * Return Value : 0 upon success. -1 if it fails.
  */
 int ctx_hand_shake(struct perftest_comm *comm,
-				   struct pingpong_dest *my_dest,
-				   struct pingpong_dest *rem_dest);
+		struct pingpong_dest *my_dest,
+		struct pingpong_dest *rem_dest);
 
 
 
@@ -240,7 +240,7 @@ int ctx_hand_shake(struct perftest_comm *comm,
  *  element - The element to print.
  */
 void ctx_print_pingpong_data(struct pingpong_dest *element,
-							 struct perftest_comm *comm);
+		struct perftest_comm *comm);
 
 /* ctx_close_connection .
  *
@@ -257,8 +257,8 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
  * Return Value : 0 upon success. -1 if it fails.
  */
 int ctx_close_connection(struct perftest_comm *comm,
-				         struct pingpong_dest *my_dest,
-				         struct pingpong_dest *rem_dest);
+		struct pingpong_dest *my_dest,
+		struct pingpong_dest *rem_dest);
 
 /* ctx_xchg_data .
  *
@@ -279,8 +279,8 @@ int ctx_close_connection(struct perftest_comm *comm,
  * Return Value : 0 upon success. -1 if it fails.
  */
 int ctx_xchg_data( struct perftest_comm *comm,
-				   void *my_data,
-				   void *rem_data,int size);
+		void *my_data,
+		void *rem_data,int size);
 
 /* ethernet_write_data .
  *
@@ -313,7 +313,7 @@ int ethernet_write_data(struct perftest_comm *comm, char *msg, size_t size);
  *  size   - size of the message
  * Return Value : 0 upon success. -1 if it fails.
  */
-int ethernet_read_data(struct perftest_comm *comm, char *recv_msg, size_t size);;
+int ethernet_read_data(struct perftest_comm *comm, char *recv_msg, size_t size);
 
 /* rdma_write_data .
  *
@@ -400,8 +400,8 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm, void *my_data, void *rem_dat
  * Return Value : 0 upon success. -1 if it fails.
  */
 void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_rep,
-                                                        struct bw_report_data *rem_bw_rep, float remote_version);
-														
+		struct bw_report_data *rem_bw_rep, float remote_version);
+
 /* exchange_versions.
  *
  * Description :
@@ -432,7 +432,7 @@ void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters 
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm);
 
 int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
-                                         struct pingpong_dest *rem_dest);
+		struct pingpong_dest *rem_dest);
 
 #endif /* PERFTEST_COMMUNICATION_H */
 

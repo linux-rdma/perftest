@@ -35,23 +35,23 @@
 #ifndef MULTICAST_RESOURCES_H
 #define MULTICAST_RESOURCES_H
 
- /* Multicast Module for perftest.
-  *
-  * Description :
-  *
-  *   This file contains the structures and methods for implementing a multiple
-  *   multicast groups in user space enviroment.
-  *	  The module is in use in "send_bw" and "send_lat" ,but can be used on other
-  *	  applications and can generate more methods and serve more benchmarks.
-  *   The Module uses only the structire defined here , enabling generic use of it.
-  *
-  * Defined Types :
-  *
-  *   mcast_parameters - Contains all the parameters needed for this module.
-  *   mcast_group      - The multicast group entitiy itself.
-  *   mcg_qp		   - Is a QP structure that is attahced to the group.
-  *
-  */
+/* Multicast Module for perftest.
+ *
+ * Description :
+ *
+ *   This file contains the structures and methods for implementing a multiple
+ *   multicast groups in user space enviroment.
+ *	  The module is in use in "send_bw" and "send_lat" ,but can be used on other
+ *	  applications and can generate more methods and serve more benchmarks.
+ *   The Module uses only the structire defined here , enabling generic use of it.
+ *
+ * Defined Types :
+ *
+ *   mcast_parameters - Contains all the parameters needed for this module.
+ *   mcast_group      - The multicast group entitiy itself.
+ *   mcg_qp		   - Is a QP structure that is attahced to the group.
+ *
+ */
 
 
 /************************************************************************
@@ -69,7 +69,7 @@
 #define MAX_POLL_ITERATION_TIMEOUT  1000000
 #define MCG_GID {255,1,0,0,0,2,201,133,0,0,0,0,0,0,0,0}
 
-//  Definitions section for MADs
+/* Definitions section for MADs */
 #define SUBN_ADM_ATTR_MC_MEMBER_RECORD 0x38
 #define MANAGMENT_CLASS_SUBN_ADM       0x03 	  /* Subnet Administration class */
 #define MCMEMBER_JOINSTATE_FULL_MEMBER 0x1
@@ -79,7 +79,7 @@
 #define DEF_TCLASS                     0
 #define DEF_FLOW_LABLE                 0
 
-// Macro for 64 bit variables to switch to from net
+/* Macro for 64 bit variables to switch to from net */
 #ifndef ntohll
 #define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | (unsigned int)ntohl(((int)(x >> 32))))
 #endif
@@ -87,30 +87,30 @@
 #define htonll(x) ntohll(x)
 #endif
 
-// generate a bit mask S bits width
+/* generate a bit mask S bits width */
 #define MASK32(S)  ( ((uint32_t) ~0L) >> (32-(S)) )
 
-// generate a bit mask with bits O+S..O set (assumes 32 bit integer).
+/* generate a bit mask with bits O+S..O set (assumes 32 bit integer). */
 #define BITS32(O,S) ( MASK32(S) << (O) )
 
-// extract S bits from (u_int32_t)W with offset O and shifts them O places to the right
+/* extract S bits from (u_int32_t)W with offset O and shifts them O places to the right */
 #define EXTRACT32(W,O,S) ( ((W)>>(O)) & MASK32(S) )
 
-// insert S bits with offset O from field F into word W (u_int32_t)
+/* insert S bits with offset O from field F into word W (u_int32_t) */
 #define INSERT32(W,F,O,S) (/*(W)=*/ ( ((W) & (~BITS32(O,S)) ) | (((F) & MASK32(S))<<(O)) ))
 
 #ifndef INSERTF
-	#define INSERTF(W,O1,F,O2,S) (INSERT32(W, EXTRACT32(F, O2, S), O1, S) )
+#define INSERTF(W,O1,F,O2,S) (INSERT32(W, EXTRACT32(F, O2, S), O1, S) )
 #endif
 
 
-// according to Table 187 in the IB spec 1.2.1
+/* according to Table 187 in the IB spec 1.2.1 */
 typedef enum {
 	SUBN_ADM_METHOD_SET    = 0x2,
 	SUBN_ADM_METHOD_DELETE = 0x15
 } subn_adm_method;
 
-// Utilities for Umad Usage.
+/* Utilities for Umad Usage. */
 typedef enum {
 	SUBN_ADM_COMPMASK_MGID         = (1ULL << 0),
 	SUBN_ADM_COMPMASK_PORT_GID     = (1ULL << 1),
@@ -132,27 +132,27 @@ typedef enum {
  *   Multicast data structures.						    			    *
  ************************************************************************/
 
-// Needed parameters for creating a multiple multicast group entity.
+/* Needed parameters for creating a multiple multicast group entity. */
 struct mcast_parameters {
-    int             	  num_qps_on_group;
-	int					  is_user_mgid;
-	int					  mcast_state;
-	int 				  ib_port;
-	uint16_t			  mlid;
-	uint16_t			  base_mlid;
-	const char			  *user_mgid;
-	char				  *ib_devname;
-	uint16_t 			  pkey;
-	uint16_t			  sm_lid;
-	uint8_t 			  sm_sl;
-	union ibv_gid 		  port_gid;
-	union ibv_gid 		  mgid;
-	// In case it's a latency test.
-	union ibv_gid         base_mgid;
-	int is_2nd_mgid_used;
+	int             	num_qps_on_group;
+	int			is_user_mgid;
+	int			mcast_state;
+	int 			ib_port;
+	uint16_t		mlid;
+	uint16_t		base_mlid;
+	const char		*user_mgid;
+	char			*ib_devname;
+	uint16_t 		pkey;
+	uint16_t		sm_lid;
+	uint8_t 		sm_sl;
+	union ibv_gid 		port_gid;
+	union ibv_gid		mgid;
+	/* In case it's a latency test. */
+	union ibv_gid		base_mgid;
+	int 			is_2nd_mgid_used;
 };
 
-// according to Table 195 in the IB spec 1.2.1
+/* according to Table 195 in the IB spec 1.2.1 */
 
 struct sa_mad_packet_t {
 	u_int8_t		mad_header_buf[24];

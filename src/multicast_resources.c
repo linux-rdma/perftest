@@ -17,7 +17,7 @@
 #include <pthread.h>
 #include "multicast_resources.h"
 
-// This is when we get sig handler from the user before we remove the join request.
+/* This is when we get sig handler from the user before we remove the join request. */
 struct mcast_parameters *sighandler_params;
 
 /******************************************************************************
@@ -43,9 +43,9 @@ static void signalCatcher (int sig)
  * prepare_mcast_mad
  ******************************************************************************/
 static void prepare_mcast_mad(uint8_t method,
-							  struct mcast_parameters *params,
-							  struct sa_mad_packet_t *samad_packet)	 {
-
+		struct mcast_parameters *params,
+		struct sa_mad_packet_t *samad_packet)
+{
 	uint8_t *ptr;
 	uint64_t comp_mask;
 
@@ -75,8 +75,8 @@ static void prepare_mcast_mad(uint8_t method,
 	ptr[48]                    = INSERTF(ptr[48], 0, MCMEMBER_JOINSTATE_FULL_MEMBER, 0, 4);
 
 	comp_mask = SUBN_ADM_COMPMASK_MGID | SUBN_ADM_COMPMASK_PORT_GID | SUBN_ADM_COMPMASK_Q_KEY |
-				SUBN_ADM_COMPMASK_P_KEY | SUBN_ADM_COMPMASK_TCLASS | SUBN_ADM_COMPMASK_SL |
-				SUBN_ADM_COMPMASK_FLOW_LABEL | SUBN_ADM_COMPMASK_JOIN_STATE;
+		SUBN_ADM_COMPMASK_P_KEY | SUBN_ADM_COMPMASK_TCLASS | SUBN_ADM_COMPMASK_SL |
+		SUBN_ADM_COMPMASK_FLOW_LABEL | SUBN_ADM_COMPMASK_JOIN_STATE;
 
 	samad_packet->ComponentMask = htonll(comp_mask);
 }
@@ -84,22 +84,22 @@ static void prepare_mcast_mad(uint8_t method,
 /******************************************************************************
  * check_mad_status
  ******************************************************************************/
-static int check_mad_status(struct sa_mad_packet_t *samad_packet) {
-
+static int check_mad_status(struct sa_mad_packet_t *samad_packet)
+{
 	uint8_t *ptr;
 	uint32_t user_trans_id;
 	uint16_t mad_header_status;
 
 	ptr = samad_packet->mad_header_buf;
 
-	// the upper 32 bits of TransactionID were set by the kernel
-    user_trans_id = ntohl(*(uint32_t *)(ptr + 12));
+	/* the upper 32 bits of TransactionID were set by the kernel */
+	user_trans_id = ntohl(*(uint32_t *)(ptr + 12));
 
-	// check the TransactionID to make sure this is the response
-	// for the join/leave multicast group request we posted
+	/* check the TransactionID to make sure this is the response */
+	/* for the join/leave multicast group request we posted */
 	if (user_trans_id != DEF_TRANS_ID) {
 		fprintf(stderr, "received a mad with TransactionID 0x%x, when expecting 0x%x\n",
-			(unsigned int)user_trans_id, (unsigned int)DEF_TRANS_ID);;
+				(unsigned int)user_trans_id, (unsigned int)DEF_TRANS_ID);;
 		return 1;
 	}
 
@@ -119,10 +119,9 @@ static int check_mad_status(struct sa_mad_packet_t *samad_packet) {
 /******************************************************************************
  * get_mlid_from_mad
  ******************************************************************************/
-static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,uint16_t *mlid) {
-
+static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,uint16_t *mlid)
+{
 	uint8_t *ptr;
-
 	ptr = samad_packet->SubnetAdminData;
 	*mlid = ntohs(*(uint16_t *)(ptr + 36));
 }
@@ -130,8 +129,8 @@ static void get_mlid_from_mad(struct sa_mad_packet_t *samad_packet,uint16_t *mli
 /******************************************************************************
  * set_multicast_gid
  ******************************************************************************/
-void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_client) {
-
+void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_client)
+{
 	uint8_t mcg_gid[16] = MCG_GID;
 	const char *pstr = params->user_mgid;
 	char *term = NULL;
@@ -167,8 +166,8 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 /******************************************************************************
  * join_multicast_group
  ******************************************************************************/
-int join_multicast_group(subn_adm_method method,struct mcast_parameters *params) {
-
+int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
+{
 	int portid = -1;
 	int agentid = -1;
 	void *umad_buff = NULL;
@@ -176,7 +175,7 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 	int length = MAD_SIZE;
 	int test_result = 0;
 
-	// mlid will be assigned to the new LID after the join
+	/* mlid will be assigned to the new LID after the join */
 	if (umad_init() < 0) {
 		fprintf(stderr, "failed to init the UMAD library\n");
 		goto cleanup;
@@ -223,7 +222,7 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 		goto cleanup;
 	}
 
-	//  "Join multicast group" message was sent
+	/*  "Join multicast group" message was sent */
 	if (method == SUBN_ADM_METHOD_SET) {
 		get_mlid_from_mad((struct sa_mad_packet_t*)mad,&params->mlid);
 		params->mcast_state |= MCAST_IS_JOINED;
@@ -259,4 +258,3 @@ cleanup:
 /******************************************************************************
  * End
  ******************************************************************************/
-
