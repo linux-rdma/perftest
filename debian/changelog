@@ -1,5 +1,5 @@
-perftest (2.3-0) stable; urgency=low
+perftest (2.4-0) stable; urgency=low
 
   * Initial release For Ubuntu (Closes: #182805)
 
- -- Gil Rockah <gilr@dev.mellanox.co.il>  Sun, 20 July 2014 10:20:00 +0200
+ -- Gil Rockah <gilr@dev.mellanox.co.il>  Mon, 8 December 2014 16:28:00 +0200
