@@ -953,7 +953,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->verb == SEND && (user_param->rx_depth % 2 == 1))
 		user_param->rx_depth += 1; 
 
-	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF)
+	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW)
 		user_param->noPeak = ON;
 
 	if (!(user_param->duration > 2*user_param->margin)) {
