@@ -2477,13 +2477,14 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
 					!(user_param->is_rate_limiting && is_sending_burst == 0)) {
-
 				if (ctx->send_rcredit) {
 					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
+					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
+
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
 						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
@@ -3125,7 +3126,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
+					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp ==1)
 						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
