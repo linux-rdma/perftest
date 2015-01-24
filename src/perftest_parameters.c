@@ -950,8 +950,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	if (user_param->verb == SEND && (user_param->rx_depth % 2 == 1))
-		user_param->rx_depth += 1; 
+	/* WA for a bug when rx_depth is odd in SEND */
+	if (user_param->verb == SEND && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
+		user_param->rx_depth += 1;
 
 	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW)
 		user_param->noPeak = ON;
