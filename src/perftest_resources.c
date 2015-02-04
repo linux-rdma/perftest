@@ -1870,7 +1870,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 	}
 
 	for (i = 0; i < num_of_qps ; i++) {
-		memset(&ctx->exp_wr[i],0,sizeof(struct ibv_exp_send_wr));
+		memset(&ctx->exp_wr[i*user_param->post_list],0,sizeof(struct ibv_exp_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 		if (user_param->mac_fwd)
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
@@ -2020,7 +2020,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 	}
 
 	for (i = 0; i < num_of_qps ; i++) {
-		memset(&ctx->wr[i],0,sizeof(struct ibv_send_wr));
+		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
 		if (user_param->mac_fwd)
 			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
