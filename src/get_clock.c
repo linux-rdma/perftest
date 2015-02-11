@@ -161,7 +161,6 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 		 * the cpu freq in HZ are as follow:
 		 * Cpu{cpu-num}ClkTck      : 00000000a9beeee4
 		 */
-		int i;
 		char *s;
 		unsigned val;
 
