@@ -80,7 +80,8 @@ static inline cycles_t get_cycles(void)
 }
 #elif defined(__sparc__) && defined(__arch64__)
 typedef unsigned long long cycles_t;
-cycles_t; static inline cycles_t get_cycles(void) {
+static inline cycles_t get_cycles(void)
+{
 	cycles_t v;
 	asm volatile ("rd %%tick, %0" : "=r" (v) : );
 	return v;
