@@ -375,6 +375,8 @@ struct perftest_parameters {
 	int             		pkey_index;
 	int				raw_qos;
 	int				use_cuda;
+	char				*mmap_file;
+	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
 	enum ctx_test_method 		test_method;
 	enum ibv_transport_type 	transport_type;
