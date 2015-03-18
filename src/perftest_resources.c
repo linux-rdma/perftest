@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/mman.h>
 
 #include "perftest_resources.h"
 #include "config.h"
@@ -126,6 +127,35 @@ static int pp_free_gpu(struct pingpong_context *ctx)
 	return ret;
 }
 #endif
+
+static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
+			const char *fname, unsigned long offset)
+{
+	int fd = open(fname, O_RDWR);
+	if (fd < 0) {
+		printf("Unable to open '%s': %s\n", fname, strerror(errno));
+		return 1;
+	}
+
+	ctx->buf = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd,
+			offset);
+	close(fd);
+
+	if (ctx->buf == MAP_FAILED) {
+		printf("Unable to mmap '%s': %s\n", fname, strerror(errno));
+		return 1;
+	}
+
+	printf("allocated mmap buffer of size %zd at %p\n", size, ctx->buf);
+
+	return 0;
+}
+
+static int pp_free_mmap(struct pingpong_context *ctx)
+{
+	munmap(ctx->buf, ctx->buff_size);
+	return 0;
+}
 
 #ifdef HAVE_VERBS_EXP
 static void get_verbs_pointers(struct pingpong_context *ctx)
@@ -819,7 +849,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 	else
 	#endif
-	if (ctx->is_contig_supported == FAILURE)
+	if (user_param->mmap_file != NULL)
+		pp_free_mmap(ctx);
+	else if (ctx->is_contig_supported == FAILURE)
 		free(ctx->buf);
 
 	free(ctx->qp);
@@ -1093,9 +1125,18 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			return NULL;
 		}
-	}
-	else {
+	} else
 	#endif
+	if (user_param->mmap_file != NULL) {
+		ctx->is_contig_supported = FAILURE;
+		if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
+				 user_param->mmap_offset))
+		{
+			fprintf(stderr, "Couldn't allocate work buf.\n");
+			return 0;
+		}
+
+	} else {
 		/* Allocating buffer for data, in case driver not support contig pages. */
 		if (ctx->is_contig_supported == FAILURE) {
 			ctx->buf = memalign(user_param->cycle_buffer,ctx->buff_size);
@@ -1114,9 +1155,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			flags |= (1 << 5);
 			#endif
 		}
-	#ifdef HAVE_CUDA
 	}
-	#endif
 
 	/* Allocating an event channel if requested. */
 	if (user_param->use_event) {
