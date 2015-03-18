@@ -37,3 +37,21 @@ stamp-h1
 
 #Ctags
 tags
+
+#Programs
+ib_atomic_bw
+ib_atomic_lat
+ib_read_bw
+ib_read_lat
+ib_send_bw
+ib_send_lat
+ib_write_bw
+ib_write_lat
+raw_ethernet_bw
+raw_ethernet_lat
+
+#Debian Stuff
+debian/compat
+debian/*.log
+debian/files
+debian/perftest
