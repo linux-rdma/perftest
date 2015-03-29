@@ -87,10 +87,17 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (ib_dev_name(ctx.context) == CONNECTIB) {
+	#ifdef HAVE_MASKED_ATOMICS
+	if (check_masked_atomics_support(&ctx)) {
 		user_param.masked_atomics = 1;
 		user_param.use_exp = 1;
 	}
+
+	if (user_param.masked_atomics && (user_param.work_rdma_cm || user_param.use_rdma_cm)) {
+		fprintf(stderr, "atomic test is not supported with -R/-z flag (rdma_cm) with this device.\n");
+		return 1;
+	}
+	#endif
 
 	/* See if MTU and link type are valid and supported. */
 	if (check_link(ctx.context, &user_param)) {
