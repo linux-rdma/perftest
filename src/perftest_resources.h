@@ -117,6 +117,8 @@
 
 #define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
 
+#define MASK_IS_SET(mask, attr)      (((mask)&(attr))!=0)
+
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
@@ -741,6 +743,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 #ifdef HAVE_MASKED_ATOMICS
 struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
 					struct perftest_parameters *user_param);
+int check_masked_atomics_support(struct pingpong_context *ctx);
 #endif
 
 #endif /* PERFTEST_RESOURCES_H */

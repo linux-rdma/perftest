@@ -3878,6 +3878,27 @@ void catch_alarm_infintely(int sig)
 }
 
 /******************************************************************************
+ *
+ ******************************************************************************/
+#ifdef HAVE_MASKED_ATOMICS
+int check_masked_atomics_support(struct pingpong_context *ctx)
+{
+	int supported_device = 0;
+	struct ibv_exp_device_attr attr;
+        memset(&attr,0,sizeof (struct ibv_exp_device_attr));
+
+	attr.comp_mask = IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
+
+	if (ibv_exp_query_device(ctx->context, &attr)) {
+		fprintf(stderr, "ibv_exp_query_device failed\n");
+		return -1;
+	}
+	/* TODO: find a way to check if it is masked atomics from dev_cap */
+	supported_device = (ib_dev_name(ctx->context) == CONNECTIB) || (ib_dev_name(ctx->context) == CONNECTX4);
+	return MASK_IS_SET(IBV_EXP_DEVICE_EXT_ATOMICS, attr.exp_device_cap_flags) && supported_device;
+}
+#endif
+/******************************************************************************
  * End
  ******************************************************************************/
 
