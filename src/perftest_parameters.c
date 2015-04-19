@@ -319,6 +319,12 @@ static void usage(const char *argv0,VerbType verb,TestType tst)
 		printf("      --latency_gap=<delay_time> ");
 		printf(" delay time between each post send\n");
 	}
+
+	#ifdef HAVE_ODP
+	printf("      --odp ");
+	printf(" Use On Demand Paging instead of Memory Registration.\n");
+	#endif
+
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
 
@@ -354,9 +360,12 @@ static void usage(const char *argv0,VerbType verb,TestType tst)
 	printf(" Use Experimental verbs in data path. Default is OFF.\n");
 	#endif
 
-	#ifdef HAVE_ODP
-	printf("      --odp ");
-	printf(" Use On Demand Paging instead of Memory Registration.\n");
+	#ifdef HAVE_ACCL_VERBS
+	printf("      --use_res_domain ");
+	printf(" Use shared resource domain\n");
+
+	printf("      --verb_type=<option> ");
+	printf(" Set verb type: normal, accl. Default is normal.\n");
 	#endif
 
 	if (tst == BW) {
@@ -505,6 +514,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
 
+	user_param->verb_type = NORMAL_INTF;
+	user_param->is_exp_cq = 0;
+	user_param->is_exp_qp = 0;
+	user_param->use_res_domain = 0;
 }
 
 /******************************************************************************
@@ -658,12 +671,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->cq_mod = user_param->post_list;
 		printf(RESULT_LINE);
 		printf("Post List requested - CQ moderation will be the size of the post list\n");
-
-		if (user_param->num_of_qps > 1) {
-			user_param->tx_depth = 128;
-			printf(RESULT_LINE);
-			printf(" Reducing TX depth to 128 to diaphragm time between post sends of each time\n");
-		}
 	}
 
 	if (user_param->test_type==DURATION) {
@@ -698,6 +705,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
 		user_param->gid_index = 0;
 	}
+
 
 	if (user_param->verb == ATOMIC && user_param->connection_type == DC) {
 		printf(RESULT_LINE);
@@ -962,6 +970,42 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr, "please check that DURATION > 2*MARGIN\n");
 		exit(1);
 	}
+
+	#ifdef HAVE_ACCL_VERBS
+	if (user_param->verb_type != NORMAL_INTF || user_param->use_res_domain) {
+		user_param->is_exp_cq = 1;
+		user_param->use_exp = 1;
+	}
+
+	if (user_param->verb_type == ACCL_INTF) {
+		if (user_param->connection_type != RC &&
+			user_param->connection_type != UC && user_param->connection_type != RawEth) {
+			fprintf(stderr, "Accelerated verbs support RC/UC/RAW_ETH connections only.\n");
+			exit(1);
+		}
+		if (user_param->verb != SEND) {
+			fprintf(stderr, "Accelerated verbs support SEND opcode only.\n");
+			exit(1);
+		}
+		if (user_param->num_of_qps > 1) {
+			fprintf(stderr, "Accelerated verbs in perftest support only 1 qp for now.\n");
+			exit(1);
+		}
+		if (user_param->post_list > 1) {
+			fprintf(stderr, "Accelerated verbs in perftest does not support in postlist feature for now.\n");
+			exit(1);
+		}
+		if (user_param->tst != BW) {
+			fprintf(stderr, "Accelerated verbs in perftest supports only BW tests for now.\n");
+			exit(1);
+		}
+		if (user_param->duplex) {
+			fprintf(stderr, "Accelerated verbs in perftest supports only unidir tests for now\n");
+			exit(1);
+		}
+	}
+	#endif
+
 	return;
 }
 
@@ -1222,6 +1266,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int odp_flag = 0;
 	static int use_promiscuous_flag = 0;
 	static int raw_mcast_flag = 0;
+	static int verb_type_flag = 0;
+	static int use_res_domain_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1303,7 +1349,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_VERBS_EXP
 			{ .name = "use_exp",		.has_arg = 0, .flag = &use_exp_flag, .val = 1},
 			#endif
-
+			#ifdef HAVE_ACCL_VERBS
+			{ .name = "verb_type",		.has_arg = 1, .flag = &verb_type_flag, .val = 1},
+			{ .name = "use_res_domain",	.has_arg = 0, .flag = &use_res_domain_flag, .val = 1},
+			#endif
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1586,6 +1635,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  }
 					  retry_count_flag = 0;
 				  }
+				  if (verb_type_flag) {
+					  if (strcmp("normal",optarg) == 0) {
+						  user_param->verb_type = NORMAL_INTF;
+					  } else if (strcmp("accl",optarg) == 0) {
+						  user_param->verb_type = ACCL_INTF;
+					  } else {
+						  fprintf(stderr, " Invalid verb type. Please choose normal/accl.\n");
+						  return FAILURE;
+					  }
+					  verb_type_flag = 0;
+				  }
+
 				  break;
 
 			default:
@@ -1620,6 +1681,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (use_exp_flag) {
 		user_param->use_exp = 1;
+	}
+
+	if (use_res_domain_flag) {
+		user_param->use_res_domain = 1;
 	}
 
 	if (use_cuda_flag) {

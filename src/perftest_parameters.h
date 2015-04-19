@@ -269,6 +269,12 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
 
+/*Accelerated verbs */
+enum verbs_intf {
+	NORMAL_INTF,
+	ACCL_INTF,
+};
+
 struct cpu_util_data {
 	int enable;
 	long long ustat[2];
@@ -400,6 +406,10 @@ struct perftest_parameters {
 	int				masked_atomics;
 	int				cycle_buffer;
 	int				cache_line_size;
+	enum verbs_intf			verb_type;
+	int				is_exp_cq;
+	int				is_exp_qp;
+	int				use_res_domain;
 };
 
 struct report_options {

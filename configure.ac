@@ -45,16 +45,6 @@ AC_CHECK_LIB([ibverbs], [ibv_get_device_list], [], [AC_MSG_ERROR([libibverbs not
 AC_CHECK_LIB([rdmacm], [rdma_create_event_channel], [], AC_MSG_ERROR([librdmacm-devel not found]))
 AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad not found]))
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
-AC_TRY_LINK([
-#include <infiniband/verbs.h>
-#include <infiniband/verbs_exp.h>],
-        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
-AM_CONDITIONAL([HAVE_ODP],[test "x$HAVE_ODP" = "xyes"])
-if [test $HAVE_ODP = yes] && [test $HAVE_ODP = yes]; then
-        AC_DEFINE([HAVE_ODP], [1], [Have ODP support])
-fi
-
-
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_exp_flow *t = ibv_exp_create_flow(NULL,NULL);],[HAVE_RAW_ETH_EXP=yes], [HAVE_RAW_ETH_EXP=no])
@@ -137,6 +127,24 @@ AC_TRY_LINK([
 AM_CONDITIONAL([HAVE_DC],[test "x$HAVE_DC" = "xyes"])
 if [test $HAVE_DC = yes] && [test $HAVE_VERBS_EXP = yes]; then
         AC_DEFINE([HAVE_DC], [1], [Enable DC feature])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_INTF_GLOBAL;],[HAVE_ACCL_VERBS=yes], [HAVE_ACCL_VERBS=no])
+AM_CONDITIONAL([HAVE_ACCL_VERBS],[test "x$HAVE_ACCL_VERBS" = "xyes"])
+if [test $HAVE_ACCL_VERBS = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_ACCL_VERBS], [1], [Enable Accelerated verbs feature])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
+AM_CONDITIONAL([HAVE_ODP],[test "x$HAVE_ODP" = "xyes"])
+if [test $HAVE_ODP = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_ODP], [1], [Have ODP support])
 fi
 
 if [test "$CUDA_H_PATH" ]; then

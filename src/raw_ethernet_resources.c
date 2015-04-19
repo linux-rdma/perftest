@@ -679,6 +679,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			firstRx = 1;
 	int 			rwqe_sent = user_param->rx_depth;
 	int			return_value = 0;
+	int			wc_id;
 
 	ALLOCATE(wc,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
@@ -710,11 +711,19 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
-					if (user_param->use_exp == 1)
-						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
-					else
+					#ifdef HAVE_ACCL_VERBS
+					if (user_param->verb_type == ACCL_INTF)
+						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_QP_BURST_SIGNALED;
+					else {
 					#endif
-						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						if (user_param->use_exp == 1)
+							ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
+						else
+					#endif
+							ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+					#ifdef HAVE_ACCL_VERBS
+					}
+					#endif
 				}
 
 				if (user_param->noPeak == OFF)
@@ -724,13 +733,24 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					break;
 				switch_smac_dmac(ctx->wr[index*user_param->post_list].sg_list);
 
-				#if defined(HAVE_VERBS_EXP)
-				if (user_param->use_exp == 1) {
-					err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
+				#ifdef HAVE_VERBS_EXP
+				#ifdef HAVE_ACCL_VERBS
+				if (user_param->verb_type == ACCL_INTF) {
+					struct ibv_sge *sg_l = ctx->exp_wr[index*user_param->post_list].sg_list;
+					err = ctx->qp_burst_family[index]->send_burst(ctx->qp[index], sg_l, 1, ctx->exp_wr[index].exp_send_flags);
+				} else {
+				#endif
+					if (user_param->use_exp == 1) {
+						err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],
+							&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
+					}
+					else {
+						err = (ctx->post_send_func_pointer)(ctx->qp[index],
+							&ctx->wr[index*user_param->post_list],&bad_wr);
+					}
+				#ifdef HAVE_ACCL_VERBS
 				}
-				else {
-					err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
-				}
+				#endif
 				#else
 				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
 				#endif
@@ -756,13 +776,20 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				if (user_param->post_list == 1 &&
 					(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
 						(user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1))){
-
 					#ifdef HAVE_VERBS_EXP
-					if (user_param->use_exp == 1)
-						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-					else
+					#ifdef HAVE_ACCL_VERBS
+					if (user_param->verb_type == ACCL_INTF)
+						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_QP_BURST_SIGNALED;
+					else {
 					#endif
-						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						if (user_param->use_exp == 1)
+							ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
+						else
+					#endif
+							ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+					#ifdef HAVE_ACCL_VERBS
+					}
+					#endif
 				}
 			}
 		}
@@ -777,7 +804,13 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		}
 
 		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
+			#ifdef HAVE_ACCL_VERBS
+			if (user_param->verb_type == ACCL_INTF)
+				ne = ctx->recv_cq_family->poll_cnt(ctx->recv_cq, CTX_POLL_BATCH);
+			else
+			#endif
+				ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
+
 			if (ne > 0) {
 				if (user_param->machine == SERVER && firstRx && user_param->test_type == DURATION) {
 					firstRx = OFF;
@@ -789,11 +822,16 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				for (i = 0; i < ne; i++) {
-					if (wc[i].status != IBV_WC_SUCCESS) {
-						NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
+					wc_id = (user_param->verb_type == ACCL_INTF) ?
+						0 : (int)wc[i].wr_id;
+
+					if (user_param->verb_type != ACCL_INTF) {
+						if (wc[i].status != IBV_WC_SUCCESS) {
+							NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
+						}
 					}
 
-					rcnt_for_qp[wc[i].wr_id]++;
+					rcnt_for_qp[wc_id]++;
 					totrcnt++;
 				}
 			} else if (ne < 0) {
@@ -803,14 +841,25 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 		}
 		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
+			#ifdef HAVE_ACCL_VERBS
+			if (user_param->verb_type == ACCL_INTF)
+				ne = ctx->send_cq_family->poll_cnt(ctx->send_cq, CTX_POLL_BATCH);
+			else
+			#endif
+				ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
+
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-					if (wc_tx[i].status != IBV_WC_SUCCESS)
-						NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
+					wc_id = (user_param->verb_type == ACCL_INTF) ?
+						0 : (int)wc[i].wr_id;
+
+					if (user_param->verb_type != ACCL_INTF) {
+						if (wc_tx[i].status != IBV_WC_SUCCESS)
+							NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
+					}
 
 					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)wc_tx[i].wr_id] += user_param->cq_mod;
+					ctx->ccnt[wc_id] += user_param->cq_mod;
 
 					if (user_param->noPeak == OFF) {
 
@@ -830,11 +879,24 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 			while (rwqe_sent - totccnt < user_param->rx_depth) {    /* Post more than buffer_size */
 				if (user_param->test_type==DURATION || rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) {
-					if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
-						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",0,rcnt_for_qp[0]);
-						return_value = 15;
-						goto cleaning;
+					#ifdef HAVE_ACCL_VERBS
+					if (user_param->verb_type == ACCL_INTF) {
+						if (ctx->qp_burst_family[0]->recv_burst(ctx->qp[0], ctx->rwr[0].sg_list, 1)) {
+							fprintf(stderr, "Couldn't post recv burst (accelerated verbs).\n");
+							return_value = 1;
+							goto cleaning;
+						}
+					} else {
+					#endif
+						if (ibv_post_recv(ctx->qp[0],&ctx->rwr[0],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",0,rcnt_for_qp[0]);
+							return_value = 15;
+							goto cleaning;
+						}
+					#ifdef HAVE_ACCL_VERBS
 					}
+					#endif
+
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[0].sg_list,
 								user_param->size,
