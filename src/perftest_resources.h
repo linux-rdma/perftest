@@ -169,6 +169,13 @@ struct pingpong_context {
 	struct ibv_exp_dct			**dct;
 	struct ibv_exp_send_wr			*exp_wr;
 	#endif
+	#ifdef HAVE_ACCL_VERBS
+	struct ibv_exp_res_domain		*res_domain;
+	struct ibv_exp_cq_family		*send_cq_family;
+	struct ibv_exp_cq_family		*recv_cq_family;
+	struct ibv_exp_qp_burst_family		**qp_burst_family;
+	#endif
+
 };
 
  struct pingpong_dest {
@@ -184,7 +191,7 @@ struct pingpong_context {
  };
 
 /******************************************************************************
- * Perftest resources Methods and interface utilitizes.f
+ * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
 
 /* link_layer_str
@@ -745,5 +752,29 @@ struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
 					struct perftest_parameters *user_param);
 int check_masked_atomics_support(struct pingpong_context *ctx);
 #endif
+
+#ifdef HAVE_ACCL_VERBS
+struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx,
+						struct perftest_parameters *user_param);
+#endif
+
+int create_reg_qp_main(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int i, int num_of_qps);
+
+#ifdef HAVE_VERBS_EXP
+int create_exp_qp_main(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int i, int num_of_qps);
+#endif
+
+int create_qp_main(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int i, int num_of_qps);
+
+#ifdef HAVE_VERBS_EXP
+struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int qp_index);
+#endif
+
+int modify_qp_to_init(struct pingpong_context *ctx,
+                struct perftest_parameters *user_param, int qp_index, int num_of_qps);
 
 #endif /* PERFTEST_RESOURCES_H */
