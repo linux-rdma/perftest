@@ -394,6 +394,9 @@ void usage_raw_ethernet()
 	printf("  -E, --dest_mac ");
 	printf(" destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
 
+	printf("  -G, --use_rss ");
+	printf(" use RSS on server side. need to open 2^x qps (using -q flag. default is -q 2). open 2^x clients that transmit to this server\n");
+
 	printf("  -J, --dest_ip ");
 	printf(" destination ip address by this format X.X.X.X (using to send packets with IP header)\n");
 
