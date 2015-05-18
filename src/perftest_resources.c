@@ -1288,6 +1288,7 @@ int modify_qp_to_init(struct pingpong_context *ctx,
 	}
 	else
 	#endif
+		init_flag = 0;
 
 	if(user_param->connection_type == DC) {
 		if ( !((!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
@@ -1725,7 +1726,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	if (user_param->connection_type == RawEth) {
 		flags = IBV_QP_STATE | IBV_QP_PORT;
 		#ifdef HAVE_VERBS_EXP
-		exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PKEY_INDEX;
+		exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PORT;
 		#endif
 
 	} else if (user_param->connection_type == UD) {
