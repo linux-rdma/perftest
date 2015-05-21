@@ -302,8 +302,13 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
 {
 	struct ibv_qp* qp = NULL;
-	struct ibv_exp_qp_init_attr qp_init_attr;
 	int num_of_qps = user_param->num_of_qps / 2;
+
+	#ifdef HAVE_VERBS_EXP
+	struct ibv_exp_qp_init_attr qp_init_attr;
+	#else
+	struct ibv_qp_init_attr_ex qp_init_attr;
+	#endif
 
 	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
@@ -333,8 +338,12 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perf
 	}
 	#endif
 
+	#ifdef HAVE_VERBS_EXP
+	qp = ibv_exp_create_qp(ctx->context, &qp_init_attr);
+	#else
+	qp = ibv_create_qp_ex(ctx->context, &qp_init_attr);
+	#endif
 
-	qp = ibv_exp_create_qp(ctx->context,&qp_init_attr);
 	return qp;
 }
 #endif
