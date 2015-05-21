@@ -248,6 +248,7 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Failed to destroy resources\n");
 				return 1;
 			}
+			user_comm.rdma_params->work_rdma_cm = ON;
 			return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 		}
 
@@ -390,6 +391,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Failed to destroy resources\n");
 			return 1;
 		}
+		user_comm.rdma_params->work_rdma_cm = ON;
 		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 	}
 

@@ -555,6 +555,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 	if (user_param.work_rdma_cm == ON) {
+		user_comm.rdma_params->work_rdma_cm = ON;
 		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
 			fprintf(stderr,"Failed to destroy resources\n");
 			return 1;
