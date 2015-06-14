@@ -127,7 +127,7 @@ static int get_cache_line_size()
 /******************************************************************************
  *
  ******************************************************************************/
-static void usage(const char *argv0,VerbType verb,TestType tst)
+static void usage(const char *argv0, VerbType verb, TestType tst, int connection_type)
 {
 	printf("Usage:\n");
 	printf("  %s            start a server and wait for connection\n", argv0);
@@ -135,7 +135,7 @@ static void usage(const char *argv0,VerbType verb,TestType tst)
 	printf("\n");
 	printf("Options:\n");
 
-	if (verb != ATOMIC) {
+	if (verb != ATOMIC && connection_type != RawEth) {
 		printf("  -a, --all ");
 		printf(" Run sizes from 2 till 2^23\n");
 	}
@@ -770,6 +770,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 	if (user_param->connection_type == RawEth) {
+
+		if (user_param->test_method == RUN_ALL) {
+			fprintf(stderr, "Raw Ethernet tests do not support -a / --all flag.\n");
+			exit(1);
+		}
 
 		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
 			printf(RESULT_LINE);
@@ -1447,7 +1452,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'a': user_param->test_method = RUN_ALL; break;
 			case 'F': user_param->cpu_freq_f = ON; break;
 			case 'V': printf("Version: %s\n",user_param->version); return VERSION_EXIT;
-			case 'h': usage(argv[0],user_param->verb,user_param->tst);
+			case 'h': usage(argv[0], user_param->verb, user_param->tst, user_param->connection_type);
 				  if(user_param->connection_type == RawEth) {
 					  usage_raw_ethernet();
 				  }
@@ -1655,7 +1660,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
 				  fprintf(stderr," Please check command line and run again.\n\n");
-				  usage(argv[0],user_param->verb,user_param->tst);
+				  usage(argv[0], user_param->verb, user_param->tst, user_param->connection_type);
 				  if(user_param->connection_type == RawEth) {
 					  usage_raw_ethernet();
 				  }
