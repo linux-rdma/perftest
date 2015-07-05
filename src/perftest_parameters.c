@@ -656,10 +656,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
-	if (user_param->dualport==ON) {
+	if (user_param->dualport == ON) {
 
 		user_param->num_of_qps *= 2;
-		if (!user_param->tst==BW) {
+		if (user_param->tst != BW) {
 			printf(" Dual-port mode only supports BW tests.\n");
 			exit (1);
 		}
