@@ -181,7 +181,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" measure results within margins. (default=2sec)\n");
 
 	printf("  -F, --CPU-freq ");
-	printf(" Do not fail even if cpufreq_ondemand module is loaded\n");
+	printf(" Do not show a warning even if cpufreq_ondemand module is loaded, and cpu-freq is not on max.\n");
 
 	if (verb == SEND) {
 		printf("  -g, --mcg ");
@@ -2235,11 +2235,6 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	} else {
 		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
-		if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
-			fprintf(stderr,"Can't produce a report\n");
-			exit(1);
-		}
-
 		units = "usec";
 	}
 
@@ -2288,10 +2283,6 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
-	if ((cycles_to_units == 0 && !user_param->cpu_freq_f)) {
-		fprintf(stderr,"Can't produce a report\n");
-		exit(1);
-	}
 
 	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
 	latency = (((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters);
