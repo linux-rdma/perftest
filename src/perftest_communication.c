@@ -995,22 +995,23 @@ int create_comm_struct(struct perftest_comm *comm,
 	ALLOCATE(comm->rdma_params,struct perftest_parameters,1);
 	memset(comm->rdma_params,0,sizeof(struct perftest_parameters));
 
-	comm->rdma_params->port		   = user_param->port;
-	comm->rdma_params->sockfd      = -1;
-	comm->rdma_params->gid_index   = user_param->gid_index;
-	comm->rdma_params->gid_index2 = user_param->gid_index2;
-	comm->rdma_params->use_rdma_cm = user_param->use_rdma_cm;
-	comm->rdma_params->servername  = user_param->servername;
-	comm->rdma_params->machine 	   = user_param->machine;
-	comm->rdma_params->side		   = LOCAL;
-	comm->rdma_params->verb		   = user_param->verb;
-	comm->rdma_params->use_mcg	   = user_param->use_mcg;
-	comm->rdma_params->duplex	   = user_param->duplex;
-	comm->rdma_params->tos         = DEF_TOS;
-	comm->rdma_params->use_xrc	   = user_param->use_xrc;
+	comm->rdma_params->port		   	= user_param->port;
+	comm->rdma_params->sockfd      		= -1;
+	comm->rdma_params->gid_index   		= user_param->gid_index;
+	comm->rdma_params->gid_index2 		= user_param->gid_index2;
+	comm->rdma_params->use_rdma_cm 		= user_param->use_rdma_cm;
+	comm->rdma_params->servername  		= user_param->servername;
+	comm->rdma_params->machine 	   	= user_param->machine;
+	comm->rdma_params->side		   	= LOCAL;
+	comm->rdma_params->verb		   	= user_param->verb;
+	comm->rdma_params->use_mcg	   	= user_param->use_mcg;
+	comm->rdma_params->duplex	   	= user_param->duplex;
+	comm->rdma_params->tos         		= DEF_TOS;
+	comm->rdma_params->use_xrc	   	= user_param->use_xrc;
 	comm->rdma_params->connection_type	= user_param->connection_type;
-	comm->rdma_params->output      = user_param->output;
-	comm->rdma_params->report_per_port = user_param->report_per_port;
+	comm->rdma_params->output      		= user_param->output;
+	comm->rdma_params->report_per_port 	= user_param->report_per_port;
+	comm->rdma_params->retry_count		= user_param->retry_count;
 
 	if (user_param->use_rdma_cm) {
 
