@@ -49,11 +49,15 @@
 
 struct perftest_parameters* duration_param;
 
-int check_flow_steering_support()
+int check_flow_steering_support(char *dev_name)
 {
 	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
 	FILE *fp;
 	char line[4];
+
+	if (strstr(dev_name, "mlx5") != NULL)
+		return 0;
+
 	fp = fopen(file_name, "r");
 	fgets(line,4,fp);
 	int val = atoi(line);
