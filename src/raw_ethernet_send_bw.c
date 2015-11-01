@@ -82,10 +82,6 @@ int main(int argc, char *argv[])
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 	user_param.connection_type = RawEth;
 
-	if (check_flow_steering_support()) {
-		return 1;
-	}
-
 	ret_parser = parser(&user_param,argv,argc);
 
 	if (ret_parser) {
@@ -93,6 +89,10 @@ int main(int argc, char *argv[])
 			fprintf(stderr," Parser function exited with Error\n");
 		}
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+		return 1;
+	}
+
+	if (check_flow_steering_support(user_param.ib_devname)) {
 		return 1;
 	}
 

@@ -108,7 +108,7 @@ void print_ip_header(struct IP_V4_header* ip_header);
 void print_udp_header(struct UDP_header* udp_header);
 void print_pkt(void* pkt,struct perftest_parameters *user_param);
 
-int check_flow_steering_support();
+int check_flow_steering_support(char *dev_name);
 
 /* build_pkt_on_buffer
  * Description: build single Ethernet packet on ctx buffer

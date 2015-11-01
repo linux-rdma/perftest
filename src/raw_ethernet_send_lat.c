@@ -84,9 +84,6 @@ int main(int argc, char *argv[])
 	user_param.connection_type = RawEth;
 	user_param.r_flag  = &report;
 
-	if (check_flow_steering_support()) {
-		return 1;
-	}
 
 	/* Configure the parameters values according to user
 	   arguments or default values. */
@@ -97,6 +94,10 @@ int main(int argc, char *argv[])
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+		return 1;
+	}
+
+	if (check_flow_steering_support(user_param.ib_devname)) {
 		return 1;
 	}
 
