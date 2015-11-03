@@ -1004,6 +1004,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, "Accelerated verbs support RC/UC/RAW_ETH connections only.\n");
 			exit(1);
 		}
+
 		if (user_param->verb != SEND) {
 			fprintf(stderr, "Accelerated verbs support SEND opcode only.\n");
 			exit(1);
@@ -1018,8 +1019,14 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, "Accelerated verbs in perftest supports only BW tests for now.\n");
 			exit(1);
 		}
+
 		if (user_param->duplex) {
 			fprintf(stderr, "Accelerated verbs in perftest supports only unidir tests for now\n");
+			exit(1);
+		}
+
+		if (user_param->test_method == RUN_INFINITELY) {
+			fprintf(stderr, "Accelerated verbs in perftest does not support Run Infinitely mode for now\n");
 			exit(1);
 		}
 	}
