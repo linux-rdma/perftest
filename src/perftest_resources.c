@@ -2685,6 +2685,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int 			cpu_mhz = 0;
 	int 			return_value = 0;
 	int			wc_id;
+	int pl_index;
+	struct ibv_sge		*sg_l;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -2795,8 +2797,12 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				#ifdef HAVE_VERBS_EXP
 				#ifdef HAVE_ACCL_VERBS
 				if (user_param->verb_type == ACCL_INTF) {
-					struct ibv_sge *sg_l = ctx->exp_wr[index*user_param->post_list].sg_list;
-					err = ctx->qp_burst_family[index]->send_burst(ctx->qp[index], sg_l, 1, ctx->exp_wr[index].exp_send_flags);
+					for (pl_index = 0; pl_index < user_param->post_list; pl_index++) {
+						sg_l = ctx->exp_wr[index*user_param->post_list + pl_index].sg_list;
+						ctx->qp_burst_family[index]->send_pending(ctx->qp[index], sg_l->addr, sg_l->length, sg_l->lkey,
+												ctx->exp_wr[index*user_param->post_list + pl_index].exp_send_flags);
+					}
+					ctx->qp_burst_family[index]->send_flush(ctx->qp[index]);
 				} else {
 				#endif
 					if (user_param->use_exp == 1) {
