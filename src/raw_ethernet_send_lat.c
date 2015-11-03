@@ -97,10 +97,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (check_flow_steering_support(user_param.ib_devname)) {
-		return 1;
-	}
-
 	/*this is a bidirectional test, so we need to let the init functions
 	 * think we are in duplex mode
 	 */
@@ -112,6 +108,11 @@ int main(int argc, char *argv[])
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+		return 1;
+	}
+	GET_STRING(user_param.ib_devname, ibv_get_device_name(ib_dev));
+
+	if (check_flow_steering_support(user_param.ib_devname)) {
 		return 1;
 	}
 

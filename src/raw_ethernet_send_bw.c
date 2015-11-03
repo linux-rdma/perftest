@@ -92,10 +92,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (check_flow_steering_support(user_param.ib_devname)) {
-		return 1;
-	}
-
 	if (user_param.raw_mcast) {
 		/* Transform IPv4 to Multicast MAC */
 		user_param.dest_mac[0] = 0x01;
@@ -128,6 +124,11 @@ int main(int argc, char *argv[])
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
+		return 1;
+	}
+	GET_STRING(user_param.ib_devname, ibv_get_device_name(ib_dev));
+
+	if (check_flow_steering_support(user_param.ib_devname)) {
 		return 1;
 	}
 
