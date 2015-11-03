@@ -1008,14 +1008,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, "Accelerated verbs support SEND opcode only.\n");
 			exit(1);
 		}
+
 		if (user_param->num_of_qps > 1) {
 			fprintf(stderr, "Accelerated verbs in perftest support only 1 qp for now.\n");
 			exit(1);
 		}
-		if (user_param->post_list > 1) {
-			fprintf(stderr, "Accelerated verbs in perftest does not support in postlist feature for now.\n");
-			exit(1);
-		}
+
 		if (user_param->tst != BW) {
 			fprintf(stderr, "Accelerated verbs in perftest supports only BW tests for now.\n");
 			exit(1);
