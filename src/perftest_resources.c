@@ -107,7 +107,7 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 	}
 	printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A,
 	       (void *) d_A);
-	ctx->buf = (void*)d_A;
+	ctx->buf[0] = (void*)d_A;
 
 	return 0;
 }
@@ -115,7 +115,7 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 static int pp_free_gpu(struct pingpong_context *ctx)
 {
 	int ret = 0;
-	CUdeviceptr d_A = (CUdeviceptr) ctx->buf;
+	CUdeviceptr d_A = (CUdeviceptr) ctx->buf[0];
 
 	printf("deallocating RX GPU buffer\n");
 	cuMemFree(d_A);
@@ -137,23 +137,23 @@ static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
 		return 1;
 	}
 
-	ctx->buf = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd,
+	ctx->buf[0] = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd,
 			offset);
 	close(fd);
 
-	if (ctx->buf == MAP_FAILED) {
+	if (ctx->buf[0] == MAP_FAILED) {
 		printf("Unable to mmap '%s': %s\n", fname, strerror(errno));
 		return 1;
 	}
 
-	printf("allocated mmap buffer of size %zd at %p\n", size, ctx->buf);
+	printf("allocated mmap buffer of size %zd at %p\n", size, ctx->buf[0]);
 
 	return 0;
 }
 
 static int pp_free_mmap(struct pingpong_context *ctx)
 {
-	munmap(ctx->buf, ctx->buff_size);
+	munmap(ctx->buf[0], ctx->buff_size);
 	return 0;
 }
 
@@ -631,6 +631,7 @@ struct ibv_device* ctx_find_dev(const char *ib_devname)
 void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
 	uint64_t tarr_size;
+	int num_of_qps_factor;
 
 	ctx->cycle_buffer = user_param->cycle_buffer;
 	ctx->cache_line_size = user_param->cache_line_size;
@@ -638,13 +639,16 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(user_param->port_by_qp, uint64_t, user_param->num_of_qps);
 
 	tarr_size = (user_param->noPeak) ? 1 : user_param->iters*user_param->num_of_qps;
-	ALLOCATE(user_param->tposted,cycles_t,tarr_size);
+	ALLOCATE(user_param->tposted, cycles_t, tarr_size);
 	memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
 
 	if (user_param->tst == LAT && user_param->test_type == DURATION)
-		ALLOCATE(user_param->tcompleted,cycles_t,1);
+		ALLOCATE(user_param->tcompleted, cycles_t, 1);
 
-	ALLOCATE(ctx->qp,struct ibv_qp*,user_param->num_of_qps);
+	ALLOCATE(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
+	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
+	ALLOCATE(ctx->buf, void* , user_param->num_of_qps);
+
 	#ifdef HAVE_ACCL_VERBS
 	ALLOCATE(ctx->qp_burst_family, struct ibv_exp_qp_burst_family*, user_param->num_of_qps);
 	#endif
@@ -652,9 +656,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	#ifdef HAVE_DC
 	if (user_param->connection_type == DC) {
 		#ifdef HAVE_VERBS_EXP
-		ALLOCATE(ctx->dct,struct ibv_exp_dct*,user_param->num_of_qps);
+		ALLOCATE(ctx->dct, struct ibv_exp_dct*, user_param->num_of_qps);
 		#else
-		ALLOCATE(ctx->dct,struct ibv_dct*,user_param->num_of_qps);
+		ALLOCATE(ctx->dct, struct ibv_dct*, user_param->num_of_qps);
 		#endif
 	}
 	#endif
@@ -699,7 +703,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ctx->cycle_buffer = user_param->size * user_param->rx_depth;
 
 	ctx->size = user_param->size;
-	ctx->buff_size = BUFF_SIZE(ctx->size,ctx->cycle_buffer)*2*user_param->num_of_qps;
+
+	num_of_qps_factor = (user_param->mr_per_qp) ? 1 : user_param->num_of_qps;
+	ctx->buff_size = BUFF_SIZE(ctx->size, ctx->cycle_buffer) * 2 * num_of_qps_factor;
 
 	user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
@@ -712,9 +718,11 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 int destroy_ctx(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
-	int i, first;
+	int i, first, dereg_counter;
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
+
+	dereg_counter = (user_param->mr_per_qp) ? user_param->num_of_qps : 1;
 
 	if (user_param->work_rdma_cm == ON)
 		rdma_disconnect(ctx->cm_id);
@@ -809,9 +817,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (ibv_dereg_mr(ctx->mr)) {
-		fprintf(stderr, "failed to deregister MR\n");
-		test_result = 1;
+	for (i = 0; i < dereg_counter; i++) {
+		if (ibv_dereg_mr(ctx->mr[i])) {
+			fprintf(stderr, "failed to deregister MR #%d\n", i+1);
+			test_result = 1;
+		}
 	}
 
 	if (user_param->verb == SEND && user_param->work_rdma_cm == ON && ctx->send_rcredit) {
@@ -849,11 +859,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 	else
 	#endif
-	if (user_param->mmap_file != NULL)
+	if (user_param->mmap_file != NULL) {
 		pp_free_mmap(ctx);
-	else if (ctx->is_contig_supported == FAILURE)
-		free(ctx->buf);
-
+	} else if (ctx->is_contig_supported == FAILURE) {
+		for (i = 0; i < dereg_counter; i++) {
+			free(ctx->buf[i]);
+		}
+	}
 	free(ctx->qp);
 
 	if ((user_param->tst == BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -889,6 +901,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	return test_result;
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 #ifdef HAVE_VERBS_EXP
 static int check_inline_recv_support(struct pingpong_context *ctx,
 					struct perftest_parameters *user_param)
@@ -915,6 +930,9 @@ static int check_inline_recv_support(struct pingpong_context *ctx,
 }
 #endif
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 #ifdef HAVE_ODP
 static int check_odp_support(struct pingpong_context *ctx)
 {
@@ -938,6 +956,9 @@ static int check_odp_support(struct pingpong_context *ctx)
 }
 #endif
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 int create_reg_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
 		   int tx_buffer_depth, int need_recv_cq)
@@ -962,6 +983,9 @@ int create_reg_cqs(struct pingpong_context *ctx,
 	return SUCCESS;
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 #ifdef HAVE_VERBS_EXP
 int create_exp_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
@@ -1023,6 +1047,9 @@ int create_exp_cqs(struct pingpong_context *ctx,
 }
 #endif
 
+/******************************************************************************
+ *
+ ******************************************************************************/
 int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int ret;
@@ -1048,6 +1075,10 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 
 	return ret;
 }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 #ifdef HAVE_ACCL_VERBS
 struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
@@ -1086,25 +1117,14 @@ struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx, struc
 /******************************************************************************
  *
  ******************************************************************************/
-int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
 {
-	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
-	int num_of_qps = user_param->num_of_qps / 2;
-	#ifdef HAVE_ACCL_VERBS
-	enum ibv_exp_query_intf_status intf_status;
-	struct ibv_exp_query_intf_params intf_params;
-	#endif
+
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_reg_mr_in reg_mr_exp_in;
 	uint64_t exp_flags = IBV_EXP_ACCESS_LOCAL_WRITE;
-	struct ibv_exp_device_attr dattr;
-
-	memset(&dattr, 0, sizeof(dattr));
-	get_verbs_pointers(ctx);
 	#endif
-
-	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
 	/* ODP */
 	#ifdef HAVE_ODP
@@ -1123,32 +1143,32 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		ctx->is_contig_supported = FAILURE;
 		if(pp_init_gpu(ctx, ctx->buff_size)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return 0;
+			return 1;
 		}
 	} else
 	#endif
+
 	if (user_param->mmap_file != NULL) {
 		ctx->is_contig_supported = FAILURE;
 		if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
 				 user_param->mmap_offset))
 		{
 			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return 0;
+			return 1;
 		}
 
 	} else {
 		/* Allocating buffer for data, in case driver not support contig pages. */
 		if (ctx->is_contig_supported == FAILURE) {
-			ctx->buf = memalign(user_param->cycle_buffer,ctx->buff_size);
-			if (!ctx->buf) {
+			ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
+			if (!ctx->buf[qp_index]) {
 				fprintf(stderr, "Couldn't allocate work buf.\n");
-				exit(1);
+				return 1;
 			}
 
-			memset(ctx->buf, 0,ctx->buff_size);
-
+			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
-			ctx->buf = NULL;
+			ctx->buf[qp_index] = NULL;
 			#ifdef HAVE_VERBS_EXP
 			exp_flags |= IBV_EXP_ACCESS_ALLOCATE_MR;
 			#else
@@ -1156,6 +1176,108 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			#endif
 		}
 	}
+
+	if (user_param->verb == WRITE) {
+		flags |= IBV_ACCESS_REMOTE_WRITE;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
+		#endif
+	} else if (user_param->verb == READ) {
+		flags |= IBV_ACCESS_REMOTE_READ;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags |= IBV_EXP_ACCESS_REMOTE_READ;
+		#endif
+		if (user_param->transport_type == IBV_TRANSPORT_IWARP)
+			flags |= IBV_ACCESS_REMOTE_WRITE;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
+		#endif
+	} else if (user_param->verb == ATOMIC) {
+		flags |= IBV_ACCESS_REMOTE_ATOMIC;
+		#ifdef HAVE_VERBS_EXP
+		exp_flags |= IBV_EXP_ACCESS_REMOTE_ATOMIC;
+		#endif
+	}
+
+	/* Allocating Memory region and assigning our buffer to it. */
+	#ifdef HAVE_VERBS_EXP
+	if (ctx->is_contig_supported == SUCCESS || user_param->use_odp) {
+		reg_mr_exp_in.pd = ctx->pd;
+		reg_mr_exp_in.addr = ctx->buf[qp_index];
+		reg_mr_exp_in.length = ctx->buff_size;
+		reg_mr_exp_in.exp_access = exp_flags;
+		reg_mr_exp_in.comp_mask = 0;
+
+		ctx->mr[qp_index] = ibv_exp_reg_mr(&reg_mr_exp_in);
+	}
+	else
+		ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
+	#else
+	ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
+	#endif
+
+	if (!ctx->mr[qp_index]) {
+		fprintf(stderr, "Couldn't allocate MR\n");
+		return 1;
+	}
+
+	if (ctx->is_contig_supported == SUCCESS)
+		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
+
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+{
+	int i;
+
+	/* create first MR */
+	if (create_single_mr(ctx, user_param, 0)) {
+		fprintf(stderr, "failed to create mr\n");
+		return 1;
+	}
+
+	/* create the rest if needed, or copy the first one */
+	for (i = 1; i < user_param->num_of_qps; i++) {
+		if (user_param->mr_per_qp) {
+			if (create_single_mr(ctx, user_param, i)) {
+				fprintf(stderr, "failed to create mr\n");
+				return 1;
+			}
+		} else {
+			ALLOCATE(ctx->mr[i], struct ibv_mr, 1);
+			memset(ctx->mr[i], 0, sizeof(struct ibv_mr));
+			ctx->mr[i] = ctx->mr[0];
+			ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
+		}
+	}
+
+	return 0;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+{
+	int i;
+	int num_of_qps = user_param->num_of_qps / 2;
+
+	#ifdef HAVE_ACCL_VERBS
+	enum ibv_exp_query_intf_status intf_status;
+	struct ibv_exp_query_intf_params intf_params;
+	#endif
+
+	#ifdef HAVE_VERBS_EXP
+	struct ibv_exp_device_attr dattr;
+	memset(&dattr, 0, sizeof(dattr));
+	get_verbs_pointers(ctx);
+	#endif
+
+	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 
 	/* Allocating an event channel if requested. */
 	if (user_param->use_event) {
@@ -1183,54 +1305,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
-	if (user_param->verb == WRITE) {
-		flags |= IBV_ACCESS_REMOTE_WRITE;
-		#ifdef HAVE_VERBS_EXP
-		exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
-		#endif
-
-	} else if (user_param->verb == READ) {
-		flags |= IBV_ACCESS_REMOTE_READ;
-		#ifdef HAVE_VERBS_EXP
-		exp_flags |= IBV_EXP_ACCESS_REMOTE_READ;
-		#endif
-		if (user_param->transport_type == IBV_TRANSPORT_IWARP)
-			flags |= IBV_ACCESS_REMOTE_WRITE;
-		#ifdef HAVE_VERBS_EXP
-		exp_flags |= IBV_EXP_ACCESS_REMOTE_WRITE;
-		#endif
-
-	} else if (user_param->verb == ATOMIC) {
-		flags |= IBV_ACCESS_REMOTE_ATOMIC;
-		#ifdef HAVE_VERBS_EXP
-		exp_flags |= IBV_EXP_ACCESS_REMOTE_ATOMIC;
-		#endif
+	if (create_mr(ctx, user_param)) {
+		fprintf(stderr, "Failed to create MR\n");
 	}
-
-	/* Allocating Memory region and assigning our buffer to it. */
-	#ifdef HAVE_VERBS_EXP
-	if (ctx->is_contig_supported == SUCCESS || user_param->use_odp) {
-		reg_mr_exp_in.pd = ctx->pd;
-		reg_mr_exp_in.addr = ctx->buf;
-		reg_mr_exp_in.length = ctx->buff_size;
-		reg_mr_exp_in.exp_access = exp_flags;
-		reg_mr_exp_in.comp_mask = 0;
-
-		ctx->mr = ibv_exp_reg_mr(&reg_mr_exp_in);
-	}
-	else
-		ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
-	#else
-	ctx->mr = ibv_reg_mr(ctx->pd,ctx->buf,ctx->buff_size,flags);
-	#endif
-
-	if (!ctx->mr) {
-		fprintf(stderr, "Couldn't allocate MR\n");
-		return FAILURE;
-	}
-
-	if (ctx->is_contig_supported == SUCCESS)
-		ctx->buf = ctx->mr->addr;
 
 	if (create_cqs(ctx, user_param)) {
 		fprintf(stderr, "Failed to create CQs\n");
@@ -2149,9 +2226,16 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->exp_wr[i*user_param->post_list],0,sizeof(struct ibv_exp_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
-		if (user_param->mac_fwd)
-			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+
+		if (user_param->mac_fwd) {
+			if (user_param->mr_per_qp) {
+				ctx->sge_list[i*user_param->post_list].addr = 
+					(uintptr_t)ctx->buf[0] + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			} else {
+				ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+			}
+		}
 
 		if (user_param->verb == WRITE || user_param->verb == READ)
 			ctx->exp_wr[i*user_param->post_list].wr.rdma.remote_addr   = rem_dest[xrc_offset + i].vaddr;
@@ -2163,7 +2247,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
+			ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
 			if (user_param->verb != SEND)
 				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
@@ -2173,7 +2257,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 			ctx->sge_list[i*user_param->post_list + j].length =
 				(user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 
-			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr->lkey;
+			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr[i]->lkey;
 
 			if (j > 0) {
 
@@ -2305,9 +2389,16 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
-		if (user_param->mac_fwd)
-			ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+
+		if (user_param->mac_fwd) {
+			if (user_param->mr_per_qp) {
+				ctx->sge_list[i*user_param->post_list].addr =
+					(uintptr_t)ctx->buf[0] + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			} else {
+				ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+			}
+		}
 
 		if (user_param->verb == WRITE || user_param->verb == READ)
 			ctx->wr[i*user_param->post_list].wr.rdma.remote_addr   = rem_dest[xrc_offset + i].vaddr;
@@ -2319,7 +2410,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size,ctx->cycle_buffer));
+			ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
 			if (user_param->verb != SEND)
 				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
@@ -2329,7 +2420,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->sge_list[i*user_param->post_list + j].length =
 				(user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 
-			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr->lkey;
+			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr[i]->lkey;
 
 			if (j > 0) {
 
@@ -2427,11 +2518,10 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
  ******************************************************************************/
 int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
-	int	i,j,k;
-	int num_of_qps = user_param->num_of_qps;
-	struct ibv_recv_wr  *bad_wr_recv;
-	i = 0;
-	int size_per_qp = user_param->rx_depth;
+	int			i = 0,j,k;
+	int			num_of_qps = user_param->num_of_qps;
+	struct ibv_recv_wr	*bad_wr_recv;
+	int			size_per_qp = user_param->rx_depth;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) &&
 				(user_param->duplex || user_param->tst == LAT)) {
@@ -2448,15 +2538,18 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		num_of_qps = 1;
 	}
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
-
-		ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf +
-			(num_of_qps + k)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		if (!user_param->mr_per_qp) {
+			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[0] +
+				(num_of_qps + k)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		} else {
+			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[i];
+		}
 
 		if (user_param->connection_type == UD)
 			ctx->recv_sge_list[i].addr += (ctx->cache_line_size - UD_ADDITION);
 
 		ctx->recv_sge_list[i].length = SIZE(user_param->connection_type,user_param->size,1);
-		ctx->recv_sge_list[i].lkey   = ctx->mr->lkey;
+		ctx->recv_sge_list[i].lkey   = ctx->mr[i]->lkey;
 
 		ctx->rwr[i].sg_list = &ctx->recv_sge_list[i];
 		ctx->rwr[i].wr_id   = i;
@@ -3775,8 +3868,9 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 
 	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
-	post_buf = (char*)ctx->buf + user_param->size - 1;
-	poll_buf = (char*)ctx->buf + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size,ctx->cycle_buffer) + user_param->size - 1;
+
+	post_buf = (char*)ctx->buf[0] + user_param->size - 1;
+	poll_buf = (char*)ctx->buf[0] + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size, ctx->cycle_buffer) + user_param->size - 1;
 
 	/* Duration support in latency tests. */
 	if (user_param->test_type == DURATION) {

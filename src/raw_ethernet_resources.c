@@ -441,7 +441,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
-	eth_header = (void*)ctx->buf;
+	eth_header = (void*)ctx->buf[0];
 
 	/* build single packet on ctx buffer */
 	build_pkt_on_buffer(eth_header,my_dest_info,rem_dest_info,user_param,eth_type,ip_next_protocol,PRINT_ON,ctx->size-RAWETH_ADDITION);
@@ -451,7 +451,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		if (ctx->size <= (ctx->cycle_buffer / 2)) {
 			while (offset < ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
 				offset += INC(ctx->size,ctx->cache_line_size);
-				eth_header = (void*)ctx->buf+offset;
+				eth_header = (void*)ctx->buf[0]+offset;
 				build_pkt_on_buffer(eth_header,my_dest_info,rem_dest_info,
 						user_param,eth_type,ip_next_protocol,
 						PRINT_OFF,ctx->size-RAWETH_ADDITION);
