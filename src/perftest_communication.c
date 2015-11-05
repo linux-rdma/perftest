@@ -64,9 +64,9 @@ static int post_one_recv_wqe(struct pingpong_context *ctx)
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_sge list;
 
-	list.addr   = (uintptr_t)ctx->buf;
+	list.addr   = (uintptr_t)ctx->buf[0];
 	list.length = sizeof(struct pingpong_dest);
-	list.lkey   = ctx->mr->lkey;
+	list.lkey   = ctx->mr[0]->lkey;
 
 	wr.next = NULL;
 	wr.wr_id = SYNC_SPEC_ID;
@@ -90,9 +90,9 @@ static int post_recv_to_get_ah(struct pingpong_context *ctx)
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_sge list;
 
-	list.addr   = (uintptr_t)ctx->buf;
+	list.addr   = (uintptr_t)ctx->buf[0];
 	list.length = UD_ADDITION + sizeof(uint32_t);
-	list.lkey   = ctx->mr->lkey;
+	list.lkey   = ctx->mr[0]->lkey;
 
 	wr.next = NULL;
 	wr.wr_id = 0;
@@ -120,11 +120,11 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
 	struct ibv_wc wc;
 	int ne;
 
-	memcpy(ctx->buf,&ctx->qp[0]->qp_num,sizeof(uint32_t));
+	memcpy(ctx->buf[0], &ctx->qp[0]->qp_num, sizeof(uint32_t));
 
-	list.addr   = (uintptr_t)ctx->buf;
+	list.addr   = (uintptr_t)ctx->buf[0];
 	list.length = sizeof(uint32_t);
-	list.lkey   = ctx->mr->lkey;
+	list.lkey   = ctx->mr[0]->lkey;
 
 	wr.wr_id      = 0;
 	wr.sg_list    = &list;
@@ -177,7 +177,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 		return 1;
 	}
 
-	ctx->ah[0] = ibv_create_ah_from_wc(ctx->pd,&wc,(struct ibv_grh*)ctx->buf,ctx->cm_id->port_num);
+	ctx->ah[0] = ibv_create_ah_from_wc(ctx->pd, &wc, (struct ibv_grh*)ctx->buf[0], ctx->cm_id->port_num);
 	user_param->rem_ud_qpn = ntohl(wc.imm_data);
 	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
 	user_param->rem_ud_qkey = attr.qkey;
@@ -358,13 +358,13 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 		m_my_dest.gid.raw[i] = my_dest->gid.raw[i];
 	}
 
-	memcpy(comm->rdma_ctx->buf, &m_my_dest, sizeof(struct pingpong_dest));
+	memcpy(comm->rdma_ctx->buf[0], &m_my_dest, sizeof(struct pingpong_dest));
 	#else
-	memcpy(comm->rdma_ctx->buf, &my_dest, sizeof(struct pingpong_dest));
+	memcpy(comm->rdma_ctx->buf[0], &my_dest, sizeof(struct pingpong_dest));
 	#endif
-	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
+	list.addr   = (uintptr_t)comm->rdma_ctx->buf[0];
 	list.length = sizeof(struct pingpong_dest);
-	list.lkey   = comm->rdma_ctx->mr->lkey;
+	list.lkey   = comm->rdma_ctx->mr[0]->lkey;
 
 
 	wr.wr_id      = SYNC_SPEC_ID;
@@ -413,7 +413,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	}
 
 	#ifdef HAVE_ENDIAN
-	memcpy(&a_rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
+	memcpy(&a_rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
 	rem_dest->lid   = ntohl(a_rem_dest.lid);
 	rem_dest->out_reads     = ntohl(a_rem_dest.out_reads);
 	rem_dest->qpn   = ntohl(a_rem_dest.qpn);
@@ -423,7 +423,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	rem_dest->vaddr         = be64toh(a_rem_dest.vaddr);
 	memcpy(rem_dest->gid.raw, &(a_rem_dest.gid), 16*sizeof(uint8_t));
 	#else
-	memcpy(&rem_dest,comm->rdma_ctx->buf,sizeof(struct pingpong_dest));
+	memcpy(&rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
 	#endif
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
@@ -625,11 +625,14 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 		my_dest[i].psn   = lrand48() & 0xffffff;
-		my_dest[i].rkey  = ctx->mr->rkey;
+		my_dest[i].rkey  = ctx->mr[i]->rkey;
 
 		/* Each qp gives his receive buffer address.*/
 		my_dest[i].out_reads = user_param->out_reads;
-		my_dest[i].vaddr = (uintptr_t)ctx->buf + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		if (user_param->mr_per_qp)
+			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+		else
+			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->dualport==ON) {
 
@@ -783,7 +786,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	temp = user_param->work_rdma_cm;
 	user_param->work_rdma_cm = ON;
 
-	if (ctx_init(ctx,user_param)) {
+	if (ctx_init(ctx, user_param)) {
 		fprintf(stderr," Unable to create the resources needed by comm struct\n");
 		return FAILURE;
 	}
@@ -862,7 +865,6 @@ int retry_rdma_connect(struct pingpong_context *ctx,
 		}
 		if (rdma_client_connect(ctx,user_param) == SUCCESS)
 			return SUCCESS;
-
 		if (destroy_rdma_resources(ctx,user_param)) {
 			fprintf(stderr,"Unable to destroy rdma resources\n");
 			return FAILURE;
@@ -992,8 +994,8 @@ int rdma_server_connect(struct pingpong_context *ctx,
 int create_comm_struct(struct perftest_comm *comm,
 		struct perftest_parameters *user_param)
 {
-	ALLOCATE(comm->rdma_params,struct perftest_parameters,1);
-	memset(comm->rdma_params,0,sizeof(struct perftest_parameters));
+	ALLOCATE(comm->rdma_params, struct perftest_parameters, 1);
+	memset(comm->rdma_params, 0, sizeof(struct perftest_parameters));
 
 	comm->rdma_params->port		   	= user_param->port;
 	comm->rdma_params->sockfd      		= -1;
@@ -1012,11 +1014,12 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->output      		= user_param->output;
 	comm->rdma_params->report_per_port 	= user_param->report_per_port;
 	comm->rdma_params->retry_count		= user_param->retry_count;
+	comm->rdma_params->mr_per_qp		= user_param->mr_per_qp;
 
 	if (user_param->use_rdma_cm) {
 
-		ALLOCATE(comm->rdma_ctx,struct pingpong_context,1);
-		memset(comm->rdma_ctx,0,sizeof(struct pingpong_context));
+		ALLOCATE(comm->rdma_ctx, struct pingpong_context, 1);
+		memset(comm->rdma_ctx, 0, sizeof(struct pingpong_context));
 
 		comm->rdma_params->tx_depth = 1;
 		comm->rdma_params->rx_depth = 1;
@@ -1026,6 +1029,8 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_params->size = sizeof(struct pingpong_dest);
 		comm->rdma_ctx->context = NULL;
 
+		ALLOCATE(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps);
+		ALLOCATE(comm->rdma_ctx->buf, void* , user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
@@ -1213,7 +1218,7 @@ int rdma_read_data(void *data,
 		return 1;
 	}
 
-	memcpy(data,comm->rdma_ctx->buf,size);
+	memcpy(data,comm->rdma_ctx->buf[0], size);
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
 		fprintf(stderr, "Couldn't post send \n");
@@ -1234,11 +1239,11 @@ int rdma_write_data(void *data,
 	struct ibv_sge list;
 	struct ibv_wc wc;
 	int ne;
-	memcpy(comm->rdma_ctx->buf,data,size);
+	memcpy(comm->rdma_ctx->buf[0],data,size);
 
-	list.addr   = (uintptr_t)comm->rdma_ctx->buf;
+	list.addr   = (uintptr_t)comm->rdma_ctx->buf[0];
 	list.length = size;
-	list.lkey   = comm->rdma_ctx->mr->lkey;
+	list.lkey   = comm->rdma_ctx->mr[0]->lkey;
 
 	wr.wr_id      = SYNC_SPEC_ID;
 	wr.sg_list    = &list;

@@ -320,6 +320,16 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" delay time between each post send\n");
 	}
 
+	printf("      --mmap=file ");
+	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
+	printf("      --mmap-offset=<offset> ");
+	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
+
+	if (tst == BW) {
+		printf("      --mr_per_qp ");
+		printf(" Create memory region for each qp.\n");
+	}
+
 	#ifdef HAVE_ODP
 	printf("      --odp ");
 	printf(" Use On Demand Paging instead of Memory Registration.\n");
@@ -355,10 +365,6 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Use CUDA lib for GPU-Direct testing.\n");
 	#endif
 
-	printf("      --mmap=file ");
-	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
-	printf("      --mmap-offset=<offset> ");
-	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
 
 	#ifdef HAVE_VERBS_EXP
 	printf("      --use_exp ");
@@ -528,12 +534,13 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->is_exp_cq = 0;
 	user_param->is_exp_qp = 0;
 	user_param->use_res_domain = 0;
+	user_param->mr_per_qp = 0;
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx) 
+static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
 {
 	int idx = 0;
 	struct ibv_device_attr attr;
@@ -804,6 +811,18 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
+			exit(1);
+		}
+
+		if ((user_param->is_server_port == ON) && (user_param->is_server_ip == OFF || user_param->is_client_ip == OFF)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\nPlease provide source_ip and/or dest_ip when using UDP\n");
+			exit(1);
+		}
+		//UDP packet is ok by now. check tcp flag
+		if (user_param->tcp == ON && user_param->is_server_port == OFF) {
+			printf(RESULT_LINE);
+			fprintf(stderr,"Invalid Command line.\nPlease provide UDP information (IP & UDP Port src/dest) in order to use TCP\n");
 			exit(1);
 		}
 
@@ -1298,6 +1317,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int raw_mcast_flag = 0;
 	static int verb_type_flag = 0;
 	static int use_res_domain_flag = 0;
+	static int mr_per_qp_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1385,6 +1405,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "verb_type",		.has_arg = 1, .flag = &verb_type_flag, .val = 1},
 			{ .name = "use_res_domain",	.has_arg = 0, .flag = &use_res_domain_flag, .val = 1},
 			#endif
+			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1761,6 +1782,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	if (raw_mcast_flag) {
 		user_param->raw_mcast = 1;
 	}
+
+	if (mr_per_qp_flag) {
+		user_param->mr_per_qp = 1;
+	}
+
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 

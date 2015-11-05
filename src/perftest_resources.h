@@ -129,10 +129,10 @@ struct pingpong_context {
 	struct ibv_context			*context;
 	struct ibv_comp_channel			*channel;
 	struct ibv_pd				*pd;
-	struct ibv_mr				*mr;
+	struct ibv_mr				**mr;
 	struct ibv_cq				*send_cq;
 	struct ibv_cq				*recv_cq;
-	void					*buf;
+	void					**buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
 	struct ibv_srq				*srq;
@@ -777,4 +777,38 @@ struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
 int modify_qp_to_init(struct pingpong_context *ctx,
                 struct perftest_parameters *user_param, int qp_index, int num_of_qps);
 
+
+/* create_single_mr
+ *
+ * Description :
+ *
+ *	Creates a single MR for a specific QP index.
+ *
+ *	Parameters :
+ *      	ctx - Resources sructure.
+ *		user_param - the perftest parameters.
+ *		qp_index  - QP index to register a MR
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int create_single_mr(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int qp_index);
+
+/* create_mr
+ *
+ * Description :
+ *
+ *	Creates Memory Regions for the test.
+ *	Takes into consideration all user parameters and test type.
+ *
+ *	Parameters :
+ *      	ctx - Resources sructure.
+ *		user_param - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int create_mr(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param);
 #endif /* PERFTEST_RESOURCES_H */
