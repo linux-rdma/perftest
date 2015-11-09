@@ -105,58 +105,31 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		struct perftest_comm *comm)
 {
 	int i;
-	srand48(getpid() * time(NULL));
-	union ibv_gid temp_gid;
 
-	if (user_param->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
-			return -1;
-		}
+	if (set_up_connection(ctx,user_param,my_dest)) {
+		fprintf(stderr," Unable to set up my IB connection parameters\n");
+		return FAILURE;
 	}
-	for (i = 0; i < user_param->num_of_qps; i++) {
-		if (user_param->use_mcg) {
 
-			if (set_mcast_group(ctx,user_param,mcg_params)) {
-				return 1;
-			}
+	if (user_param->use_mcg && (user_param->duplex || user_param->machine == SERVER)) {
 
-			my_dest[i].gid = mcg_params->mgid;
-			my_dest[i].lid = mcg_params->mlid;
-			my_dest[i].qpn = QPNUM_MCAST;
-
-		} else {
-			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
-			my_dest[i].lid   	   = ctx_get_local_lid(ctx->context,user_param->ib_port);
-			my_dest[i].qpn   	   = ctx->qp[i]->qp_num;
+		mcg_params->user_mgid = user_param->user_mgid;
+		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_param->machine);
+		if (set_mcast_group(ctx,user_param,mcg_params)) {
+			return 1;
 		}
 
-		my_dest[i].psn = lrand48() & 0xffffff;
-
-		/* We do not fail test upon lid above RoCE. */
-		if (user_param->gid_index < 0) {
-			if (!my_dest->lid) {
-				fprintf(stderr," Local lid 0x0 detected,without any use of gid. Is SM running?\n");
-				return -1;
-			}
-		}
-
-		#ifdef HAVE_XRCD
-		if (user_param->use_xrc || user_param->connection_type == DC) {
-			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
-				fprintf(stderr, "Couldn't get SRQ number\n");
+		for (i=0; i < user_param->num_of_qps; i++) {
+			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
+				fprintf(stderr, "Couldn't attach QP to MultiCast group");
 				return 1;
 			}
 		}
-		#endif
 
-		#ifdef HAVE_DC
-		if (user_param->connection_type == DC) {
-			if (ibv_get_srq_num(ctx->srq,&(my_dest[i].srqn))) {
-				fprintf(stderr, "Couldn't get SRQ number\n");
-				return 1;
-			}
-		}
-		#endif
+		mcg_params->mcast_state |= MCAST_IS_ATTACHED;
+		my_dest->gid = mcg_params->mgid;
+		my_dest->lid = mcg_params->mlid;
+		my_dest->qpn = QPNUM_MCAST;
 	}
 
 	return 0;
