@@ -156,14 +156,14 @@ int main(int argc, char *argv[])
 	/* Allocating arrays needed for the test. */
 	alloc_ctx(&ctx,&user_param);
 
-	/* Print basic test information. */
-	ctx_print_test_info(&user_param);
-
 	/* set mac address by user choose */
 	if (send_set_up_connection(&flow_rules,&ctx,&user_param,&my_dest_info,&rem_dest_info)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
+
+	/* Print basic test information. */
+	ctx_print_test_info(&user_param);
 
 	if ( !user_param.raw_mcast && (user_param.machine == SERVER || user_param.duplex)) {
 		print_spec(flow_rules,&user_param);

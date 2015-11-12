@@ -224,6 +224,8 @@
 
 #define MAX_VERSION 16	/* Reserve 15 bytes for version numbers */
 
+#define GET_ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr[0])))
+
 /* The Verb of the benchmark. */
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
