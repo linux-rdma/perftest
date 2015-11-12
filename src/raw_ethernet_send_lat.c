@@ -148,9 +148,6 @@ int main(int argc, char *argv[])
 	/* Allocating arrays needed for the test. */
 	alloc_ctx(&ctx, &user_param);
 
-	/* Print basic test information. */
-	ctx_print_test_info(&user_param);
-
 	/*set up the connection, return the required flow rules (notice that user_param->duplex == TRUE)
 	 * so the function will setup like it's a bidirectional test
 	 */
@@ -158,6 +155,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to set up socket connection\n");
 		return 1;
 	}
+
+	/* Print basic test information. */
+	ctx_print_test_info(&user_param);
 
 	for (i = 0; i < user_param.flows; i++)
 		print_spec(flow_rules[i], &user_param);

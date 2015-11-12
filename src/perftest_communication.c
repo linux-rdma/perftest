@@ -527,6 +527,98 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	return 0;
 }
 
+
+#ifdef HAVE_GID_ATTR
+enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
+
+struct roce_version_sorted_enum {
+	enum ibv_exp_roce_gid_type type;
+	int rate;
+};
+
+/* This struct defines which RoCE version is more important for default usage */
+struct roce_version_sorted_enum roce_versions_sorted [] = {
+	{IBV_EXP_IB_ROCE_V1_GID_TYPE, 1},
+	{IBV_EXP_ROCE_V2_GID_TYPE, 2},
+	{IBV_EXP_ROCE_V1_5_GID_TYPE, 3}
+};
+
+int find_roce_version_rate (int roce_ver)
+{
+	int i;
+	int arr_len = GET_ARRAY_SIZE(roce_versions_sorted);
+
+	for (i = 0; i < arr_len; i++) {
+		if (roce_versions_sorted[i].type == roce_ver)
+			return roce_versions_sorted[i].rate;
+	}
+
+	return -1;
+}
+
+/* RoCE V1.5 > V2 > V1
+ * other RoCE versions will be ignored until added to roce_versions_sorted array */
+static int check_better_roce_version (int roce_ver, int roce_ver_rival)
+{
+	int roce_ver_rate = find_roce_version_rate(roce_ver);
+	int roce_ver_rate_rival = find_roce_version_rate(roce_ver_rival);
+
+	if (roce_ver_rate < roce_ver_rate_rival)
+		return RIGHT_IS_BETTER;
+	else if (roce_ver_rate > roce_ver_rate_rival)
+		return LEFT_IS_BETTER;
+	else
+		return EQUAL;
+}
+#endif
+
+static int get_best_gid_index (struct pingpong_context *ctx,
+		  struct perftest_parameters *user_param,
+		  struct ibv_port_attr *attr, int port)
+{
+	int gid_index = 0, i;
+	union ibv_gid temp_gid, temp_gid_rival;
+	int is_ipv4, is_ipv4_rival;
+
+	for (i = 1; i < attr->gid_tbl_len; i++) {
+		if (ibv_query_gid(ctx->context, port, gid_index, &temp_gid)) {
+			return -1;
+		}
+
+		if (ibv_query_gid(ctx->context, port, i, &temp_gid_rival)) {
+			return -1;
+		}
+
+		is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid.raw);
+		is_ipv4_rival = ipv6_addr_v4mapped((struct in6_addr *)temp_gid_rival.raw);
+
+		if (is_ipv4_rival && !is_ipv4 && !user_param->ipv6)
+			gid_index = i;
+		else if (!is_ipv4_rival && is_ipv4 && user_param->ipv6)
+			gid_index = i;
+#ifdef HAVE_GID_ATTR
+		else {
+			int roce_version, roce_version_rival;
+			struct ibv_exp_gid_attr gid_attr;
+
+			gid_attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE;
+			if (ibv_exp_query_gid_attr(ctx->context, port, gid_index, &gid_attr))
+				return -1;
+			roce_version = gid_attr.type;
+
+			if (ibv_exp_query_gid_attr(ctx->context, port, i, &gid_attr))
+				return -1;
+			roce_version_rival = gid_attr.type;
+
+			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
+				gid_index = i;
+		}
+#endif
+	}
+
+	return gid_index;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -631,10 +723,7 @@ int set_up_connection(struct pingpong_context *ctx,
 {
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
-
 	int i;
-	int is_ipv4;
-
 	union ibv_gid temp_gid;
 	union ibv_gid temp_gid2;
 	struct ibv_port_attr attr;
@@ -651,46 +740,35 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 
 	if (user_param->gid_index != -1) {
-		if (ibv_query_port(ctx->context,user_param->ib_port,&attr))
+		if (ibv_query_port(ctx->context, user_param->ib_port, &attr))
 			return 0;
 
 		if (user_param->use_gid_user) {
-			if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
+			if (ibv_query_gid(ctx->context, user_param->ib_port, user_param->gid_index, &temp_gid))
 				return -1;
-			}
 		} else {
-			for (i=0 ; i < attr.gid_tbl_len; i++) {
-				if (ibv_query_gid(ctx->context,user_param->ib_port,i,&temp_gid)) {
-					return -1;
-				}
-				is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid.raw);
-				if ((user_param->ipv6 && !is_ipv4) || (!user_param->ipv6 && is_ipv4)) {
-					user_param->gid_index = i;
-					break;
-				}
-			}
+			user_param->gid_index = get_best_gid_index(ctx, user_param, &attr, user_param->ib_port);
+			if (user_param->gid_index < 0)
+				return -1;
+			if (ibv_query_gid(ctx->context, user_param->ib_port, user_param->gid_index, &temp_gid))
+				return -1;
 		}
 	}
 
-	if (user_param->dualport==ON) {
+	if (user_param->dualport == ON) {
 		if (user_param->gid_index2 != -1) {
-			if (ibv_query_port(ctx->context,user_param->ib_port2,&attr))
+			if (ibv_query_port(ctx->context, user_param->ib_port2, &attr))
 				return 0;
 
 			if (user_param->use_gid_user) {
-				if (ibv_query_gid(ctx->context,user_param->ib_port2,user_param->gid_index,&temp_gid2))
+				if (ibv_query_gid(ctx->context, user_param->ib_port2, user_param->gid_index, &temp_gid2))
 					return -1;
 			} else {
-				for (i=0 ; i < attr.gid_tbl_len; i++) {
-					if (ibv_query_gid(ctx->context,user_param->ib_port2,i,&temp_gid2)) {
+				user_param->gid_index2 = get_best_gid_index(ctx, user_param, &attr, user_param->ib_port2);
+				if (user_param->gid_index2 < 0)
+					return -1;
+				if (ibv_query_gid(ctx->context, user_param->ib_port2, user_param->gid_index2, &temp_gid2))
 						return -1;
-					}
-					is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid2.raw);
-					if ((user_param->ipv6 && !is_ipv4) || (!user_param->ipv6 && is_ipv4)) {
-						user_param->gid_index = i;
-						break;
-					}
-				}
 			}
 		}
 	}

@@ -180,6 +180,15 @@ if [test $HAVE_SCATTER_FCS = yes] && [test $HAVE_VERBS_EXP = yes]; then
         AC_DEFINE([HAVE_SCATTER_FCS], [1], [Have SCATTER_FCS support])
 fi
 
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = ibv_exp_query_gid_attr(NULL, 1, 0, NULL);],[HAVE_GID_ATTR=yes], [HAVE_GID_ATTR=no])
+AM_CONDITIONAL([HAVE_GID_ATTR],[test "x$HAVE_GID_ATTR" = "xyes"])
+if [test $HAVE_GID_ATTR = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_GID_ATTR], [1], [Enable GID Attribute query feature])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])

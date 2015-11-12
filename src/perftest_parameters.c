@@ -2256,9 +2256,9 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 		printf(" Buffer size     : %d[B]\n" ,user_param->buff_size/2);
 
 	if (user_param->gid_index != DEF_GID_INDEX)
-		printf(" Gid index       : %d\n" ,user_param->gid_index);
-	if ((user_param->dualport==ON) && (user_param->gid_index2 != DEF_GID_INDEX))
-		printf(" Gid index2      : %d\n" ,user_param->gid_index2);
+		printf(" GID index       : %d\n", user_param->gid_index);
+	if ((user_param->dualport == ON) && (user_param->gid_index2 != DEF_GID_INDEX))
+		printf(" GID index2      : %d\n", user_param->gid_index2);
 
 	if (user_param->verb != READ && user_param->verb != ATOMIC)
 		printf(" Max inline data : %d[B]\n",user_param->inline_size);
