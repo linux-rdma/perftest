@@ -435,6 +435,7 @@ struct perftest_parameters {
 	int 				raw_ipv6;
 	int 				report_per_port;
 	int 				use_odp;
+	int				use_hugepages;
 	int				use_promiscuous;
 	int				use_sniffer;
 	int				check_alive_exited;
