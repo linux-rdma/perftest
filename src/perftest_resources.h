@@ -152,6 +152,7 @@ struct pingpong_context {
 	uint64_t				send_qp_buff_size;
 	uint64_t				flow_buff_size;
 	int					tx_depth;
+	int					huge_shmid;
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
 	int					is_contig_supported;
@@ -778,4 +779,19 @@ int create_single_mr(struct pingpong_context *ctx,
  */
 int create_mr(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param);
+
+/* alloc_hugapage_region
+ *
+ * Description :
+ *
+ *	Creates hugepage memory Regions for the test.
+ *
+ *	Parameters :
+ *      	ctx - Resources sructure.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int alloc_hugepage_region (struct pingpong_context *ctx);
+
 #endif /* PERFTEST_RESOURCES_H */

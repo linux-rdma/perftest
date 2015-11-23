@@ -437,11 +437,14 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Use CUDA lib for GPU-Direct testing.\n");
 	#endif
 
-
 	#ifdef HAVE_VERBS_EXP
 	printf("      --use_exp ");
 	printf(" Use Experimental verbs in data path. Default is OFF.\n");
 	#endif
+
+	printf("      --use_hugepages ");
+	printf(" Use Hugepages instead of contig, memalign allocations.\n");
+
 
 	#ifdef HAVE_ACCL_VERBS
 	printf("      --use_res_domain ");
@@ -643,6 +646,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->ipv6			= 0;
 	user_param->report_per_port		= 0;
 	user_param->use_odp			= 0;
+	user_param->use_hugepages		= 0;
 	user_param->use_promiscuous		= 0;
 	user_param->use_sniffer			= 0;
 	user_param->check_alive_exited		= 0;
@@ -1649,6 +1653,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int raw_ipv6_flag = 0;
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
+	static int hugepages_flag = 0;
 	static int use_promiscuous_flag = 0;
 	static int use_sniffer_flag = 0;
 	static int raw_mcast_flag = 0;
@@ -1765,6 +1770,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
+			{ .name = "use_hugepages",		.has_arg = 0, .flag = &hugepages_flag, .val = 1},
 			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
 			#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
 			{ .name = "sniffer",		.has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
@@ -2334,6 +2340,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if(odp_flag) {
 		user_param->use_odp = 1;
+	}
+
+	if(hugepages_flag) {
+		user_param->use_hugepages = 1;
 	}
 
 	if (use_promiscuous_flag) {

@@ -12,6 +12,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/mman.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 #if defined(__FreeBSD__)
 #include <sys/stat.h>
 #endif
@@ -884,7 +886,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 		pp_free_mmap(ctx);
 	} else if (ctx->is_contig_supported == FAILURE) {
 		for (i = 0; i < dereg_counter; i++) {
-			free(ctx->buf[i]);
+			if (user_param->use_hugepages) {
+				shmdt(ctx->buf[i]);
+			} else {
+				free(ctx->buf[i]);
+			}
 		}
 	}
 	free(ctx->qp);
@@ -1152,7 +1158,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#ifdef HAVE_ODP
 	if (user_param->use_odp) {
 		if ( !check_odp_support(ctx) )
-			return 1;
+			return FAILURE;
 
 		/* ODP does not support contig pages */
 		ctx->is_contig_supported = FAILURE;
@@ -1165,7 +1171,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		ctx->is_contig_supported = FAILURE;
 		if(pp_init_gpu(ctx, ctx->buff_size)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return 1;
+			return FAILURE;
 		}
 	} else
 	#endif
@@ -1180,7 +1186,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 				 user_param->mmap_offset))
 		{
 			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return 1;
+			return FAILURE;
 		}
 
 	} else {
@@ -1189,11 +1195,19 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			#if defined(__FreeBSD__)
 			posix_memalign(ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
 			#else
-			ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
+			if (user_param->use_hugepages) {
+				if (alloc_hugepage_region(ctx) != SUCCESS){
+					fprintf(stderr, "Failed to allocate hugepage region.\n");
+					return FAILURE;
+				}
+				memset(ctx->buf[qp_index], 0, ctx->buff_size);
+			} else if  (ctx->is_contig_supported == FAILURE) {
+				ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
+			}
 			#endif
 			if (!ctx->buf[qp_index]) {
 				fprintf(stderr, "Couldn't allocate work buf.\n");
-				return 1;
+				return FAILURE;
 			}
 
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
@@ -1248,7 +1262,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	if (!ctx->mr[qp_index]) {
 		fprintf(stderr, "Couldn't allocate MR\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (ctx->is_contig_supported == SUCCESS)
@@ -1263,7 +1277,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 	}
 
-	return 0;
+	return SUCCESS;
 }
 
 /******************************************************************************
@@ -1300,6 +1314,40 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 /******************************************************************************
  *
  ******************************************************************************/
+#define HUGEPAGE_ALIGN  (2*1024*1024)
+#define SHMAT_ADDR (void *)(0x0UL)
+#define SHMAT_FLAGS (0)
+
+int alloc_hugepage_region (struct pingpong_context *ctx)
+{
+    int buf_size;
+    int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
+    buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
+
+    /* create hugepage shared region */
+    ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
+                        SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
+    if (ctx->huge_shmid < 0) {
+        fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
+        return FAILURE;
+    }
+
+    /* attach shared memory */
+    ctx->buf = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
+    if (ctx->buf == (void *) -1) {
+	fprintf(stderr, "Failed to attach shared memory region\n");
+	return FAILURE;
+    }
+
+    /* Mark shmem for removal */
+    if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
+	fprintf(stderr, "Failed to mark shm for removal\n");
+	return FAILURE;
+    }
+
+     return SUCCESS;
+}
+
 int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int i;
@@ -1317,6 +1365,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	#endif
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
+
+	if (user_param->use_hugepages)
+		ctx->is_contig_supported = FAILURE;
 
 	/* Allocating an event channel if requested. */
 	if (user_param->use_event) {
