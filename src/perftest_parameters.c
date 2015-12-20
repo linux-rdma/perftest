@@ -7,6 +7,7 @@
 #include "perftest_parameters.h"
 
 #define MAC_LEN (17)
+#define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
 #define HEX_BASE (16)
 
@@ -64,6 +65,18 @@ static int parse_mac_from_str(char *mac, u_int8_t *addr)
 		fprintf(stderr, "MAC address longer than six fields\n");
 		return FAILURE;
 	}
+	return SUCCESS;
+}
+
+static int parse_ethertype_from_str(char *ether_str, uint16_t *ethertype_val)
+{
+	if (strlen(ether_str) != ETHERTYPE_LEN) {
+		fprintf(stderr, "invalid ethertype length\n");
+		return FAILURE;
+	}
+	*ethertype_val = strtoul(ether_str, NULL, HEX_BASE);
+	if (!*ethertype_val)
+		return FAILURE;
 	return SUCCESS;
 }
 
@@ -419,6 +432,9 @@ void usage_raw_ethernet()
 
 	printf("  -k, --source_port ");
 	printf(" source port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
+
+	printf("  -Y, --ethertype ");
+	printf(" ethertype value in the ethernet frame by this format 0xXXXX\n");
 
 	printf("  -Z, --server ");
 	printf(" choose server side for the current machine (--server/--client must be selected )\n");
@@ -1368,6 +1384,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "source_ip",		.has_arg = 1, .val = 'j' },
 			{ .name = "dest_port",		.has_arg = 1, .val = 'K' },
 			{ .name = "source_port",	.has_arg = 1, .val = 'k' },
+			{ .name = "ethertype",		.has_arg = 1, .val = 'Y' },
 			{ .name = "limit_bw",		.has_arg = 1, .val = 'w' },
 			{ .name = "limit_msgrate",	.has_arg = 1, .val = 'y' },
 			{ .name = "server",		.has_arg = 0, .val = 'Z' },
@@ -1597,6 +1614,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  user_param->client_port = strtol(optarg, NULL, 0);
 				  if(OFF == check_if_valid_udp_port(user_param->client_port)) {
 					  fprintf(stderr," Invalid client UDP port\n");
+					  return FAILURE;
+				  }
+				  break;
+			case 'Y':
+				  user_param->is_ethertype = ON;
+				  if (parse_ethertype_from_str(optarg, &user_param->ethertype)) {
+					  fprintf(stderr, " Invalid ethertype value\n");
 					  return FAILURE;
 				  }
 				  break;

@@ -435,7 +435,8 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 	int offset = 0;
 	struct ETH_header* eth_header;
 	uint16_t ip_next_protocol = 0;
-	uint16_t eth_type = (user_param->is_client_ip || user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
+	uint16_t eth_type = user_param->is_ethertype ? user_param->ethertype :
+		(user_param->is_client_ip || user_param->is_server_ip ? IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
 	if(user_param->is_client_port && user_param->is_server_port)
 		ip_next_protocol = (user_param->tcp ? TCP_PROTOCOL : UDP_PROTOCOL);
 
@@ -621,6 +622,12 @@ int send_set_up_connection(
 			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
 			memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
 		}
+
+		if (user_param->is_ethertype) {
+			spec_info->eth.val.ether_type = user_param->ethertype;
+			spec_info->eth.mask.ether_type = 0xffff;
+		}
+
 	}
 
 	if (user_param->machine == CLIENT || user_param->duplex) {

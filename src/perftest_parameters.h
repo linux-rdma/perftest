@@ -323,6 +323,8 @@ struct perftest_parameters {
 	int				tcp;
 	int				is_server_port;
 	int				is_client_port;
+	uint16_t			ethertype;
+	int				is_ethertype;
 	int				cpu_freq_f;
 	int				connection_type;
 	int				num_of_qps;
