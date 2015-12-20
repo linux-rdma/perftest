@@ -1927,7 +1927,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 	else
 		attr->ah_attr.port_num = user_param->ib_port;
 
-	attr->ah_attr.dlid = dest->lid;
+	attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
 	if (user_param->gid_index == DEF_GID_INDEX) {
 
 		attr->ah_attr.is_global = 0;
@@ -1988,7 +1988,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 
 	if (user_param->connection_type != RawEth) {
 
-		attr->ah_attr.dlid = dest->lid;
+		attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
 		attr->ah_attr.sl = user_param->sl;
 
 		if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))

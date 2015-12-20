@@ -416,6 +416,7 @@ struct perftest_parameters {
 	int				is_exp_qp;
 	int				use_res_domain;
 	int				mr_per_qp;
+	uint16_t			dlid;
 };
 
 struct report_options {
