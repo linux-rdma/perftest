@@ -317,6 +317,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --cpu_util ");
 	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
 
+	printf("      --dlid ");
+	printf(" Set a Destination LID instead of getting it from the other side.\n");
+
 	printf("      --dont_xchg_versions ");
 	printf(" Do not exchange versions and MTU with other side \n");
 
@@ -546,11 +549,12 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
 
-	user_param->verb_type = NORMAL_INTF;
-	user_param->is_exp_cq = 0;
-	user_param->is_exp_qp = 0;
-	user_param->use_res_domain = 0;
-	user_param->mr_per_qp = 0;
+	user_param->verb_type		= NORMAL_INTF;
+	user_param->is_exp_cq		= 0;
+	user_param->is_exp_qp		= 0;
+	user_param->use_res_domain	= 0;
+	user_param->mr_per_qp		= 0;
+	user_param->dlid		= 0;
 }
 
 /******************************************************************************
@@ -1334,6 +1338,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int verb_type_flag = 0;
 	static int use_res_domain_flag = 0;
 	static int mr_per_qp_flag = 0;
+	static int dlid_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1423,6 +1428,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_res_domain",	.has_arg = 0, .flag = &use_res_domain_flag, .val = 1},
 			#endif
 			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
+			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1731,7 +1737,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  user_param->mmap_offset = strtol(optarg, NULL, 0);
 					  mmap_offset_flag = 0;
 				  }
-
+				  if (dlid_flag) {
+					  user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
+				  }
 				  break;
 
 			default:

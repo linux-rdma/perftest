@@ -1015,6 +1015,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->report_per_port 	= user_param->report_per_port;
 	comm->rdma_params->retry_count		= user_param->retry_count;
 	comm->rdma_params->mr_per_qp		= user_param->mr_per_qp;
+	comm->rdma_params->dlid			= user_param->dlid;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1405,10 +1406,15 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 		struct perftest_comm *comm)
 {
 	int is_there_mgid,local_mgid,remote_mgid;
+
+	/* use dlid value from user (if user specified and only on the remote side) */
+	uint16_t dlid = (comm->rdma_params->dlid && comm->rdma_params->side) ?
+				comm->rdma_params->dlid : element->lid;
+
 	if (comm->rdma_params->output != FULL_VERBOSITY)
 		return;
 	/*First of all we print the basic format.*/
-	printf(BASIC_ADDR_FMT,sideArray[comm->rdma_params->side],element->lid,element->qpn,element->psn);
+	printf(BASIC_ADDR_FMT, sideArray[comm->rdma_params->side], dlid, element->qpn, element->psn);
 
 	switch (comm->rdma_params->verb) {
 		case 2  : printf(READ_FMT,element->out_reads);
