@@ -624,7 +624,7 @@ int send_set_up_connection(
 		}
 
 		if (user_param->is_ethertype) {
-			spec_info->eth.val.ether_type = user_param->ethertype;
+			spec_info->eth.val.ether_type = htons(user_param->ethertype);
 			spec_info->eth.mask.ether_type = 0xffff;
 		}
 
