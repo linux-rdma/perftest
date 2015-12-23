@@ -1938,6 +1938,7 @@ static int ctx_modify_dc_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.grh.dgid = dest->gid;
 		attr->ah_attr.grh.sgid_index = user_param->gid_index;
 		attr->ah_attr.grh.hop_limit = 1;
+		attr->ah_attr.grh.traffic_class = user_param->traffic_class;
 		attr->ah_attr.sl = 0;
 	}
 
@@ -2001,6 +2002,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			attr->ah_attr.grh.dgid = dest->gid;
 			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
 			attr->ah_attr.grh.hop_limit = 1;
+			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
 		}
 
 		if (user_param->connection_type != UD) {
