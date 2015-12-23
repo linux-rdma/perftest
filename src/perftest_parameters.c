@@ -1739,6 +1739,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  }
 				  if (dlid_flag) {
 					  user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
+					  dlid_flag = 0;
 				  }
 				  break;
 
