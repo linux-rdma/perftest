@@ -376,6 +376,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --retry_count=<value> ");
 	printf(" Set retry count value in rdma_cm mode\n");
 
+	printf("      --tclass=<value> ");
+	printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
+
 	#ifdef HAVE_CUDA
 	printf("      --use_cuda ");
 	printf(" Use CUDA lib for GPU-Direct testing.\n");
@@ -555,6 +558,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_res_domain	= 0;
 	user_param->mr_per_qp		= 0;
 	user_param->dlid		= 0;
+	user_param->traffic_class	= 0;
 }
 
 /******************************************************************************
@@ -1339,6 +1343,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_res_domain_flag = 0;
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
+	static int tclass_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1429,6 +1434,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
+			{ .name = "tclass",		.has_arg = 1, .flag = &tclass_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1740,6 +1746,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (dlid_flag) {
 					  user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
 					  dlid_flag = 0;
+				  }
+				  if (tclass_flag) {
+					  user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
+					  tclass_flag = 0;
 				  }
 				  break;
 

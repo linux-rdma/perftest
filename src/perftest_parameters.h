@@ -417,6 +417,7 @@ struct perftest_parameters {
 	int				use_res_domain;
 	int				mr_per_qp;
 	uint16_t			dlid;
+	uint8_t				traffic_class;
 };
 
 struct report_options {
