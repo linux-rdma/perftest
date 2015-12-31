@@ -529,14 +529,14 @@ int main(int argc, char *argv[])
 		if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw_infinitely(&ctx,&user_param)) {
-				fprintf(stderr," Error occured while running infinitely! aborting ...\n");
+				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
 				return FAILURE;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
-				fprintf(stderr," Error occured while running infinitely on server! aborting ...\n");
+				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
 				return FAILURE;
 			}
 		}

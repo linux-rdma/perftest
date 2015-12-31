@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (run_iter_bw(&ctx, &user_param)) {
-			fprintf(stderr, " Error occured in run_iter function\n");
+			fprintf(stderr, " Error occurred in run_iter function\n");
 			return FAILURE;
 		}
 
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
 		if (run_iter_bw_infinitely(&ctx, &user_param)) {
-			fprintf(stderr, " Error occured while running infinitely! aborting ...\n");
+			fprintf(stderr, " Error occurred while running infinitely! aborting ...\n");
 			return FAILURE;
 		}
 	}

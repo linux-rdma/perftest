@@ -352,7 +352,7 @@ int main(int argc, char *argv[])
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if(run_iter_bw_infinitely(&ctx,&user_param)) {
-			fprintf(stderr," Error occured while running! aborting ...\n");
+			fprintf(stderr," Error occurred while running! aborting ...\n");
 			return FAILURE;
 		}
 	}

@@ -113,7 +113,7 @@
 /* UD addition to the buffer. */
 #define IF_UD_ADD(type,cache_line_size) ((type == UD) ? (cache_line_size) : (0))
 
-/* Macro that defines the adress where we write in RDMA.
+/* Macro that defines the address where we write in RDMA.
  * If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
  */
 #define INC(size,cache_line_size) ((size > cache_line_size) ? ((size%cache_line_size == 0) ?  \
