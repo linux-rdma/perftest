@@ -3727,7 +3727,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 			}
 
 		} else if (ne < 0) {
-			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
+			fprintf(stderr, "Poll Receive CQ failed %d\n", ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}
