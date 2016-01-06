@@ -74,19 +74,6 @@ int check_flow_steering_support(char *dev_name)
 	return 0;
 }
 
-
-/******************************************************************************
- *
- ******************************************************************************/
-static void mac_from_gid(uint8_t   *mac, uint8_t *gid, uint32_t port)
-{
-	memcpy(mac, gid + 8, 3);
-	memcpy(mac + 3, gid + 13, 3);
-	if(port==1) {
-		mac[0] ^= 2;
-	}
-}
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -562,11 +549,7 @@ int send_set_up_connection(
 
 		spec_info->eth.val.ether_type = 0;
 
-		if(user_param->is_source_mac) {
-			mac_from_user(spec_info->eth.val.dst_mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac));
-		} else {
-			mac_from_gid(spec_info->eth.val.dst_mac, temp_gid.raw, user_param->ib_port);
-		}
+		mac_from_user(spec_info->eth.val.dst_mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac));
 
 		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
 		if(user_param->is_server_ip || user_param->is_client_ip) {
@@ -633,12 +616,7 @@ int send_set_up_connection(
 	if (user_param->machine == CLIENT || user_param->duplex) {
 
 		/* set source mac */
-		if(user_param->is_source_mac) {
-			mac_from_user(my_dest_info->mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac) );
-
-		} else {
-			mac_from_gid(my_dest_info->mac, temp_gid.raw, user_param->ib_port);
-		}
+		mac_from_user(my_dest_info->mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac) );
 
 		/* set dest mac */
 		mac_from_user(rem_dest_info->mac , &(user_param->dest_mac[0]) , sizeof(user_param->dest_mac) );
