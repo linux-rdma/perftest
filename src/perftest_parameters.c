@@ -419,7 +419,7 @@ void usage_raw_ethernet()
 {
 	printf("  Raw Ethernet options :\n");
 	printf("  -B, --source_mac ");
-	printf(" source MAC address by this format XX:XX:XX:XX:XX:XX (default take the MAC address form GID)\n");
+	printf(" source MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
 
 	printf("  -E, --dest_mac ");
 	printf(" destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered \n");
@@ -823,6 +823,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		if(user_param->machine == UNCHOSEN) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
+			exit(1);
+		}
+
+		if(user_param->is_source_mac == OFF) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must enter source mac by this format -B XX:XX:XX:XX:XX:XX\n");
 			exit(1);
 		}
 
