@@ -222,8 +222,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
 	}
 
-	printf("  -m, --mtu=<mtu> ");
-	printf(" Mtu size : 256 - 4096 (default port mtu)\n");
+	if (connection_type == RawEth) {
+		printf("  -m, --mtu=<mtu> ");
+		printf(" Mtu size : 64 - 9600 (default port mtu)\n");
+	} else {
+		printf("  -m, --mtu=<mtu> ");
+		printf(" Mtu size : 256 - 4096 (default port mtu)\n");
+	}
 
 	if (verb == SEND) {
 		printf("  -M, --MGID=<multicast_gid> ");
