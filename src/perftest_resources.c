@@ -1119,6 +1119,7 @@ struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx, struc
  ******************************************************************************/
 int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
 {
+	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 
 	#ifdef HAVE_VERBS_EXP
@@ -1223,6 +1224,13 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	if (ctx->is_contig_supported == SUCCESS)
 		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
+
+
+	/* Initialize buffer with random numbers */
+	srand(time(NULL));
+	for (i = 0; i < ctx->buff_size; i++) {
+		((char*)ctx->buf[qp_index])[i] = (char)rand();
+	}
 
 	return 0;
 }
