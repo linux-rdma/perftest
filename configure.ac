@@ -153,6 +153,15 @@ if [test "$CUDA_H_PATH" ]; then
 	LIBS=$LIBS" -lcuda"
 fi
 
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_DEVICE_SCATTER_FCS;],[HAVE_SCATTER_FCS=yes], [HAVE_SCATTER_FCS=no])
+AM_CONDITIONAL([HAVE_SCATTER_FCS],[test "x$HAVE_SCATTER_FCS" = "xyes"])
+if [test $HAVE_SCATTER_FCS = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_SCATTER_FCS], [1], [Have SCATTER_FCS support])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])

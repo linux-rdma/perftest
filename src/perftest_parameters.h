@@ -418,6 +418,7 @@ struct perftest_parameters {
 	int				mr_per_qp;
 	uint16_t			dlid;
 	uint8_t				traffic_class;
+	int				disable_fcs;
 };
 
 struct report_options {
