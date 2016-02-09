@@ -456,6 +456,11 @@ void usage_raw_ethernet()
 	printf("  -v, --mac_fwd ");
 	printf(" run mac forwarding test \n");
 
+	#ifdef HAVE_SCATTER_FCS
+	printf("      --disable_fcs ");
+	printf(" Disable Scatter FCS feature. (Scatter FCS is enabled by default when using --use_exp flag). \n");
+	#endif
+
 	printf("      --promiscuous");
 	printf(" run promiscuous mode.\n");
 
@@ -564,6 +569,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->mr_per_qp		= 0;
 	user_param->dlid		= 0;
 	user_param->traffic_class	= 0;
+	user_param->disable_fcs		= 0;
 }
 
 /******************************************************************************
@@ -1355,6 +1361,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
+	static int disable_fcs_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1446,6 +1453,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
 			{ .name = "tclass",		.has_arg = 1, .flag = &tclass_flag, .val = 1},
+			#ifdef HAVE_SCATTER_FCS
+			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
+			#endif
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1839,6 +1849,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (mr_per_qp_flag) {
 		user_param->mr_per_qp = 1;
+	}
+
+	if (disable_fcs_flag) {
+		user_param->disable_fcs = 1;
 	}
 
 	if (optind == argc - 1) {

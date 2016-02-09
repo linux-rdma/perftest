@@ -1520,6 +1520,7 @@ int create_qp_main(struct pingpong_context *ctx,
 	query |= user_param->masked_atomics;
 	query |= user_param->verb_type != NORMAL_INTF;
 	query |= user_param->use_res_domain;
+	query |= user_param->use_exp;
 
 	if (query == 1)
 		user_param->is_exp_qp = 1;
@@ -1534,7 +1535,25 @@ int create_qp_main(struct pingpong_context *ctx,
 	return ret;
 }
 
+#ifdef HAVE_VERBS_EXP
+#ifdef HAVE_SCATTER_FCS
+static int check_scatter_fcs_support(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	struct ibv_exp_device_attr dev_attr;
 
+	memset(&dev_attr, 0, sizeof(dev_attr));
+	dev_attr.comp_mask = IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
+	dev_attr.exp_device_cap_flags = IBV_EXP_DEVICE_SCATTER_FCS;
+	if (ibv_exp_query_device(ctx->context, &dev_attr)) {
+		fprintf(stderr, "ibv_exp_query_device failed\n");
+		return 1;
+	}
+
+	return MASK_IS_SET(IBV_EXP_DEVICE_SCATTER_FCS, dev_attr.exp_device_cap_flags);
+}
+#endif
+#endif
 
 #ifdef HAVE_VERBS_EXP
 struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
@@ -1613,6 +1632,14 @@ struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
 		default:  fprintf(stderr, "Unknown connection type \n");
 			  return NULL;
 	}
+
+	#ifdef HAVE_SCATTER_FCS
+	if (!user_param->disable_fcs && (user_param->connection_type == RawEth)) {
+		if(check_scatter_fcs_support(ctx, user_param)) {
+			attr.exp_create_flags |= IBV_EXP_QP_CREATE_SCATTER_FCS;
+		}
+	}
+	#endif
 
 	qp = ibv_exp_create_qp(ctx->context, &attr);
 	if (!qp)
