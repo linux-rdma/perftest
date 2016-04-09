@@ -163,15 +163,17 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
 	}
 
-	if (verb == SEND) {
-		printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
-		printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
-	} else 	if (verb == WRITE) {
-		printf("  -c, --connection=<RC/XRC/UC/DC> ");
-		printf(" Connection type RC/XRC/UC/DC (default RC)\n");
-	} else if (verb == READ || verb == ATOMIC) {
-		printf("  -c, --connection=<RC/XRC/DC> ");
-		printf(" Connection type RC/XRC/DC (default RC)\n");
+	if (connection_type != RawEth) {
+		if (verb == SEND) {
+			printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
+			printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
+		} else 	if (verb == WRITE) {
+			printf("  -c, --connection=<RC/XRC/UC/DC> ");
+			printf(" Connection type RC/XRC/UC/DC (default RC)\n");
+		} else if (verb == READ || verb == ATOMIC) {
+			printf("  -c, --connection=<RC/XRC/DC> ");
+			printf(" Connection type RC/XRC/DC (default RC)\n");
+		}
 	}
 
 	if (tst == LAT) {
@@ -185,7 +187,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -D, --duration ");
 	printf(" Run test for a customized period of seconds.\n");
 
-	if (verb != WRITE) {
+	if (verb != WRITE && connection_type != RawEth) {
 		printf("  -e, --events ");
 		printf(" Sleep on CQ events (default poll)\n");
 	}
@@ -224,10 +226,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (connection_type == RawEth) {
 		printf("  -m, --mtu=<mtu> ");
-		printf(" Mtu size : 64 - 9600 (default port mtu)\n");
+		printf(" MTU size : 64 - 9600 (default port mtu)\n");
 	} else {
 		printf("  -m, --mtu=<mtu> ");
-		printf(" Mtu size : 256 - 4096 (default port mtu)\n");
+		printf(" MTU size : 256 - 4096 (default port mtu)\n");
 	}
 
 	if (verb == SEND) {
@@ -248,7 +250,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" num of outstanding read/atom(default max of device)\n");
 	}
 
-	if (tst == BW) {
+	if (tst == BW && connection_type != RawEth) {
 		printf("  -O, --dualport ");
 		printf(" Run test in dual-port mode.\n");
 	}
@@ -256,7 +258,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -p, --port=<port> ");
 	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
 
-	if (tst == BW) {
+	if (tst == BW  && connection_type != RawEth) {
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
 	}
 
@@ -271,8 +273,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
 	}
 
-	printf("  -R, --rdma_cm ");
-	printf(" Connect QPs with rdma_cm and run test on those QPs\n");
+	if (connection_type != RawEth) {
+		printf("  -R, --rdma_cm ");
+		printf(" Connect QPs with rdma_cm and run test on those QPs\n");
+	}
 
 	if (verb != ATOMIC) {
 		printf("  -s, --size=<size> ");
@@ -302,19 +306,24 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Display version number\n");
 
 	if (tst == BW) {
-		printf("  -w, --limit_bw ");
+		printf("  -w, --limit_bw=<value> ");
 		printf(" Set verifier limit for bandwidth\n");
 	}
-	printf("  -x, --gid-index=<index> ");
-	printf(" Test uses GID with GID index (Default : IB - no gid . ETH - 0)\n");
+
+	if (connection_type != RawEth) {
+		printf("  -x, --gid-index=<index> ");
+		printf(" Test uses GID with GID index (Default : IB - no gid . ETH - 0)\n");
+	}
 
 	if (tst == BW) {
-		printf("  -y, --limit_msgrate ");
+		printf("  -y, --limit_msgrate=<value> ");
 		printf(" Set verifier limit for Msg Rate\n");
 	}
 
-	printf("  -z, --com_rdma_cm ");
-	printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
+	if (connection_type != RawEth) {
+		printf("  -z, --com_rdma_cm ");
+		printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
+	}
 
 	/*Long flags*/
 	putchar('\n');
@@ -325,26 +334,32 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --dlid ");
 	printf(" Set a Destination LID instead of getting it from the other side.\n");
 
-	printf("      --dont_xchg_versions ");
-	printf(" Do not exchange versions and MTU with other side \n");
+	if (connection_type != RawEth) {
+		printf("      --dont_xchg_versions ");
+		printf(" Do not exchange versions and MTU with other side \n");
+	}
 
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
 	}
 
-	printf("      --ipv6 ");
-	printf(" Use IPv6 GID. Default is IPv4\n");
+	if (connection_type != RawEth) {
+		printf("      --ipv6 ");
+		printf(" Use IPv6 GID. Default is IPv4\n");
+	}
 
 	if (tst == LAT) {
 		printf("      --latency_gap=<delay_time> ");
 		printf(" delay time between each post send\n");
 	}
 
-	printf("      --mmap=file ");
-	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
-	printf("      --mmap-offset=<offset> ");
-	printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
+	if (connection_type != RawEth) {
+		printf("      --mmap=file ");
+		printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
+		printf("      --mmap-offset=<offset> ");
+		printf(" Use an mmap'd file as the buffer for testing P2P transfers.\n");
+	}
 
 	if (tst == BW) {
 		printf("      --mr_per_qp ");
@@ -368,8 +383,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
 
-		printf("      --report-per-port ");
-		printf(" Report BW data on both ports when running Dualport and Duration mode\n");
+		if (connection_type != RawEth) {
+			printf("      --report-per-port ");
+			printf(" Report BW data on both ports when running Dualport and Duration mode\n");
+		}
 
 		printf("      --reversed ");
 		printf(" Reverse traffic direction - Server send to client\n");
@@ -378,8 +395,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Run test forever, print results every <duration> seconds\n");
 	}
 
-	printf("      --retry_count=<value> ");
-	printf(" Set retry count value in rdma_cm mode\n");
+	if (connection_type != RawEth) {
+		printf("      --retry_count=<value> ");
+		printf(" Set retry count value in rdma_cm mode\n");
+	}
 
 	printf("      --tclass=<value> ");
 	printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
@@ -601,35 +620,38 @@ static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
 /******************************************************************************
  *
  ******************************************************************************/
-static void change_conn_type(int *cptr,VerbType verb,const char *optarg)
+static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 {
-	if (strcmp(connStr[0],optarg)==0)
+	if (*cptr == RawEth)
+		return;
+
+	if (strcmp(connStr[0], optarg)==0)
 		*cptr = RC;
 
-	else if (strcmp(connStr[1],optarg)==0) {
+	else if (strcmp(connStr[1], optarg)==0) {
 		*cptr = UC;
 		if (verb == READ || verb == ATOMIC) {
 			fprintf(stderr," UC connection not possible in READ/ATOMIC verbs\n");
 			exit(1);
 		}
 
-	} else if (strcmp(connStr[2],optarg)==0)  {
+	} else if (strcmp(connStr[2], optarg)==0)  {
 		*cptr = UD;
 		if (verb != SEND) {
 			fprintf(stderr," UD connection only possible in SEND verb\n");
 			exit(1);
 		}
-	} else if(strcmp(connStr[3],optarg)==0) {
+	} else if(strcmp(connStr[3], optarg)==0) {
 		*cptr = RawEth;
 
-	} else if(strcmp(connStr[4],optarg)==0) {
+	} else if(strcmp(connStr[4], optarg)==0) {
 		#ifdef HAVE_XRCD
 		*cptr = XRC;
 		#else
 		fprintf(stderr," XRC not detected in libibverbs\n");
 		exit(1);
 		#endif
-	} else if (strcmp(connStr[5],optarg)==0) {
+	} else if (strcmp(connStr[5], optarg)==0) {
 		#ifdef HAVE_DC
 		*cptr = DC;
 		#else
@@ -754,6 +776,93 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr, " CPU Utilization works only with Duration mode.\n");
 	}
 
+	if (user_param->connection_type == RawEth) {
+
+		if (user_param->test_method == RUN_ALL) {
+			fprintf(stderr, "Raw Ethernet tests do not support -a / --all flag.\n");
+			exit(1);
+		}
+
+		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
+			printf(RESULT_LINE);
+			fprintf(stdout," Raw Ethernet test supports only 1 QP for now\n");
+			exit(1);
+		}
+		if (user_param->use_rdma_cm == ON || user_param->work_rdma_cm == ON) {
+			fprintf(stderr," RDMA CM isn't supported for Raw Ethernet tests\n");
+			exit(1);
+		}
+
+		if (user_param->use_event) {
+			fprintf(stderr," Events mode isn't supported for Raw Ethernet tests\n");
+			exit(1);
+		}
+
+		if (user_param->use_gid_user) {
+			fprintf(stderr," GID index isn't supported for Raw Ethernet tests\n");
+			exit(1);
+		}
+
+		if (user_param->mmap_file != NULL || user_param->mmap_offset) {
+			fprintf(stderr," mmaped files aren't supported for Raw Ethernet tests\n");
+			exit(1);
+		}
+
+		if(user_param->machine == UNCHOSEN) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
+			exit(1);
+		}
+
+		/* Verify the packet */
+		if(user_param->is_source_mac == OFF) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must enter source mac by this format -B XX:XX:XX:XX:XX:XX\n");
+			exit(1);
+		}
+
+		if(user_param->is_dest_mac == OFF && (user_param->tst == LAT || (user_param->machine == CLIENT && !user_param->raw_mcast))) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
+			exit(1);
+		}
+
+		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
+			exit(1);
+		}
+
+		if ((user_param->is_server_port == ON) && (user_param->is_server_ip == OFF || user_param->is_client_ip == OFF)) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Invalid Command line.\nPlease provide source_ip and/or dest_ip when using UDP\n");
+			exit(1);
+		}
+		/* UDP packet is ok by now. check tcp flag */
+		if (user_param->tcp == ON && user_param->is_server_port == OFF) {
+			printf(RESULT_LINE);
+			fprintf(stderr,"Invalid Command line.\nPlease provide UDP information (IP & UDP Port src/dest) in order to use TCP\n");
+			exit(1);
+		}
+
+		/* Mac forwarding dependencies */
+		if (user_param->duplex == OFF && user_param->mac_fwd == ON) {
+			printf("mac_fwd should run in duplex mode only. changing to duplex mode.\n");
+			user_param->duplex = ON;
+		}
+		if (user_param->mac_fwd == ON && user_param->cq_mod >= user_param->rx_depth) {
+			fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
+			user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
+			fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
+		}
+
+		if (user_param->raw_mcast && user_param->duplex) {
+			fprintf(stderr, " Multicast feature works on unidirectional traffic only\n");
+			exit(1);
+		}
+
+	}
+
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
 		user_param->gid_index = 0;
 	}
@@ -818,72 +927,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr," ODP does not support ATOMICS for now\n");
 		exit(1);
 	}
-	if (user_param->connection_type == RawEth) {
-
-		if (user_param->test_method == RUN_ALL) {
-			fprintf(stderr, "Raw Ethernet tests do not support -a / --all flag.\n");
-			exit(1);
-		}
-
-		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
-			printf(RESULT_LINE);
-			fprintf(stdout," Raw Ethernet test supports only 1 QP for now\n");
-			exit(1);
-		}
-
-		if(user_param->machine == UNCHOSEN) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n you must choose test side --client or --server\n");
-			exit(1);
-		}
-
-		if(user_param->is_source_mac == OFF) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n you must enter source mac by this format -B XX:XX:XX:XX:XX:XX\n");
-			exit(1);
-		}
-
-		if(user_param->machine == CLIENT && user_param->is_dest_mac == OFF && !user_param->raw_mcast) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
-			exit(1);
-		}
-
-		if((user_param->is_server_port == ON && user_param->is_client_port == OFF) || (user_param->is_server_port == OFF && user_param->is_client_port == ON)) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n if you would like to send UDP header,\n you must enter server&client port --server_port X --client_port X\n");
-			exit(1);
-		}
-
-		if ((user_param->is_server_port == ON) && (user_param->is_server_ip == OFF || user_param->is_client_ip == OFF)) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\nPlease provide source_ip and/or dest_ip when using UDP\n");
-			exit(1);
-		}
-		//UDP packet is ok by now. check tcp flag
-		if (user_param->tcp == ON && user_param->is_server_port == OFF) {
-			printf(RESULT_LINE);
-			fprintf(stderr,"Invalid Command line.\nPlease provide UDP information (IP & UDP Port src/dest) in order to use TCP\n");
-			exit(1);
-		}
-
-		/* Mac forwarding dependencies */
-		if (user_param->duplex == OFF && user_param->mac_fwd == ON) {
-			printf("mac_fwd should run in duplex mode only. changing to duplex mode.\n");
-			user_param->duplex = ON;
-		}
-		if (user_param->mac_fwd == ON && user_param->cq_mod >= user_param->rx_depth) {
-			fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
-			user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
-			fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
-		}
-
-		if (user_param->raw_mcast && user_param->duplex) {
-			printf(" Multicast feature works on unidirectional traffic only\n");
-			exit(1);
-		}
-
-	}
 
 	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
@@ -910,19 +953,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr," run_infinitely not supported in SEND Bidirectional BW test\n");
 			exit(1);
 		}
-	}
-
-	/*raw ethernet send latency
-	client and server must enter the destination mac
-	*/
-	if (user_param->connection_type == RawEth && user_param->tst == LAT && user_param->verb == SEND) {
-
-		if (user_param-> is_dest_mac == OFF) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Invalid Command line.\n you must enter dest mac by this format -E XX:XX:XX:XX:XX:XX\n");
-			exit(1);
-		}
-
 	}
 
 	if (user_param->connection_type == DC && !user_param->use_srq)
@@ -1481,7 +1511,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->connection_type == RawEth)
 					  user_param->raw_qos = 1;
 				  break;
-			case 'x': CHECK_VALUE(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index"); 
+			case 'x': CHECK_VALUE(user_param->gid_index, uint8_t, MIN_GID_IX, MAX_GID_IX, "Gid index");
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q':
