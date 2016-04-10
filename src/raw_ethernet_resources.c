@@ -39,6 +39,7 @@
 #include <string.h>
 #include <signal.h>
 #include <getopt.h>
+#include <unistd.h>
 #include </usr/include/netinet/ip.h>
 #include <poll.h>
 #include "perftest_parameters.h"
@@ -52,8 +53,10 @@ struct perftest_parameters* duration_param;
 int check_flow_steering_support(char *dev_name)
 {
 	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
+	char* openibd_path = "/etc/init.d/openibd";
 	FILE *fp;
 	char line[4];
+	int is_flow_steering_supported = 0;
 
 	if (strstr(dev_name, "mlx5") != NULL)
 		return 0;
@@ -65,13 +68,15 @@ int check_flow_steering_support(char *dev_name)
 	if (val >= 0) {
 		fprintf(stderr,"flow steering is not supported.\n");
 		fprintf(stderr," please run: echo options mlx4_core log_num_mgm_entry_size=-1 >> /etc/modprobe.d/mlnx.conf\n");
-		fprintf(stderr," and restart the driver: /etc/init.d/openibd restart \n");
-		fclose(fp);
-		return 1;
+		if (access(openibd_path, F_OK) != -1)
+			fprintf(stderr," and restart the driver: %s restart \n", openibd_path);
+		else
+			fprintf(stderr," and restart the driver: modprobe -r mlx4_core; modprobe mlx4_core \n");
+		is_flow_steering_supported =  1;
 	}
 
-	fclose(fp); 
-	return 0;
+	fclose(fp);
+	return is_flow_steering_supported;
 }
 
 /******************************************************************************
