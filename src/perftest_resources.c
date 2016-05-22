@@ -2799,6 +2799,10 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			err = 0;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
+	#ifdef HAVE_ACCL_VERBS
+	int pl_index;
+	struct ibv_sge		*sg_l;
+	#endif
 	#endif
 	struct ibv_send_wr 	*bad_wr = NULL;
 	struct ibv_wc 	   	*wc = NULL;
@@ -2815,8 +2819,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int 			cpu_mhz = 0;
 	int 			return_value = 0;
 	int			wc_id;
-	int pl_index;
-	struct ibv_sge		*sg_l;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
