@@ -110,7 +110,8 @@ static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
 /******************************************************************************
  *
  ******************************************************************************/
-void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uint8_t protocol,int sizePkt, int tos)
+void gen_ip_header(void* ip_header_buffer, uint32_t* saddr, uint32_t* daddr,
+		   uint8_t protocol, int pkt_size, int tos, int flows_offset)
 {
 	struct IP_V4_header ip_header;
 
@@ -119,7 +120,7 @@ void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uin
 	ip_header.version = 4;
 	ip_header.ihl = 5;
 	ip_header.tos = (tos == DEF_TOS)? 0 : tos;
-	ip_header.tot_len = htons(sizePkt);
+	ip_header.tot_len = htons(pkt_size);
 	ip_header.id = htons(0);
 	ip_header.frag_off = htons(0);
 	ip_header.ttl = DEFAULT_TTL;
@@ -134,15 +135,15 @@ void gen_ip_header(void* ip_header_buffer,uint32_t* saddr ,uint32_t* daddr , uin
 /******************************************************************************
  *
  ******************************************************************************/
-void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt)
+void gen_udp_header(void* UDP_header_buffer, int src_port, int dst_port, int pkt_size)
 {
 	struct UDP_header udp_header;
 
 	memset(&udp_header,0,sizeof(struct UDP_header));
 
-	udp_header.uh_sport = htons(*sPort);
-	udp_header.uh_dport = htons(*dPort);
-	udp_header.uh_ulen = htons(sizePkt - sizeof(struct IP_V4_header));
+	udp_header.uh_sport = htons(src_port);
+	udp_header.uh_dport = htons(dst_port);
+	udp_header.uh_ulen = htons(pkt_size - sizeof(struct IP_V4_header));
 	udp_header.uh_sum = 0;
 
 	memcpy(UDP_header_buffer, &udp_header, sizeof(struct UDP_header));
@@ -152,14 +153,14 @@ void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t sadd
 /******************************************************************************
  *
  ******************************************************************************/
-void gen_tcp_header(void* TCP_header_buffer,int* sPort ,int* dPort)
+void gen_tcp_header(void* TCP_header_buffer,int src_port ,int dst_port)
 {
 	struct TCP_header tcp_header;
 
 	memset(&tcp_header,0,sizeof(struct TCP_header));
 
-	tcp_header.th_sport = htons(*sPort);
-	tcp_header.th_dport = htons(*dPort);
+	tcp_header.th_sport = htons(src_port);
+	tcp_header.th_dport = htons(dst_port);
 	tcp_header.th_doff = 5;
 	tcp_header.th_window = htons(8192);
 	memcpy(TCP_header_buffer, &tcp_header, sizeof(struct TCP_header));
@@ -290,6 +291,7 @@ void print_ip_header(struct IP_V4_header* ip_header)
 {
 	char str_ip_s[INET_ADDRSTRLEN];
 	char str_ip_d[INET_ADDRSTRLEN];
+
 	if (NULL == ip_header) {
 		fprintf(stderr, "IP_V4_header pointer is Null\n");
 		return;
@@ -386,31 +388,39 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
  *build single packet on ctx buffer
  ******************************************************************************/
 void build_pkt_on_buffer(struct ETH_header* eth_header,
-		struct raw_ethernet_info *my_dest_info,
-		struct raw_ethernet_info *rem_dest_info,
-		struct perftest_parameters *user_param,
-		uint16_t eth_type,
-		uint16_t ip_next_protocol,
-		int print_flag,
-		int sizePkt)
+			 struct raw_ethernet_info *my_dest_info,
+			 struct raw_ethernet_info *rem_dest_info,
+			 struct perftest_parameters *user_param,
+			 uint16_t eth_type, uint16_t ip_next_protocol,
+			 int print_flag, int pkt_size, int flows_offset)
 {
 	void* header_buff = NULL;
-	gen_eth_header(eth_header,my_dest_info->mac,rem_dest_info->mac,eth_type);
-	if(user_param->is_client_ip || user_param->is_server_ip) {
+	int have_ip_header = user_param->is_client_ip || user_param->is_server_ip;
+	int is_udp_or_tcp = user_param->is_client_port && user_param->is_server_port;
+
+	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type);
+
+	if(have_ip_header) {
+		int offset = is_udp_or_tcp ? 0 : flows_offset;
+
 		header_buff = (void*)eth_header + sizeof(struct ETH_header);
-		gen_ip_header(header_buff,&my_dest_info->ip,&rem_dest_info->ip,ip_next_protocol,sizePkt, user_param->tos);
+		gen_ip_header(header_buff, &my_dest_info->ip, &rem_dest_info->ip,
+			      ip_next_protocol, pkt_size, user_param->tos, offset);
 	}
-	if(user_param->is_client_port && user_param->is_server_port) {
+
+	if(is_udp_or_tcp) {
 		header_buff = header_buff + sizeof(struct IP_V4_header);
 		if (user_param->tcp)
-			gen_tcp_header(header_buff,&my_dest_info->port,&rem_dest_info->port);
+			gen_tcp_header(header_buff, my_dest_info->port + flows_offset,
+				       rem_dest_info->port + flows_offset);
 		else
-			gen_udp_header(header_buff,&my_dest_info->port,&rem_dest_info->port,my_dest_info->ip,rem_dest_info->ip,sizePkt);
+			gen_udp_header(header_buff, my_dest_info->port + flows_offset,
+				       rem_dest_info->port+ flows_offset, pkt_size);
 
 	}
 
 	if(print_flag == PRINT_ON) {
-		print_pkt((void*)eth_header,user_param);
+		print_pkt((void*)eth_header, user_param);
 	}
 }
 
@@ -425,6 +435,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		struct raw_ethernet_info	*rem_dest_info)
 {
 	int offset = 0;
+	int i;
 	struct ETH_header* eth_header;
 	uint16_t ip_next_protocol = 0;
 	uint16_t eth_type = user_param->is_ethertype ? user_param->ethertype :
@@ -437,18 +448,29 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 	eth_header = (void*)ctx->buf[0];
 
 	/* build single packet on ctx buffer */
-	build_pkt_on_buffer(eth_header,my_dest_info,rem_dest_info,user_param,eth_type,ip_next_protocol,PRINT_ON,ctx->size-RAWETH_ADDITION);
+	build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info, user_param,
+			    eth_type, ip_next_protocol, PRINT_ON,
+			    ctx->size - RAWETH_ADDITION, 0);
 
 	if (user_param->tst == BW) {
 		/* fill ctx buffer with same packets */
 		if (ctx->size <= (ctx->cycle_buffer / 2)) {
 			while (offset < ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
-				offset += INC(ctx->size,ctx->cache_line_size);
-				eth_header = (void*)ctx->buf[0]+offset;
-				build_pkt_on_buffer(eth_header,my_dest_info,rem_dest_info,
-						user_param,eth_type,ip_next_protocol,
-						PRINT_OFF,ctx->size-RAWETH_ADDITION);
+				offset += INC(ctx->size, ctx->cache_line_size);
+				eth_header = (void*)ctx->buf[0] + offset;
+				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
+						    user_param, eth_type, ip_next_protocol,
+						    PRINT_OFF ,ctx->size - RAWETH_ADDITION, 0);
 			}
+		}
+	} else if (user_param->tst == LAT && user_param->flows != DEF_FLOWS) {
+		/* fill ctx buffer with different packets according to flows_offset */
+		for (i = 1; i < user_param->flows; i++) {
+			offset += INC(ctx->size, ctx->cache_line_size);
+			eth_header = (void*)ctx->buf[0] + offset;
+			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
+					    user_param, eth_type, ip_next_protocol,
+					    PRINT_ON ,ctx->size - RAWETH_ADDITION, i);
 		}
 	}
 
@@ -479,6 +501,132 @@ int calc_flow_rules_size(int is_ip_header,int is_udp_header)
 	return tot_size;
 }
 
+static int set_up_flow_rules(
+		#ifdef HAVE_RAW_ETH_EXP
+		struct ibv_exp_flow_attr **flow_rules,
+		#else
+		struct ibv_flow_attr **flow_rules,
+		#endif
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		int flows_offset)
+{
+
+	#ifdef HAVE_RAW_ETH_EXP
+	struct ibv_exp_flow_spec* spec_info;
+	struct ibv_exp_flow_attr* attr_info;
+	#else
+	struct ibv_flow_spec* spec_info;
+	struct ibv_flow_attr* attr_info;
+	#endif
+
+	void* header_buff;
+	int flow_rules_size;
+	int is_ip = user_param->is_server_ip || user_param->is_client_ip;
+	int is_port = user_param->is_server_port || user_param->is_client_port;
+
+	flow_rules_size = calc_flow_rules_size(is_ip, is_port);
+
+	ALLOCATE(header_buff, uint8_t, flow_rules_size);
+
+	memset(header_buff, 0, flow_rules_size);
+
+	#ifdef HAVE_RAW_ETH_EXP
+	*flow_rules = (struct ibv_exp_flow_attr*)header_buff;
+	attr_info = (struct ibv_exp_flow_attr*)header_buff;
+	#else
+	*flow_rules = (struct ibv_flow_attr*)header_buff;
+	attr_info = (struct ibv_flow_attr*)header_buff;
+	#endif
+
+	attr_info->size = flow_rules_size;
+	attr_info->priority = 0;
+	attr_info->num_of_specs = 1 + is_ip + is_port;
+	attr_info->port = user_param->ib_port;
+	attr_info->flags = 0;
+
+	#ifdef HAVE_RAW_ETH_EXP
+	attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
+	header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
+	spec_info = (struct ibv_exp_flow_spec*)header_buff;
+	spec_info->eth.type = IBV_EXP_FLOW_SPEC_ETH;
+	spec_info->eth.size = sizeof(struct ibv_exp_flow_spec_eth);
+	#else
+	attr_info->type = IBV_FLOW_ATTR_NORMAL;
+	header_buff = header_buff + sizeof(struct ibv_flow_attr);
+	spec_info = (struct ibv_flow_spec*)header_buff;
+	spec_info->eth.type = IBV_FLOW_SPEC_ETH;
+	spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
+	#endif
+
+	spec_info->eth.val.ether_type = 0;
+
+	mac_from_user(spec_info->eth.val.dst_mac, &(user_param->source_mac[0]), sizeof(user_param->source_mac));
+
+	memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
+	if(user_param->is_server_ip || user_param->is_client_ip) {
+		#ifdef HAVE_RAW_ETH_EXP
+		header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
+		spec_info = (struct ibv_exp_flow_spec*)header_buff;
+		spec_info->ipv4.type = IBV_EXP_FLOW_SPEC_IPV4;
+		spec_info->ipv4.size = sizeof(struct ibv_exp_flow_spec_ipv4);
+		#else
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+		spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
+		spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
+		#endif
+
+		if(user_param->machine == SERVER) {
+
+			spec_info->ipv4.val.dst_ip = user_param->server_ip;
+			spec_info->ipv4.val.src_ip = user_param->client_ip;
+
+		} else{
+
+			spec_info->ipv4.val.dst_ip = user_param->client_ip;
+			spec_info->ipv4.val.src_ip = user_param->server_ip;
+		}
+
+		memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
+		memset((void*)&spec_info->ipv4.mask.src_ip, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
+	}
+
+	if(user_param->is_server_port && user_param->is_client_port) {
+		#ifdef HAVE_RAW_ETH_EXP
+		header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_ipv4);
+		spec_info = (struct ibv_exp_flow_spec*)header_buff;
+		spec_info->tcp_udp.type = (user_param->tcp) ? IBV_EXP_FLOW_SPEC_TCP : IBV_EXP_FLOW_SPEC_UDP;
+		spec_info->tcp_udp.size = sizeof(struct ibv_exp_flow_spec_tcp_udp);
+		#else
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+		spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
+		spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
+		#endif
+
+		if(user_param->machine == SERVER) {
+
+			spec_info->tcp_udp.val.dst_port = htons(user_param->server_port);
+			spec_info->tcp_udp.val.src_port = htons(user_param->client_port);
+
+		} else {
+			spec_info->tcp_udp.val.dst_port = htons(user_param->client_port + flows_offset);
+			spec_info->tcp_udp.val.src_port = htons(user_param->server_port + flows_offset);
+		}
+
+		memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
+		memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
+	}
+
+	if (user_param->is_ethertype) {
+		spec_info->eth.val.ether_type = htons(user_param->ethertype);
+		spec_info->eth.mask.ether_type = 0xffff;
+	}
+
+	return 0;
+}
+
 /******************************************************************************
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
@@ -495,6 +643,7 @@ int send_set_up_connection(
 {
 
 	union ibv_gid temp_gid;
+	int i;
 
 	if (user_param->gid_index != -1) {
 		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
@@ -504,118 +653,8 @@ int send_set_up_connection(
 	}
 
 	if (user_param->machine == SERVER || user_param->duplex) {
-
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_spec* spec_info;
-		struct ibv_exp_flow_attr* attr_info;
-		#else
-		struct ibv_flow_spec* spec_info;
-		struct ibv_flow_attr* attr_info;
-		#endif
-
-		void* header_buff;
-		int flow_rules_size;
-		int is_ip = user_param->is_server_ip || user_param->is_client_ip;
-		int is_port = user_param->is_server_port || user_param->is_client_port;
-
-		flow_rules_size = calc_flow_rules_size(is_ip,is_port);
-
-		ALLOCATE(header_buff,uint8_t,flow_rules_size);
-
-		memset(header_buff, 0,flow_rules_size);
-
-		#ifdef HAVE_RAW_ETH_EXP
-		*flow_rules = (struct ibv_exp_flow_attr*)header_buff;
-		attr_info = (struct ibv_exp_flow_attr*)header_buff;
-		#else
-		*flow_rules = (struct ibv_flow_attr*)header_buff;
-		attr_info = (struct ibv_flow_attr*)header_buff;
-		#endif
-
-		attr_info->size = flow_rules_size;
-		attr_info->priority = 0;
-		attr_info->num_of_specs = 1 + is_ip + is_port;
-		attr_info->port = user_param->ib_port;
-		attr_info->flags = 0;
-
-		#ifdef HAVE_RAW_ETH_EXP
-		attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
-		header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
-		spec_info = (struct ibv_exp_flow_spec*)header_buff;
-		spec_info->eth.type = IBV_EXP_FLOW_SPEC_ETH;
-		spec_info->eth.size = sizeof(struct ibv_exp_flow_spec_eth);
-		#else
-		attr_info->type = IBV_FLOW_ATTR_NORMAL;
-		header_buff = header_buff + sizeof(struct ibv_flow_attr);
-		spec_info = (struct ibv_flow_spec*)header_buff;
-		spec_info->eth.type = IBV_FLOW_SPEC_ETH;
-		spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
-		#endif
-
-		spec_info->eth.val.ether_type = 0;
-
-		mac_from_user(spec_info->eth.val.dst_mac , &(user_param->source_mac[0]) , sizeof(user_param->source_mac));
-
-		memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
-		if(user_param->is_server_ip || user_param->is_client_ip) {
-			#ifdef HAVE_RAW_ETH_EXP
-			header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
-			spec_info = (struct ibv_exp_flow_spec*)header_buff;
-			spec_info->ipv4.type = IBV_EXP_FLOW_SPEC_IPV4;
-			spec_info->ipv4.size = sizeof(struct ibv_exp_flow_spec_ipv4);
-			#else
-			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
-			spec_info = (struct ibv_flow_spec*)header_buff;
-			spec_info->ipv4.type = IBV_FLOW_SPEC_IPV4;
-			spec_info->ipv4.size = sizeof(struct ibv_flow_spec_ipv4);
-			#endif
-
-			if(user_param->machine == SERVER) {
-
-				spec_info->ipv4.val.dst_ip = user_param->server_ip;
-				spec_info->ipv4.val.src_ip = user_param->client_ip;
-
-			} else{
-
-				spec_info->ipv4.val.dst_ip = user_param->client_ip;
-				spec_info->ipv4.val.src_ip = user_param->server_ip;
-			}
-
-			memset((void*)&spec_info->ipv4.mask.dst_ip, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
-			memset((void*)&spec_info->ipv4.mask.src_ip, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
-		}
-
-		if(user_param->is_server_port && user_param->is_client_port) {
-			#ifdef HAVE_RAW_ETH_EXP
-			header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_ipv4);
-			spec_info = (struct ibv_exp_flow_spec*)header_buff;
-			spec_info->tcp_udp.type = (user_param->tcp) ? IBV_EXP_FLOW_SPEC_TCP : IBV_EXP_FLOW_SPEC_UDP;
-			spec_info->tcp_udp.size = sizeof(struct ibv_exp_flow_spec_tcp_udp);
-			#else
-			header_buff = header_buff + sizeof(struct ibv_flow_spec_ipv4);
-			spec_info = (struct ibv_flow_spec*)header_buff;
-			spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
-			spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
-			#endif
-			if(user_param->machine == SERVER) {
-
-				spec_info->tcp_udp.val.dst_port = htons(user_param->server_port);
-				spec_info->tcp_udp.val.src_port = htons(user_param->client_port);
-
-			} else{
-				spec_info->tcp_udp.val.dst_port = htons(user_param->client_port);
-				spec_info->tcp_udp.val.src_port = htons(user_param->server_port);
-			}
-
-			memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
-			memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
-		}
-
-		if (user_param->is_ethertype) {
-			spec_info->eth.val.ether_type = htons(user_param->ethertype);
-			spec_info->eth.mask.ether_type = 0xffff;
-		}
-
+		for (i = 0; i < user_param->flows; i++)
+			set_up_flow_rules(&flow_rules[i], ctx, user_param, i);
 	}
 
 	if (user_param->machine == CLIENT || user_param->duplex) {

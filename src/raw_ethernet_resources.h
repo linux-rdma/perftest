@@ -121,7 +121,8 @@ int check_flow_steering_support(char *dev_name);
  *		eth_type -
  *		ip_next_protocol -
  *		print_flag - if print_flag == TRUE : print the packet after it's done
- *		sizePkt - size of the requested packet
+ *		pkt_size - size of the requested packet
+ *		flows_offset - current offset from the base flow
  */
 void build_pkt_on_buffer(struct ETH_header* eth_header,
 		struct raw_ethernet_info *my_dest_info,
@@ -130,7 +131,8 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 		uint16_t eth_type,
 		uint16_t ip_next_protocol,
 		int print_flag,
-		int sizePkt);
+		int pkt_size,
+		int flows_offset);
 
 /*  create_raw_eth_pkt
  * 	Description: build raw Ethernet packet by user arguments
@@ -188,9 +190,11 @@ int send_set_up_connection(
  * 		ip_header_buff - Pointer to output
  * 		saddr - source IP address of the packet(network order)
  * 		daddr - destination IP address of the packet(network order)
- * 		sizePkt - size of the packet
+ * 		pkt_size - size of the packet
+ *		flows_offset - current offset from the base flow
  */
-void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t protocol,int sizePkt, int tos);
+void gen_ip_header(void* ip_header_buff, uint32_t* saddr, uint32_t* daddr,
+		   uint8_t protocol, int pkt_size, int tos, int flows_offset);
 
 /* gen_udp_header .
 
@@ -198,24 +202,22 @@ void gen_ip_header(void* ip_header_buff,uint32_t* saddr ,uint32_t* daddr,uint8_t
  *
  * Parameters :
  * 		UDP_header_buffer - Pointer to output
- *		sPort - source UDP port of the packet
- *		dPort -destination UDP port of the packet
- *		sadder -source IP address of the packet(using for UPD checksum)(network order)
- *		dadder - source IP address of the packet(using for UPD checksum)(network order)
- *		sizePkt - size of the packet
+ *		src_port - source UDP port of the packet
+ *		dst_port -destination UDP port of the packet
+ *		pkt_size - size of the packet
  */
-void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
+void gen_udp_header(void* UDP_header_buffer, int src_port, int dst_port, int pkt_size);
 
-/* gen_udp_header .
+/* gen_tcp_header .
 
- * Description :create UDP header on buffer
+ * Description :create TCP header on buffer
  *
  * Parameters :
  * 		TCP_header_buffer - Pointer to output
- *		sPort - source TCP port of the packet
- *		dPort -destination TCP port of the packet
+ *		src_port - source TCP port of the packet
+ *		dst_port -destination TCP port of the packet
  */
-void gen_tcp_header(void* TCP_header_buffer,int* sPort ,int* dPort);
+void gen_tcp_header(void* TCP_header_buffer,int src_port ,int dst_port);
 
 /* run_iter_fw
  *

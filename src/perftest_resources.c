@@ -705,7 +705,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ctx->size = user_param->size;
 
 	num_of_qps_factor = (user_param->mr_per_qp) ? 1 : user_param->num_of_qps;
-	ctx->buff_size = BUFF_SIZE(ctx->size, ctx->cycle_buffer) * 2 * num_of_qps_factor;
+	ctx->buff_size = BUFF_SIZE(ctx->size, ctx->cycle_buffer) * 2 * num_of_qps_factor * user_param->flows;
 
 	user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
@@ -4106,7 +4106,11 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 	int			total_gap_cycles = user_param->latency_gap * cpu_mhz;
+	int			send_flows_index = 0;
+	int			recv_flows_index = 0;
 	cycles_t 		end_cycle, start_gap=0;
+	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
+	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
 
 	if (user_param->connection_type != RawEth) {
 		#ifdef HAVE_VERBS_EXP
@@ -4165,6 +4169,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
 						return 1;
 					}
+
 					rcnt++;
 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
@@ -4175,7 +4180,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					 * post that you received a packet.
 					 */
 					if (user_param->test_type==DURATION || (rcnt + size_per_qp  <= user_param->iters)) {
-
 						if (user_param->use_srq) {
 
 							if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
@@ -4184,10 +4188,18 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 							}
 
 						} else {
-
 							if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv: rcnt=%lu\n",rcnt);
 								return 15;
+							}
+						}
+
+						if (user_param->flows != DEF_FLOWS) {
+							if (++recv_flows_index == user_param->flows) {
+								recv_flows_index = 0;
+								ctx->recv_sge_list[0].addr = primary_recv_addr;
+							} else {
+								ctx->recv_sge_list[0].addr += INC(user_param->size, ctx->cache_line_size);
 							}
 						}
 					}
@@ -4239,6 +4251,15 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 			if (err) {
 				fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
 				return 1;
+			}
+
+			if (user_param->flows != DEF_FLOWS) {
+				if (++send_flows_index == user_param->flows) {
+					send_flows_index = 0;
+					ctx->sge_list[0].addr = primary_send_addr;
+				} else {
+					ctx->sge_list[0].addr += INC(user_param->size, ctx->cache_line_size);
+				}
 			}
 
 			if (poll == 1) {

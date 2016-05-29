@@ -614,38 +614,6 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel)
 	return 0;
 }
 
-
-
-/* gen_udp_header .
-
- * Description :create UDP header on buffer
- *
- * Parameters :
- * 		UDP_header_buffer - Pointer to output
- *		sPort - source UDP port of the packet
- *		dPort -destination UDP port of the packet
- *		sadder -source IP address of the packet(using for UPD checksum)(network order)
- *		dadder - source IP address of the packet(using for UPD checksum)(network order)
- *		sizePkt - size of the packet
- */
-
-void gen_udp_header(void* UDP_header_buffer,int* sPort ,int* dPort,uint32_t saddr,uint32_t daddr,int sizePkt);
-/* increase_rem_addr.
- *
- * Description :
- *	Increases the remote address in RDMA verbs by INC ,
- *  (at least 64 CACHE_LINE size) , so that the system will be a able to cahce the data
- *  in an orginzed way.
- *
- *  Parameters :
- *		wr - The send wqe.
- *		size - size of the message to send.
- *		scnt - The ammount of post_send or post_receive we called.
- *		prim_addr - The address of the original buffer.
- *
- * Return Value : SUCCESS, FAILURE.
- */
-
 #if defined(HAVE_VERBS_EXP)
 static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer)
 {

@@ -439,7 +439,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 /******************************************************************************
   usage
  ******************************************************************************/
-void usage_raw_ethernet()
+void usage_raw_ethernet(TestType tst)
 {
 	printf("  Raw Ethernet options :\n");
 	printf("  -B, --source_mac ");
@@ -479,6 +479,11 @@ void usage_raw_ethernet()
 	printf("      --disable_fcs ");
 	printf(" Disable Scatter FCS feature. (Scatter FCS is enabled by default when using --use_exp flag). \n");
 	#endif
+
+	if (tst == LAT) {
+		printf("      --flows");
+		printf(" set number of TCP/UDP flows, starting from <src_port, dst_port>. \n");
+	}
 
 	printf("      --promiscuous");
 	printf(" run promiscuous mode.\n");
@@ -589,6 +594,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->dlid		= 0;
 	user_param->traffic_class	= 0;
 	user_param->disable_fcs		= 0;
+	user_param->flows		= DEF_FLOWS;
 }
 
 /******************************************************************************
@@ -861,6 +867,19 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
+		if (user_param->flows != DEF_FLOWS) {
+
+			if (user_param->tst != LAT) {
+				fprintf(stderr, " Flows feature works with Latency test only\n");
+				exit(1);
+			}
+
+			/* UDP/TCP must have server_port, so this check is enough */
+			if (user_param->is_server_port == OFF) {
+				fprintf(stderr, " Flows feature works with UDP/TCP packets only for now\n");
+				exit(1);
+			}
+		}
 	}
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
@@ -1392,6 +1411,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
 	static int disable_fcs_flag = 0;
+	static int flows_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1486,6 +1506,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SCATTER_FCS
 			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
 			#endif
+			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1579,7 +1600,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'V': printf("Version: %s\n",user_param->version); return VERSION_EXIT;
 			case 'h': usage(argv[0], user_param->verb, user_param->tst, user_param->connection_type);
 				  if(user_param->connection_type == RawEth) {
-					  usage_raw_ethernet();
+					  usage_raw_ethernet(user_param->tst);
 				  }
 				  return HELP_EXIT;
 			case 'z': user_param->use_rdma_cm = ON; break;
@@ -1802,6 +1823,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
 					  tclass_flag = 0;
 				  }
+				  if (flows_flag) {
+					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
+					if (user_param->flows <= 0) {
+						fprintf(stderr, "Invalid flows value. Please set a positive number\n");
+						return FAILURE;
+					}
+
+					flows_flag = 0;
+				  }
 				  break;
 
 			default:
@@ -1809,7 +1839,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  fprintf(stderr," Please check command line and run again.\n\n");
 				  usage(argv[0], user_param->verb, user_param->tst, user_param->connection_type);
 				  if(user_param->connection_type == RawEth) {
-					  usage_raw_ethernet();
+					  usage_raw_ethernet(user_param->tst);
 				  }
 				  return 1;
 		}
