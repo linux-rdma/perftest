@@ -121,6 +121,7 @@
 #define DEF_RETRY_COUNT (7)
 #define DEF_CACHE_LINE_SIZE (64)
 #define DEF_PAGE_SIZE (4096)
+#define DEF_FLOWS (1)
 
 /* Optimal Values for Inline */
 #define DEF_INLINE_WRITE (220)
@@ -419,6 +420,7 @@ struct perftest_parameters {
 	uint16_t			dlid;
 	uint8_t				traffic_class;
 	int				disable_fcs;
+	int				flows;
 };
 
 struct report_options {
