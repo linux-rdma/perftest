@@ -799,11 +799,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->use_event) {
-			fprintf(stderr," Events mode isn't supported for Raw Ethernet tests\n");
-			exit(1);
-		}
-
 		if (user_param->use_gid_user) {
 			fprintf(stderr," GID index isn't supported for Raw Ethernet tests\n");
 			exit(1);
