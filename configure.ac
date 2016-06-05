@@ -33,6 +33,8 @@ AS_IF([test "x$enable_verbs_exp" = "xyes"],
       [USE_VERBS_EXP=yes],
         [USE_VERBS_EXP=no])
 
+AC_PREFIX_DEFAULT("/usr")
+
 AC_PROG_CC
 AC_PROG_CXX
 AM_PROG_AS
