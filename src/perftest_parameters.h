@@ -262,7 +262,9 @@ enum ctx_device {
 	CONNECTX3_PRO		= 8,
 	SKYHAWK			= 9,
 	CONNECTX4		= 10,
-	CONNECTX4LX		= 11
+	CONNECTX4LX		= 11,
+	QLOGIC_E4		= 12,
+	QLOGIC_AH		= 13
 };
 
 /* Units for rate limiter */

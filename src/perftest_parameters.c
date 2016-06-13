@@ -1225,7 +1225,17 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 25418 : dev_fname = CONNECTX;  break;
 			case 25428 : dev_fname = CONNECTX;  break;
 			case 25448 : dev_fname = CONNECTX;  break;
-			case 1824  : dev_fname = SKYHAWK;  break;
+			case 1824  : dev_fname = SKYHAWK;   break;
+			case 5684  : dev_fname = QLOGIC_E4; break;
+			case 5700  : dev_fname = QLOGIC_E4; break;
+			case 5716  : dev_fname = QLOGIC_E4; break;
+			case 5718  : dev_fname = QLOGIC_E4; break;
+			case 5734  : dev_fname = QLOGIC_E4; break;
+			case 32880 : dev_fname = QLOGIC_AH; break;
+			case 32881 : dev_fname = QLOGIC_AH; break;
+			case 32882 : dev_fname = QLOGIC_AH; break;
+			case 32883 : dev_fname = QLOGIC_AH; break;
+			case 32912 : dev_fname = QLOGIC_AH; break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
