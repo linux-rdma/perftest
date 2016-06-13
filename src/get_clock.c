@@ -142,7 +142,12 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 	int print_flag = 0;
 	double delta;
 
+	#if defined(__FreeBSD__)
+	f = popen("/sbin/sysctl hw.clockrate","r");
+	#else
 	f = fopen("/proc/cpuinfo","r");
+	#endif
+
 	if (!f)
 		return 0.0;
 	while(fgets(buf, sizeof(buf), f)) {
@@ -172,7 +177,11 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 		rc = sscanf(s, "%x", &val);
 		m = val/1000000;
 		#else
+		#if defined (__FreeBSD__)
+		rc = sscanf(buf, "hw.clockrate: %lf", &m);
+		#else
 		rc = sscanf(buf, "cpu MHz : %lf", &m);
+		#endif
 		#endif
 
 		if (rc != 1)
@@ -193,7 +202,11 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 		}
 	}
 
+#if defined(__FreeBSD__)
+	pclose(f);
+#else
 	fclose(f);
+#endif
 	return mhz;
 }
 #endif

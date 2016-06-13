@@ -4,6 +4,10 @@
 #include <getopt.h>
 #include <limits.h>
 #include <arpa/inet.h>
+#if defined(__FreeBSD__)
+#include <netinet/in.h>
+#include <sys/socket.h>
+#endif
 #include "perftest_parameters.h"
 
 #define MAC_LEN (17)
@@ -29,6 +33,20 @@ static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
  *
  * Return Value : SUCCESS, FAILURE.
  ******************************************************************************/
+#if defined(__FreeBSD__)
+#define strdupa(_s)                                             \
+({                                                              \
+        char *_d;                                               \
+        int _len;                                               \
+                                                                \
+        _len = strlen(_s) + 1;                                  \
+        _d = alloca(_len);                                      \
+        if (_d)                                                 \
+                memcpy(_d, _s, _len);                           \
+        _d;                                                     \
+})
+#endif
+
 static int parse_mac_from_str(char *mac, u_int8_t *addr)
 {
 	char tmpMac[MAC_LEN+1];
@@ -111,7 +129,9 @@ int check_if_valid_udp_port(int udp_port)
  ******************************************************************************/
 static int get_cache_line_size()
 {
-	int size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	int size = 0;
+ #if !defined(__FreeBSD__)
+	size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
 	if (size == 0) {
 		#if defined(__sparc__) && defined(__arch64__)
 		char* file_name =
@@ -131,7 +151,7 @@ static int get_cache_line_size()
 		size = atoi(line);
 		fclose(fp);
 	}
-
+#endif
 	if (size <= 0)
 		size = DEF_CACHE_LINE_SIZE;
 
@@ -590,7 +610,6 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
-
 	user_param->verb_type		= NORMAL_INTF;
 	user_param->is_exp_cq		= 0;
 	user_param->is_exp_qp		= 0;
@@ -741,7 +760,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			if (user_param->rx_depth == DEF_RX_SEND) {
 				user_param->rx_depth = (user_param->iters < UC_MAX_RX) ? user_param->iters : UC_MAX_RX;
 			}
-		} 
+		}
 	}
 
 	if (user_param->cq_mod > user_param->tx_depth) {
@@ -1687,7 +1706,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->size < 1 || user_param->size > (UINT_MAX / 2)) {
 					  fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
 					  return 1;
-				  }	
+				  }
 				  break;
 			case 'e': user_param->use_event = ON;
 				  if (user_param->verb == WRITE) {
@@ -2366,7 +2385,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->msgRate_avg_p2 = msgRate_avg_p2;
 	my_bw_rep->sl = user_param->sl;
 
-	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION) 
+	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION)
 			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 

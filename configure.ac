@@ -80,12 +80,28 @@ if test $HAVE_XRCD = yes; then
 	AC_DEFINE([HAVE_XRCD], [1], [Enable XRCD feature])
 fi
 
-AC_TRY_LINK([#include <endian.h>],
+AC_TRY_LINK([
+#if !defined(__FreeBSD__)
+#include <endian.h>
+#else
+#include <sys/endian.h>
+#endif],
 	[int x = htobe32(0);],[HAVE_ENDIAN=yes], [HAVE_ENDIAN=no])
 
 AM_CONDITIONAL([HAVE_ENDIAN],[test "x$HAVE_ENDIAN" = "xyes"])
 if test $HAVE_ENDIAN = yes; then
 	AC_DEFINE([HAVE_ENDIAN], [1], [Enable endian conversion])
+fi
+
+AC_TRY_LINK([],
+	[#if !defined(__FreeBSD__)
+	 #error nope
+	 #endif],
+	[IS_FREEBSD=yes], [IS_FREEBSD=no])
+
+AM_CONDITIONAL([IS_FREEBSD],[test "x$IS_FREEBSD" = "xyes"])
+if test $IS_FREEBSD = yes; then
+	AC_DEFINE([IS_FREEBSD], [1], [OS is FreeBSD])
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],

@@ -2,6 +2,12 @@
 #define RAW_ETHERNET_RESOURCES_H
 
 
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +19,11 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
+#if defined(__FreeBSD__)
+#include <infiniband/byteorder.h>
+#else
 #include <asm/byteorder.h>
+#endif
 
 #define INFO "INFO"
 #define TRACE "TRACE"
@@ -57,6 +67,20 @@ struct ETH_header {
 	uint8_t src_mac[6];
 	uint16_t eth_type;
 }__attribute__((packed));
+
+
+#if defined(__FreeBSD__)
+#if BYTE_ORDER == BIG_ENDIAN
+#define __BIG_ENDIAN_BITFIELD
+#define htobe32_const(x) (x)
+#elif BYTE_ORDER == LITTLE_ENDIAN
+#define __LITTLE_ENDIAN_BITFIELD
+#define htobe32_const(x) (((x) >> 24) | (((x) >> 8) & 0xff00) | \
+    ((((x) & 0xffffff) << 8) & 0xff0000) | ((((x) & 0xff) << 24) & 0xff000000))
+#else
+#error "Must set BYTE_ORDER"
+#endif
+#endif
 
 struct IP_V4_header{
 	#if defined(__LITTLE_ENDIAN_BITFIELD)
