@@ -31,38 +31,46 @@ noinst_HEADERS +=
 bin_PROGRAMS +=
 endif
 
+if IS_FREEBSD
+LIBMLX4= -lmlx4
+LIBMLX5= -lmlx5
+else
+LIBMLX4=
+LIBMLX5=
+endif
+
 ib_send_bw_SOURCES = src/send_bw.c src/multicast_resources.c src/multicast_resources.h
-ib_send_bw_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH)
+ib_send_bw_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_send_lat_SOURCES = src/send_lat.c src/multicast_resources.c src/multicast_resources.h
-ib_send_lat_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH)
+ib_send_lat_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_write_lat_SOURCES = src/write_lat.c
-ib_write_lat_LDADD = libperftest.a $(LIBMATH) 
+ib_write_lat_LDADD = libperftest.a $(LIBMATH)  $(LIBMLX4) $(LIBMLX5)
 
 ib_write_bw_SOURCES = src/write_bw.c
-ib_write_bw_LDADD = libperftest.a $(LIBMATH)
+ib_write_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_read_lat_SOURCES = src/read_lat.c
-ib_read_lat_LDADD = libperftest.a $(LIBMATH)
+ib_read_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_read_bw_SOURCES = src/read_bw.c
-ib_read_bw_LDADD = libperftest.a $(LIBMATH)
+ib_read_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_atomic_lat_SOURCES = src/atomic_lat.c
-ib_atomic_lat_LDADD = libperftest.a $(LIBMATH)
+ib_atomic_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 ib_atomic_bw_SOURCES = src/atomic_bw.c
-ib_atomic_bw_LDADD = libperftest.a $(LIBMATH)
+ib_atomic_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 if HAVE_RAW_ETH
 raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
-raw_ethernet_bw_LDADD = libperftest.a $(LIBMATH)
+raw_ethernet_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 raw_ethernet_lat_SOURCES = src/raw_ethernet_send_lat.c
-raw_ethernet_lat_LDADD = libperftest.a $(LIBMATH)
+raw_ethernet_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
-else 
+else
 raw_ethernet_bw_SOURCES =
 raw_ethernet_bw_LDADD =
 

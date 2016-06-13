@@ -33,6 +33,11 @@
  *
  * $Id$
  */
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,9 +67,11 @@ int check_flow_steering_support(char *dev_name)
 		return 0;
 
 	fp = fopen(file_name, "r");
+	if (fp == NULL)
+		return 0;
 	fgets(line,4,fp);
-	int val = atoi(line);
 
+	int val = atoi(line);
 	if (val >= 0) {
 		fprintf(stderr,"flow steering is not supported.\n");
 		fprintf(stderr," please run: echo options mlx4_core log_num_mgm_entry_size=-1 >> /etc/modprobe.d/mlnx.conf\n");

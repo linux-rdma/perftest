@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#if !defined(__FreeBSD__)
 #include <malloc.h>
+#endif
 #include <getopt.h>
 #include <limits.h>
 #include <errno.h>
@@ -10,6 +12,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/mman.h>
+#if defined(__FreeBSD__)
+#include <sys/stat.h>
+#endif
 
 #include "perftest_resources.h"
 #include "config.h"
@@ -224,16 +229,17 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 	char tmp[100];
 	int index=0;
 	fp = fopen(file_name, "r");
+	if (fp != NULL) {
+		fgets(line,100,fp);
+		compress_spaces(line,line);
+		index=get_n_word_string(line,tmp,index,2); /* skip first word */
+		duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
 
-	fgets(line,100,fp);
-	compress_spaces(line,line);
-	index=get_n_word_string(line,tmp,index,2); /* skip first word */
-	duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
+		index=get_n_word_string(line,tmp,index,3); /* skip 2 stats */
+		duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
 
-	index=get_n_word_string(line,tmp,index,3); /* skip 2 stats */
-	duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
-
-	fclose(fp);
+		fclose(fp);
+	}
 }
 
 static int check_for_contig_pages_support(struct ibv_context *context)
@@ -584,9 +590,9 @@ int destroy_rdma_resources(struct pingpong_context *ctx,
 {
 	int ret;
 	if (user_param->machine == CLIENT) {
-		ret = rdma_destroy_id(ctx->cm_id);	
+		ret = rdma_destroy_id(ctx->cm_id);
 	} else {
-		ret = rdma_destroy_id(ctx->cm_id_control);	
+		ret = rdma_destroy_id(ctx->cm_id_control);
 	}
 	rdma_destroy_event_channel(ctx->cm_channel);
 	return ret;
@@ -1150,7 +1156,11 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#endif
 
 	if (user_param->mmap_file != NULL) {
-		ctx->is_contig_supported = FAILURE;
+		#if defined(__FreeBSD__)
+		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
+		#else
+		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
+		#endif
 		if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
 				 user_param->mmap_offset))
 		{
@@ -1161,7 +1171,11 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	} else {
 		/* Allocating buffer for data, in case driver not support contig pages. */
 		if (ctx->is_contig_supported == FAILURE) {
+			#if defined(__FreeBSD__)
+			posix_memalign(ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
+			#else
 			ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
+			#endif
 			if (!ctx->buf[qp_index]) {
 				fprintf(stderr, "Couldn't allocate work buf.\n");
 				return 1;
@@ -1336,7 +1350,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
-	if (user_param->use_srq && !user_param->use_xrc && (user_param->tst == LAT || 
+	if (user_param->use_srq && !user_param->use_xrc && (user_param->tst == LAT ||
 				user_param->machine == SERVER || user_param->duplex == ON)) {
 
 		struct ibv_srq_init_attr attr = {
@@ -2374,7 +2388,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 				if (j > 0) {
 
 					ctx->exp_wr[i*user_param->post_list + j].wr.atomic.remote_addr = ctx->exp_wr[i*user_param->post_list + j-1].wr.atomic.remote_addr;
-					if ((user_param->tst == BW))
+					if (user_param->tst == BW)
 						increase_exp_rem_addr(&ctx->exp_wr[i*user_param->post_list + j],user_param->size,
 								j-1,ctx->rem_addr[i],ATOMIC,ctx->cache_line_size,ctx->cycle_buffer);
 				}
@@ -2533,7 +2547,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.atomic.remote_addr =
 						ctx->wr[i*user_param->post_list + j-1].wr.atomic.remote_addr;
-					if ((user_param->tst == BW))
+					if (user_param->tst == BW)
 						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,
 								j-1,ctx->rem_addr[i],ATOMIC,ctx->cache_line_size,ctx->cycle_buffer);
 				}
@@ -3113,7 +3127,7 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
 		user_param->iters=0;
 		duration_param->state = START_STATE;
 		signal(SIGALRM, catch_alarm);
-		if (user_param->margin > 0) 
+		if (user_param->margin > 0)
 			alarm(user_param->margin);
 		else
 			catch_alarm(0);
@@ -4161,7 +4175,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
 			( (user_param->test_type == DURATION && user_param->state != END_STATE))) {
 
-		/* 
+		/*
 		 * Get the received packet. make sure that the client won't enter here until he sends
 		 * his first packet (scnt < 1)
 		 * server will enter here first and wait for a packet to arrive (from the client)
@@ -4357,7 +4371,7 @@ void catch_alarm(int sig)
 			duration_param->state = STOP_SAMPLE_STATE;
 			duration_param->tcompleted[0] = get_cycles();
 			get_cpu_stats(duration_param,2);
-			if (duration_param->margin > 0) 
+			if (duration_param->margin > 0)
 				alarm(duration_param->margin);
 			else
 				catch_alarm(0);
@@ -4388,7 +4402,7 @@ void check_alive(int sig)
 			/* exit nice from run_iter function and report known bw/mr */
 			check_alive_data.to_exit = 1;
 		}
-	} 
+	}
 }
 
 /******************************************************************************

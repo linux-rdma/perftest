@@ -4,16 +4,109 @@
 #include <limits.h>
 #include <unistd.h>
 #include <getopt.h>
+#if !defined(__FreeBSD__)
 #include <malloc.h>
-#include <errno.h>
 #include <byteswap.h>
+#endif
+#include <errno.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include "perftest_communication.h"
+#if defined(__FreeBSD__)
+#include <ctype.h>
+#endif
 
+#if defined(__FreeBSD__)
+#define s6_addr32 __u6_addr.__u6_addr32
+/* states: S_N: normal, S_I: comparing integral part, S_F: comparing
+           fractional parts, S_Z: idem but with leading Zeroes only */
+#define  S_N    0x0
+#define  S_I    0x4
+#define  S_F    0x8
+#define  S_Z    0xC
+
+/* result_type: CMP: return diff; LEN: compare using len_diff/diff */
+#define  CMP    2
+#define  LEN    3
+
+
+/* Compare S1 and S2 as strings holding indices/version numbers,
+   returning less than, equal to or greater than zero if S1 is less than,
+   equal to or greater than S2 (for more info, see the Glibc texinfo doc).  */
+
+int
+strverscmp (const char *s1, const char *s2)
+{
+  const unsigned char *p1 = (const unsigned char *) s1;
+  const unsigned char *p2 = (const unsigned char *) s2;
+  unsigned char c1, c2;
+  int state;
+  int diff;
+
+  /* Symbol(s)    0       [1-9]   others  (padding)
+     Transition   (10) 0  (01) d  (00) x  (11) -   */
+  static const unsigned int next_state[] =
+    {
+      /* state    x    d    0    - */
+      /* S_N */  S_N, S_I, S_Z, S_N,
+      /* S_I */  S_N, S_I, S_I, S_I,
+      /* S_F */  S_N, S_F, S_F, S_F,
+      /* S_Z */  S_N, S_F, S_Z, S_Z
+    };
+
+  static const int result_type[] =
+    {
+      /* state   x/x  x/d  x/0  x/-  d/x  d/d  d/0  d/-
+                 0/x  0/d  0/0  0/-  -/x  -/d  -/0  -/- */
+
+      /* S_N */  CMP, CMP, CMP, CMP, CMP, LEN, CMP, CMP,
+                 CMP, CMP, CMP, CMP, CMP, CMP, CMP, CMP,
+      /* S_I */  CMP, -1,  -1,  CMP, +1,  LEN, LEN, CMP,
+                 +1,  LEN, LEN, CMP, CMP, CMP, CMP, CMP,
+      /* S_F */  CMP, CMP, CMP, CMP, CMP, LEN, CMP, CMP,
+                 CMP, CMP, CMP, CMP, CMP, CMP, CMP, CMP,
+      /* S_Z */  CMP, +1,  +1,  CMP, -1,  CMP, CMP, CMP,
+                 -1,  CMP, CMP, CMP
+    };
+
+  if (p1 == p2)
+    return 0;
+
+  c1 = *p1++;
+  c2 = *p2++;
+  /* Hint: '0' is a digit too.  */
+  state = S_N | ((c1 == '0') + (isdigit (c1) != 0));
+
+  while ((diff = c1 - c2) == 0 && c1 != '\0')
+    {
+      state = next_state[state];
+      c1 = *p1++;
+      c2 = *p2++;
+      state |= (c1 == '0') + (isdigit (c1) != 0);
+    }
+
+  state = result_type[state << 2 | (((c2 == '0') + (isdigit (c2) != 0)))];
+
+  switch (state)
+    {
+    case CMP:
+      return diff;
+
+    case LEN:
+      while (isdigit (*p1++))
+	if (!isdigit (*p2++))
+	  return 1;
+
+      return isdigit (*p2) ? -1 : diff;
+
+    default:
+      return state;
+    }
+}
+#endif
 /******************************************************************************
  *
  ******************************************************************************/
@@ -567,7 +660,7 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		} else {
 			for (i=0 ; i < attr.gid_tbl_len; i++) {
-				if (ibv_query_gid(ctx->context,user_param->ib_port,i,&temp_gid)) {	
+				if (ibv_query_gid(ctx->context,user_param->ib_port,i,&temp_gid)) {
 					return -1;
 				}
 				is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid.raw);
@@ -696,7 +789,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	struct addrinfo hints;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family   = AF_UNSPEC;
+	hints.ai_family   = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
@@ -704,8 +797,11 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		return FAILURE;
 	}
 
-	sin.sin_addr.s_addr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
-	sin.sin_family = PF_INET;
+	if (res->ai_family != PF_INET) {
+		return FAILURE;
+	}
+
+	memcpy(&sin, res->ai_addr, sizeof(sin));
 	sin.sin_port = htons((unsigned short)user_param->port);
 
 	while (1) {
@@ -819,9 +915,9 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		rdma_ack_cm_event(event);
 		fprintf(stderr, "Unexpected CM event bl blka %d\n", event->event);
-		return FAILURE;
+		rdma_ack_cm_event(event);
+                return FAILURE;
 	}
 
 	if (user_param->connection_type == UD) {
@@ -891,7 +987,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags    = AI_PASSIVE;
-	hints.ai_family   = AF_UNSPEC;
+	hints.ai_family   = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
@@ -899,8 +995,10 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return FAILURE;
 	}
 
-	sin.sin_addr.s_addr = 0;
-	sin.sin_family = PF_INET;
+	if (res->ai_family != PF_INET) {
+		return FAILURE;
+	}
+	memcpy(&sin, res->ai_addr, sizeof(sin));
 	sin.sin_port = htons((unsigned short)user_param->port);
 
 	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
@@ -1341,7 +1439,7 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 	if (ctx_xchg_data(comm, (void*) (&temp.iters), (void*) (&rem_bw_rep->iters), size)) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);
-	}	 
+	}
 	if (ctx_xchg_data(comm, (void*) (&temp.bw_peak), (void*) (&rem_bw_rep->bw_peak), sizeof(double))) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		exit(1);

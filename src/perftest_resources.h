@@ -54,7 +54,11 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
+#if defined(__FreeBSD__)
+#include <infiniband/byteswap.h>
+#else
 #include <byteswap.h>
+#endif
 #include <math.h>
 #include <arpa/inet.h>
 #include <sys/time.h>

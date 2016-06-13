@@ -40,7 +40,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#if !defined(__FreeBSD__)
 #include <malloc.h>
+#endif
 
 #include "get_clock.h"
 #include "perftest_parameters.h"

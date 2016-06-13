@@ -9,10 +9,16 @@
 #include <time.h>
 #include <limits.h>
 #include <unistd.h>
+#if !defined(__FreeBSD__)
 #include <malloc.h>
+#endif
 #include <getopt.h>
 #include <errno.h>
+#if defined(__FreeBSD__)
+#include <infiniband/byteswap.h>
+#else
 #include <byteswap.h>
+#endif
 #include <signal.h>
 #include <pthread.h>
 #include "multicast_resources.h"
