@@ -2167,7 +2167,10 @@ int ctx_connect(struct pingpong_context *ctx,
 		#endif
 		memset(&attr, 0, sizeof attr);
 
-		if ( (i >= xrc_offset) && (user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT))
+		if (user_param->rate_limit_type == HW_RATE_LIMIT)
+			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit;
+
+		if ((i >= xrc_offset) && (user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT))
 			xrc_offset = -1*xrc_offset;
 
 		if(user_param->connection_type == DC) {
@@ -2183,7 +2186,6 @@ int ctx_connect(struct pingpong_context *ctx,
 				return FAILURE;
 			}
 		}
-
 		if (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex) {
 			if(user_param->connection_type == DC) {
 				#ifdef HAVE_DC
@@ -2214,6 +2216,27 @@ int ctx_connect(struct pingpong_context *ctx,
 			if (!ctx->ah[i]) {
 				fprintf(stderr, "Failed to create AH for UD\n");
 				return FAILURE;
+			}
+		}
+
+		if (user_param->rate_limit_type == HW_RATE_LIMIT) {
+			struct ibv_qp_attr qp_attr;
+			struct ibv_qp_init_attr init_attr;
+			int err, qp_static_rate;
+
+			memset(&qp_attr,0,sizeof(struct ibv_qp_attr));
+			memset(&init_attr,0,sizeof(struct ibv_qp_init_attr));
+
+			err = ibv_query_qp(ctx->qp[i], &qp_attr, IBV_QP_AV, &init_attr);
+			if (err)
+				fprintf(stderr, "ibv_query_qp failed to get ah_attr\n");
+			else
+				qp_static_rate = (int)(qp_attr.ah_attr.static_rate);
+
+			//- Fall back to SW Limit
+			if(err || (qp_static_rate != user_param->valid_hw_rate_limit)) {
+				user_param->rate_limit_type = SW_RATE_LIMIT;
+				fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit, providing SW rate limit \x1b[0m\n");
 			}
 		}
 
@@ -2851,7 +2874,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		user_param->tposted[0] = get_cycles();
 
 	/* If using rate limiter, calculate gap time between bursts */
-	if (user_param->is_rate_limiting == 1) {
+	if (user_param->rate_limit_type == SW_RATE_LIMIT ) {
 		/* Calculate rate limit in pps */
 		switch (user_param->rate_units) {
 			case MEGA_BYTE_PS:
@@ -2884,7 +2907,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		/* main loop to run over all the qps and post each time n messages */
 		for (index =0 ; index < num_of_qps ; index++) {
 
-			if (user_param->is_rate_limiting == 1 && is_sending_burst == 0) {
+			if (user_param->rate_limit_type == SW_RATE_LIMIT && is_sending_burst == 0) {
 				if (gap_deadline > get_cycles()) {
 					/* Go right to cq polling until gap time is over. */
 					continue;
@@ -2895,7 +2918,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 
 			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
-					!(user_param->is_rate_limiting && is_sending_burst == 0)) {
+					!((user_param->rate_limit_type == SW_RATE_LIMIT ) && is_sending_burst == 0)) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
@@ -3005,7 +3028,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				/* Check if a full burst was sent. */
-				if (user_param->is_rate_limiting == 1) {
+				if (user_param->rate_limit_type == SW_RATE_LIMIT) {
 					burst_iter += user_param->post_list;
 					if (burst_iter >= user_param->burst_size) {
 						is_sending_burst = 0;

@@ -1052,31 +1052,24 @@ int establish_connection(struct perftest_comm *comm)
 	int (*ptr)(struct perftest_comm*);
 
 	if (comm->rdma_params->use_rdma_cm) {
-
 		if (comm->rdma_params->machine == CLIENT) {
-
 			if (rdma_client_connect(comm->rdma_ctx,comm->rdma_params)) {
 				fprintf(stderr," Unable to perform rdma_client function\n");
 				return 1;
 			}
-
 		} else {
-
 			if (rdma_server_connect(comm->rdma_ctx,comm->rdma_params)) {
 				fprintf(stderr," Unable to perform rdma_server function\n");
 				return 1;
 			}
 		}
-
 	} else {
-
 		ptr = comm->rdma_params->servername ? &ethernet_client_connect : &ethernet_server_connect;
 
 		if ((*ptr)(comm)) {
 			fprintf(stderr,"Unable to open file descriptor for socket connection");
 			return 1;
 		}
-
 	}
 	return 0;
 }

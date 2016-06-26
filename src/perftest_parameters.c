@@ -428,10 +428,14 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
 
 		printf("      --rate_limit=<rate>");
-		printf(" Set the maximum rate of sent packages. default unit is [pps]. use --rate_units to change that.\n");
+		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is pps (p)\n");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g) , pps not supported when HW limit.\n");
+
+		printf("      --rate_limit_type=<type>");
+		printf(" [HW/SW] Limit the QP's by HW or by SW. Disabled by default. when rate_limit is specified HW limit is Default .\n");
+
 	}
 
 	putchar('\n');
@@ -545,10 +549,11 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->raw_qos		= 0;
 	user_param->inline_recv_size	= 0;
 	user_param->tcp			= 0;
-	user_param->is_rate_limiting	= 0;
 	user_param->burst_size		= 0;
 	user_param->rate_limit		= 0;
-	user_param->rate_units		= MEGA_BYTE_PS;
+	user_param->valid_hw_rate_limit	= 0;
+	user_param->rate_units		= GIGA_BIT_PS;
+	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->output		= -1;
 	user_param->use_cuda		= 0;
 	user_param->mmap_file		= NULL;
@@ -690,6 +695,33 @@ int set_eth_mtu(struct perftest_parameters *user_param)
 
 	return 0;
 }
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void print_supported_ibv_rate_values()
+{
+	int i;
+	for (i = 0; i < RATE_VALUES_COUNT; i++)
+		printf("\t\t\t %s Gbps \t\t\n", RATE_VALUES[i].rate_gbps_str);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void  get_gbps_str_by_ibv_rate(char *rate_input_value, int *rate)
+{
+	int i;
+	for (i = 0; i < RATE_VALUES_COUNT; i++) {
+		if (strcmp(rate_input_value, RATE_VALUES[i].rate_gbps_str) == 0) {
+			*rate = (int)RATE_VALUES[i].rate_gbps_enum;
+			return;
+		}
+	}
+	printf("\x1b[31mThe input value for hw rate limit is not supported\x1b[0m\n");
+	print_supported_ibv_rate_values();
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -697,7 +729,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 {
 	/*Additional configuration and assignments.*/
 	if (user_param->test_type == ITERATIONS) {
-
 		if (user_param->tx_depth > user_param->iters) {
 			user_param->tx_depth = user_param->iters;
 		}
@@ -979,7 +1010,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr," XRC does not support RDMA_CM\n");
 			exit(1);
 		}
-
 		user_param->use_xrc = ON;
 		user_param->use_srq = ON;
 	}
@@ -1004,24 +1034,56 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->srq_exists = 1;
 
 	if (user_param->burst_size > 0) {
-		if (user_param->is_rate_limiting == 0) {
+		if (user_param->rate_limit_type == DISABLE_RATE_LIMIT) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Can't enable burst mode when rate limiter is off\n");
 			exit(1);
 		}
 	}
 
-	if (user_param->is_rate_limiting == 1) {
+	if (user_param->burst_size <= 0) {
+		if (user_param->rate_limit_type == SW_RATE_LIMIT)
+			fprintf(stderr," Setting burst size to tx depth = %d\n", user_param->tx_depth);
+		user_param->burst_size = user_param->tx_depth;
+	}
+
+	if (user_param->rate_limit_type == SW_RATE_LIMIT) {
 		if (user_param->tst != BW || user_param->verb == ATOMIC || (user_param->verb == SEND && user_param->duplex)) {
 			printf(RESULT_LINE);
-			fprintf(stderr," Rate limiter cann't be executed on non-BW, ATOMIC or bidirectional SEND tests\n");
+			fprintf(stderr,"SW Rate limiter cann't be executed on non-BW, ATOMIC or bidirectional SEND tests\n");
 			exit(1);
 		}
-
-		if (user_param->burst_size <= 0) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Setting burst size to tx depth = %d\n",user_param->tx_depth);
-			user_param->burst_size = user_param->tx_depth;
+	} else if (user_param->rate_limit_type == HW_RATE_LIMIT) {
+		if (user_param->use_rdma_cm == ON || user_param->work_rdma_cm == ON) {
+			fprintf(stderr," HW rate limit isn't supported yet with rdma_cm flows\n");
+			exit(1);
+		}
+		double rate_limit_gbps = 0;
+		switch (user_param->rate_units) {
+			case MEGA_BYTE_PS:
+				rate_limit_gbps =((double)(((user_param->rate_limit)*8*1024*1024) / 1000000000));
+				break;
+			case GIGA_BIT_PS:
+				rate_limit_gbps = user_param->rate_limit;
+				break;
+			case PACKET_PS:
+				printf(RESULT_LINE);
+				fprintf(stderr, " Failed: pps  rate limit units is not supported when setting HW rate limit\n");
+				exit(1);
+			default:
+				printf(RESULT_LINE);
+				fprintf(stderr, " Failed: Unknown rate limit units\n");
+				exit(1);
+		}
+		if (rate_limit_gbps > 0) {
+			int rate_to_set = -1;
+			get_gbps_str_by_ibv_rate(user_param->rate_limit_str, &rate_to_set);
+			if (rate_to_set == -1) {
+				printf(RESULT_LINE);
+				fprintf(stderr, " Failed: Unknown rate limit value\n");
+				exit(1);
+			}
+			user_param->valid_hw_rate_limit = rate_to_set;
 		}
 	}
 
@@ -1396,6 +1458,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int burst_size_flag = 0;
 	static int rate_limit_flag = 0;
 	static int rate_units_flag = 0;
+	static int rate_limit_type_flag = 0;
 	static int verbosity_output_flag = 0;
 	static int cpu_util_flag = 0;
 	static int latency_gap_flag = 0;
@@ -1484,6 +1547,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
 			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
 			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
+			{ .name = "rate_limit_type",	.has_arg = 1, .flag = &rate_limit_type_flag, .val = 1},
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
 			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
 			{ .name = "cpu_util",		.has_arg = 0, .flag = &cpu_util_flag, .val = 1},
@@ -1734,110 +1798,124 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'v': user_param->mac_fwd = ON; break;
 			case 'G': user_param->use_rss = ON; break;
 			case 0: /* required for long options to work. */
-				  if (pkey_flag) {
-					  user_param->pkey_index = strtol(optarg,NULL,0);
-					  pkey_flag = 0;
-				  }
-				  if (inline_recv_flag) {
-					  user_param->inline_recv_size = strtol(optarg,NULL,0);
-					  inline_recv_flag = 0;
-				  }
-				  if (rate_limit_flag) {
-					  user_param->is_rate_limiting = 1;
-					  user_param->rate_limit = strtol(optarg,NULL,0);
-					  if (user_param->rate_limit < 0) {
-						  fprintf(stderr, " Rate limit must be non-negative\n");
-						  return FAILURE;
-					  }
-					  rate_limit_flag = 0;
-				  }
-				  if (burst_size_flag) {
-					  user_param->burst_size = strtol(optarg,NULL,0);
-					  if (user_param->burst_size < 0) {
-						  fprintf(stderr, " Burst size must be non-negative\n");
-						  return FAILURE;
-					  }
-					  burst_size_flag = 0;
-				  }
-				  if (rate_units_flag) {
-					  if (strcmp("M",optarg) == 0) {
-						  user_param->rate_units = MEGA_BYTE_PS;
-					  } else if (strcmp("g",optarg) == 0) {
-						  user_param->rate_units = GIGA_BIT_PS;
-					  } else if (strcmp("p",optarg) == 0) {
-						  user_param->rate_units = PACKET_PS;
-					  } else {
-						  fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
-						  return FAILURE;
-					  }
-					  rate_units_flag = 0;
-				  }
-				  if (verbosity_output_flag) {
-					  if (strcmp("bandwidth",optarg) == 0) {
-						  user_param->output = OUTPUT_BW;
-					  } else if (strcmp("message_rate",optarg) == 0) {
-						  user_param->output = OUTPUT_MR;
-					  } else if (strcmp("latency",optarg) == 0) {
-						  user_param->output = OUTPUT_LAT;
-					  } else {
-						  fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
-						  return FAILURE;
-					  }
-					  verbosity_output_flag = 0;
-				  }
-				  if (latency_gap_flag) {
-					  user_param->latency_gap = strtol(optarg,NULL,0);
-					  if (user_param->latency_gap < 0) {
-						  fprintf(stderr, " Latency gap time must be non-negative\n");
-						  return FAILURE;
-					  }
-					  latency_gap_flag = 0;
-				  }
-				  if (retry_count_flag) {
-					  user_param->retry_count = strtol(optarg,NULL,0);
-					  if (user_param->retry_count < 0) {
-						  fprintf(stderr, " Retry Count value must be positive\n");
-						  return FAILURE;
-					  }
-					  retry_count_flag = 0;
-				  }
-				  if (verb_type_flag) {
-					  if (strcmp("normal",optarg) == 0) {
-						  user_param->verb_type = NORMAL_INTF;
-					  } else if (strcmp("accl",optarg) == 0) {
-						  user_param->verb_type = ACCL_INTF;
-					  } else {
-						  fprintf(stderr, " Invalid verb type. Please choose normal/accl.\n");
-						  return FAILURE;
-					  }
-					  verb_type_flag = 0;
-				  }
-				  if (mmap_file_flag) {
-					  user_param->mmap_file = strdup(optarg);
-					  mmap_file_flag = 0;
-				  }
-				  if (mmap_offset_flag) {
-					  user_param->mmap_offset = strtol(optarg, NULL, 0);
-					  mmap_offset_flag = 0;
-				  }
-				  if (dlid_flag) {
-					  user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
-					  dlid_flag = 0;
-				  }
-				  if (tclass_flag) {
-					  user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
-					  tclass_flag = 0;
-				  }
-				  if (flows_flag) {
+				if (pkey_flag) {
+					user_param->pkey_index = strtol(optarg,NULL,0);
+					pkey_flag = 0;
+				}
+				if (inline_recv_flag) {
+					user_param->inline_recv_size = strtol(optarg,NULL,0);
+					inline_recv_flag = 0;
+				}
+				if (rate_limit_flag) {
+					GET_STRING(user_param->rate_limit_str ,strdupa(optarg));
+					user_param->rate_limit = atof(optarg);
+					if (user_param->rate_limit <= 0) {
+						fprintf(stderr, " Rate limit must be non-negative\n");
+						return FAILURE;
+					}
+					/* if not specified, choose HW rate limiter as default */
+					if (user_param->rate_limit_type == DISABLE_RATE_LIMIT)
+						user_param->rate_limit_type = HW_RATE_LIMIT;
+
+					rate_limit_flag = 0;
+				}
+				if (burst_size_flag) {
+					user_param->burst_size = strtol(optarg,NULL,0);
+					if (user_param->burst_size < 0) {
+						fprintf(stderr, " Burst size must be non-negative\n");
+						return FAILURE;
+					}
+					burst_size_flag = 0;
+				}
+				if (rate_units_flag) {
+					if (strcmp("M",optarg) == 0) {
+						user_param->rate_units = MEGA_BYTE_PS;
+					} else if (strcmp("g",optarg) == 0) {
+						user_param->rate_units = GIGA_BIT_PS;
+					} else if (strcmp("p",optarg) == 0) {
+						user_param->rate_units = PACKET_PS;
+					} else {
+						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
+						return FAILURE;
+					}
+					rate_units_flag = 0;
+				}
+				if (rate_limit_type_flag) {
+					if(strcmp("SW",optarg) == 0)
+						user_param->rate_limit_type = SW_RATE_LIMIT;
+					else if(strcmp("HW",optarg) == 0)
+						user_param->rate_limit_type = HW_RATE_LIMIT;
+					else {
+						fprintf(stderr, " Invalid HW limit type  flag. Please use HW, SW \n");
+						return FAILURE;
+					}
+					rate_limit_type_flag = 0;
+				}
+				if (verbosity_output_flag) {
+					if (strcmp("bandwidth",optarg) == 0) {
+						user_param->output = OUTPUT_BW;
+					} else if (strcmp("message_rate",optarg) == 0) {
+						user_param->output = OUTPUT_MR;
+					} else if (strcmp("latency",optarg) == 0) {
+						user_param->output = OUTPUT_LAT;
+					} else {
+						fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
+						return FAILURE;
+					}
+					verbosity_output_flag = 0;
+				}
+				if (latency_gap_flag) {
+					user_param->latency_gap = strtol(optarg,NULL,0);
+					if (user_param->latency_gap < 0) {
+						fprintf(stderr, " Latency gap time must be non-negative\n");
+						return FAILURE;
+					}
+					latency_gap_flag = 0;
+				}
+				if (retry_count_flag) {
+					user_param->retry_count = strtol(optarg,NULL,0);
+					if (user_param->retry_count < 0) {
+						fprintf(stderr, " Retry Count value must be positive\n");
+						return FAILURE;
+					}
+					retry_count_flag = 0;
+				}
+				if (verb_type_flag) {
+					if (strcmp("normal",optarg) == 0) {
+						user_param->verb_type = NORMAL_INTF;
+					} else if (strcmp("accl",optarg) == 0) {
+						user_param->verb_type = ACCL_INTF;
+					} else {
+						fprintf(stderr, " Invalid verb type. Please choose normal/accl.\n");
+						return FAILURE;
+					}
+					verb_type_flag = 0;
+				}
+				if (mmap_file_flag) {
+					user_param->mmap_file = strdup(optarg);
+					mmap_file_flag = 0;
+				}
+				if (mmap_offset_flag) {
+					user_param->mmap_offset = strtol(optarg, NULL, 0);
+					mmap_offset_flag = 0;
+				}
+				if (dlid_flag) {
+					user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
+					dlid_flag = 0;
+				}
+				if (tclass_flag) {
+					user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
+					tclass_flag = 0;
+				}
+				if (flows_flag) {
 					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
 					if (user_param->flows <= 0) {
 						fprintf(stderr, "Invalid flows value. Please set a positive number\n");
 						return FAILURE;
 					}
-
 					flows_flag = 0;
-				  }
-				  break;
+				}
+				break;
 
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
@@ -2462,6 +2540,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 }
+
 /******************************************************************************
  * End
  ******************************************************************************/
