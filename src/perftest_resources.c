@@ -2247,10 +2247,16 @@ int ctx_connect(struct pingpong_context *ctx,
 			else
 				qp_static_rate = (int)(qp_attr.ah_attr.static_rate);
 
-			//- Fall back to SW Limit
+			//- Fall back to SW Limit only if flag undefined
 			if(err || (qp_static_rate != user_param->valid_hw_rate_limit)) {
-				user_param->rate_limit_type = SW_RATE_LIMIT;
-				fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit, providing SW rate limit \x1b[0m\n");
+				if(!user_param->is_rate_limit_type) {
+					user_param->rate_limit_type = SW_RATE_LIMIT;
+					fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit, providing SW rate limit \x1b[0m\n");
+				} else {
+					fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit \x1b[0m\n");
+					return FAILURE;
+				}
+
 			}
 		}
 

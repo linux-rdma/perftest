@@ -407,6 +407,7 @@ struct perftest_parameters {
 	int 				burst_size;
 	enum 				rate_limiter_units rate_units;
 	enum 				rate_limiter_types rate_limit_type;
+	int				is_rate_limit_type;
 	enum verbosity_level 		output;
 	int 				cpu_util;
 	struct cpu_util_data 		cpu_util_data;

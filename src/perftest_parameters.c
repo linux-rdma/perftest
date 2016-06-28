@@ -574,6 +574,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->valid_hw_rate_limit	= 0;
 	user_param->rate_units		= GIGA_BIT_PS;
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
+	user_param->is_rate_limit_type  = 0;
 	user_param->output		= -1;
 	user_param->use_cuda		= 0;
 	user_param->mmap_file		= NULL;
@@ -1860,6 +1861,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					rate_units_flag = 0;
 				}
 				if (rate_limit_type_flag) {
+					user_param->is_rate_limit_type = 1;
 					if(strcmp("SW",optarg) == 0)
 						user_param->rate_limit_type = SW_RATE_LIMIT;
 					else if(strcmp("HW",optarg) == 0)
