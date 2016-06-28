@@ -507,10 +507,11 @@ void usage_raw_ethernet(TestType tst)
 	printf(" Disable Scatter FCS feature. (Scatter FCS is enabled by default when using --use_exp flag). \n");
 	#endif
 
-	if (tst == LAT) {
-		printf("      --flows");
-		printf(" set number of TCP/UDP flows, starting from <src_port, dst_port>. \n");
-	}
+	printf("      --flows");
+	printf(" set number of TCP/UDP flows, starting from <src_port, dst_port>. \n");
+
+	printf("      --flows_burst");
+	printf(" set number of burst size per TCP/UDP flow. \n");
 
 	printf("      --promiscuous");
 	printf(" run promiscuous mode.\n");
@@ -624,6 +625,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->traffic_class	= 0;
 	user_param->disable_fcs		= 0;
 	user_param->flows		= DEF_FLOWS;
+	user_param->flows_burst		= 1;
 }
 
 /******************************************************************************
@@ -744,6 +746,39 @@ void  get_gbps_str_by_ibv_rate(char *rate_input_value, int *rate)
 	}
 	printf("\x1b[31mThe input value for hw rate limit is not supported\x1b[0m\n");
 	print_supported_ibv_rate_values();
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void flow_rules_force_dependecies(struct perftest_parameters *user_param)
+{
+	int min_iter_req  = 0;
+	if (user_param->flows != DEF_FLOWS) {
+		if (user_param->is_server_port == OFF) {
+			fprintf(stderr, " Flows feature works with UDP/TCP packets only for now\n");
+			exit(1);
+		}
+		if (user_param->test_type == ITERATIONS) {
+			min_iter_req = user_param->flows * user_param->flows_burst;
+			if (user_param->iters / min_iter_req < 1) {
+				fprintf(stderr, " Current iteration number will not complete full cycle on all flows, it need to be multiple of the product between flows and flows_burst\n");
+				fprintf(stderr, " Set  N*%d Iterations \n", user_param->flows * user_param->flows_burst);
+				exit(1);
+			}
+		}
+		if (user_param->duplex) {
+			fprintf(stderr, " Flows is currentley designed to work with unidir tests only\n");
+			exit(1);
+		}
+
+	} else {
+		if (user_param->flows_burst  > 1) {
+			fprintf(stderr, " Flows burst is designed to work with more then single flow\n");
+			exit(1);
+		}
+	}
+	return;
 }
 
 /******************************************************************************
@@ -917,19 +952,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->flows != DEF_FLOWS) {
-
-			if (user_param->tst != LAT) {
-				fprintf(stderr, " Flows feature works with Latency test only\n");
-				exit(1);
-			}
-
-			/* UDP/TCP must have server_port, so this check is enough */
-			if (user_param->is_server_port == OFF) {
-				fprintf(stderr, " Flows feature works with UDP/TCP packets only for now\n");
-				exit(1);
-			}
-		}
+		flow_rules_force_dependecies(user_param);
 	}
 
 	if (user_param->use_mcg &&  user_param->gid_index == -1) {
@@ -1079,7 +1102,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	} else if (user_param->rate_limit_type == HW_RATE_LIMIT) {
 		if (user_param->use_rdma_cm == ON || user_param->work_rdma_cm == ON) {
-			fprintf(stderr," HW rate limit isn't supported yet with rdma_cm flows\n");
+			fprintf(stderr," HW rate limit isn't supported yet with rdma_cm scenarios\n");
 			exit(1);
 		}
 		double rate_limit_gbps = 0;
@@ -1224,7 +1247,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 	return;
 }
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1505,6 +1527,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int wait_destroy_flag = 0;
 	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
+	static int flows_burst_flag = 0;
 
 	init_perftest_params(user_param);
 
@@ -1602,6 +1625,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
 			#endif
 			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
+			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1940,11 +1964,20 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (flows_flag) {
 					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
-					if (user_param->flows <= 0) {
+					if (user_param->flows == 0) {
 						fprintf(stderr, "Invalid flows value. Please set a positive number\n");
 						return FAILURE;
 					}
 					flows_flag = 0;
+				}
+				if (flows_burst_flag) {
+					user_param->flows_burst = (uint16_t)strtol(optarg, NULL, 0);
+					if (user_param->flows_burst == 0) {
+						fprintf(stderr, "Invalid burst flow value. Please set a positive number\n");
+						return FAILURE;
+					}
+					flows_burst_flag = 0;
+
 				}
 				break;
 

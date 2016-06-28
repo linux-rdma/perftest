@@ -434,6 +434,7 @@ struct perftest_parameters {
 	uint32_t			wait_destroy;
 	int				disable_fcs;
 	int				flows;
+	int				flows_burst;
 };
 
 struct report_options {
