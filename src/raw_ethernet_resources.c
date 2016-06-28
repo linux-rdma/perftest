@@ -442,7 +442,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		struct raw_ethernet_info	*rem_dest_info)
 {
 	int offset = 0;
-	int i;
+	int i, print_flag = 0;
 	struct ETH_header* eth_header;
 	uint16_t ip_next_protocol = 0;
 	uint16_t eth_type = user_param->is_ethertype ? user_param->ethertype :
@@ -454,30 +454,31 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	eth_header = (void*)ctx->buf[0];
 
-	/* build single packet on ctx buffer */
-	build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info, user_param,
-			    eth_type, ip_next_protocol, PRINT_ON,
-			    ctx->size - RAWETH_ADDITION, 0);
-
 	if (user_param->tst == BW) {
-		/* fill ctx buffer with same packets */
-		if (ctx->size <= (ctx->cycle_buffer / 2)) {
-			while (offset < ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
-				offset += INC(ctx->size, ctx->cache_line_size);
-				eth_header = (void*)ctx->buf[0] + offset;
+		/* fill ctx buffer with different packets according to flows_offset */
+		for (i = 0; i < user_param->flows; i++) {
+			print_flag = PRINT_ON;
+			offset = (ctx->cycle_buffer) * i; /* update the offset to next flow */
+			eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next flow */
+			/* fill ctx buffer with same packets */
+			while (offset-(ctx->cycle_buffer * i) < ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
 				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 						    user_param, eth_type, ip_next_protocol,
-						    PRINT_OFF ,ctx->size - RAWETH_ADDITION, 0);
+						    print_flag , ctx->size - RAWETH_ADDITION, i);
+				print_flag = PRINT_OFF;
+				offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
+				eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next packet in same flow */
 			}
 		}
-	} else if (user_param->tst == LAT && user_param->flows != DEF_FLOWS) {
+	} else if (user_param->tst == LAT) {
 		/* fill ctx buffer with different packets according to flows_offset */
-		for (i = 1; i < user_param->flows; i++) {
-			offset += INC(ctx->size, ctx->cache_line_size);
-			eth_header = (void*)ctx->buf[0] + offset;
+		for (i = 0; i < user_param->flows; i++) {
 			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 					    user_param, eth_type, ip_next_protocol,
 					    PRINT_ON ,ctx->size - RAWETH_ADDITION, i);
+			offset += INC(ctx->size, ctx->cache_line_size);
+			eth_header = (void*)ctx->buf[0] + offset;
+
 		}
 	}
 
@@ -614,8 +615,8 @@ static int set_up_flow_rules(
 
 		if(user_param->machine == SERVER) {
 
-			spec_info->tcp_udp.val.dst_port = htons(user_param->server_port);
-			spec_info->tcp_udp.val.src_port = htons(user_param->client_port);
+			spec_info->tcp_udp.val.dst_port = htons(user_param->server_port + flows_offset);
+			spec_info->tcp_udp.val.src_port = htons(user_param->client_port + flows_offset);
 
 		} else {
 			spec_info->tcp_udp.val.dst_port = htons(user_param->client_port + flows_offset);
@@ -630,7 +631,6 @@ static int set_up_flow_rules(
 		spec_info->eth.val.ether_type = htons(user_param->ethertype);
 		spec_info->eth.mask.ether_type = 0xffff;
 	}
-
 	return 0;
 }
 
