@@ -2839,13 +2839,14 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	int rtt_factor;
 	double cycles_to_units;
 	cycles_t test_sample_time;
-	double latency;
+	double latency, tps;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
 
 	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
 	latency = (((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters);
+	tps = user_param->iters / (test_sample_time / (cycles_to_units * 1000000));
 
 	if (user_param->output == OUTPUT_LAT) {
 		printf("%lf\n",latency);
@@ -2854,7 +2855,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 		printf(REPORT_FMT_LAT_DUR,
 				user_param->size,
 				user_param->iters,
-				latency);
+				latency, tps);
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 }

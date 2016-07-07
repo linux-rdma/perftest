@@ -183,7 +183,7 @@
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]    t_avg[usec]    t_stdev[usec]   99""%"" percentile[usec]   99.9""%"" percentile[usec] "
 
-#define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]  	"
+#define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]    tps average"
 
 #define RESULT_EXT "\n"
 
@@ -205,7 +205,7 @@
 /* Result print format for latency tests. */
 #define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f        %-7.2f              %-7.2f"
 
-#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f"
+#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f        %-7.2f"
 
 #define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
 { arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
