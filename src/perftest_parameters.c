@@ -443,6 +443,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	#endif
 
 	if (tst == BW) {
+		printf("      --wait_destroy=<seconds> ");
+		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
+
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
@@ -581,6 +584,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
 	user_param->iters_per_port[1]	= 0;
+	user_param->wait_destroy	= 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
@@ -1498,6 +1502,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
+	static int wait_destroy_flag = 0;
 	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 
@@ -1592,6 +1597,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
 			{ .name = "tclass",		.has_arg = 1, .flag = &tclass_flag, .val = 1},
+			{ .name = "wait_destroy",	.has_arg = 1, .flag = &wait_destroy_flag, .val = 1},
 			#ifdef HAVE_SCATTER_FCS
 			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
 			#endif
@@ -1927,6 +1933,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (tclass_flag) {
 					user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
 					tclass_flag = 0;
+				}
+				if (wait_destroy_flag) {
+					user_param->wait_destroy = (uint32_t)strtol(optarg, NULL, 0);
+					wait_destroy_flag = 0;
 				}
 				if (flows_flag) {
 					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
