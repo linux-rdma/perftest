@@ -728,6 +728,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
 
+	if (user_param->wait_destroy) {
+		printf(" Waiting %u seconds before releasing resources...\n",
+		       user_param->wait_destroy);
+		sleep(user_param->wait_destroy);
+	}
+
 	dereg_counter = (user_param->mr_per_qp) ? user_param->num_of_qps : 1;
 
 	if (user_param->work_rdma_cm == ON)

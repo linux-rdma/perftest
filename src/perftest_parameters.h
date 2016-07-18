@@ -431,6 +431,7 @@ struct perftest_parameters {
 	int				mr_per_qp;
 	uint16_t			dlid;
 	uint8_t				traffic_class;
+	uint32_t			wait_destroy;
 	int				disable_fcs;
 	int				flows;
 };
