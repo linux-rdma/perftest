@@ -531,6 +531,11 @@ void usage_raw_ethernet(TestType tst)
 	printf("      --promiscuous");
 	printf(" run promiscuous mode.\n");
 
+	#ifdef HAVE_SNIFFER
+	printf("      --sniffer");
+	printf(" run sniffer mode.\n");
+	#endif
+
 	printf("      --tcp ");
 	printf(" send TCP Packets. must include IP and Ports information.\n");
 
@@ -630,6 +635,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->report_per_port		= 0;
 	user_param->use_odp			= 0;
 	user_param->use_promiscuous		= 0;
+	user_param->use_sniffer			= 0;
 	user_param->check_alive_exited		= 0;
 	user_param->raw_mcast			= 0;
 	user_param->masked_atomics		= 0;
@@ -1542,6 +1548,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
 	static int use_promiscuous_flag = 0;
+	static int use_sniffer_flag = 0;
 	static int raw_mcast_flag = 0;
 	static int verb_type_flag = 0;
 	static int use_res_domain_flag = 0;
@@ -1640,6 +1647,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
 			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
+			#ifdef HAVE_SNIFFER
+			{ .name = "sniffer",		.has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
+			#endif
 			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
 			#ifdef HAVE_VERBS_EXP
 			{ .name = "use_exp",		.has_arg = 0, .flag = &use_exp_flag, .val = 1},
@@ -2114,6 +2124,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (use_promiscuous_flag) {
 		user_param->use_promiscuous = 1;
+	}
+
+	if (use_sniffer_flag) {
+		user_param->use_sniffer = 1;
 	}
 
 	if (raw_mcast_flag) {
