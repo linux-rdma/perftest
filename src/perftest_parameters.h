@@ -423,6 +423,7 @@ struct perftest_parameters {
 	int 				report_per_port;
 	int 				use_odp;
 	int				use_promiscuous;
+	int				use_sniffer;
 	int				check_alive_exited;
 	int				raw_mcast;
 	int				masked_atomics;

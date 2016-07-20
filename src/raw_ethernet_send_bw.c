@@ -70,10 +70,16 @@ int main(int argc, char *argv[])
 	struct ibv_exp_flow		**flow_create_result;
 	struct ibv_exp_flow_attr	**flow_rules;
 	struct ibv_exp_flow 		*flow_promisc = NULL ;
+	#ifdef HAVE_SNIFFER
+	struct ibv_exp_flow 		*flow_sniffer = NULL;
+	#endif
 	#else
 	struct ibv_flow			**flow_create_result;
 	struct ibv_flow_attr		**flow_rules;
 	struct ibv_flow 		*flow_promisc = NULL ;
+	#ifdef HAVE_SNIFFER
+	struct ibv_flow 		*flow_sniffer = NULL;
+	#endif
 	#endif
 	int 				i;
 	union ibv_gid mgid;
@@ -257,6 +263,34 @@ int main(int argc, char *argv[])
 			}
 			#endif
 		}
+		#ifdef HAVE_SNIFFER
+		if (user_param.use_sniffer) {
+			#ifdef HAVE_RAW_ETH_EXP
+			struct ibv_exp_flow_attr attr = {
+				.type = IBV_EXP_FLOW_ATTR_SNIFFER,
+				.num_of_specs = 0,
+				.port = user_param.ib_port,
+				.flags = 0
+			};
+			#else
+			struct ibv_flow_attr attr = {
+				.type = IBV_FLOW_ATTR_SNIFFER,
+				.num_of_specs = 0,
+				.port = user_param.ib_port,
+				.flags = 0
+			};
+			#endif
+
+			#ifdef HAVE_RAW_ETH_EXP
+			if ((flow_sniffer = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
+			#else
+			if ((flow_sniffer = ibv_create_flow(ctx.qp[0], &attr)) == NULL) {
+			#endif
+				perror("error");
+				fprintf(stderr, "Couldn't attach SNIFFER rule QP\n");
+			}
+		}
+		#endif /* HAVE_SNIFFER */
 	}
 
 	/* Prepare IB resources for rtr/rts. */
@@ -392,6 +426,20 @@ int main(int argc, char *argv[])
 				return FAILURE;
 			}
 		}
+
+		#ifdef HAVE_SNIFFER
+		if (user_param.use_sniffer) {
+			#ifdef HAVE_RAW_ETH_EXP
+			if (ibv_exp_destroy_flow(flow_sniffer)) {
+			#else
+			if (ibv_destroy_flow(flow_sniffer)) {
+			#endif
+				perror("error");
+				fprintf(stderr, "Couldn't Destory sniffer flow\n");
+				return FAILURE;
+			}
+		}
+		#endif
 
 		if (user_param.raw_mcast) {
 			if (ibv_detach_mcast(ctx.qp[0], &mgid, 0)) {
