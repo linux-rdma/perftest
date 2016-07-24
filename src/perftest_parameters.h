@@ -181,7 +181,7 @@
 
 #define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
 
-#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]"
+#define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]    t_avg[usec]    t_stdev[usec]   99""%"" percentile[usec]   99.9""%"" percentile[usec] "
 
 #define RESULT_FMT_LAT_DUR " #bytes        #iterations       t_avg[usec]  	"
 
@@ -203,7 +203,7 @@
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 /* Result print format for latency tests. */
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f"
+#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f        %-7.2f              %-7.2f"
 
 #define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f"
 

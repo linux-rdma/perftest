@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #endif
 #include "perftest_parameters.h"
-
+#include<math.h>
 #define MAC_LEN (17)
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
@@ -393,6 +393,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
+	printf(" Latency measurement is Average calculation \n");
 
 	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
 
@@ -768,10 +769,9 @@ void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 			}
 		}
 		if (user_param->duplex) {
-			fprintf(stderr, " Flows is currentley designed to work with unidir tests only\n");
+			fprintf(stderr, " Flows is currently designed to work with unidir tests only\n");
 			exit(1);
 		}
-
 	} else {
 		if (user_param->flows_burst  > 1) {
 			fprintf(stderr, " Flows burst is designed to work with more then single flow\n");
@@ -2523,57 +2523,87 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	int i;
 	int rtt_factor;
-	double cycles_to_units;
-	cycles_t median;
+	double cycles_to_units ,cycles_rtt_quotient, temp_var, pow_var;
+	cycles_t median ;
 	cycles_t *delta = NULL;
 	const char* units;
-	double latency;
+	double latency, stdev, average_sum = 0 , average, stdev_sum = 0;
+	int iters_99,iters_99_9;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	ALLOCATE(delta,cycles_t,user_param->iters - 1);
 
-	for (i = 0; i < user_param->iters - 1; ++i)
-		delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
-
 	if (user_param->r_flag->cycles) {
 		cycles_to_units = 1;
 		units = "cycles";
-
 	} else {
 		cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
 		units = "usec";
 	}
 
+	for (i = 0; i < user_param->iters - 1; ++i)
+		delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
+
+	cycles_rtt_quotient = cycles_to_units / rtt_factor;
 	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
 	}
 
 	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
 
+	median = get_median(user_param->iters - 1, delta);
+
+	iters_99 = ceil((user_param->iters - 1 )*0.99);
+	iters_99_9 = ceil((user_param->iters - 1)*0.999);
+
+	/* calcualte average sum on sorted array*/
+	for (i = 0; i < user_param->iters - 1; ++i)
+		average_sum += (delta[i] / cycles_rtt_quotient);
+
+	average = average_sum / (user_param->iters - 1);
+
+	/* Calculate stdev by variance*/
+	for (i = 0; i < user_param->iters - 1; ++i) {
+		temp_var = average - (delta[i] / cycles_rtt_quotient);
+		pow_var = pow(temp_var, 2 );
+		stdev_sum += pow_var;
+	}
+	stdev = sqrt(stdev_sum / (user_param->iters));
+
 	if (user_param->r_flag->histogram) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_to_units / rtt_factor);
+			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
 	}
 
-	median = get_median(user_param->iters - 1, delta);
-
-	latency = median / cycles_to_units / rtt_factor;
-
-	if (user_param->output == OUTPUT_LAT) {
-		printf("%lf\n",latency);
+	if (user_param->r_flag->unsorted || user_param->r_flag->histogram) {
+		if (user_param->output == FULL_VERBOSITY) {
+			printf(RESULT_LINE);
+			printf("%s",(user_param->test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
+			printf((user_param->cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+		}
 	}
+
+	latency = median / cycles_rtt_quotient;
+
+	if (user_param->output == OUTPUT_LAT)
+		printf("%lf\n",average);
 	else {
 		printf(REPORT_FMT_LAT,
 				(unsigned long)user_param->size,
 				user_param->iters,
-				delta[0] / cycles_to_units / rtt_factor,
-				delta[user_param->iters - 2] / cycles_to_units / rtt_factor,
-				latency);
+				delta[0] / cycles_rtt_quotient,
+				delta[user_param->iters - 2] / cycles_rtt_quotient,
+				latency,
+				average,
+				stdev,
+				(delta[iters_99] / cycles_rtt_quotient),
+				(delta[iters_99_9] / cycles_rtt_quotient));
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
+
 	free(delta);
 }
 
