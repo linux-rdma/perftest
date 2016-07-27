@@ -305,7 +305,8 @@ static int ctx_xrcd_create(struct pingpong_context *ctx,struct perftest_paramete
 /******************************************************************************
  *
  ******************************************************************************/
-static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+static int ctx_xrc_srq_create(struct pingpong_context *ctx,
+			      struct perftest_parameters *user_param)
 {
 	struct ibv_srq_init_attr_ex srq_init_attr;
 
@@ -323,9 +324,9 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 		srq_init_attr.cq = ctx->send_cq;
 
 	srq_init_attr.pd = ctx->pd;
-	ctx->srq = ibv_create_srq_ex(ctx->context,&srq_init_attr);
+	ctx->srq = ibv_create_srq_ex(ctx->context, &srq_init_attr);
 	if (ctx->srq == NULL) {
-		fprintf(stderr," Couldn't open XRC SRQ\n");
+		fprintf(stderr, "Couldn't open XRC SRQ\n");
 		return FAILURE;
 	}
 
@@ -335,7 +336,9 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
-static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,struct perftest_parameters *user_param,int qp_index)
+static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,
+					struct perftest_parameters *user_param,
+					int qp_index)
 {
 	struct ibv_qp* qp = NULL;
 	int num_of_qps = user_param->num_of_qps / 2;
@@ -1467,11 +1470,19 @@ int modify_qp_to_init(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 int create_reg_qp_main(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, int i, int num_of_qps)
+		       struct perftest_parameters *user_param,
+		       int i, int num_of_qps)
 {
-	ctx->qp[i] = ctx_qp_create(ctx,user_param);
+	if (user_param->use_xrc) {
+		#ifdef HAVE_XRCD
+		ctx->qp[i] = ctx_xrc_qp_create(ctx, user_param, i);
+		#endif
+	} else {
+		ctx->qp[i] = ctx_qp_create(ctx, user_param);
+	}
+
 	if (ctx->qp[i] == NULL) {
-		fprintf(stderr," Unable to create QP.\n");
+		fprintf(stderr, "Unable to create QP.\n");
 		return FAILURE;
 	}
 
@@ -1530,7 +1541,9 @@ int create_exp_qp_main(struct pingpong_context *ctx,
 int create_qp_main(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int i, int num_of_qps)
 {
-	int ret, query;
+	int ret;
+	#ifdef HAVE_VERBS_EXP
+	int query;
 
 	/* flag that indicates that we are going to use exp QP */
 	query = (user_param->connection_type == DC);
@@ -1545,7 +1558,6 @@ int create_qp_main(struct pingpong_context *ctx,
 	if (query == 1)
 		user_param->is_exp_qp = 1;
 
-	#ifdef HAVE_VERBS_EXP
 	if (user_param->is_exp_qp)
 		ret = create_exp_qp_main(ctx, user_param, i, num_of_qps);
 	else
