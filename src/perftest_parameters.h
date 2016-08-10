@@ -325,8 +325,10 @@ struct perftest_parameters {
 	uint8_t				dest_mac[6];
 	int				is_source_mac;
 	int				is_dest_mac;
-	uint32_t			server_ip;
+	uint8_t				server_ip6[16];
+	uint8_t				client_ip6[16];
 	uint32_t			client_ip;
+	uint32_t			server_ip;
 	int				is_server_ip;
 	int				is_client_ip;
 	int				server_port;
@@ -412,10 +414,12 @@ struct perftest_parameters {
 	int 				cpu_util;
 	struct cpu_util_data 		cpu_util_data;
 	int 				latency_gap;
+	int 				flow_label;
 	int 				retry_count;
 	int 				dont_xchg_versions;
 	int 				use_exp;
 	int 				ipv6;
+	int 				raw_ipv6;
 	int 				report_per_port;
 	int 				use_odp;
 	int				use_promiscuous;

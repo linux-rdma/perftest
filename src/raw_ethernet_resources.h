@@ -37,16 +37,19 @@
 #define PERF_MAC_FMT " %02X:%02X:%02X:%02X:%02X:%02X"
 
 #define IP_ETHER_TYPE (0x800)
+#define IP6_ETHER_TYPE (0x86DD)
 #define PRINT_ON (1)
 #define PRINT_OFF (0)
 #define UDP_PROTOCOL (0x11)
 #define TCP_PROTOCOL (0x06)
 #define IP_HEADER_LEN (20)
 #define DEFAULT_TTL (128)
+#define DEFAULT_IPV6_NEXT_HDR (0x3b)
 
 struct raw_ethernet_info {
 	uint8_t mac[6];
 	uint32_t ip;
+	uint8_t ip6[16];
 	int port;
 };
 
@@ -81,6 +84,24 @@ struct ETH_header {
 #error "Must set BYTE_ORDER"
 #endif
 #endif
+
+struct IP_V6_header {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8			priority:4,
+				version:4;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	__u8			version:4,
+				priority:4;
+#endif
+	__u8			flow_lbl[3];
+
+	__be16			payload_len;
+	__u8			nexthdr;
+	__u8			hop_limit;
+
+	struct	in6_addr	saddr;
+	struct	in6_addr	daddr;
+}__attribute__((packed));
 
 struct IP_V4_header{
 	#if defined(__LITTLE_ENDIAN_BITFIELD)
@@ -181,7 +202,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
  *				is_udp_header - if udp header is exist, count the header's size
  *
  */
-int calc_flow_rules_size(int is_ip_header,int is_udp_header);
+int calc_flow_rules_size(struct perftest_parameters *user_param, int is_ip_header,int is_udp_header);
 
 /* send_set_up_connection
  * Description: init raw_ethernet_info and ibv_flow_spec to user args

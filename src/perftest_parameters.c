@@ -117,6 +117,12 @@ int parse_ip_from_str(char *ip, u_int32_t *addr)
 	return inet_pton(AF_INET, ip, addr);
 }
 
+/******************************************************************************/
+int parse_ip6_from_str(char *ip6, struct in6_addr *addr)
+{
+	return inet_pton(AF_INET6, ip6, addr);
+}
+
 /******************************************************************************
   check_valid_udp_port.
  ******************************************************************************/
@@ -480,10 +486,18 @@ void usage_raw_ethernet(TestType tst)
 	printf(" use RSS on server side. need to open 2^x qps (using -q flag. default is -q 2). open 2^x clients that transmit to this server\n");
 
 	printf("  -J, --dest_ip ");
+	#ifdef HAVE_IPV6
+	printf(" destination ip address by this format X.X.X.X for IPv4 or X:X:X:X:X:X for IPv6 (using to send packets with IP header)\n");
+	#else
 	printf(" destination ip address by this format X.X.X.X (using to send packets with IP header)\n");
+	#endif
 
 	printf("  -j, --source_ip ");
+	#ifdef HAVE_IPV6
+	printf(" source ip address by this format X.X.X.X for IPv4 or X:X:X:X:X:X for IPv6 (using to send packets with IP header)\n");
+	#else
 	printf(" source ip address by this format X.X.X.X (using to send packets with IP header)\n");
+	#endif
 
 	printf("  -K, --dest_port ");
 	printf(" destination port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header)\n");
@@ -519,6 +533,14 @@ void usage_raw_ethernet(TestType tst)
 
 	printf("      --tcp ");
 	printf(" send TCP Packets. must include IP and Ports information.\n");
+
+	#ifdef HAVE_IPV6
+	printf("      --raw_ipv6 ");
+	printf(" send IPv6 Packets.\n");
+	#endif
+
+	printf("      --flow_label ");
+	printf(" IPv6 flow label\n");
 
 	printf("\n");
 
@@ -1508,6 +1530,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int verbosity_output_flag = 0;
 	static int cpu_util_flag = 0;
 	static int latency_gap_flag = 0;
+	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
 	static int use_exp_flag = 0;
@@ -1515,6 +1538,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
+	static int raw_ipv6_flag = 0;
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
 	static int use_promiscuous_flag = 0;
@@ -1528,6 +1552,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
+
+	char *server_ip = NULL;
+	char *client_ip = NULL;
 
 	init_perftest_params(user_param);
 
@@ -1600,12 +1627,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
 			{ .name = "cpu_util",		.has_arg = 0, .flag = &cpu_util_flag, .val = 1},
 			{ .name = "latency_gap",	.has_arg = 1, .flag = &latency_gap_flag, .val = 1},
+			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
+			#ifdef HAVE_IPV6
+			{ .name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
+			#endif
 			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
 			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
@@ -1792,17 +1823,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  break;
 			case 'J':
 				  user_param->is_server_ip = ON;
-				  if(1 != parse_ip_from_str(optarg, &(user_param->server_ip))) {
-					  fprintf(stderr," Invalid server IP address\n");
-					  return FAILURE;
-				  }
+				  server_ip = optarg;
 				  break;
 			case 'j':
 				  user_param->is_client_ip = ON;
-				  if(1 != parse_ip_from_str(optarg, &(user_param->client_ip))) {
-					  fprintf(stderr," Invalid client IP address\n");
-					  return FAILURE;
-				  }
+				  client_ip = optarg;
 				  break;
 			case 'K':
 				  user_param->is_server_port = ON;
@@ -1923,6 +1948,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					latency_gap_flag = 0;
 				}
+				if (flow_label_flag) {
+					user_param->flow_label = strtol(optarg,NULL,0);
+					if (user_param->flow_label < 0) {
+						fprintf(stderr, "flow label must be non-negative\n");
+						return FAILURE;
+					}
+					flow_label_flag = 0;
+				}
 				if (retry_count_flag) {
 					user_param->retry_count = strtol(optarg,NULL,0);
 					if (user_param->retry_count < 0) {
@@ -2040,6 +2073,39 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (ipv6_flag) {
 		user_param->ipv6 = 1;
+	}
+
+	if (raw_ipv6_flag) {
+		if (user_param->is_server_ip) {
+			if(1 != parse_ip6_from_str(server_ip,
+						  (struct in6_addr *)&(user_param->server_ip6))) {
+				fprintf(stderr," Invalid server IP address\n");
+				return FAILURE;
+			}
+		}
+		if (user_param->is_client_ip) {
+			if(1 != parse_ip6_from_str(client_ip,
+						  (struct in6_addr *)&(user_param->client_ip6))) {
+				fprintf(stderr," Invalid client IP address\n");
+				return FAILURE;
+			}
+		}
+		user_param->raw_ipv6 = 1;
+	} else {
+		if (user_param->is_server_ip) {
+			if(1 != parse_ip_from_str(server_ip,
+						  &(user_param->server_ip))) {
+				fprintf(stderr," Invalid server IP address\n");
+				return FAILURE;
+			}
+		}
+		if (user_param->is_client_ip) {
+			if(1 != parse_ip_from_str(client_ip,
+						  &(user_param->client_ip))) {
+				fprintf(stderr," Invalid client IP address\n");
+				return FAILURE;
+			}
+		}
 	}
 
 	if(odp_flag) {
