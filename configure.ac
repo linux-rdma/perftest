@@ -157,6 +157,23 @@ if [test $HAVE_ACCL_VERBS = yes] && [test $HAVE_VERBS_EXP = yes]; then
 fi
 
 AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_FLOW_SPEC_IPV6;],[HAVE_IPV6=yes], [HAVE_IPV6=no])
+AM_CONDITIONAL([HAVE_IPV6],[test "x$HAVE_IPV6" = "xyes"])
+if [test $HAVE_IPV6 = yes] && [test $HAVE_VERBS_EXP = no]; then
+        AC_DEFINE([HAVE_IPV6], [1], [Enable IPv6 Flow Specification])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_FLOW_SPEC_IPV6_EXT;],[HAVE_IPV6=yes], [HAVE_IPV6=no])
+AM_CONDITIONAL([HAVE_IPV6],[test "x$HAVE_IPV6" = "xyes"])
+if [test $HAVE_IPV6 = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_IPV6], [1], [Enable IPv6 Flow Specification])
+fi
+
+AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
         [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
