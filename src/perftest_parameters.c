@@ -14,7 +14,6 @@
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
 #define HEX_BASE (16)
-
 static const char *connStr[] = {"RC","UC","UD","RawEth","XRC","DC"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
@@ -85,7 +84,6 @@ static int parse_mac_from_str(char *mac, u_int8_t *addr)
 	}
 	return SUCCESS;
 }
-
 static int parse_ethertype_from_str(char *ether_str, uint16_t *ethertype_val)
 {
 	if (strlen(ether_str) != ETHERTYPE_LEN) {
@@ -614,6 +612,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->iters_per_port[0]	= 0;
 	user_param->iters_per_port[1]	= 0;
 	user_param->wait_destroy	= 0;
+	user_param->is_old_raw_eth_param = 0;
+	user_param->is_new_raw_eth_param = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
@@ -1526,6 +1526,53 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
+void set_raw_eth_parameters(struct perftest_parameters *user_param)
+{
+	int i;
+	int l2_new_params,l3_new_params,l4_new_params;
+
+	l2_new_params = user_param->is_source_mac & user_param->is_dest_mac;
+	l3_new_params = user_param->is_server_ip & user_param->is_client_ip & l2_new_params;
+	l4_new_params = user_param->is_server_port & user_param->is_client_port & l3_new_params;
+
+	if (user_param->is_new_raw_eth_param == 1 && user_param->is_old_raw_eth_param == 1) {
+		printf(RESULT_LINE);
+		fprintf(stderr," Invalid Command line.\nMix of source with local|remote and dest with local|remote is not supported.\n");
+		fprintf(stderr,"For L2 tests you must enter local and remote mac  by this format --local_mac XX:XX:XX:XX:XX:XX --remote_mac XX:XX:XX:XX:XX:XX\n");
+		fprintf(stderr,"For L3 tests You must add also local and remote ip  by this format --local_ip X.X.X.X --remote_ip X.X.X.X\n");
+		fprintf(stderr,"For L4 you need to add also local and remote port  by this format --local_port XXXX  --remote_port XXXX\n");
+		exit(1);
+	}
+	if (user_param->is_new_raw_eth_param) {
+			for (i = 0; i < MAC_ARR_LEN; i++)
+			{
+				user_param->source_mac[i] = user_param->local_mac[i];
+				user_param->dest_mac[i] = user_param->remote_mac[i];
+			}
+			user_param->is_source_mac = ON;
+			user_param->is_dest_mac = ON;
+
+			if(user_param->machine == SERVER) {
+				user_param->server_ip = user_param->local_ip;
+				user_param->client_ip = user_param->remote_ip;
+				user_param->server_port = user_param->local_port;
+				user_param->client_port = user_param->remote_port;
+			}
+			else if (user_param->machine == CLIENT) {
+				user_param->server_ip = user_param->remote_ip;
+				user_param->client_ip = user_param->local_ip;
+				user_param->server_port = user_param->remote_port;
+				user_param->client_port = user_param->local_port;
+			}
+			user_param->is_server_ip = ON;
+			user_param->is_client_ip = ON;
+			user_param->is_server_port = ON;
+			user_param->is_client_port = ON;
+	}
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
 int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 {
 	int c,size_len;
@@ -1568,9 +1615,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
+	static int local_ip_flag = 0;
+	static int remote_ip_flag = 0;
+	static int local_port_flag = 0;
+	static int remote_port_flag = 0;
+	static int local_mac_flag = 0;
+	static int remote_mac_flag = 0;
+
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
+	char *local_ip = NULL;
+	char *remote_ip = NULL;
 
 	init_perftest_params(user_param);
 
@@ -1628,6 +1684,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "client",		.has_arg = 0, .val = 'P' },
 			{ .name = "mac_fwd",		.has_arg = 0, .val = 'v' },
 			{ .name = "use_rss",		.has_arg = 0, .val = 'G' },
+			{ .name = "remote_mac",		.has_arg = 1, .flag = &remote_mac_flag, .val = 1 },
+			{ .name = "local_mac",		.has_arg = 1, .flag = &local_mac_flag, .val = 1 },
+			{ .name = "remote_ip",		.has_arg = 1, .flag = &remote_ip_flag, .val = 1 },
+			{ .name = "local_ip",		.has_arg = 1, .flag = &local_ip_flag, .val = 1 },
+			{ .name = "remote_port",	.has_arg = 1, .flag = &remote_port_flag, .val = 1 },
+			{ .name = "local_port",		.has_arg = 1, .flag = &local_port_flag, .val = 1 },
 			{ .name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
@@ -1831,24 +1893,29 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  user_param->r_flag->unsorted = ON;
 				  break;
 			case 'B':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_source_mac = ON;
 				  if(parse_mac_from_str(optarg, user_param->source_mac))
 					  return FAILURE;
 				  break;
 			case 'E':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_dest_mac = ON;
 				  if(parse_mac_from_str(optarg, user_param->dest_mac))
 					  return FAILURE;
 				  break;
 			case 'J':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_server_ip = ON;
 				  server_ip = optarg;
 				  break;
 			case 'j':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_client_ip = ON;
 				  client_ip = optarg;
 				  break;
 			case 'K':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_server_port = ON;
 				  user_param->server_port = strtol(optarg, NULL, 0);
 				  if(OFF == check_if_valid_udp_port(user_param->server_port)) {
@@ -1857,6 +1924,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  }
 				  break;
 			case 'k':
+				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_client_port = ON;
 				  user_param->client_port = strtol(optarg, NULL, 0);
 				  if(OFF == check_if_valid_udp_port(user_param->client_port)) {
@@ -2033,6 +2101,46 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					flows_burst_flag = 0;
 
 				}
+				if (remote_mac_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					if(parse_mac_from_str(optarg, user_param->remote_mac))
+						return FAILURE;
+					remote_mac_flag = 0;
+				}
+				if (local_mac_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					if(parse_mac_from_str(optarg, user_param->local_mac))
+						return FAILURE;
+					local_mac_flag = 0;
+				}
+				if (remote_ip_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					remote_ip = optarg;
+					remote_ip_flag = 0;
+				}
+				if (local_ip_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					local_ip = optarg;
+					local_ip_flag = 0;
+				}
+				if (remote_port_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					user_param->remote_port = strtol(optarg, NULL, 0);
+					if(OFF == check_if_valid_udp_port(user_param->remote_port)) {
+						fprintf(stderr," Invalid remote UDP port\n");
+						return FAILURE;
+					}
+					remote_port_flag = 0;
+				}
+				if (local_port_flag) {
+					user_param->is_new_raw_eth_param = 1;
+					user_param->local_port = strtol(optarg, NULL, 0);
+					if(OFF == check_if_valid_udp_port(user_param->local_port)) {
+						fprintf(stderr," Invalid local UDP port\n");
+						return FAILURE;
+					}
+					local_port_flag = 0;
+				}
 				break;
 
 			default:
@@ -2111,6 +2219,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				return FAILURE;
 			}
 		}
+		if (user_param->is_new_raw_eth_param) {
+			if(1 != parse_ip6_from_str(local_ip,
+						  (struct in6_addr *)&(user_param->local_ip6))) {
+				fprintf(stderr," Invalid local IP address\n");
+				return FAILURE;
+			}
+			if(1 != parse_ip6_from_str(remote_ip,
+						  (struct in6_addr *)&(user_param->remote_ip6))) {
+				fprintf(stderr," Invalid remote IP address\n");
+				return FAILURE;
+			}
+		}
 		user_param->raw_ipv6 = 1;
 	} else {
 		if (user_param->is_server_ip) {
@@ -2124,6 +2244,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			if(1 != parse_ip_from_str(client_ip,
 						  &(user_param->client_ip))) {
 				fprintf(stderr," Invalid client IP address\n");
+				return FAILURE;
+			}
+		}
+		if (user_param->is_new_raw_eth_param) {
+			if(1 != parse_ip_from_str(local_ip,
+						  &(user_param->local_ip))) {
+				fprintf(stderr," Invalid local IP address\n");
+				return FAILURE;
+			}
+			if(1 != parse_ip_from_str(remote_ip,
+						  &(user_param->remote_ip))) {
+				fprintf(stderr," Invalid remote IP address\n");
 				return FAILURE;
 			}
 		}
@@ -2171,7 +2303,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		else
 			user_param->machine = SERVER;
 	}
-
+	set_raw_eth_parameters(user_param);
 	force_dependecies(user_param);
 	return 0;
 }
