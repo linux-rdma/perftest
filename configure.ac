@@ -176,6 +176,23 @@ fi
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_FLOW_SPEC_IPV4_EXT;],[HAVE_IPV4_EXT=yes], [HAVE_IPV4_EXT=no])
+AM_CONDITIONAL([HAVE_IPV4_EXT],[test "x$HAVE_IPV4_EXT" = "xyes"])
+if [test $HAVE_IPV4_EXT = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_IPV4_EXT], [1], [Enable IPv4 Extended Flow Specification])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_FLOW_SPEC_IPV4_EXT;],[HAVE_IPV4_EXT=yes], [HAVE_IPV4_EXT=no])
+AM_CONDITIONAL([HAVE_IPV4_EXT],[test "x$HAVE_IPV4_EXT" = "xyes"])
+if [test $HAVE_IPV4_EXT = yes] && [test $HAVE_VERBS_EXP = no]; then
+        AC_DEFINE([HAVE_IPV4_EXT], [1], [Enable IPv4 Extended Flow Specification])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>
+#include <infiniband/verbs_exp.h>],
         [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
 AM_CONDITIONAL([HAVE_ODP],[test "x$HAVE_ODP" = "xyes"])
 if [test $HAVE_ODP = yes] && [test $HAVE_VERBS_EXP = yes]; then
