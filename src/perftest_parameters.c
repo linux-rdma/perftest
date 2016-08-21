@@ -2518,12 +2518,14 @@ static int cycles_compare(const void *aptr, const void *bptr)
 /******************************************************************************
  *
  ******************************************************************************/
+#define cycles_to_usec(sample, cycles_to_units, factor) ((((sample) / (cycles_to_units)) / (factor)))
+
 void print_report_lat (struct perftest_parameters *user_param)
 {
 
 	int i;
 	int rtt_factor;
-	double cycles_to_units ,cycles_rtt_quotient, temp_var, pow_var;
+	double cycles_to_units, temp_var, pow_var;
 	cycles_t median ;
 	cycles_t *delta = NULL;
 	const char* units;
@@ -2544,11 +2546,10 @@ void print_report_lat (struct perftest_parameters *user_param)
 	for (i = 0; i < user_param->iters - 1; ++i)
 		delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
 
-	cycles_rtt_quotient = cycles_to_units / rtt_factor;
 	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
+			printf("%d, %g\n", i + 1, cycles_to_usec(delta[i], cycles_to_units, rtt_factor));
 	}
 
 	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
@@ -2560,13 +2561,13 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	/* calcualte average sum on sorted array*/
 	for (i = 0; i < user_param->iters - 1; ++i)
-		average_sum += (delta[i] / cycles_rtt_quotient);
+		average_sum += cycles_to_usec(delta[i], cycles_to_units, rtt_factor);
 
 	average = average_sum / (user_param->iters - 1);
 
 	/* Calculate stdev by variance*/
 	for (i = 0; i < user_param->iters - 1; ++i) {
-		temp_var = average - (delta[i] / cycles_rtt_quotient);
+		temp_var = average - cycles_to_usec(delta[i], cycles_to_units, rtt_factor);
 		pow_var = pow(temp_var, 2 );
 		stdev_sum += pow_var;
 	}
@@ -2575,7 +2576,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 	if (user_param->r_flag->histogram) {
 		printf("#, %s\n", units);
 		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
+			printf("%d, %g\n", i + 1, cycles_to_usec(delta[i], cycles_to_units, rtt_factor));
 	}
 
 	if (user_param->r_flag->unsorted || user_param->r_flag->histogram) {
@@ -2586,7 +2587,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 		}
 	}
 
-	latency = median / cycles_rtt_quotient;
+	latency = cycles_to_usec(median, cycles_to_units, rtt_factor);
 
 	if (user_param->output == OUTPUT_LAT)
 		printf("%lf\n",average);
@@ -2594,13 +2595,13 @@ void print_report_lat (struct perftest_parameters *user_param)
 		printf(REPORT_FMT_LAT,
 				(unsigned long)user_param->size,
 				user_param->iters,
-				delta[0] / cycles_rtt_quotient,
-				delta[user_param->iters - 2] / cycles_rtt_quotient,
+				cycles_to_usec(delta[0], cycles_to_units, rtt_factor),
+				cycles_to_usec(delta[user_param->iters - 2], cycles_to_units, rtt_factor),
 				latency,
 				average,
 				stdev,
-				(delta[iters_99] / cycles_rtt_quotient),
-				(delta[iters_99_9] / cycles_rtt_quotient));
+				cycles_to_usec(delta[iters_99], cycles_to_units, rtt_factor),
+				cycles_to_usec(delta[iters_99_9], cycles_to_units, rtt_factor));
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 
