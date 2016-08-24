@@ -590,7 +590,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 			offset = (ctx->cycle_buffer) * i; /* update the offset to next flow */
 			eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next flow */
 			/* fill ctx buffer with same packets */
-			while (offset-(ctx->cycle_buffer * i) < ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
+			while (offset-(ctx->cycle_buffer * i) <= ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
 				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 						    user_param, eth_type, ip_next_protocol,
 						    print_flag , ctx->size - RAWETH_ADDITION, i);
