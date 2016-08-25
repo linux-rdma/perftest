@@ -73,6 +73,7 @@ int main(int argc, char *argv[])
 	#else
 	struct ibv_flow			**flow_create_result;
 	struct ibv_flow_attr		**flow_rules;
+	struct ibv_flow 		*flow_promisc = NULL ;
 	#endif
 	int 				i;
 	union ibv_gid mgid;
@@ -95,7 +96,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, " Parser function exited with Error\n");
 		}
 		DEBUG_LOG(TRACE,"<<<<<<%s", __FUNCTION__);
-		return 1;
+		return FAILURE;
 	}
 
 	#ifdef HAVE_RAW_ETH_EXP
@@ -138,12 +139,12 @@ int main(int argc, char *argv[])
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return 1;
+		return FAILURE;
 	}
 	GET_STRING(user_param.ib_devname, ibv_get_device_name(ib_dev));
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
-		return 1;
+		return FAILURE;
 	}
 
 	/* Getting the relevant context from the device */
@@ -151,7 +152,7 @@ int main(int argc, char *argv[])
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return 1;
+		return FAILURE;
 	}
 
 	/* See if MTU and link type are valid and supported. */
@@ -167,7 +168,7 @@ int main(int argc, char *argv[])
 	/* set mac address by user choose */
 	if (send_set_up_connection(flow_rules, &ctx, &user_param, &my_dest_info, &rem_dest_info)) {
 		fprintf(stderr, " Unable to set up socket connection\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* Print basic test information. */
@@ -207,12 +208,12 @@ int main(int argc, char *argv[])
 	}
 
 	/* build raw Ethernet packets on ctx buffer */
-	if((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd) {
+	if ((user_param.machine == CLIENT || user_param.duplex) && !user_param.mac_fwd) {
 		create_raw_eth_pkt(&user_param, &ctx, &my_dest_info, &rem_dest_info);
 	}
 
 	/* create flow rules for servers/duplex clients ,  that not test raw_mcast */
-	if ( !user_param.raw_mcast && (user_param.machine == SERVER || user_param.duplex)) {
+	if (!user_param.raw_mcast && (user_param.machine == SERVER || user_param.duplex)) {
 
 		/* attaching the qp to the spec */
 		for (i = 0; i < user_param.flows; i++) {
@@ -229,8 +230,8 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		#ifdef HAVE_RAW_ETH_EXP
 		if (user_param.use_promiscuous) {
+			#ifdef HAVE_RAW_ETH_EXP
 			struct ibv_exp_flow_attr attr = {
 				.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
 				.num_of_specs = 0,
@@ -242,15 +243,28 @@ int main(int argc, char *argv[])
 				perror("error");
 				fprintf(stderr, "Couldn't attach promiscous rule QP\n");
 			}
+			#else
+			struct ibv_flow_attr attr = {
+				.type = IBV_FLOW_ATTR_ALL_DEFAULT,
+				.num_of_specs = 0,
+				.port = user_param.ib_port,
+				.flags = 0
+			};
+
+			if ((flow_promisc = ibv_create_flow(ctx.qp[0], &attr)) == NULL) {
+				perror("error");
+				fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+			}
+			#endif
 		}
-		#endif
 	}
+
 	/* Prepare IB resources for rtr/rts. */
 	if (user_param.work_rdma_cm == OFF) {
 		if (ctx_connect(&ctx, NULL, &user_param, NULL)) {
 			fprintf(stderr, " Unable to Connect the HCA's through the link\n");
 			DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -288,7 +302,7 @@ int main(int argc, char *argv[])
 			if (ctx_set_recv_wqes(&ctx, &user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				return 1;
+				return FAILURE;
 			}
 		}
 
@@ -317,7 +331,7 @@ int main(int argc, char *argv[])
 
 			if(run_iter_bw_server(&ctx, &user_param)) {
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				return 17;
+				return FAILURE;
 			}
 		}
 
@@ -331,7 +345,7 @@ int main(int argc, char *argv[])
 
 			if (ctx_set_recv_wqes(&ctx, &user_param)) {
 				fprintf(stderr, "Failed to post receive recv_wqes\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 
@@ -339,20 +353,35 @@ int main(int argc, char *argv[])
 
 			if(run_iter_bw_infinitely(&ctx, &user_param)) {
 				fprintf(stderr, " Error occured while running infinitely! aborting ...\n");
-				return 1;
+				return FAILURE;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx, &user_param)) {
 				fprintf(stderr, " Error occured while running infinitely on server! aborting ...\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 	}
+
 	if(user_param.machine == SERVER || user_param.duplex) {
-		/* destroy flow */
+		/* destroy open flows */
 		for (i = 0; i < user_param.flows; i++) {
+			#ifdef HAVE_RAW_ETH_EXP
+			if (ibv_exp_destroy_flow(flow_promisc)) {
+			#else
+			if (ibv_destroy_flow(flow_promisc)) {
+			#endif
+				perror("error");
+				fprintf(stderr, "Couldn't Destory flow\n");
+				return FAILURE;
+			}
+
+			free(flow_rules[i]);
+		}
+
+		if (user_param.use_promiscuous) {
 			#ifdef HAVE_RAW_ETH_EXP
 			if (ibv_exp_destroy_flow(flow_create_result[i])) {
 			#else
@@ -362,11 +391,7 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Couldn't Destory flow\n");
 				return FAILURE;
 			}
-
-			free(flow_rules[i]);
 		}
-	}
-	if(user_param.machine == SERVER || user_param.duplex) {
 
 		if (user_param.raw_mcast) {
 			if (ibv_detach_mcast(ctx.qp[0], &mgid, 0)) {
@@ -379,18 +404,18 @@ int main(int argc, char *argv[])
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr, "Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return 1;
+		return FAILURE;
 	}
 
 	/* limit verifier */
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
 		fprintf(stderr, "Error: BW result is below bw limit\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.output == FULL_VERBOSITY)
 		printf(RESULT_LINE);
 
 	DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-	return 0;
+	return SUCCESS;
 }

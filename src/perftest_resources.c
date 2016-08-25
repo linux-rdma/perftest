@@ -3179,7 +3179,8 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
 int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	uint64_t		rcnt = 0;
-	int 			ne,i;
+	int 			ne = 0;
+	int			i;
 	uint64_t		tot_iters;
 	uint64_t                *rcnt_for_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
@@ -3230,6 +3231,9 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 		}
 
 		do {
+			if (user_param->test_type == DURATION && user_param->state == END_STATE)
+				break;
+
 			#ifdef HAVE_ACCL_VERBS
 			if (user_param->verb_type == ACCL_INTF)
 				ne = ctx->recv_cq_family->poll_cnt(ctx->recv_cq, CTX_POLL_BATCH);
