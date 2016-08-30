@@ -369,9 +369,9 @@ int main(int argc, char *argv[])
 		/* destroy open flows */
 		for (i = 0; i < user_param.flows; i++) {
 			#ifdef HAVE_RAW_ETH_EXP
-			if (ibv_exp_destroy_flow(flow_promisc)) {
+			if (ibv_exp_destroy_flow(flow_create_result[i])) {
 			#else
-			if (ibv_destroy_flow(flow_promisc)) {
+			if (ibv_destroy_flow(flow_create_result[i])) {
 			#endif
 				perror("error");
 				fprintf(stderr, "Couldn't Destory flow\n");
@@ -383,9 +383,9 @@ int main(int argc, char *argv[])
 
 		if (user_param.use_promiscuous) {
 			#ifdef HAVE_RAW_ETH_EXP
-			if (ibv_exp_destroy_flow(flow_create_result[i])) {
+			if (ibv_exp_destroy_flow(flow_promisc)) {
 			#else
-			if (ibv_destroy_flow(flow_create_result[i])) {
+			if (ibv_destroy_flow(flow_promisc)) {
 			#endif
 				perror("error");
 				fprintf(stderr, "Couldn't Destory flow\n");
