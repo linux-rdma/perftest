@@ -931,6 +931,7 @@ int send_set_up_connection(
 				       &(user_param->client_ip6[0]),
 				       sizeof(user_param->client_ip6));
 			my_dest_info->port = user_param->server_port;
+			rem_dest_info->port = user_param->client_port;
 		}
 	}
 	return 0;
