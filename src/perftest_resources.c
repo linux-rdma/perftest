@@ -2034,6 +2034,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	int flags = IBV_QP_STATE;
+
 	attr->qp_state = IBV_QPS_RTR;
 	attr->ah_attr.src_path_bits = 0;
 
@@ -2073,7 +2074,6 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			attr->ah_attr.grh.hop_limit = 0xFF;
 			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
 		}
-
 		if (user_param->connection_type != UD) {
 
 			attr->path_mtu = user_param->curr_mtu;
@@ -2094,7 +2094,8 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.sl = user_param->sl;
 		flags |= IBV_QP_AV;
 	}
-	return ibv_modify_qp(qp,attr,flags);
+
+	return ibv_modify_qp(qp, attr, flags);
 }
 
 #ifdef HAVE_DC
@@ -2138,13 +2139,18 @@ static int ctx_modify_dc_qp_to_rts(struct ibv_qp *qp,
  *
  ******************************************************************************/
 static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
-		struct ibv_qp_attr *attr,
+		void *_attr,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *dest,
 		struct pingpong_dest *my_dest)
 {
-
+	#ifdef HAVE_PACKET_PACING_EXP
+	uint64_t flags = IBV_QP_STATE;
+	#else
 	int flags = IBV_QP_STATE;
+	#endif
+	struct ibv_qp_attr *attr = (struct ibv_qp_attr*)_attr;
+
 	attr->qp_state = IBV_QPS_RTS;
 
 	if (user_param->connection_type != RawEth) {
@@ -2158,12 +2164,21 @@ static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 			attr->retry_cnt = 7;
 			attr->rnr_retry = 7;
 			attr->max_rd_atomic  = dest->out_reads;
-
 			flags |= (IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC);
 		}
 	}
 
-	return ibv_modify_qp(qp,attr,flags);
+	#ifdef HAVE_PACKET_PACING_EXP
+	if (user_param->rate_limit_type == PP_RATE_LIMIT) {
+		((struct ibv_exp_qp_attr*)_attr)->rate_limit = user_param->rate_limit;
+		flags |= IBV_EXP_QP_RATE_LIMIT;
+		return ibv_exp_modify_qp(qp, (struct ibv_exp_qp_attr*)_attr, flags);
+	} else {
+	#endif
+		return ibv_modify_qp(qp, attr, flags);
+	#ifdef HAVE_PACKET_PACING_EXP
+	}
+	#endif
 }
 
 /******************************************************************************
@@ -2181,6 +2196,8 @@ int ctx_connect(struct pingpong_context *ctx,
 	#else
 	struct ibv_qp_attr_ex attr_ex;
 	#endif
+	#elif HAVE_PACKET_PACING_EXP
+	struct ibv_exp_qp_attr attr_ex;
 	#endif
 	struct ibv_qp_attr attr;
 	int xrc_offset = 0;
@@ -2196,13 +2213,20 @@ int ctx_connect(struct pingpong_context *ctx,
 				continue;
 			}
 		}
-		#ifdef HAVE_DC
+		#if defined (HAVE_DC) || defined (HAVE_PACKET_PACING_EXP)
 		memset(&attr_ex, 0, sizeof attr_ex);
 		#endif
 		memset(&attr, 0, sizeof attr);
 
 		if (user_param->rate_limit_type == HW_RATE_LIMIT)
 			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit;
+
+		#ifdef HAVE_PACKET_PACING_EXP
+		if (user_param->rate_limit_type == PP_RATE_LIMIT && !(check_packet_pacing_support(ctx))) {
+			fprintf(stderr, "Packet Pacing isn't supported.\n");
+			return FAILURE;
+		}
+		#endif
 
 		if ((i >= xrc_offset) && (user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT))
 			xrc_offset = -1*xrc_offset;
@@ -2215,7 +2239,7 @@ int ctx_connect(struct pingpong_context *ctx,
 			}
 			#endif
 		} else {
-			if(ctx_modify_qp_to_rtr(ctx->qp[i],&attr,user_param,&dest[xrc_offset + i],&my_dest[i],i)) {
+			if(ctx_modify_qp_to_rtr(ctx->qp[i], &attr, user_param, &dest[xrc_offset + i], &my_dest[i], i)) {
 				fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
 				return FAILURE;
 			}
@@ -2223,16 +2247,27 @@ int ctx_connect(struct pingpong_context *ctx,
 		if (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex) {
 			if(user_param->connection_type == DC) {
 				#ifdef HAVE_DC
-				if(ctx_modify_dc_qp_to_rts(ctx->qp[i],&attr_ex,user_param,&dest[xrc_offset + i],&my_dest[i])) {
+				if(ctx_modify_dc_qp_to_rts(ctx->qp[i], &attr_ex, user_param, &dest[xrc_offset + i], &my_dest[i])) {
 					fprintf(stderr, "Failed to modify QP to RTS\n");
 					return FAILURE;
 				}
 				#endif
 			} else {
-				if(ctx_modify_qp_to_rts(ctx->qp[i],&attr,user_param,&dest[xrc_offset + i],&my_dest[i])) {
-					fprintf(stderr, "Failed to modify QP to RTS\n");
-					return FAILURE;
+				#ifdef HAVE_PACKET_PACING_EXP
+				if (user_param->rate_limit_type == PP_RATE_LIMIT) {
+					if(ctx_modify_qp_to_rts(ctx->qp[i], &attr_ex, user_param, &dest[xrc_offset + i], &my_dest[i])) {
+						fprintf(stderr, "Failed to modify QP %x to RTS\n", ctx->qp[i]->qp_num);
+						return FAILURE;
+					}
+				} else {
+				#endif
+					if(ctx_modify_qp_to_rts(ctx->qp[i], &attr, user_param, &dest[xrc_offset + i], &my_dest[i])) {
+						fprintf(stderr, "Failed to modify QP to RTS\n");
+						return FAILURE;
+					}
+				#ifdef HAVE_PACKET_PACING_EXP
 				}
+				#endif
 			}
 		}
 
@@ -4495,8 +4530,25 @@ int check_masked_atomics_support(struct pingpong_context *ctx)
 }
 #endif
 
+/******************************************************************************
+ *
+ ******************************************************************************/
+#ifdef HAVE_PACKET_PACING_EXP
+int check_packet_pacing_support(struct pingpong_context *ctx)
+{
+	struct ibv_exp_device_attr attr;
+	memset(&attr, 0, sizeof (struct ibv_exp_device_attr));
 
+	attr.comp_mask = IBV_EXP_DEVICE_ATTR_PACKET_PACING_CAPS;
+
+	if (ibv_exp_query_device(ctx->context, &attr)) {
+		fprintf(stderr, "ibv_exp_query_device failed\n");
+		return -1;
+	}
+
+	return MASK_IS_SET(IBV_EXP_DEVICE_ATTR_PACKET_PACING_CAPS, attr.comp_mask);
+}
+#endif
 /******************************************************************************
  * End
  ******************************************************************************/
-

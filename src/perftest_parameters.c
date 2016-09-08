@@ -461,10 +461,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g) , pps not supported when HW limit.\n");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n	 Note (1): pps not supported with HW limit.\n	 Note (2): When using PP rate_units is forced to Kbps.\n");
 
 		printf("      --rate_limit_type=<type>");
-		printf(" [HW/SW] Limit the QP's by HW or by SW. Disabled by default. when rate_limit is specified HW limit is Default .\n");
+		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit is specified HW limit is Default.\n");
 
 	}
 
@@ -1159,6 +1159,15 @@ static void force_dependecies(struct perftest_parameters *user_param)
 				exit(1);
 			}
 			user_param->valid_hw_rate_limit = rate_to_set;
+		}
+	} else if (user_param->rate_limit_type == PP_RATE_LIMIT) {
+		if (user_param->rate_limit < 0) {
+			fprintf(stderr," Must specify a rate limit when using Packet Pacing.\n Please add --rate_limit=<limit>.\n");
+			exit(1);
+		}
+		if (user_param->connection_type != RawEth) {
+			fprintf(stderr,"Packet Pacing is only supported for Raw Ethernet.\n");
+			exit(1);
 		}
 	}
 
@@ -1931,8 +1940,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						user_param->rate_limit_type = SW_RATE_LIMIT;
 					else if(strcmp("HW",optarg) == 0)
 						user_param->rate_limit_type = HW_RATE_LIMIT;
+					else if(strcmp("PP",optarg) == 0)
+						user_param->rate_limit_type = PP_RATE_LIMIT;
 					else {
-						fprintf(stderr, " Invalid HW limit type  flag. Please use HW, SW \n");
+						fprintf(stderr, " Invalid rate limit type flag. Please use HW, SW or PP.\n");
 						return FAILURE;
 					}
 					rate_limit_type_flag = 0;
