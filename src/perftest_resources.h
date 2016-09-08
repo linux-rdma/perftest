@@ -725,6 +725,10 @@ struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
 int check_masked_atomics_support(struct pingpong_context *ctx);
 #endif
 
+#ifdef HAVE_PACKET_PACING_EXP
+int check_packet_pacing_support(struct pingpong_context *ctx);
+#endif
+
 #ifdef HAVE_ACCL_VERBS
 struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx,
 						struct perftest_parameters *user_param);
