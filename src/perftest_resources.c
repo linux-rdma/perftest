@@ -1250,9 +1250,11 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 
 	/* Initialize buffer with random numbers */
-	srand(time(NULL));
-	for (i = 0; i < ctx->buff_size; i++) {
-		((char*)ctx->buf[qp_index])[i] = (char)rand();
+	if (!user_param->use_cuda) {
+		srand(time(NULL));
+		for (i = 0; i < ctx->buff_size; i++) {
+			((char*)ctx->buf[qp_index])[i] = (char)rand();
+		}
 	}
 
 	return 0;
