@@ -241,7 +241,7 @@ if [test $HAVE_GID_ATTR = yes] && [test $HAVE_VERBS_EXP = yes]; then
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
-	[struct ibv_exp_qp_attr *attr;],[HAVE_PACKET_PACING_EXP=yes], [HAVE_PACKET_PACING_EXP=no])
+	[struct ibv_exp_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING_EXP=yes], [HAVE_PACKET_PACING_EXP=no])
 AM_CONDITIONAL([HAVE_PACKET_PACING_EXP],[test "x$HAVE_PACKET_PACING_EXP" = "xyes"])
 if [test $HAVE_PACKET_PACING_EXP = yes] && [test $HAVE_VERBS_EXP = yes]; then
 	AC_DEFINE([HAVE_PACKET_PACING_EXP], [1], [Have PACKET_PACING_EXP support])
