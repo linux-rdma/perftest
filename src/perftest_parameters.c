@@ -1529,11 +1529,6 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 void set_raw_eth_parameters(struct perftest_parameters *user_param)
 {
 	int i;
-	int l2_new_params,l3_new_params,l4_new_params;
-
-	l2_new_params = user_param->is_source_mac & user_param->is_dest_mac;
-	l3_new_params = user_param->is_server_ip & user_param->is_client_ip & l2_new_params;
-	l4_new_params = user_param->is_server_port & user_param->is_client_port & l3_new_params;
 
 	if (user_param->is_new_raw_eth_param == 1 && user_param->is_old_raw_eth_param == 1) {
 		printf(RESULT_LINE);
@@ -1544,30 +1539,23 @@ void set_raw_eth_parameters(struct perftest_parameters *user_param)
 		exit(1);
 	}
 	if (user_param->is_new_raw_eth_param) {
-			for (i = 0; i < MAC_ARR_LEN; i++)
-			{
-				user_param->source_mac[i] = user_param->local_mac[i];
-				user_param->dest_mac[i] = user_param->remote_mac[i];
-			}
-			user_param->is_source_mac = ON;
-			user_param->is_dest_mac = ON;
+		for (i = 0; i < MAC_ARR_LEN; i++)
+		{
+			user_param->source_mac[i] = user_param->local_mac[i];
+			user_param->dest_mac[i] = user_param->remote_mac[i];
+		}
 
-			if(user_param->machine == SERVER) {
-				user_param->server_ip = user_param->local_ip;
-				user_param->client_ip = user_param->remote_ip;
-				user_param->server_port = user_param->local_port;
-				user_param->client_port = user_param->remote_port;
-			}
-			else if (user_param->machine == CLIENT) {
-				user_param->server_ip = user_param->remote_ip;
-				user_param->client_ip = user_param->local_ip;
-				user_param->server_port = user_param->remote_port;
-				user_param->client_port = user_param->local_port;
-			}
-			user_param->is_server_ip = ON;
-			user_param->is_client_ip = ON;
-			user_param->is_server_port = ON;
-			user_param->is_client_port = ON;
+		if (user_param->machine == SERVER) {
+			user_param->server_ip = user_param->local_ip;
+			user_param->client_ip = user_param->remote_ip;
+			user_param->server_port = user_param->local_port;
+			user_param->client_port = user_param->remote_port;
+		} else if (user_param->machine == CLIENT) {
+			user_param->server_ip = user_param->remote_ip;
+			user_param->client_ip = user_param->local_ip;
+			user_param->server_port = user_param->remote_port;
+			user_param->client_port = user_param->local_port;
+		}
 	}
 }
 /******************************************************************************
@@ -2103,28 +2091,33 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (remote_mac_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_dest_mac = 1;
 					if(parse_mac_from_str(optarg, user_param->remote_mac))
 						return FAILURE;
 					remote_mac_flag = 0;
 				}
 				if (local_mac_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_source_mac = 1;
 					if(parse_mac_from_str(optarg, user_param->local_mac))
 						return FAILURE;
 					local_mac_flag = 0;
 				}
 				if (remote_ip_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_client_ip = 1;
 					remote_ip = optarg;
 					remote_ip_flag = 0;
 				}
 				if (local_ip_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_server_ip = 1;
 					local_ip = optarg;
 					local_ip_flag = 0;
 				}
 				if (remote_port_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_client_port = 1;
 					user_param->remote_port = strtol(optarg, NULL, 0);
 					if(OFF == check_if_valid_udp_port(user_param->remote_port)) {
 						fprintf(stderr," Invalid remote UDP port\n");
@@ -2134,6 +2127,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (local_port_flag) {
 					user_param->is_new_raw_eth_param = 1;
+					user_param->is_server_port = 1;
 					user_param->local_port = strtol(optarg, NULL, 0);
 					if(OFF == check_if_valid_udp_port(user_param->local_port)) {
 						fprintf(stderr," Invalid local UDP port\n");
@@ -2205,58 +2199,68 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 
 	if (raw_ipv6_flag) {
-		if (user_param->is_server_ip) {
-			if(1 != parse_ip6_from_str(server_ip,
-						  (struct in6_addr *)&(user_param->server_ip6))) {
-				fprintf(stderr," Invalid server IP address\n");
-				return FAILURE;
-			}
-		}
-		if (user_param->is_client_ip) {
-			if(1 != parse_ip6_from_str(client_ip,
-						  (struct in6_addr *)&(user_param->client_ip6))) {
-				fprintf(stderr," Invalid client IP address\n");
-				return FAILURE;
-			}
-		}
 		if (user_param->is_new_raw_eth_param) {
-			if(1 != parse_ip6_from_str(local_ip,
-						  (struct in6_addr *)&(user_param->local_ip6))) {
-				fprintf(stderr," Invalid local IP address\n");
-				return FAILURE;
+			if (user_param->is_server_ip) {
+				if(1 != parse_ip6_from_str(local_ip,
+							  (struct in6_addr *)&(user_param->local_ip6))) {
+					fprintf(stderr," Invalid local IP address\n");
+					return FAILURE;
+				}
 			}
-			if(1 != parse_ip6_from_str(remote_ip,
-						  (struct in6_addr *)&(user_param->remote_ip6))) {
-				fprintf(stderr," Invalid remote IP address\n");
-				return FAILURE;
+			if (user_param->is_client_ip) {
+				if(1 != parse_ip6_from_str(remote_ip,
+							  (struct in6_addr *)&(user_param->remote_ip6))) {
+					fprintf(stderr," Invalid remote IP address\n");
+					return FAILURE;
+				}
+			}
+		} else {
+			if (user_param->is_server_ip) {
+				if(1 != parse_ip6_from_str(server_ip,
+							  (struct in6_addr *)&(user_param->server_ip6))) {
+					fprintf(stderr," Invalid server IP address\n");
+					return FAILURE;
+				}
+			}
+			if (user_param->is_client_ip) {
+				if(1 != parse_ip6_from_str(client_ip,
+							  (struct in6_addr *)&(user_param->client_ip6))) {
+					fprintf(stderr," Invalid client IP address\n");
+					return FAILURE;
+				}
 			}
 		}
 		user_param->raw_ipv6 = 1;
 	} else {
-		if (user_param->is_server_ip) {
-			if(1 != parse_ip_from_str(server_ip,
-						  &(user_param->server_ip))) {
-				fprintf(stderr," Invalid server IP address\n");
-				return FAILURE;
-			}
-		}
-		if (user_param->is_client_ip) {
-			if(1 != parse_ip_from_str(client_ip,
-						  &(user_param->client_ip))) {
-				fprintf(stderr," Invalid client IP address\n");
-				return FAILURE;
-			}
-		}
 		if (user_param->is_new_raw_eth_param) {
-			if(1 != parse_ip_from_str(local_ip,
-						  &(user_param->local_ip))) {
-				fprintf(stderr," Invalid local IP address\n");
-				return FAILURE;
+			if (user_param->is_server_ip) {
+				if(1 != parse_ip_from_str(local_ip,
+							  &(user_param->local_ip))) {
+					fprintf(stderr," Invalid local IP address\n");
+					return FAILURE;
+				}
 			}
-			if(1 != parse_ip_from_str(remote_ip,
-						  &(user_param->remote_ip))) {
-				fprintf(stderr," Invalid remote IP address\n");
-				return FAILURE;
+			if (user_param->is_client_ip) {
+				if(1 != parse_ip_from_str(remote_ip,
+							  &(user_param->remote_ip))) {
+					fprintf(stderr," Invalid remote IP address\n");
+					return FAILURE;
+				}
+			}
+		} else {
+			if (user_param->is_server_ip) {
+				if(1 != parse_ip_from_str(server_ip,
+							  &(user_param->server_ip))) {
+					fprintf(stderr," Invalid server IP address\n");
+					return FAILURE;
+				}
+			}
+			if (user_param->is_client_ip) {
+				if(1 != parse_ip_from_str(client_ip,
+							  &(user_param->client_ip))) {
+					fprintf(stderr," Invalid client IP address\n");
+					return FAILURE;
+				}
 			}
 		}
 	}
