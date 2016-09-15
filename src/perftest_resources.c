@@ -2691,8 +2691,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->rwr[i].next    = NULL;
 		ctx->rwr[i].num_sge	= MAX_RECV_SGE;
 
-		if (user_param->tst == BW)
-			ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
+		ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
 
 		for (j = 0; j < size_per_qp ; ++j) {
 
@@ -2720,6 +2719,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 						user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 		}
+		ctx->recv_sge_list[i].addr = ctx->rx_buffer_addr[i];
 	}
 	return 0;
 }
@@ -4156,7 +4156,6 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		else
 			catch_alarm(0);
 	}
-
 	while (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 		if (user_param->latency_gap) {
 			start_gap = get_cycles();
@@ -4272,7 +4271,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		 * server will enter here first and wait for a packet to arrive (from the client)
 		 */
 		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == CLIENT)) {
-
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
