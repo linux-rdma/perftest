@@ -2720,7 +2720,6 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 						user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 		}
-		ctx->recv_sge_list[i].addr = ctx->rx_buffer_addr[i];
 	}
 	return 0;
 }
