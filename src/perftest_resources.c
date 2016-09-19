@@ -960,25 +960,30 @@ static int check_inline_recv_support(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-#ifdef HAVE_ODP
+#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
 static int check_odp_support(struct pingpong_context *ctx)
 {
+	#ifdef HAVE_EX_ODP
+	struct ibv_device_attr_ex dattr;
+	int odp_support_send = IBV_ODP_SUPPORT_SEND;
+	int odp_support_recv = IBV_ODP_SUPPORT_RECV;
+	int ret = ibv_query_device_ex(ctx->context, NULL, &dattr);
+	#elif defined  HAVE_EXP_ODP
 	struct ibv_exp_device_attr dattr;
 	int ret = ibv_exp_query_device(ctx->context, &dattr);
+	int odp_support_send = IBV_EXP_ODP_SUPPORT_SEND;
+	int odp_support_recv = IBV_EXP_ODP_SUPPORT_RECV;
+	#endif
 	if (ret) {
 		fprintf(stderr, " Couldn't query device for on-demand paging capabilities.\n");
 		return 0;
-	} else if (!(dattr.comp_mask & IBV_EXP_DEVICE_ATTR_ODP)) {
-		fprintf(stderr, " On-demand paging not supported by driver.\n");
-		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & IBV_EXP_ODP_SUPPORT_SEND)) {
+	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_send)) {
 		fprintf(stderr, " Send is not supported for RC transport.\n");
 		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & IBV_EXP_ODP_SUPPORT_RECV)) {
+	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_recv)) {
 		fprintf(stderr, " Receive is not supported for RC transport.\n");
 		return 0;
 	}
-
 	return 1;
 }
 #endif
@@ -1155,14 +1160,18 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#endif
 
 	/* ODP */
-	#ifdef HAVE_ODP
+	#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
 	if (user_param->use_odp) {
 		if ( !check_odp_support(ctx) )
 			return FAILURE;
 
 		/* ODP does not support contig pages */
 		ctx->is_contig_supported = FAILURE;
+		#ifdef HAVE_EX_ODP
+		flags |= IBV_ACCESS_ON_DEMAND;
+		#elif defined  HAVE_EXP_ODP
 		exp_flags |= IBV_EXP_ACCESS_ON_DEMAND;
+		#endif
 	}
 	#endif
 
@@ -1397,10 +1406,13 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 	if (create_mr(ctx, user_param)) {
 		fprintf(stderr, "Failed to create MR\n");
+		return FAILURE;
 	}
 
 	if (create_cqs(ctx, user_param)) {
 		fprintf(stderr, "Failed to create CQs\n");
+		return FAILURE;
+
 	}
 
 	#ifdef HAVE_XRCD
