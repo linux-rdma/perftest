@@ -394,7 +394,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Create memory region for each qp.\n");
 	}
 
-	#ifdef HAVE_ODP
+	#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
 	printf("      --odp ");
 	printf(" Use On Demand Paging instead of Memory Registration.\n");
 	#endif

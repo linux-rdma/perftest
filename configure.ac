@@ -207,13 +207,30 @@ if [test $HAVE_SNIFFER = yes] && [test $HAVE_VERBS_EXP = no]; then
         AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_device_attr_ex *attr_ex; int x = attr_ex->comp_mask;],[HAVE_EX=yes], [HAVE_EX=no])
+AM_CONDITIONAL([HAVE_EX],[test "x$HAVE_EX" = "xyes"])
+if [test $HAVE_EX = yes]; then
+	AC_DEFINE([HAVE_EX], [1], [Have EX support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_ACCESS_ON_DEMAND;],[HAVE_EX_ODP=yes], [HAVE_EX_ODP=no])
+AM_CONDITIONAL([HAVE_EX_ODP],[test "x$HAVE_EX_ODP" = "xyes"])
+if [test $HAVE_EX_ODP = yes] && [test $HAVE_EX = yes]; then
+        AC_DEFINE([HAVE_EX_ODP], [1], [Have Extended  ODP support])
+fi
+
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
-        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
-AM_CONDITIONAL([HAVE_ODP],[test "x$HAVE_ODP" = "xyes"])
-if [test $HAVE_ODP = yes] && [test $HAVE_VERBS_EXP = yes]; then
-        AC_DEFINE([HAVE_ODP], [1], [Have ODP support])
+        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_EXP_ODP=yes], [HAVE_EXP_ODP=no])
+AM_CONDITIONAL([HAVE_EXP_ODP],[test "x$HAVE_EXP_ODP" = "xyes"])
+if [test $HAVE_EXP_ODP = yes] ; then
+	if  [test $HAVE_EX_ODP = no] ; then
+		AC_DEFINE([HAVE_EXP_ODP], [1], [Have Experimental ODP support])
+	fi
 fi
 
 if [test "$CUDA_H_PATH" ]; then
