@@ -269,7 +269,8 @@ enum ctx_device {
 	CONNECTX4		= 10,
 	CONNECTX4LX		= 11,
 	QLOGIC_E4		= 12,
-	QLOGIC_AH		= 13
+	QLOGIC_AH		= 13,
+	CHELSIO_T6		= 14,
 };
 
 /* Units for rate limiter */

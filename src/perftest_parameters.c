@@ -1341,6 +1341,7 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 4  : dev_fname = CHELSIO_T4; break;
 			case 11 :
 			case 5  : dev_fname = CHELSIO_T5; break;
+			case 6  : dev_fname = CHELSIO_T6; break;
 			default : dev_fname = UNKNOWN; break;
 		}
 
