@@ -57,7 +57,7 @@ static inline cycles_t get_cycles()
 {
 	cycles_t ret;
 
-	asm volatile ("mftb %0" : "=r" (ret) : );
+	__asm__ __volatile__ ("\n\t isync" "\n\t mftb %0" : "=r"(ret));
 	return ret;
 }
 #elif defined(__ia64__)
