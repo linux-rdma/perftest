@@ -363,6 +363,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Do not exchange versions and MTU with other side \n");
 	}
 
+	printf("      --force-link=<value> ");
+	printf(" Force the link(s) to a specific type: IB or Ethernet.\n");
+
+
 	if (verb != WRITE) {
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
@@ -559,6 +563,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->port		= DEF_PORT;
 	user_param->ib_port		= DEF_IB_PORT;
 	user_param->ib_port2		= DEF_IB_PORT2;
+	user_param->link_type		= LINK_UNSPEC;
+	user_param->link_type2		= LINK_UNSPEC;
 	user_param->size		= (user_param->tst == BW ) ? DEF_SIZE_BW : DEF_SIZE_LAT;
 	user_param->tx_depth		= (user_param->tst == BW ) ? DEF_TX_BW : DEF_TX_LAT;
 	user_param->qp_timeout		= DEF_QP_TIME;
@@ -866,6 +872,8 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			printf(" Dual-port mode not supported in multicast feature\n");
 			exit (1);
 		}
+		if (user_param->link_type != LINK_UNSPEC)
+			user_param->link_type2 = user_param->link_type;
 	}
 
 	if (user_param->post_list > 1) {
@@ -1307,9 +1315,9 @@ const char *transport_str(enum ibv_transport_type type)
 }
 
 /******************************************************************************
- *
+ * Try to map verbs' link layer types to a descriptive string or "Unknown"
  ******************************************************************************/
-const char *link_layer_str(uint8_t link_layer)
+const char *link_layer_str(int8_t link_layer)
 {
 	switch (link_layer) {
 
@@ -1318,13 +1326,22 @@ const char *link_layer_str(uint8_t link_layer)
 			return "IB";
 		case IBV_LINK_LAYER_ETHERNET:
 			return "Ethernet";
-		#ifdef HAVE_SCIF
-		case IBV_LINK_LAYER_SCIF:
-			return "SCIF";
-		#endif
 		default:
 			return "Unknown";
 	}
+}
+
+/******************************************************************************
+ * Try to parse a string to a verbs link layer or LINK_FAILURE
+ ******************************************************************************/
+const int str_link_layer(const char *str)
+{
+	if (strncasecmp("IB", str, 2) == 0)
+		return IBV_LINK_LAYER_INFINIBAND;
+	else if (strncasecmp("Ethernet", str, 8) == 0)
+		return IBV_LINK_LAYER_ETHERNET;
+	else
+		return LINK_FAILURE;
 }
 
 /******************************************************************************
@@ -1443,32 +1460,63 @@ enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu)
 }
 
 /******************************************************************************
+ * Set both link layers and return SUCCESS if both ports are active.
+ * FAILURE is returned when requested port/link is not active/known except
+ * when the link type is over-rode (--force-link="..."), in which case FAILURE
+ * is returned only when the link(s) are not active.
  *
+ * When --force-link is specified both ports are over-rode (ie no support for
+ * forcing different link types on different ports).
  ******************************************************************************/
-static uint8_t set_link_layer(struct ibv_context *context,uint8_t ib_port)
+static int set_link_layer(struct ibv_context *context, struct perftest_parameters *params)
 {
 	struct ibv_port_attr port_attr;
-	uint8_t curr_link;
+	int8_t curr_link = params->link_type;
 
-	if (ibv_query_port(context,ib_port,&port_attr)) {
-		fprintf(stderr," Unable to query port attributes\n");
-		return LINK_FAILURE;
+	if (ibv_query_port(context, params->ib_port, &port_attr)) {
+		fprintf(stderr, " Unable to query port %d attributes\n", params->ib_port);
+		return FAILURE;
 	}
+
+	if (curr_link == LINK_UNSPEC)
+		params->link_type = port_attr.link_layer;
 
 	if (port_attr.state != IBV_PORT_ACTIVE) {
-		fprintf(stderr," Port number %d state is %s\n"
-				,ib_port
+		fprintf(stderr, " Port number %d state is %s\n"
+				,params->ib_port
 				,portStates[port_attr.state]);
-		return LINK_FAILURE;
+		return FAILURE;
 	}
 
-	curr_link = port_attr.link_layer;
-	if (!strcmp(link_layer_str(curr_link),"Unknown")) {
-		fprintf(stderr," Unable to determine link layer \n");
-		return LINK_FAILURE;
+	if (strcmp("Unknown", link_layer_str(params->link_type)) == 0) {
+		fprintf(stderr, "Link layer on port %d is Unknown\n", params->ib_port);
+		return FAILURE;
 	}
 
-	return port_attr.link_layer;
+	if (params->dualport == ON) {
+		curr_link = params->link_type2;
+		if (ibv_query_port(context, params->ib_port2, &port_attr)) {
+			fprintf(stderr, " Unable to query port %d attributes\n", params->ib_port2);
+			return FAILURE;
+		}
+
+		if (curr_link == LINK_UNSPEC)
+			params->link_type2 = port_attr.link_layer;
+
+		if (port_attr.state != IBV_PORT_ACTIVE) {
+			fprintf(stderr, " Port number %d state is %s\n"
+				,params->ib_port2
+				,portStates[port_attr.state]);
+			return FAILURE;
+		}
+
+		if (strcmp("Unknown", link_layer_str(params->link_type2)) == 0) {
+			fprintf(stderr, "Link layer on port %d is Unknown\n", params->ib_port2);
+			return FAILURE;
+		}
+	}
+
+	return SUCCESS;
 }
 
 /******************************************************************************
@@ -1612,6 +1660,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
+	static int force_link_flag = 0;
 	static int local_ip_flag = 0;
 	static int remote_ip_flag = 0;
 	static int local_port_flag = 0;
@@ -1681,6 +1730,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "client",		.has_arg = 0, .val = 'P' },
 			{ .name = "mac_fwd",		.has_arg = 0, .val = 'v' },
 			{ .name = "use_rss",		.has_arg = 0, .val = 'G' },
+			{ .name = "force-link",		.has_arg = 1, .flag = &force_link_flag, .val = 1},
 			{ .name = "remote_mac",		.has_arg = 1, .flag = &remote_mac_flag, .val = 1 },
 			{ .name = "local_mac",		.has_arg = 1, .flag = &local_mac_flag, .val = 1 },
 			{ .name = "remote_ip",		.has_arg = 1, .flag = &remote_ip_flag, .val = 1 },
@@ -2097,6 +2147,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					flows_burst_flag = 0;
 
 				}
+				if (force_link_flag) {
+					user_param->link_type = str_link_layer(optarg);
+					if (user_param->link_type == LINK_FAILURE) {
+						fprintf(stderr, "Invalid link layer value should be IB or ETHERNET.\n");
+						return FAILURE;
+					}
+					force_link_flag = 0;
+				}
 				if (remote_mac_flag) {
 					user_param->is_new_raw_eth_param = 1;
 					user_param->is_dest_mac = 1;
@@ -2326,9 +2384,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param)
 {
 	user_param->transport_type = context->device->transport_type;
-	user_param->link_type = set_link_layer(context,user_param->ib_port);
 
-	if (user_param->link_type == LINK_FAILURE) {
+	if (set_link_layer(context, user_param) == FAILURE) {
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return FAILURE;
 	}
@@ -2354,13 +2411,8 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 
 	if (user_param->dualport==ON) {
 
-		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
 		if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
 			user_param->gid_index2 = 1;
-		}
-		if (user_param->link_type2 == LINK_FAILURE) {
-			fprintf(stderr, " Couldn't set the link layer\n");
-			return FAILURE;
 		}
 	}
 
@@ -2408,9 +2460,8 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 int check_link(struct ibv_context *context,struct perftest_parameters *user_param)
 {
 	user_param->transport_type = context->device->transport_type;
-	user_param->link_type = set_link_layer(context,user_param->ib_port);
 
-	if (user_param->link_type == LINK_FAILURE) {
+	if (set_link_layer(context, user_param) == FAILURE){
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return FAILURE;
 	}
@@ -2429,13 +2480,8 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 
 	/* in case of dual-port mode */
 	if (user_param->dualport==ON) {
-		user_param->link_type2 = set_link_layer(context,user_param->ib_port2);
 		if (user_param->link_type2 == IBV_LINK_LAYER_ETHERNET &&  user_param->gid_index2 == -1) {
 			user_param->gid_index2 = 1;
-		}
-		if (user_param->link_type2 == LINK_FAILURE) {
-			fprintf(stderr, " Couldn't set the link layer\n");
-			return FAILURE;
 		}
 	}
 

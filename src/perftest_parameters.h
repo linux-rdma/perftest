@@ -89,7 +89,8 @@
 #define HELP_EXIT	 (11)
 #define MTU_FIX	     (7)
 #define MAX_SIZE     (8388608)
-#define LINK_FAILURE (4)
+#define LINK_FAILURE (-1)
+#define LINK_UNSPEC (-2)
 #define MAX_OUT_READ_HERMON (16)
 #define MAX_OUT_READ        (4)
 #define UD_ADDITION         (40)
@@ -379,8 +380,8 @@ struct perftest_parameters {
 	float				limit_msgrate;
 	uint32_t			rem_ud_qpn;
 	uint32_t			rem_ud_qkey;
-	uint8_t				link_type;
-	uint8_t				link_type2;
+	int8_t				link_type;
+	int8_t				link_type2;
 	MachineType			machine;
 	PrintDataSide			side;
 	VerbType			verb;
@@ -515,7 +516,20 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
  *
  * Return Value :"IB", "Etherent" or "Unknown".
  */
-const char *link_layer_str(uint8_t link_layer);
+const char *link_layer_str(int8_t link_layer);
+
+/* str_link_layer
+ *
+ * Description : Try to parse a string into a verbs link layer type.
+ *
+ * link_layer   : (According to verbs.h) :
+ *      "IB"       -> IBV_LINK_LAYER_INFINIBAND.
+ *      "Ethernet" -> IBV_LINK_LAYER_ETHERNET.
+ *      otherwise  -> LINK_FAILURE.
+ *
+ * Return Value : IBV_LINK_LAYER or LINK_FAILURE
+ */
+const int str_link_layer(const char *str);
 
 /* parser
  *
