@@ -200,17 +200,6 @@ struct pingpong_context {
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
 
-/* link_layer_str
- *
- * Description : Determines the link layer type (IB or ETH).
- *
- * Parameters :
- *  link_layer - The link layer
-
- * Return Value : 0 upon success. -1 if it fails.
- */
-const char *link_layer_str(uint8_t link_layer);
-
 /* check_add_port
  *
  * Description : Creating a service struct from a given port and servername.
