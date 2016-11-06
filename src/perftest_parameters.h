@@ -231,7 +231,7 @@
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
 /* The type of the test */
-typedef enum { LAT , BW } TestType;
+typedef enum { LAT , BW , LAT_BY_BW } TestType;
 
 /* The type of the machine ( server or client actually). */
 typedef enum { SERVER , CLIENT , UNCHOSEN} MachineType;
@@ -456,6 +456,7 @@ struct perftest_parameters {
 	int				disable_fcs;
 	int				flows;
 	int				flows_burst;
+	uint32_t			reply_every;
 };
 
 struct report_options {

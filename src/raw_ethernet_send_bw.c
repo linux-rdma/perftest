@@ -201,32 +201,10 @@ int main(int argc, char *argv[])
 			print_spec(flow_rules[flow_index], &user_param);
 	}
 
-	/* Create (if necessary) the rdma_cm ids and channel. */
-	if (user_param.work_rdma_cm == ON) {
-
-		if (create_rdma_resources(&ctx, &user_param)) {
-			fprintf(stderr, " Unable to create the rdma_resources\n");
-			return FAILURE;
-		}
-
-		if (user_param.machine == CLIENT) {
-			if (rdma_client_connect(&ctx, &user_param)) {
-				fprintf(stderr, "Unable to perform rdma_client function\n");
-				return FAILURE;
-			}
-
-		} else if (rdma_server_connect(&ctx, &user_param)) {
-			fprintf(stderr, "Unable to perform rdma_client function\n");
-			return FAILURE;
-		}
-
-	} else {
-
-		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
-		if (ctx_init(&ctx, &user_param)) {
-			fprintf(stderr, " Couldn't create IB resources\n");
-			return FAILURE;
-		}
+	/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
+	if (ctx_init(&ctx, &user_param)) {
+		fprintf(stderr, " Couldn't create IB resources\n");
+		return FAILURE;
 	}
 
 	/* build raw Ethernet packets on ctx buffer */
@@ -270,7 +248,7 @@ int main(int argc, char *argv[])
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
 				if ((flow_promisc[qp_index] = ibv_exp_create_flow(ctx.qp[qp_index], &attr)) == NULL) {
 					perror("error");
-					fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+					fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
 				}
 			}
 			#else
@@ -284,7 +262,7 @@ int main(int argc, char *argv[])
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
 				if ((flow_promisc[qp_index] = ibv_create_flow(ctx.qp[qp_index], &attr)) == NULL) {
 					perror("error");
-					fprintf(stderr, "Couldn't attach promiscous rule QP\n");
+					fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
 				}
 			}
 			#endif
@@ -322,12 +300,10 @@ int main(int argc, char *argv[])
 	}
 
 	/* Prepare IB resources for rtr/rts. */
-	if (user_param.work_rdma_cm == OFF) {
-		if (ctx_connect(&ctx, NULL, &user_param, NULL)) {
-			fprintf(stderr, " Unable to Connect the HCA's through the link\n");
-			DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-			return FAILURE;
-		}
+	if (ctx_connect(&ctx, NULL, &user_param, NULL)) {
+		fprintf(stderr, " Unable to Connect the HCA's through the link\n");
+		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
+		return FAILURE;
 	}
 
 	if (user_param.raw_mcast) {

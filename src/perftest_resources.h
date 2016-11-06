@@ -562,7 +562,35 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  *  ctx     - Test Context.
  *  user_param  - user_parameters struct for this test.
  */
-int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+int run_iter_lat_send(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
+/* run_iter_lat_burst
+ *
+ * Description :
+ *
+ *  This is the latency test function for SEND verb latency test in burst mode
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_param  - user_parameters struct for this test.
+ */
+
+int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
+/* run_iter_lat_burst_server
+ *
+ * Description :
+ *
+ *  This is the latency test function for server side latency test in burst mode
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_param  - user_parameters struct for this test.
+ */
+
+int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
 
 /* ctx_get_local_lid .
  *
@@ -578,7 +606,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
  *
  * Return Value : The Lid itself. (No error values).
  */
-uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
+uint16_t ctx_get_local_lid(struct ibv_context *context, int ib_port);
 
 /* ctx_notify_events
  *

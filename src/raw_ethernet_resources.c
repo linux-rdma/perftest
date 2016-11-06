@@ -587,7 +587,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	eth_header = buf;
 
-	if (user_param->tst == BW) {
+	if (user_param->tst == BW || user_param->tst == LAT_BY_BW) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
 			print_flag = PRINT_ON;

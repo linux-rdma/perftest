@@ -230,7 +230,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -h, --help ");
 	printf(" Show this help screen.\n");
 
-	if (tst == LAT) {
+	if (tst == LAT || tst == LAT_BY_BW) {
 		printf("  -H, --report-histogram ");
 		printf(" Print out all results (default print summary only)\n");
 	}
@@ -243,7 +243,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Max size of message to be sent in inline\n");
 	}
 
-	if (tst == BW) {
+	if (tst == BW || tst == LAT_BY_BW) {
 		printf("  -l, --post_list=<list size>");
 		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
 	}
@@ -310,7 +310,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -S, --sl=<sl> ");
 	printf(" SL (default %d)\n",DEF_SL);
 
-	if (tst == BW) {
+	if (tst == BW || tst == LAT_BY_BW) {
 		printf("  -t, --tx-depth=<dep> ");
 		printf(" Size of tx queue (default %d)\n",tst == LAT ? DEF_TX_LAT : DEF_TX_BW);
 	}
@@ -321,7 +321,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -u, --qp-timeout=<timeout> ");
 	printf(" QP timeout, timeout value is 4 usec * 2 ^(timeout), default %d\n",DEF_QP_TIME);
 
-	if (tst == LAT) {
+	if (tst == LAT || tst == LAT_BY_BW) {
 		printf("  -U, --report-unsorted ");
 		printf(" (implies -H) print out unsorted results (default sorted)\n");
 	}
@@ -454,7 +454,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Set verb type: normal, accl. Default is normal.\n");
 	#endif
 
-	if (tst == BW) {
+	if (tst == BW || tst == LAT_BY_BW) {
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
 
@@ -466,10 +466,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n	 Note (1): pps not supported with HW limit.\n	 Note (2): When using rate_limit_type=PP, rate units is forced to MB/sec.\n");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n");
+		printf("      Note (1): pps not supported with HW limit.\n");
+		printf("      Note (2): When using PP rate_units is forced to Kbps.\n");
 
 		printf("      --rate_limit_type=<type>");
-		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit is specified HW limit is Default.\n");
+		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit Not is specified HW limit is Default.\n");
+		printf("      Note (1) in Latency under load test SW rate limit is forced\n");
 
 	}
 
@@ -569,7 +572,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->link_type		= LINK_UNSPEC;
 	user_param->link_type2		= LINK_UNSPEC;
 	user_param->size		= (user_param->tst == BW ) ? DEF_SIZE_BW : DEF_SIZE_LAT;
-	user_param->tx_depth		= (user_param->tst == BW ) ? DEF_TX_BW : DEF_TX_LAT;
+	user_param->tx_depth		= (user_param->tst == BW || user_param->tst == LAT_BY_BW ) ? DEF_TX_BW : DEF_TX_LAT;
 	user_param->qp_timeout		= DEF_QP_TIME;
 	user_param->test_method		= RUN_REGULAR;
 	user_param->cpu_freq_f		= OFF;
@@ -626,6 +629,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->wait_destroy	= 0;
 	user_param->is_old_raw_eth_param = 0;
 	user_param->is_new_raw_eth_param = 0;
+	user_param->reply_every		= 1;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
@@ -842,6 +846,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 				user_param->rx_depth = (user_param->iters < UC_MAX_RX) ? user_param->iters : UC_MAX_RX;
 			}
 		}
+	}
+
+	if (user_param->tst == LAT_BY_BW && user_param->rate_limit_type == DISABLE_RATE_LIMIT) {
+		if (user_param->output == FULL_VERBOSITY)
+			printf("rate_limit type is forced to SW.\n");
+		user_param->rate_limit_type = SW_RATE_LIMIT;
 	}
 
 	if (user_param->cq_mod > user_param->tx_depth) {
@@ -1119,7 +1129,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->srq_exists = 1;
 
 	if (user_param->burst_size > 0) {
-		if (user_param->rate_limit_type == DISABLE_RATE_LIMIT) {
+		if (user_param->rate_limit_type == DISABLE_RATE_LIMIT && user_param->tst != LAT_BY_BW ) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Can't enable burst mode when rate limiter is off\n");
 			exit(1);
@@ -1188,7 +1198,27 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->rate_limit = user_param->rate_limit * 8 * 1024;
 	}
 
-	if (user_param->output != -1) {
+	if (user_param->tst == LAT_BY_BW) {
+		if ( user_param->test_type == DURATION) {
+			fprintf(stderr, "Latency under load test is currently support iteration mode only.\n");
+			exit(1);
+		}
+		if (user_param->num_of_qps > 1) {
+			fprintf(stderr,"Multi QP is not supported in LAT under load test\n");
+			exit(1);
+		}
+		if (user_param->duplex) {
+			fprintf(stderr,"Bi-Dir is not supported in LAT under load test\n");
+			exit(1);
+		}
+		if(user_param->output != FULL_VERBOSITY && user_param->output != OUTPUT_LAT) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Output verbosity level for BW can be latency\n");
+			exit(1);
+		}
+	}
+
+	if (user_param->output != FULL_VERBOSITY) {
 		if (user_param->tst == BW && !(user_param->output == OUTPUT_BW || user_param->output == OUTPUT_MR)) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Output verbosity level for BW can be: bandwidth, message_rate\n");
@@ -1673,7 +1703,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int remote_port_flag = 0;
 	static int local_mac_flag = 0;
 	static int remote_mac_flag = 0;
-
+	static int reply_every_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -1792,6 +1822,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
 			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
+			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -1932,15 +1963,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  return 1;
 				  } break;
 			case 'H':
-				  if (user_param->tst != LAT) {
-					  fprintf(stderr," Availible only on Latency tests\n");
+				  if (user_param->tst == BW) {
+					  fprintf(stderr," Available only on Latency tests\n");
 					  return 1;
 				  }
 				  user_param->r_flag->histogram = ON;
 				  break;
 			case 'U':
-				  if (user_param->tst != LAT) {
-					  fprintf(stderr," Availible only on Latency tests\n");
+				  if (user_param->tst == BW) {
+					fprintf(stderr," is Available only on Latency tests\n");
 					  return 1;
 				  }
 				  user_param->r_flag->unsorted = ON;
@@ -2207,6 +2238,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					local_port_flag = 0;
+				}
+				if (reply_every_flag) {
+					user_param->reply_every = strtol(optarg, NULL, 0);
+					reply_every_flag = 0;
 				}
 				break;
 
@@ -2810,22 +2845,23 @@ static int cycles_compare(const void *aptr, const void *bptr)
 /******************************************************************************
  *
  ******************************************************************************/
-#define cycles_to_usec(sample, cycles_to_units, factor) ((((sample) / (cycles_to_units)) / (factor)))
 
 void print_report_lat (struct perftest_parameters *user_param)
 {
 
 	int i;
 	int rtt_factor;
-	double cycles_to_units, temp_var, pow_var;
+	double cycles_to_units, cycles_rtt_quotient, temp_var, pow_var;
 	cycles_t median ;
 	cycles_t *delta = NULL;
 	const char* units;
 	double latency, stdev, average_sum = 0 , average, stdev_sum = 0;
-	int iters_99,iters_99_9;
+	int iters_99, iters_99_9;
+	int measure_cnt;
 
+	measure_cnt = (user_param->tst == LAT) ? user_param->iters : (user_param->iters) / user_param->reply_every;
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
-	ALLOCATE(delta,cycles_t,user_param->iters - 1);
+	ALLOCATE(delta, cycles_t, measure_cnt);
 
 	if (user_param->r_flag->cycles) {
 		cycles_to_units = 1;
@@ -2835,40 +2871,48 @@ void print_report_lat (struct perftest_parameters *user_param)
 		units = "usec";
 	}
 
-	for (i = 0; i < user_param->iters - 1; ++i)
-		delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
-
-	if (user_param->r_flag->unsorted) {
-		printf("#, %s\n", units);
-		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, cycles_to_usec(delta[i], cycles_to_units, rtt_factor));
+	if (user_param->tst == LAT) {
+		for (i = 0; i < measure_cnt - 1; ++i) {
+			delta[i] = user_param->tposted[i + 1] - user_param->tposted[i];
+		}
+	} else if (user_param->tst == LAT_BY_BW) {
+		for (i = 0; i < measure_cnt; ++i) {
+			delta[i] = user_param->tcompleted[i] - user_param->tposted[i];
+		}
+	}
+	else {
+		fprintf(stderr,"print report LAT is support in LAT and LAT_BY_BW tests only\n");
+		exit(1);
 	}
 
-	qsort(delta, user_param->iters - 1, sizeof *delta, cycles_compare);
+	cycles_rtt_quotient = cycles_to_units / rtt_factor;
+	if (user_param->r_flag->unsorted) {
+		printf("#, %s\n", units);
+		for (i = 0; i < measure_cnt; ++i)
+			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
+	}
 
-	median = get_median(user_param->iters - 1, delta);
+	qsort(delta, measure_cnt, sizeof *delta, cycles_compare);
 
-	iters_99 = ceil((user_param->iters - 1 )*0.99);
-	iters_99_9 = ceil((user_param->iters - 1)*0.999);
+	median = get_median(measure_cnt, delta);
 
 	/* calcualte average sum on sorted array*/
-	for (i = 0; i < user_param->iters - 1; ++i)
-		average_sum += cycles_to_usec(delta[i], cycles_to_units, rtt_factor);
+	for (i = 0; i < measure_cnt; ++i)
+		average_sum += (delta[i] / cycles_rtt_quotient);
 
-	average = average_sum / (user_param->iters - 1);
+	average = average_sum / measure_cnt;
 
 	/* Calculate stdev by variance*/
-	for (i = 0; i < user_param->iters - 1; ++i) {
-		temp_var = average - cycles_to_usec(delta[i], cycles_to_units, rtt_factor);
+	for (i = 0; i < measure_cnt; ++i) {
+		temp_var = average - (delta[i] / cycles_rtt_quotient);
 		pow_var = pow(temp_var, 2 );
 		stdev_sum += pow_var;
 	}
-	stdev = sqrt(stdev_sum / (user_param->iters));
 
 	if (user_param->r_flag->histogram) {
 		printf("#, %s\n", units);
-		for (i = 0; i < user_param->iters - 1; ++i)
-			printf("%d, %g\n", i + 1, cycles_to_usec(delta[i], cycles_to_units, rtt_factor));
+		for (i = 0; i < measure_cnt; ++i)
+			printf("%d, %g\n", i + 1, delta[i] / cycles_rtt_quotient);
 	}
 
 	if (user_param->r_flag->unsorted || user_param->r_flag->histogram) {
@@ -2879,7 +2923,11 @@ void print_report_lat (struct perftest_parameters *user_param)
 		}
 	}
 
-	latency = cycles_to_usec(median, cycles_to_units, rtt_factor);
+	latency = median / cycles_rtt_quotient;
+	stdev = sqrt(stdev_sum / measure_cnt);
+	iters_99 = ceil((measure_cnt - 1 ) * 0.99);
+	iters_99_9 = ceil((measure_cnt - 1) * 0.999);
+
 
 	if (user_param->output == OUTPUT_LAT)
 		printf("%lf\n",average);
@@ -2887,13 +2935,13 @@ void print_report_lat (struct perftest_parameters *user_param)
 		printf(REPORT_FMT_LAT,
 				(unsigned long)user_param->size,
 				user_param->iters,
-				cycles_to_usec(delta[0], cycles_to_units, rtt_factor),
-				cycles_to_usec(delta[user_param->iters - 2], cycles_to_units, rtt_factor),
+				delta[0] / cycles_rtt_quotient,
+				delta[user_param->iters - 2] / cycles_rtt_quotient,
 				latency,
 				average,
 				stdev,
-				cycles_to_usec(delta[iters_99], cycles_to_units, rtt_factor),
-				cycles_to_usec(delta[iters_99_9], cycles_to_units, rtt_factor));
+				delta[iters_99] / cycles_rtt_quotient,
+				delta[iters_99_9] / cycles_rtt_quotient);
 		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 
