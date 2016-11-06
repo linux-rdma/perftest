@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 	 * Raw Ethernet Send Latency Test
 	 */
 	user_param.verb    = SEND;
-	user_param.tst     = LAT;
+	user_param.tst     = LAT_BY_BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 	user_param.connection_type = RawEth;
 	user_param.r_flag  = &report;
@@ -169,6 +169,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+
 	/* attaching the qp to the spec */
 	for (i = 0; i < user_param.flows; i++) {
 		#ifdef HAVE_RAW_ETH_EXP
@@ -213,7 +214,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* build ONE Raw Ethernet packets on ctx buffer */
-	create_raw_eth_pkt(&user_param, &ctx, ctx.buf[0], &my_dest_info , &rem_dest_info);
+	create_raw_eth_pkt(&user_param, &ctx, (void*)ctx.buf[0], &my_dest_info , &rem_dest_info);
 
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
@@ -228,7 +229,6 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-
 	ctx_set_send_wqes(&ctx,&user_param,NULL);
 
 	if (ctx_set_recv_wqes(&ctx,&user_param)) {
@@ -237,15 +237,20 @@ int main(int argc, char *argv[])
 	}
 
 	/* latency test function for SEND verb latency test. */
-	if (run_iter_lat_send(&ctx, &user_param)) {
-		return FAILURE;
+	if (user_param.machine == CLIENT) {
+		if (run_iter_lat_burst(&ctx, &user_param))
+			return FAILURE;
+	}
+	else {
+		if (run_iter_lat_burst_server(&ctx, &user_param))
+			return FAILURE;
 	}
 
 	/* print report (like print_report_bw) in the correct format
 	 * (as set before: FMT_LAT or FMT_LAT_DUR)
 	 */
-	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) :
-		print_report_lat_duration(&user_param);
+	if (user_param.machine == CLIENT)
+		print_report_lat(&user_param);
 
 	/* destory promisc flow */
 	if (user_param.use_promiscuous) {
