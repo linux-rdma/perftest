@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* build ONE Raw Ethernet packets on ctx buffer */
-	create_raw_eth_pkt(&user_param,&ctx, &my_dest_info , &rem_dest_info);
+	create_raw_eth_pkt(&user_param, &ctx, ctx.buf[0], &my_dest_info , &rem_dest_info);
 
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);

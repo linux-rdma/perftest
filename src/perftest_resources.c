@@ -767,7 +767,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 							|| ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) ||
 					user_param->connection_type == UD) && (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
 			if (ibv_destroy_ah(ctx->ah[i])) {
-				fprintf(stderr, "failed to destroy AH\n");
+				fprintf(stderr, "Failed to destroy AH\n");
 				test_result = 1;
 			}
 		}
@@ -775,7 +775,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		if (user_param->connection_type == DC && ((!(user_param->duplex || user_param->tst == LAT)
 						&& (user_param->machine == SERVER)) || ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) {
 			if (ibv_exp_destroy_dct(ctx->dct[i])) {
-				fprintf(stderr, "failed to destroy dct\n");
+				fprintf(stderr, "Failed to destroy dct\n");
 				test_result = 1;
 			}
 			if ( i == user_param->num_of_qps -1 )
@@ -783,7 +783,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		} else
 		#endif
 		if (ibv_destroy_qp(ctx->qp[i])) {
-			fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
+			fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
 			test_result = 1;
 		}
 	}
@@ -791,13 +791,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 	if (user_param->use_rss) {
 		if (user_param->connection_type == UD && (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
 			if (ibv_destroy_ah(ctx->ah[0])) {
-				fprintf(stderr, "failed to destroy AH\n");
+				fprintf(stderr, "Failed to destroy AH\n");
 				test_result = 1;
 			}
 		}
 
 		if (ibv_destroy_qp(ctx->qp[0])) {
-			fprintf(stderr, " Couldn't destroy QP - %s\n",strerror(errno));
+			fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
 			test_result = 1;
 		}
 	}
@@ -825,14 +825,14 @@ int destroy_ctx(struct pingpong_context *ctx,
 	#endif
 
 	if (ibv_destroy_cq(ctx->send_cq)) {
-		fprintf(stderr, "failed to destroy CQ\n");
+		fprintf(stderr, "Failed to destroy CQ - %s\n", strerror(errno));
 		test_result = 1;
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel)) ) {
 		if (!(user_param->connection_type == DC && user_param->machine == SERVER)) {
 			if (ibv_destroy_cq(ctx->recv_cq)) {
-				fprintf(stderr, "failed to destroy CQ\n");
+				fprintf(stderr, "Failed to destroy CQ - %s\n", strerror(errno));
 				test_result = 1;
 			}
 		}
@@ -840,7 +840,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	for (i = 0; i < dereg_counter; i++) {
 		if (ibv_dereg_mr(ctx->mr[i])) {
-			fprintf(stderr, "failed to deregister MR #%d\n", i+1);
+			fprintf(stderr, "Failed to deregister MR #%d\n", i+1);
 			test_result = 1;
 		}
 	}
@@ -856,20 +856,20 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	if (ibv_dealloc_pd(ctx->pd)) {
-		fprintf(stderr, "failed to deallocate PD\n");
+		fprintf(stderr, "Failed to deallocate PD - %s\n", strerror(errno));
 		test_result = 1;
 	}
 
 	if (ctx->channel) {
 		if (ibv_destroy_comp_channel(ctx->channel)) {
-			fprintf(stderr, "failed to close event channel\n");
+			fprintf(stderr, "Failed to close event channel\n");
 			test_result = 1;
 		}
 	}
 	if (user_param->use_rdma_cm == OFF) {
 
 		if (ibv_close_device(ctx->context)) {
-			fprintf(stderr, "failed to close device context\n");
+			fprintf(stderr, "Failed to close device context\n");
 			test_result = 1;
 		}
 	}

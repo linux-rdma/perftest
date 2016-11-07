@@ -242,9 +242,9 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	ALLOCATE(my_dest, struct pingpong_dest, user_param.num_of_qps);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
-	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	ALLOCATE(rem_dest, struct pingpong_dest, user_param.num_of_qps);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
