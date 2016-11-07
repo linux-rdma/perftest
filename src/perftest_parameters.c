@@ -282,8 +282,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -p, --port=<port> ");
 	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
 
-	if (tst == BW  && connection_type != RawEth) {
-		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n",DEF_NUM_QPS);
+	if (tst == BW ) {
+		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n", DEF_NUM_QPS);
 	}
 
 	if (tst == BW) {
@@ -907,11 +907,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->num_of_qps > 1 && !user_param->use_rss) {
-			printf(RESULT_LINE);
-			fprintf(stdout," Raw Ethernet test supports only 1 QP for now\n");
-			exit(1);
-		}
 		if (user_param->use_rdma_cm == ON || user_param->work_rdma_cm == ON) {
 			fprintf(stderr," RDMA CM isn't supported for Raw Ethernet tests\n");
 			exit(1);
@@ -1759,10 +1754,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'x': CHECK_VALUE(user_param->gid_index, uint8_t, MIN_GID_IX, MAX_GID_IX, "Gid index");
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
-			case 'q':
-				  if (user_param->tst != BW) {
-					  fprintf(stderr," Multiple QPs only available on bw tests\n");
-					  return 1;
+			case 'q': if (user_param->tst != BW) {
+					fprintf(stderr," Multiple QPs only available on bw tests\n");
+					return 1;
 				  }
 				  CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
 				  break;

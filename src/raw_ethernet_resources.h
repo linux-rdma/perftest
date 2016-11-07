@@ -187,11 +187,13 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
  *	Parameters:
  *				user_param - user_parameters struct for this test
  *				ctx - Test Context.
+ *				buf - The QP's packet buffer.
  *				my_dest_info - ethernet information of me
  *				rem_dest_info - ethernet information of the remote
  */
 void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		struct pingpong_context 	*ctx ,
+		void		 		*eth_header,
 		struct raw_ethernet_info	*my_dest_info,
 		struct raw_ethernet_info	*rem_dest_info);
 
