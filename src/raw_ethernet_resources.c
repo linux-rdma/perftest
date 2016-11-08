@@ -1046,7 +1046,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				#endif
 				if(err) {
 					fprintf(stderr, "Couldn't post send: qp %d scnt=%lu \n", index, ctx->scnt[index]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
@@ -1090,7 +1090,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr, "Failed to notify events to CQ");
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -1129,7 +1129,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -1167,7 +1167,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 			while (rwqe_sent - totccnt < user_param->rx_depth) {    /* Post more than buffer_size */
@@ -1177,7 +1177,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (user_param->verb_type == ACCL_INTF) {
 						if (ctx->qp_burst_family[0]->recv_burst(ctx->qp[0], ctx->rwr[0].sg_list, 1)) {
 							fprintf(stderr, "Couldn't post recv burst (accelerated verbs).\n");
-							return_value = 1;
+							return_value = FAILURE;
 							goto cleaning;
 						}
 					} else {

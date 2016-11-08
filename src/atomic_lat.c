@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if(user_param.use_xrc)
@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return 1;
+		return FAILURE;
 	}
 
 	#ifdef HAVE_MASKED_ATOMICS
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 
 	if (user_param.masked_atomics && (user_param.work_rdma_cm || user_param.use_rdma_cm)) {
 		fprintf(stderr, "atomic test is not supported with -R/-z flag (rdma_cm) with this device.\n");
-		return 1;
+		return FAILURE;
 	}
 
 	#endif
@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* Print basic test information. */
@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return 1;
+		return FAILURE;
 	}
 
 	user_comm.rdma_params->side = REMOTE;
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return 1;
+			return FAILURE;
 		}
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -215,28 +215,28 @@ int main(int argc, char *argv[])
 		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
 			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
 			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
 	/* An additional handshake is required after moving qp to RTR. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* Only Client post read request. */
 	if (user_param.machine == SERVER) {
 		if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
-			return 1;
+			return FAILURE;
 		}
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -265,7 +265,7 @@ int main(int argc, char *argv[])
 
 	if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {
