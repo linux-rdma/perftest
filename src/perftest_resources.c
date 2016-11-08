@@ -2801,7 +2801,7 @@ static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct per
 				if (swc[i].status != IBV_WC_SUCCESS) {
 					fprintf(stderr, "Poll send CQ error status=%u qp %d\n",
 							swc[i].status,(int)swc[i].wr_id);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 				send_cnt--;
@@ -2809,7 +2809,7 @@ static int clean_scq_credit(int send_cnt,struct pingpong_context *ctx,struct per
 
 		} else if (sne < 0) {
 			fprintf(stderr, "Poll send CQ to clean credit failed ne=%d\n",sne);
-			return_value = 1;
+			return_value = FAILURE;
 			goto cleaning;
 		}
 	} while(send_cnt > 0);
@@ -2860,7 +2860,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 
 			if (err) {
 				fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -2871,14 +2871,14 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 			if (ne > 0) {
 
 				if (wc.status != IBV_WC_SUCCESS) {
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
 				warmindex -= user_param->post_list;
 
 			} else if (ne < 0) {
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 
@@ -2950,7 +2950,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->test_type == DURATION && user_param->state != START_STATE && user_param->margin > 0) {
 		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
 		fprintf(stderr, "Please increase margin or decrease tx_depth\n");
-		return_value = 1;
+		return_value = FAILURE;
 		goto cleaning;
 	}
 
@@ -2972,7 +2972,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				break;
 			default:
 				fprintf(stderr, " Failed: Unknown rate limit units\n");
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 		}
 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
@@ -3060,7 +3060,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 				/* if we have more than single flow and the burst iter is the last one */
@@ -3137,7 +3137,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				if (user_param->use_event) {
 					if (ctx_notify_events(ctx->channel)) {
 						fprintf(stderr, "Couldn't request CQ notification\n");
-						return_value = 1;
+						return_value = FAILURE;
 						goto cleaning;
 					}
 				}
@@ -3157,7 +3157,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						if (user_param->verb_type != ACCL_INTF) {
 							if (wc[i].status != IBV_WC_SUCCESS) {
 								NOTIFY_COMP_ERROR_SEND(wc[i],totscnt,totccnt);
-								return_value = 1;
+								return_value = FAILURE;
 								goto cleaning;
 							}
 						}
@@ -3182,7 +3182,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				} else if (ne < 0) {
 					fprintf(stderr, "poll CQ failed %d\n",ne);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 					}
 		}
@@ -3269,7 +3269,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 		if (user_param->use_event) {
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr ," Failed to notify events to CQ");
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -3305,7 +3305,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						if (wc[i].status != IBV_WC_SUCCESS) {
 
 							NOTIFY_COMP_ERROR_RECV(wc[i],rcnt_for_qp[wc_id]);
-							return_value = 1;
+							return_value = FAILURE;
 							goto cleaning;
 						}
 					}
@@ -3324,7 +3324,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						if (user_param->verb_type == ACCL_INTF) {
 							if (ctx->qp_burst_family[wc_id]->recv_burst(ctx->qp[wc_id], ctx->rwr[wc_id].sg_list, 1)) {
 								fprintf(stderr, "Couldn't post recv burst (accelerated verbs).\n");
-								return_value = 1;
+								return_value = FAILURE;
 								goto cleaning;
 							}
 						} else {
@@ -3332,7 +3332,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							if (user_param->use_srq) {
 								if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc_id],&bad_wr_recv)) {
 									fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n", wc_id,rcnt);
-									return_value = 1;
+									return_value = FAILURE;
 									goto cleaning;
 								}
 
@@ -3381,7 +3381,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
 													swc[j].status,(int)swc[j].wr_id,
 													rcnt_for_qp[swc[j].wr_id],scredit_for_qp[swc[j].wr_id]);
-											return_value = 1;
+											return_value = FAILURE;
 											goto cleaning;
 										}
 										scredit_for_qp[swc[j].wr_id]--;
@@ -3389,14 +3389,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 									}
 								} else if (sne < 0) {
 									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
-									return_value = 1;
+									return_value = FAILURE;
 									goto cleaning;
 								}
 							}
 							if (ibv_post_send(ctx->qp[wc_id],&ctx->ctrl_wr[wc_id],&bad_wr)) {
 								fprintf(stderr,"Couldn't post send qp %d credit = %lu\n",
 										wc_id,rcnt_for_qp[wc_id]);
-								return_value = 1;
+								return_value = FAILURE;
 								goto cleaning;
 							}
 							scredit_for_qp[wc_id]++;
@@ -3410,13 +3410,13 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 		if (ne < 0) {
 			fprintf(stderr, "Poll Receive CQ failed %d\n", ne);
-			return_value = 1;
+			return_value = FAILURE;
 			goto cleaning;
 		}
 		else if (ne == 0) {
 			if (check_alive_data.to_exit) {
 				user_param->check_alive_exited = 1;
-				return_value = 0;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -3428,7 +3428,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 cleaning:
 	if (ctx->send_rcredit) {
 		if (clean_scq_credit(tot_scredit, ctx, user_param))
-			return_value = 1;
+			return_value = FAILURE;
 	}
 
 	check_alive_data.last_totrcnt=0;
@@ -3504,7 +3504,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 				ctx->scnt[index] += user_param->post_list;
@@ -3520,7 +3520,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc[i],ctx->scnt[(int)wc[i].wr_id],ctx->scnt[(int)wc[i].wr_id]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 				ctx->scnt[(int)wc[i].wr_id]--;
@@ -3529,7 +3529,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n",ne);
-			return_value = 1;
+			return_value = FAILURE;
 			goto cleaning;
 		}
 	}
@@ -3576,7 +3576,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					fprintf(stderr,"A completion with Error in run_infinitely_bw_server function");
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
@@ -3584,7 +3584,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 					if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
-						return_value = 1;
+						return_value = FAILURE;
 						goto cleaning;
 					}
 
@@ -3613,7 +3613,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
 													swc[j].status,(int)swc[j].wr_id,
 													rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
-											return_value = 1;
+											return_value = FAILURE;
 											goto cleaning;
 										}
 										ccnt_for_qp[swc[j].wr_id]--;
@@ -3621,14 +3621,14 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 								} else if (sne < 0) {
 									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
-									return_value = 1;
+									return_value = FAILURE;
 									goto cleaning;
 								}
 							}
 							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
 								fprintf(stderr,"Couldn't post send qp %d credit=%lu\n",
 										(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-								return_value = 1;
+								return_value = FAILURE;
 								goto cleaning;
 							}
 							ccnt_for_qp[wc[i].wr_id]++;
@@ -3640,7 +3640,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 		} else if (ne < 0) {
 			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
-			return_value = 1;
+			return_value = FAILURE;
 			goto cleaning;
 		}
 	}
@@ -3766,7 +3766,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
@@ -3801,7 +3801,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -3826,7 +3826,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
@@ -3845,7 +3845,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
-							return_value = 1;
+							return_value = FAILURE;
 							goto cleaning;
 						}
 
@@ -3882,7 +3882,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 									fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%d\n",
 											credit_wc.status,(int)credit_wc.wr_id,
 											rcnt_for_qp[credit_wc.wr_id],scredit_for_qp[credit_wc.wr_id]);
-									return_value = 1;
+									return_value = FAILURE;
 									goto cleaning;
 								}
 
@@ -3904,13 +3904,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 								}
 							} else if (sne < 0) {
 								fprintf(stderr, "Poll send CQ ne=%d\n",sne);
-								return_value = 1;
+								return_value = FAILURE;
 								goto cleaning;
 							}
 						}
 						if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
 							fprintf(stderr,"Couldn't post send: qp%lu credit=%lu\n",wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
-							return_value = 1;
+							return_value = FAILURE;
 							goto cleaning;
 						}
 						scredit_for_qp[wc[i].wr_id]++;
@@ -3927,7 +3927,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		else if (ne == 0) {
 			if (check_alive_data.to_exit) {
 				user_param->check_alive_exited = 1;
-				return_value = 0;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -3938,14 +3938,14 @@ int run_iter_bi(struct pingpong_context *ctx,
 			for (i = 0; i < ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
 				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
 					if (!ctx->send_rcredit) {
 						fprintf(stderr, "Polled RDMA_WRITE completion without recv credit request\n");
-						return_value = 1;
+						return_value = FAILURE;
 						goto cleaning;
 					}
 					scredit_for_qp[wc_tx[i].wr_id]--;
@@ -3984,7 +3984,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (ctx->send_rcredit) {
 		if (clean_scq_credit(tot_scredit, ctx, user_param)) {
-			return_value = 1;
+			return_value = FAILURE;
 			goto cleaning;
 		}
 	}
@@ -4478,7 +4478,7 @@ void check_alive(int sig)
 		if (check_alive_data.is_events) {
 			/* Can't report BW, as we are stuck in event_loop */
 			fprintf(stderr," Due to this issue, Perftest cannot produce a report when in event mode.\n");
-			exit(0);
+			exit(FAILURE);
 		}
 		else {
 			/* exit nice from run_iter function and report known bw/mr */
