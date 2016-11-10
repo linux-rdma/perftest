@@ -568,7 +568,8 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		struct raw_ethernet_info	*my_dest_info,
 		struct raw_ethernet_info	*rem_dest_info)
 {
-	int offset = 0;
+	int pkt_offset = 0;
+	int flow_limit = 0;
 	int i, print_flag = 0;
 	struct ETH_header* eth_header;
 	uint16_t ip_next_protocol = 0;
@@ -582,31 +583,31 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
 	eth_header = (void*)ctx->buf[0];
-
 	if (user_param->tst == BW) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
 			print_flag = PRINT_ON;
-			offset = (ctx->cycle_buffer) * i; /* update the offset to next flow */
-			eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next flow */
+			pkt_offset = ctx->flow_buff_size * i; /* update the offset to next flow */
+			flow_limit = ctx->flow_buff_size * (i+1);
+			eth_header = (void*)ctx->buf[0] + pkt_offset;/* update the eth_header to next flow */
 			/* fill ctx buffer with same packets */
-			while (offset-(ctx->cycle_buffer * i) <= ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
+			while ((flow_limit - INC(ctx->size, ctx->cache_line_size)) >= pkt_offset) {
 				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 						    user_param, eth_type, ip_next_protocol,
-						    print_flag , ctx->size - RAWETH_ADDITION, i);
+						    print_flag, ctx->size - RAWETH_ADDITION, i);
 				print_flag = PRINT_OFF;
-				offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
-				eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next packet in same flow */
+				pkt_offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
+				eth_header = (void*)ctx->buf[0] + pkt_offset;/* update the eth_header to next packet in same flow */
 			}
 		}
 	} else if (user_param->tst == LAT) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
+			pkt_offset = ctx->flow_buff_size * i;
+			eth_header = (void*)ctx->buf[0] + pkt_offset;
 			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 					    user_param, eth_type, ip_next_protocol,
-					    PRINT_ON ,ctx->size - RAWETH_ADDITION, i);
-			offset += INC(ctx->size, ctx->cache_line_size);
-			eth_header = (void*)ctx->buf[0] + offset;
+					    PRINT_ON, ctx->size - RAWETH_ADDITION, i);
 
 		}
 	}

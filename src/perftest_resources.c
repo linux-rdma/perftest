@@ -641,7 +641,6 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 {
 	uint64_t tarr_size;
 	int num_of_qps_factor;
-
 	ctx->cycle_buffer = user_param->cycle_buffer;
 	ctx->cache_line_size = user_param->cache_line_size;
 
@@ -714,8 +713,15 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ctx->size = user_param->size;
 
 	num_of_qps_factor = (user_param->mr_per_qp) ? 1 : user_param->num_of_qps;
-	ctx->buff_size = BUFF_SIZE(ctx->size, ctx->cycle_buffer) * 2 * num_of_qps_factor * user_param->flows;
 
+	/* holds the size of maximum between msg size and cycle buffer,
+	* aligned to cache line,
+	* it is multiply by 2 for send and receive
+	* with reference to number of flows and number of QPs */
+	ctx->buff_size = INC(BUFF_SIZE(ctx->size, ctx->cycle_buffer),
+				 ctx->cache_line_size) * 2 * num_of_qps_factor * user_param->flows;
+	ctx->send_qp_buff_size = ctx->buff_size / num_of_qps_factor / 2;
+	ctx->flow_buff_size = ctx->send_qp_buff_size / user_param->flows;
 	user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
 		ctx->buff_size += ctx->cache_line_size;
@@ -2675,7 +2681,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 		if (!user_param->mr_per_qp) {
 			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[0] +
-				(num_of_qps + k)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+				(num_of_qps + k) * ctx->send_qp_buff_size;
 		} else {
 			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[i];
 		}
@@ -2905,7 +2911,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	struct ibv_send_wr 	*bad_wr = NULL;
 	struct ibv_wc 	   	*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
-
 	/* Rate Limiter*/
 	int 			rate_limit_pps = 0;
 	double 			gap_time = 0;	/* in usec */
@@ -2919,8 +2924,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			wc_id;
 	int			send_flows_index = 0;
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
-	int			flows_burst_iter = 0;
 	int			address_offset = 0;
+	int			flows_burst_iter = 0;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 
@@ -3058,40 +3063,42 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					return_value = 1;
 					goto cleaning;
 				}
-
+				/* if we have more than single flow and the burst iter is the last one */
 				if (user_param->flows != DEF_FLOWS) {
-				/*we inc the address after we post_send , maybe need to skip next If*/
-					if(++flows_burst_iter == user_param->flows_burst) {
-                                                flows_burst_iter = 0;
-                                                if (++send_flows_index == user_param->flows)
-                                                        send_flows_index = 0;
-						address_offset = send_flows_index * ctx->cycle_buffer;
+					if (++flows_burst_iter == user_param->flows_burst) {
+						flows_burst_iter = 0;
+						/* inc the send_flows_index and update the address */
+						if (++send_flows_index == user_param->flows)
+							send_flows_index = 0;
+						address_offset = send_flows_index * ctx->flow_buff_size;
 						ctx->sge_list[0].addr = primary_send_addr + address_offset;
-                                        }
-                                }
+					}
+				}
 
 				/* in multiple flow scenarios we will go to next cycle buffer address in the main buffer*/
 				if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
 					#ifdef HAVE_VERBS_EXP
 					if (user_param->use_exp == 1)
 						increase_loc_addr(ctx->exp_wr[index].sg_list,user_param->size,
-								ctx->scnt[index],ctx->my_addr[index] + address_offset,0,ctx->cache_line_size,ctx->cycle_buffer);
+								ctx->scnt[index], ctx->my_addr[index] + address_offset, 0,
+									ctx->cache_line_size, ctx->cycle_buffer);
 					else
 					#endif
-						increase_loc_addr(ctx->wr[index].sg_list,user_param->size,ctx->scnt[index],
-								ctx->my_addr[index] + address_offset ,0,ctx->cache_line_size,ctx->cycle_buffer);
+						increase_loc_addr(ctx->wr[index].sg_list,user_param->size, ctx->scnt[index],
+								ctx->my_addr[index] + address_offset , 0, ctx->cache_line_size,
+								ctx->cycle_buffer);
 
 					if (user_param->verb != SEND) {
 						#ifdef HAVE_VERBS_EXP
 						if (user_param->use_exp == 1)
-							increase_exp_rem_addr(&ctx->exp_wr[index],user_param->size,
-									ctx->scnt[index],ctx->rem_addr[index],user_param->verb,ctx->cache_line_size,
-									ctx->cycle_buffer);
+							increase_exp_rem_addr(&ctx->exp_wr[index], user_param->size,
+									ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
+									ctx->cache_line_size, ctx->cycle_buffer);
 						else
 						#endif
-							increase_rem_addr(&ctx->wr[index],user_param->size,
-									ctx->scnt[index],ctx->rem_addr[index],user_param->verb,ctx->cache_line_size,
-									ctx->cycle_buffer);
+							increase_rem_addr(&ctx->wr[index], user_param->size,
+									ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
+									ctx->cache_line_size, ctx->cycle_buffer);
 					}
 				}
 
@@ -3302,7 +3309,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							goto cleaning;
 						}
 					}
-
 					rcnt_for_qp[wc_id]++;
 					rcnt++;
 					check_alive_data.current_totrcnt = rcnt;
@@ -3313,7 +3319,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						}
 						user_param->iters++;
 					}
-
 					if (user_param->test_type==DURATION || rcnt_for_qp[wc_id] + size_per_qp <= user_param->iters) {
 						#ifdef HAVE_ACCL_VERBS
 						if (user_param->verb_type == ACCL_INTF) {
@@ -3339,7 +3344,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 								}
 
 							}
-
 							if (user_param->flows != DEF_FLOWS) {
 								if (++recv_flows_burst == user_param->flows_burst) {
 									recv_flows_burst = 0;
@@ -4192,7 +4196,6 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 
 		do {
 			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
-
 			if(ne > 0) {
 				if (wc.status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
@@ -4238,7 +4241,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	cycles_t 		end_cycle, start_gap=0;
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
-
 	if (user_param->connection_type != RawEth) {
 		#ifdef HAVE_VERBS_EXP
 		if (user_param->use_exp == 1) {
@@ -4253,7 +4255,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		#endif
 
 	}
-
 	if (user_param->size <= user_param->inline_size) {
 		#ifdef HAVE_VERBS_EXP
 		if (user_param->use_exp == 1)
@@ -4277,15 +4278,12 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					return 1;
 				}
 			}
-
 			do {
 				ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
-
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
 
 				if (ne > 0) {
-
 					if (firstRx) {
 						set_on_first_rx_packet(user_param);
 						firstRx = 0;
@@ -4298,28 +4296,27 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 
 					rcnt++;
 
-					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE)
+					if (user_param->test_type == DURATION && user_param->state == SAMPLE_STATE)
 						user_param->iters++;
 
 					/*if we're in duration mode or there
 					 * is enough space in the rx_depth,
 					 * post that you received a packet.
 					 */
-					if (user_param->test_type==DURATION || (rcnt + size_per_qp  <= user_param->iters)) {
+					if (user_param->test_type == DURATION || (rcnt + size_per_qp <= user_param->iters)) {
 						if (user_param->use_srq) {
 
-							if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.wr_id,rcnt);
+							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc.wr_id], &bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.wr_id, rcnt);
 								return 1;
 							}
 
 						} else {
-							if (ibv_post_recv(ctx->qp[wc.wr_id],&ctx->rwr[wc.wr_id],&bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv: rcnt=%lu\n",rcnt);
+							if (ibv_post_recv(ctx->qp[wc.wr_id], &ctx->rwr[wc.wr_id], &bad_wr_recv)) {
+								fprintf(stderr, "Couldn't post recv: rcnt=%lu\n", rcnt);
 								return 15;
 							}
 						}
-
 						if (user_param->flows != DEF_FLOWS) {
 							if (++recv_flows_index == user_param->flows) {
 								recv_flows_index = 0;
@@ -4378,16 +4375,14 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
 				return 1;
 			}
-
 			if (user_param->flows != DEF_FLOWS) {
 				if (++send_flows_index == user_param->flows) {
 					send_flows_index = 0;
 					ctx->sge_list[0].addr = primary_send_addr;
 				} else {
-					ctx->sge_list[0].addr += INC(user_param->size, ctx->cache_line_size);
+					ctx->sge_list[0].addr = primary_send_addr + (ctx->flow_buff_size * send_flows_index);
 				}
 			}
-
 			if (poll == 1) {
 
 				struct ibv_wc s_wc;
@@ -4404,8 +4399,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				do {
 					s_ne = ibv_poll_cq(ctx->send_cq, 1, &s_wc);
 				} while (!user_param->use_event && s_ne == 0);
-
-
 
 				if (s_ne < 0) {
 					fprintf(stderr, "poll on Send CQ failed %d\n", s_ne);

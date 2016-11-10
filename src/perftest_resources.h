@@ -149,6 +149,8 @@ struct pingpong_context {
 	uint64_t				*rx_buffer_addr;
 	uint64_t				*rem_addr;
 	uint64_t				buff_size;
+	uint64_t				send_qp_buff_size;
+	uint64_t				flow_buff_size;
 	int					tx_depth;
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
