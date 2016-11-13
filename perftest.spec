@@ -1,6 +1,6 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        3.0
+Version:        3.4
 Release:        4.0
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
