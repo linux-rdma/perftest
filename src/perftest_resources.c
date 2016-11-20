@@ -1634,6 +1634,7 @@ struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
 
 		attr.comp_mask |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
 		attr.max_inl_recv = user_param->inline_recv_size;
+		attr.sq_sig_all = (1 == user_param->cq_mod) ? 1 : 0; //inline receive on requestor must QP's sq_sig_all to be applied
 	}
 
 	#ifdef HAVE_ACCL_VERBS
