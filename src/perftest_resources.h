@@ -727,7 +727,7 @@ struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
 int check_masked_atomics_support(struct pingpong_context *ctx);
 #endif
 
-#ifdef HAVE_PACKET_PACING_EXP
+#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
 int check_packet_pacing_support(struct pingpong_context *ctx);
 #endif
 
