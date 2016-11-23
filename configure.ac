@@ -247,6 +247,13 @@ if [test $HAVE_PACKET_PACING_EXP = yes] && [test $HAVE_VERBS_EXP = yes]; then
 	AC_DEFINE([HAVE_PACKET_PACING_EXP], [1], [Have PACKET_PACING_EXP support])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
+AM_CONDITIONAL([HAVE_PACKET_PACING],[test "x$HAVE_PACKET_PACING" = "xyes"])
+if [test $HAVE_PACKET_PACING = yes]; then
+	AC_DEFINE([HAVE_PACKET_PACING], [1], [Have PACKET_PACING support])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])

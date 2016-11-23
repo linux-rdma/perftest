@@ -459,7 +459,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n	 Note (1): pps not supported with HW limit.\n	 Note (2): When using PP rate_units is forced to Kbps.\n");
+		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n	 Note (1): pps not supported with HW limit.\n	 Note (2): When using rate_limit_type=PP, rate units is forced to MB/sec.\n");
 
 		printf("      --rate_limit_type=<type>");
 		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit is specified HW limit is Default.\n");
@@ -1167,6 +1167,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr,"Packet Pacing is only supported for Raw Ethernet.\n");
 			exit(1);
 		}
+
+		if (user_param->rate_units != MEGA_BYTE_PS) {
+			fprintf(stderr,"Packet Pacing only supports MEGA_BYTE_PS.\n");
+			exit(1);
+		}
+
+		user_param->rate_limit = user_param->rate_limit * 8 * 1024;
 	}
 
 	if (user_param->output != -1) {
