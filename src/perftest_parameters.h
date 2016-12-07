@@ -135,7 +135,7 @@
 
 /* Max and Min allowed values for perftest parameters. */
 #define MIN_TOS		(0)
-#define MAX_TOS		(256)
+#define MAX_TOS		(255)
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (3)
 #define MIN_ITER      (5)
