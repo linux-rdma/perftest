@@ -167,15 +167,14 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 		 * Cpu{cpu-num}ClkTck      : 00000000a9beeee4
 		 */
 		char *s;
-		unsigned val;
 
 		s = strstr(buf, "ClkTck\t: ");
 		if (!s)
 			continue;
 		s += (strlen("ClkTck\t: ") - strlen("0x"));
 		strncpy(s, "0x", strlen("0x"));
-		rc = sscanf(s, "%x", &val);
-		m = val/1000000;
+		rc = sscanf(s, "%lf", &m);
+		m /= 1000000;
 		#else
 		#if defined (__FreeBSD__)
 		rc = sscanf(buf, "hw.clockrate: %lf", &m);
