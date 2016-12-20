@@ -234,15 +234,16 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 	int index=0;
 	fp = fopen(file_name, "r");
 	if (fp != NULL) {
-		fgets(line,100,fp);
-		compress_spaces(line,line);
-		index=get_n_word_string(line,tmp,index,2); /* skip first word */
-		duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
+		if (fgets(line,100,fp) != NULL) {
+			compress_spaces(line,line);
+			index=get_n_word_string(line,tmp,index,2); /* skip first word */
+			duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
 
-		index=get_n_word_string(line,tmp,index,3); /* skip 2 stats */
-		duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
+			index=get_n_word_string(line,tmp,index,3); /* skip 2 stats */
+			duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
 
-		fclose(fp);
+			fclose(fp);
+		}
 	}
 }
 
@@ -3621,7 +3622,6 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
 	int 			single_thread_handler;
-	int 			thread_id;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -3638,7 +3638,10 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	}
 
 	pthread_t print_thread;
-	thread_id = pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set );
+	if (!pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set)){
+		printf("Fail to create thread \n");
+		return FAILURE;
+	}
 
 	alarm(user_param->duration);
 	user_param->iters = 0;
@@ -4912,13 +4915,13 @@ void *handle_signal_print_thread(void *sigmask)
 		rc = sigwait(set, &sig_caught);
 		if (rc != 0){
 			printf("Error when try to wait for SIGALRM\n");
-			return FAILURE;
+			exit(EXIT_FAILURE);
 		}
 		if(sig_caught == SIGALRM)
 				catch_alarm_infintely();
 		else {
 			printf("Unsupported signal caught %d, only signal %d is supported\n", sig_caught, SIGALRM);
-			return FAILURE;
+			exit(EXIT_FAILURE);
 		}
 	}
 

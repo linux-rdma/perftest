@@ -70,7 +70,8 @@ int check_flow_steering_support(char *dev_name)
 	fp = fopen(file_name, "r");
 	if (fp == NULL)
 		return 0;
-	fgets(line,4,fp);
+	if (fgets(line, 4, fp) == NULL)
+		return 0;
 
 	int val = atoi(line);
 	if (val >= 0) {
@@ -342,8 +343,9 @@ static char *etype_str(uint16_t etype)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_ethernet_header(struct ETH_header* p_ethernet_header)
+void print_ethernet_header(void* in_ethernet_header)
 {
+	struct ETH_header* p_ethernet_header = in_ethernet_header;
 	if (NULL == p_ethernet_header) {
 		fprintf(stderr, "ETH_header pointer is Null\n");
 		return;
@@ -373,6 +375,46 @@ void print_ethernet_header(struct ETH_header* p_ethernet_header)
 	char* eth_type = etype_str((ntohs(p_ethernet_header->eth_type)));
 	printf("%-22s|\n",eth_type);
 	printf("|------------------------------------------------------------|\n\n");
+
+}
+/******************************************************************************
+*
+******************************************************************************/
+void print_ethernet_vlan_header(void* in_ethernet_header)
+{
+	struct ETH_vlan_header* p_ethernet_header = in_ethernet_header;
+        if (NULL == p_ethernet_header) {
+                fprintf(stderr, "ETH_header pointer is Null\n");
+                return;
+        }
+
+        printf("**raw ethernet header****************************************\n\n");
+        printf("----------------------------------------------------------------------------\n");
+        printf("| Dest MAC         | Src MAC          |    vlan tag    |   Packet Type     |\n");
+        printf("|--------------------------------------------------------------------------|\n");
+        printf("|");
+        printf(PERF_MAC_FMT,
+                        p_ethernet_header->dst_mac[0],
+                        p_ethernet_header->dst_mac[1],
+                        p_ethernet_header->dst_mac[2],
+                        p_ethernet_header->dst_mac[3],
+                        p_ethernet_header->dst_mac[4],
+                        p_ethernet_header->dst_mac[5]);
+        printf("|");
+        printf(PERF_MAC_FMT,
+                        p_ethernet_header->src_mac[0],
+                        p_ethernet_header->src_mac[1],
+                        p_ethernet_header->src_mac[2],
+                        p_ethernet_header->src_mac[3],
+                        p_ethernet_header->src_mac[4],
+                        p_ethernet_header->src_mac[5]);
+        printf("|");
+        printf("   0x%08x   ",ntohl(p_ethernet_header->vlan_header));
+
+        printf("|");
+        char* eth_type = (ntohs(p_ethernet_header->eth_type) ==  IP_ETHER_TYPE ? "IP" : "DEFAULT");
+        printf("%-19s|\n",eth_type);
+        printf("|--------------------------------------------------------------------------|\n\n");
 
 }
 /******************************************************************************
@@ -490,7 +532,7 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 		return;
 	}
 
-	print_ethernet_header((struct ETH_header*)pkt);
+	user_param->print_eth_func((struct ETH_header*)pkt);
 	if(user_param->is_client_ip || user_param->is_server_ip) {
 		pkt = (void*)pkt + sizeof(struct ETH_header);
 		if (user_param->raw_ipv6)
@@ -523,13 +565,30 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	void* header_buff = NULL;
 	int have_ip_header = user_param->is_client_ip || user_param->is_server_ip;
 	int is_udp_or_tcp = user_param->is_client_port && user_param->is_server_port;
+	int eth_header_size = sizeof(struct ETH_header);
+	static uint32_t vlan_pcp = 0;
+
+	if(user_param->vlan_pcp==VLAN_PCP_VARIOUS) {
+		vlan_pcp++;
+	} else {
+		vlan_pcp = user_param->vlan_pcp;
+	}
 
 	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type);
+
+	if(user_param->vlan_en) {
+		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
+		p_eth_vlan->eth_type = eth_header->eth_type;
+		p_eth_vlan->vlan_header = htonl(VLAN_TPID << 16 |
+								((vlan_pcp & 0x7) << 13) | VLAN_VID | VLAN_CFI << 12);
+		eth_header_size = sizeof(struct ETH_vlan_header);
+		pkt_size -=4;
+	}
 
 	if(have_ip_header) {
 		int offset = is_udp_or_tcp ? 0 : flows_offset;
 
-		header_buff = (void*)eth_header + sizeof(struct ETH_header);
+		header_buff = (void*)eth_header + eth_header_size;
 		if (user_param->raw_ipv6)
 			gen_ipv6_header(header_buff, my_dest_info->ip6,
 					rem_dest_info->ip6, ip_next_protocol,
@@ -574,13 +633,15 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 {
 	int pkt_offset = 0;
 	int flow_limit = 0;
-	int i, print_flag = 0;
+	int i = 0;
+	int print_flag = (user_param->vlan_pcp==VLAN_PCP_VARIOUS) ? PRINT_ON:PRINT_OFF;
 	struct ETH_header* eth_header;
+	uint16_t vlan_tag_size = user_param->vlan_en ? 4 : 0;
 	uint16_t ip_next_protocol = 0;
 	uint16_t eth_type = user_param->is_ethertype ? user_param->ethertype :
 		(user_param->is_client_ip || user_param->is_server_ip ?
 		 (user_param->raw_ipv6) ? IP6_ETHER_TYPE :
-		 IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION));
+		 IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION-vlan_tag_size));
 	if(user_param->is_client_port && user_param->is_server_port)
 		ip_next_protocol = (user_param->tcp ? TCP_PROTOCOL : UDP_PROTOCOL);
 
