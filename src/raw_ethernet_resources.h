@@ -54,6 +54,7 @@ struct raw_ethernet_info {
 };
 
 
+
 /* gen_eth_header .
  * Description :create raw Ethernet header on buffer
  *
@@ -64,13 +65,22 @@ struct raw_ethernet_info {
  *	 	eth_type - IP/or size of ptk
  *
  */
-
 struct ETH_header {
 	uint8_t dst_mac[6];
 	uint8_t src_mac[6];
 	uint16_t eth_type;
 }__attribute__((packed));
 
+struct ETH_vlan_header {
+        uint8_t dst_mac[6];
+        uint8_t src_mac[6];
+        uint32_t vlan_header;
+        uint16_t eth_type;
+}__attribute__((packed));
+
+#define VLAN_TPID (0x8100)
+#define VLAN_VID (0x001)
+#define VLAN_CFI (0)
 
 #if defined(__FreeBSD__)
 #if BYTE_ORDER == BIG_ENDIAN
@@ -148,7 +158,10 @@ void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters*
 #else
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param);
 #endif
-void print_ethernet_header(struct ETH_header* p_ethernet_header);
+//void print_ethernet_header(struct ETH_header* p_ethernet_header);
+void print_ethernet_header(void* p_ethernet_header);
+//void print_ethernet_vlan_header(struct ETH_vlan_header* p_ethernet_header);
+void print_ethernet_vlan_header(void* p_ethernet_header);
 void print_ip_header(struct IP_V4_header* ip_header);
 void print_udp_header(struct UDP_header* udp_header);
 void print_pkt(void* pkt,struct perftest_parameters *user_param);

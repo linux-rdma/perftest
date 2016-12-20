@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #endif
 #include "perftest_parameters.h"
+#include "raw_ethernet_resources.h"
 #include<math.h>
 #define MAC_LEN (17)
 #define ETHERTYPE_LEN (6)
@@ -151,9 +152,10 @@ static int get_cache_line_size()
 		if (fp == NULL) {
 			return DEF_CACHE_LINE_SIZE;
 		}
-		fgets(line,10,fp);
-		size = atoi(line);
-		fclose(fp);
+		if(fgets(line,10,fp) != NULL) {
+			size = atoi(line);
+			fclose(fp);
+		}
 	}
 #endif
 	if (size <= 0)
@@ -544,6 +546,12 @@ void usage_raw_ethernet(TestType tst)
 	printf("  -Z, --server ");
 	printf(" choose server side for the current machine (--server/--client must be selected )\n");
 
+	printf("      --vlan_en ");
+	printf(" insert vlan tag in ethernet header.\n");
+
+	printf("      --vlan_pcp ");
+	printf(" specify vlan_pcp value for vlan tag, 0~7. 8 means different vlan_pcp for each packet\n");
+
 	if (tst != FS_RATE) {
 		printf("  -P, --client ");
 		printf(" choose client side for the current machine (--server/--client must be selected)\n");
@@ -661,6 +669,9 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->is_old_raw_eth_param = 0;
 	user_param->is_new_raw_eth_param = 0;
 	user_param->reply_every		= 1;
+	user_param->vlan_en             = OFF;
+	user_param->vlan_pcp		= 1;
+	user_param->print_eth_func 	= &print_ethernet_header;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
@@ -1754,6 +1765,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int reply_every_flag = 0;
 	static int perform_warm_up_flag = 0;
 	static int use_ooo_flag = 0;
+	static int vlan_en = 0;
+	static int vlan_pcp_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -1875,6 +1888,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
 			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
 			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
+			{ .name = "vlan_en",            .has_arg = 0, .flag = &vlan_en, .val = 1 },
+			{ .name = "vlan_pcp",		.has_arg = 1, .flag = &vlan_pcp_flag, .val = 1 },
 
 			#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
 			{ .name = "use_ooo",		.has_arg = 0, .flag = &use_ooo_flag, .val = 1},
@@ -1950,6 +1965,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  break;
 			case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
 			case 'D': user_param->duration = strtol(optarg, NULL, 0);
+				printf("get the pcpc flag %s\n",optarg);
 				  if (user_param->duration <= 0) {
 					  fprintf(stderr," Duration period must be greater than 0\n");
 					  return 1;
@@ -2308,6 +2324,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->reply_every = strtol(optarg, NULL, 0);
 					reply_every_flag = 0;
 				}
+				if(vlan_pcp_flag) {
+					user_param->vlan_pcp = strtol(optarg, NULL, 0);
+					user_param->vlan_en = ON;
+					if (user_param->vlan_pcp > 8) {
+						fprintf(stderr, "Invalid vlan priority value. Please set a number in 0~8\n");
+						return FAILURE;
+					}
+					vlan_pcp_flag = 0;
+				}
 				break;
 
 			default:
@@ -2470,7 +2495,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 	if (use_ooo_flag)
 		user_param->use_ooo = 1;
-
+	if(vlan_en) {
+		user_param->vlan_en = ON;
+		user_param->print_eth_func = &print_ethernet_vlan_header;
+		vlan_en = 0;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 

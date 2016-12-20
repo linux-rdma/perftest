@@ -167,7 +167,7 @@
 #define MAX_MTU_RAW_ETERNET	(9600)
 #define MIN_FS_PORT		(5000)
 #define MAX_FS_PORT		(65536)
-
+#define VLAN_PCP_VARIOUS        (8)
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
@@ -317,6 +317,29 @@ struct check_alive_data {
 	int to_exit;
 	int is_events;
 };
+
+/* gen_eth_header .
+ * Description :create raw Ethernet header on buffer
+ *
+ * Parameters :
+ *	 	eth_header - Pointer to output
+ *	 	src_mac - source MAC address of the packet
+ *	 	dst_mac - destination MAC address of the packet
+ *	 	eth_type - IP/or size of ptk
+ *
+ *
+struct ETH_header {
+	uint8_t dst_mac[6];
+	uint8_t src_mac[6];
+	uint16_t eth_type;
+}__attribute__((packed));
+
+struct ETH_vlan_header {
+        uint8_t dst_mac[6];
+        uint8_t src_mac[6];
+        uint32_t vlan_header;
+        uint16_t eth_type;
+}__attribute__((packed));*/
 
 struct perftest_parameters {
 
@@ -473,6 +496,10 @@ struct perftest_parameters {
 	uint32_t			reply_every;
 	int				perform_warm_up;
 	int				use_ooo;
+	int                             vlan_en;
+	uint32_t			vlan_pcp;
+	void 				(*print_eth_func)(void*);
+
 };
 
 struct report_options {
