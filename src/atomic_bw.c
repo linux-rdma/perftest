@@ -259,9 +259,11 @@ int main(int argc, char *argv[])
 
 	if (user_param.test_method == RUN_REGULAR || user_param.test_method == RUN_ALL) {
 
-		if (perform_warm_up(&ctx, &user_param)) {
-			fprintf(stderr, "Problems with warm up\n");
-			return FAILURE;
+		if (user_param->perform_warm_up) {
+			if (perform_warm_up(&ctx, &user_param)) {
+				fprintf(stderr, "Problems with warm up\n");
+				return FAILURE;
+			}
 		}
 
 		if (user_param.duplex) {

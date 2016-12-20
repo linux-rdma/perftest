@@ -403,6 +403,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
 	printf(" Latency measurement is Average calculation \n");
 
+	printf("      --perform_warm_up");
+	printf(" Perform some iterations before start measuring in order to warming-up memory cache, valid in Atomic, Read and Write BW tests\n");
+
 	printf("      --pkey_index=<pkey index> PKey index to use for QP\n");
 
 	if ( tst == BW ) {
@@ -672,6 +675,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->disable_fcs		= 0;
 	user_param->flows		= DEF_FLOWS;
 	user_param->flows_burst		= 1;
+	user_param->perform_warm_up	= 0;
 }
 
 /******************************************************************************
@@ -1204,11 +1208,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 		if (user_param->num_of_qps > 1) {
-			fprintf(stderr,"Multi QP is not supported in LAT under load test\n");
+			fprintf(stderr, "Multi QP is not supported in LAT under load test\n");
 			exit(1);
 		}
 		if (user_param->duplex) {
-			fprintf(stderr,"Bi-Dir is not supported in LAT under load test\n");
+			fprintf(stderr, "Bi-Dir is not supported in LAT under load test\n");
 			exit(1);
 		}
 		if(user_param->output != FULL_VERBOSITY && user_param->output != OUTPUT_LAT) {
@@ -1326,6 +1330,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, "Accelerated verbs in perftest does not support Run Infinitely mode for now\n");
 			exit(1);
 		}
+	}
+	if (user_param->perform_warm_up &&
+	    !(user_param->tst == BW &&
+	    (user_param->verb == ATOMIC || user_param->verb == WRITE || user_param->verb == READ))) {
+		fprintf(stderr, "Perform warm up is available in ATOMIC, READ and WRITE BW tests only");
+		exit(1);
 	}
 	#endif
 
@@ -1704,6 +1714,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int local_mac_flag = 0;
 	static int remote_mac_flag = 0;
 	static int reply_every_flag = 0;
+	static int perform_warm_up_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -1823,6 +1834,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
 			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
 			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
+			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -2400,7 +2412,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	if (disable_fcs_flag) {
 		user_param->disable_fcs = 1;
 	}
-
+	if (perform_warm_up_flag) {
+		user_param->perform_warm_up = 1;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
