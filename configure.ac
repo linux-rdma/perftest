@@ -193,10 +193,10 @@ fi
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
-        [int x = IBV_EXP_FLOW_ATTR_SNIFFER;],[HAVE_SNIFFER=yes], [HAVE_SNIFFER=no])
-AM_CONDITIONAL([HAVE_SNIFFER],[test "x$HAVE_SNIFFER" = "xyes"])
-if [test $HAVE_SNIFFER = yes] && [test $HAVE_VERBS_EXP = yes]; then
-        AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
+        [int x = IBV_EXP_FLOW_ATTR_SNIFFER;],[HAVE_SNIFFER_EXP=yes], [HAVE_SNIFFER_EXP=no])
+AM_CONDITIONAL([HAVE_SNIFFER_EXP],[test "x$HAVE_SNIFFER_EXP" = "xyes"])
+if [test $HAVE_SNIFFER_EXP = yes] && [test $HAVE_VERBS_EXP_EXP = yes]; then
+        AC_DEFINE([HAVE_SNIFFER_EXP], [1], [Enable Sniffer Flow Specification])
 fi
 
 AC_TRY_LINK([

@@ -529,7 +529,10 @@ void usage_raw_ethernet(TestType tst)
 	printf("      --promiscuous");
 	printf(" run promiscuous mode.\n");
 
-	#ifdef HAVE_SNIFFER
+	printf("      --reply_every ");
+	printf(" in latency test, receiver pong after number of received pings\n");
+
+	#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
 	printf("      --sniffer");
 	printf(" run sniffer mode.\n");
 	#endif
@@ -1705,7 +1708,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
 			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
-			#ifdef HAVE_SNIFFER
+			#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
 			{ .name = "sniffer",		.has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
 			#endif
 			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},

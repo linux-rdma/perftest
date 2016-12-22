@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 	struct ibv_exp_flow		**flow_create_result;
 	struct ibv_exp_flow_attr	**flow_rules;
 	struct ibv_exp_flow 		**flow_promisc = NULL ;
-	#ifdef HAVE_SNIFFER
+	#ifdef HAVE_SNIFFER_EXP
 	struct ibv_exp_flow 		**flow_sniffer = NULL;
 	#endif
 	#else
@@ -113,12 +113,16 @@ int main(int argc, char *argv[])
 	#ifdef HAVE_RAW_ETH_EXP
         ALLOCATE(flow_create_result, struct ibv_exp_flow*, user_param.flows * user_param.num_of_qps);
         ALLOCATE(flow_rules, struct ibv_exp_flow_attr*, user_param.flows * user_param.num_of_qps);
-        ALLOCATE(flow_sniffer, struct ibv_exp_flow*, user_param.num_of_qps);
-        ALLOCATE(flow_promisc, struct ibv_exp_flow*, user_param.num_of_qps);
-        #else
+	#ifdef HAVE_SNIFFER_EXP
+	ALLOCATE(flow_sniffer, struct ibv_exp_flow*, user_param.num_of_qps);
+	#endif
+	ALLOCATE(flow_promisc, struct ibv_exp_flow*, user_param.num_of_qps);
+	#else
         ALLOCATE(flow_create_result, struct ibv_flow*, user_param.flows * user_param.num_of_qps);
         ALLOCATE(flow_rules, struct ibv_flow_attr*, user_param.flows * user_param.num_of_qps);
-        ALLOCATE(flow_sniffer, struct ibv_flow*, user_param.num_of_qps);
+	#ifdef HAVE_SNIFFER
+	ALLOCATE(flow_sniffer, struct ibv_flow*, user_param.num_of_qps);
+	#endif
         ALLOCATE(flow_promisc, struct ibv_flow*, user_param.num_of_qps);
         #endif
 
@@ -285,7 +289,7 @@ int main(int argc, char *argv[])
 			}
 			#endif
 		}
-		#ifdef HAVE_SNIFFER
+		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
 		if (user_param.use_sniffer) {
 			#ifdef HAVE_RAW_ETH_EXP
 			struct ibv_exp_flow_attr attr = {
@@ -457,7 +461,7 @@ int main(int argc, char *argv[])
 			free(flow_promisc);
 		}
 
-		#ifdef HAVE_SNIFFER
+		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
 		if (user_param.use_sniffer) {
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
 				#ifdef HAVE_RAW_ETH_EXP
