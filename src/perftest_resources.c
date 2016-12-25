@@ -2576,6 +2576,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 	}
 }
 #endif
+#define ATOMIC_QP_OFFSET(qpn) ((((qpn) & 0x7 )*8) + (((qpn & 0x78)>>3) * 256))
 
 /******************************************************************************
  *
@@ -2595,7 +2596,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+	//	ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer)) + ATOMIC_QP_OFFSET(ctx->qp[i]->qp_num);
 
 		if (user_param->mac_fwd) {
 			if (user_param->mr_per_qp) {
@@ -2610,15 +2612,19 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->wr[i*user_param->post_list].wr.rdma.remote_addr   = rem_dest[xrc_offset + i].vaddr;
 
 		else if (user_param->verb == ATOMIC)
-			ctx->wr[i*user_param->post_list].wr.atomic.remote_addr = rem_dest[xrc_offset + i].vaddr;
+			ctx->wr[i*user_param->post_list].wr.atomic.remote_addr = rem_dest[xrc_offset + i].vaddr + ATOMIC_QP_OFFSET(ctx->qp[i]->qp_num);
+			//ctx->wr[i*user_param->post_list].wr.atomic.remote_addr = rem_dest[xrc_offset + i].vaddr;
 
 		if (user_param->tst == BW || user_param->tst == LAT_BY_BW) {
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+			//ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+			ctx->my_addr[i] = (uintptr_t)ctx->buf + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer)) + ATOMIC_QP_OFFSET(ctx->qp[i]->qp_num);
+
 			if (user_param->verb != SEND)
-				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
+				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr + ATOMIC_QP_OFFSET(ctx->qp[i]->qp_num);
+				//ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
 
 		for (j = 0; j < user_param->post_list; j++) {
