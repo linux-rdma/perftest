@@ -263,9 +263,9 @@ int main(int argc, char *argv[])
 			user_param.size = (uint64_t)1 << i;
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-			if (user_param->perform_warm_up) {
-				if(perform_warm_up(&ctx,&user_param)) {
-					fprintf(stderr,"Problems with warm up\n");
+			if (user_param.perform_warm_up) {
+				if(perform_warm_up(&ctx, &user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
 					return FAILURE;
 				}
 			}
@@ -302,9 +302,12 @@ int main(int argc, char *argv[])
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if (user_param.verb != SEND) {
-			if(perform_warm_up(&ctx,&user_param)) {
-				fprintf(stderr,"Problems with warm up\n");
-				return FAILURE;
+
+			if (user_param.perform_warm_up) {
+				if(perform_warm_up(&ctx, &user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
+					return FAILURE;
+				}
 			}
 		}
 
