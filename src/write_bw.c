@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if((user_param.connection_type == DC || user_param.use_xrc) && user_param.duplex) {
@@ -80,14 +80,14 @@ int main(int argc, char *argv[])
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* Getting the relevant context from the device */
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* See if MTU and link type are valid and supported. */
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
-			return 1;
+			return FAILURE;
 		}
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
 		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
 			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
 			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
-			return 1;
+			return FAILURE;
 		}
 
 		if (user_param.output == FULL_VERBOSITY) {
@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 		if (user_param.work_rdma_cm == ON) {
 			if (destroy_ctx(&ctx,&user_param)) {
 				fprintf(stderr, "Failed to destroy resources\n");
-				return 1;
+				return FAILURE;
 			}
 			user_comm.rdma_params->work_rdma_cm = ON;
 			return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
@@ -263,27 +263,29 @@ int main(int argc, char *argv[])
 			user_param.size = (uint64_t)1 << i;
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-			if(perform_warm_up(&ctx,&user_param)) {
-				fprintf(stderr,"Problems with warm up\n");
-				return 1;
+			if (user_param.perform_warm_up) {
+				if(perform_warm_up(&ctx, &user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
+					return FAILURE;
+				}
 			}
 
 			if(user_param.duplex) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-					return 1;
+					return FAILURE;
 				}
 			}
 
 			if(run_iter_bw(&ctx,&user_param)) {
 				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
-				return 1;
+				return FAILURE;
 			}
 
 			if (user_param.duplex && (atof(user_param.version) >= 4.6)) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-					return 1;
+					return FAILURE;
 				}
 			}
 
@@ -300,22 +302,25 @@ int main(int argc, char *argv[])
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if (user_param.verb != SEND) {
-			if(perform_warm_up(&ctx,&user_param)) {
-				fprintf(stderr,"Problems with warm up\n");
-				return 1;
+
+			if (user_param.perform_warm_up) {
+				if(perform_warm_up(&ctx, &user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
+					return FAILURE;
+				}
 			}
 		}
 
 		if(user_param.duplex) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
-			return 1;
+			return FAILURE;
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -346,7 +351,7 @@ int main(int argc, char *argv[])
 
 		if(run_iter_bw_infinitely(&ctx,&user_param)) {
 			fprintf(stderr," Error occured while running infinitely! aborting ...\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -371,17 +376,17 @@ int main(int argc, char *argv[])
 	/* Closing connection. */
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
 		fprintf(stderr,"Error: BW result is below bw limit\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (!user_param.is_msgrate_limit_passed && (user_param.is_limit_bw == ON )) {
 		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
-		return 1;
+		return FAILURE;
 	}
 
 	free(my_dest);
@@ -390,7 +395,7 @@ int main(int argc, char *argv[])
 	if (user_param.work_rdma_cm == ON) {
 		if (destroy_ctx(&ctx,&user_param)) {
 			fprintf(stderr, "Failed to destroy resources\n");
-			return 1;
+			return FAILURE;
 		}
 		user_comm.rdma_params->work_rdma_cm = ON;
 		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);

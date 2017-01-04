@@ -149,7 +149,10 @@ struct pingpong_context {
 	uint64_t				*rx_buffer_addr;
 	uint64_t				*rem_addr;
 	uint64_t				buff_size;
+	uint64_t				send_qp_buff_size;
+	uint64_t				flow_buff_size;
 	int					tx_depth;
+	int					huge_shmid;
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
 	int					is_contig_supported;
@@ -197,17 +200,6 @@ struct pingpong_context {
 /******************************************************************************
  * Perftest resources Methods and interface utilitizes.
  ******************************************************************************/
-
-/* link_layer_str
- *
- * Description : Determines the link layer type (IB or ETH).
- *
- * Parameters :
- *  link_layer - The link layer
-
- * Return Value : 0 upon success. -1 if it fails.
- */
-const char *link_layer_str(uint8_t link_layer);
 
 /* check_add_port
  *
@@ -570,7 +562,35 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
  *  ctx     - Test Context.
  *  user_param  - user_parameters struct for this test.
  */
-int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+int run_iter_lat_send(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
+/* run_iter_lat_burst
+ *
+ * Description :
+ *
+ *  This is the latency test function for SEND verb latency test in burst mode
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_param  - user_parameters struct for this test.
+ */
+
+int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
+/* run_iter_lat_burst_server
+ *
+ * Description :
+ *
+ *  This is the latency test function for server side latency test in burst mode
+ *
+ * Parameters :
+ *
+ *  ctx     - Test Context.
+ *  user_param  - user_parameters struct for this test.
+ */
+
+int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
 
 /* ctx_get_local_lid .
  *
@@ -586,7 +606,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
  *
  * Return Value : The Lid itself. (No error values).
  */
-uint16_t ctx_get_local_lid(struct ibv_context *context,int ib_port);
+uint16_t ctx_get_local_lid(struct ibv_context *context, int ib_port);
 
 /* ctx_notify_events
  *
@@ -725,7 +745,7 @@ struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
 int check_masked_atomics_support(struct pingpong_context *ctx);
 #endif
 
-#ifdef HAVE_PACKET_PACING_EXP
+#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
 int check_packet_pacing_support(struct pingpong_context *ctx);
 #endif
 
@@ -787,4 +807,19 @@ int create_single_mr(struct pingpong_context *ctx,
  */
 int create_mr(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param);
+
+/* alloc_hugapage_region
+ *
+ * Description :
+ *
+ *	Creates hugepage memory Regions for the test.
+ *
+ *	Parameters :
+ *      	ctx - Resources sructure.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int alloc_hugepage_region (struct pingpong_context *ctx);
+
 #endif /* PERFTEST_RESOURCES_H */

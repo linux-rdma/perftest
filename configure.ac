@@ -193,10 +193,10 @@ fi
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
-        [int x = IBV_EXP_FLOW_ATTR_SNIFFER;],[HAVE_SNIFFER=yes], [HAVE_SNIFFER=no])
-AM_CONDITIONAL([HAVE_SNIFFER],[test "x$HAVE_SNIFFER" = "xyes"])
-if [test $HAVE_SNIFFER = yes] && [test $HAVE_VERBS_EXP = yes]; then
-        AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
+        [int x = IBV_EXP_FLOW_ATTR_SNIFFER;],[HAVE_SNIFFER_EXP=yes], [HAVE_SNIFFER_EXP=no])
+AM_CONDITIONAL([HAVE_SNIFFER_EXP],[test "x$HAVE_SNIFFER_EXP" = "xyes"])
+if [test $HAVE_SNIFFER_EXP = yes] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_SNIFFER_EXP], [1], [Enable Sniffer Flow Specification])
 fi
 
 AC_TRY_LINK([
@@ -207,13 +207,30 @@ if [test $HAVE_SNIFFER = yes] && [test $HAVE_VERBS_EXP = no]; then
         AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_device_attr_ex *attr_ex; int x = attr_ex->comp_mask;],[HAVE_EX=yes], [HAVE_EX=no])
+AM_CONDITIONAL([HAVE_EX],[test "x$HAVE_EX" = "xyes"])
+if [test $HAVE_EX = yes]; then
+	AC_DEFINE([HAVE_EX], [1], [Have EX support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_ACCESS_ON_DEMAND;],[HAVE_EX_ODP=yes], [HAVE_EX_ODP=no])
+AM_CONDITIONAL([HAVE_EX_ODP],[test "x$HAVE_EX_ODP" = "xyes"])
+if [test $HAVE_EX_ODP = yes] && [test $HAVE_EX = yes]; then
+        AC_DEFINE([HAVE_EX_ODP], [1], [Have Extended  ODP support])
+fi
+
 AC_TRY_LINK([
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>],
-        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_ODP=yes], [HAVE_ODP=no])
-AM_CONDITIONAL([HAVE_ODP],[test "x$HAVE_ODP" = "xyes"])
-if [test $HAVE_ODP = yes] && [test $HAVE_VERBS_EXP = yes]; then
-        AC_DEFINE([HAVE_ODP], [1], [Have ODP support])
+        [int x = IBV_EXP_ACCESS_ON_DEMAND;],[HAVE_EXP_ODP=yes], [HAVE_EXP_ODP=no])
+AM_CONDITIONAL([HAVE_EXP_ODP],[test "x$HAVE_EXP_ODP" = "xyes"])
+if [test $HAVE_EXP_ODP = yes] ; then
+	if  [test $HAVE_EX_ODP = no] ; then
+		AC_DEFINE([HAVE_EXP_ODP], [1], [Have Experimental ODP support])
+	fi
 fi
 
 if [test "$CUDA_H_PATH" ]; then
@@ -245,6 +262,13 @@ AC_TRY_LINK([#include <infiniband/verbs.h>],
 AM_CONDITIONAL([HAVE_PACKET_PACING_EXP],[test "x$HAVE_PACKET_PACING_EXP" = "xyes"])
 if [test $HAVE_PACKET_PACING_EXP = yes] && [test $HAVE_VERBS_EXP = yes]; then
 	AC_DEFINE([HAVE_PACKET_PACING_EXP], [1], [Have PACKET_PACING_EXP support])
+fi
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
+AM_CONDITIONAL([HAVE_PACKET_PACING],[test "x$HAVE_PACKET_PACING" = "xyes"])
+if [test $HAVE_PACKET_PACING = yes]; then
+	AC_DEFINE([HAVE_PACKET_PACING], [1], [Have PACKET_PACING support])
 fi
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3"

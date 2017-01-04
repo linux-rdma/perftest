@@ -53,15 +53,15 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	struct ibv_port_attr port_attr;
 
 	if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&mcg_params->port_gid)) {
-		return 1;
+		return FAILURE;
 	}
 
 	if (ibv_query_pkey(ctx->context,user_param->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
-		return 1;
+		return FAILURE;
 	}
 
 	if (ibv_query_port(ctx->context,user_param->ib_port,&port_attr)) {
-		return 1;
+		return FAILURE;
 	}
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
@@ -71,7 +71,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 		/* Request for Mcast group create registery in SM. */
 		if (join_multicast_group(SUBN_ADM_METHOD_SET,mcg_params)) {
 			fprintf(stderr,"Couldn't Register the Mcast group on the SM\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 	return 0;
@@ -98,13 +98,13 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		mcg_params->user_mgid = user_param->user_mgid;
 		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_param->machine);
 		if (set_mcast_group(ctx,user_param,mcg_params)) {
-			return 1;
+			return FAILURE;
 		}
 
 		for (i=0; i < user_param->num_of_qps; i++) {
 			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
 				fprintf(stderr, "Couldn't attach QP to MultiCast group");
-				return 1;
+				return FAILURE;
 			}
 		}
 
@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		return 1;
+		return FAILURE;
 	}
 	if((user_param.connection_type == DC || user_param.use_xrc) && user_param.duplex) {
 		user_param.num_of_qps *= 2;
@@ -194,7 +194,7 @@ int main(int argc, char *argv[])
 	ib_dev = ctx_find_dev(user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.use_mcg)
@@ -204,7 +204,7 @@ int main(int argc, char *argv[])
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return 1;
+		return FAILURE;
 	}
 
 
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
@@ -242,9 +242,9 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	ALLOCATE(my_dest, struct pingpong_dest, user_param.num_of_qps);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
-	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	ALLOCATE(rem_dest, struct pingpong_dest, user_param.num_of_qps);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
 	/* Set up the Connection. */
 	if (send_set_up_connection(&ctx,&user_param,my_dest,&mcg_params,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
-		return 1;
+		return FAILURE;
 	}
 
 	/* Print basic test information. */
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return 1;
+			return FAILURE;
 		}
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
 		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
 			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
 			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
 		memcpy(mcg_params.mgid.raw, rem_dest[0].gid.raw, 16);
 		if (set_mcast_group(&ctx,&user_param,&mcg_params)) {
 			fprintf(stderr," Unable to Join Sender to Mcast gid\n");
-			return 1;
+			return FAILURE;
 		}
 		/*
 		 * The next stall in code (50 ms sleep) is a work around for fixing the
@@ -349,26 +349,26 @@ int main(int argc, char *argv[])
 		/* Prepare IB resources for rtr/rts. */
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (user_param.use_event) {
 
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-			return 1;
+			return FAILURE;
 		}
 
 		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
@@ -399,13 +399,13 @@ int main(int argc, char *argv[])
 			if (user_param.machine == SERVER || user_param.duplex) {
 				if (ctx_set_recv_wqes(&ctx,&user_param)) {
 					fprintf(stderr," Failed to post receive recv_wqes\n");
-					return 1;
+					return FAILURE;
 				}
 			}
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				return 1;
+				return FAILURE;
 			}
 
 			if (ctx.send_rcredit) {
@@ -439,7 +439,7 @@ int main(int argc, char *argv[])
 			}
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				return 1;
+				return FAILURE;
 			}
 
 			/* Check if last iteration ended well in UC/UD */
@@ -456,13 +456,13 @@ int main(int argc, char *argv[])
 		if (user_param.machine == SERVER || user_param.duplex) {
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return 1;
+			return FAILURE;
 		}
 
 		if (user_param.duplex) {
@@ -512,27 +512,27 @@ int main(int argc, char *argv[])
 
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return 1;
+			return FAILURE;
 		}
 
 		if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw_infinitely(&ctx,&user_param)) {
 				fprintf(stderr," Error occured while running infinitely! aborting ...\n");
-				return 1;
+				return FAILURE;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
 				fprintf(stderr," Error occured while running infinitely on server! aborting ...\n");
-				return 1;
+				return FAILURE;
 			}
 		}
 	}
@@ -558,18 +558,18 @@ int main(int argc, char *argv[])
 		user_comm.rdma_params->work_rdma_cm = ON;
 		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
 			fprintf(stderr,"Failed to destroy resources\n");
-			return 1;
+			return FAILURE;
 		}
 	}
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
 		fprintf(stderr,"Error: BW result is below bw limit\n");
-		return 1;
+		return FAILURE;
 	}
 
 	if (!user_param.is_msgrate_limit_passed && (user_param.is_limit_bw == ON )) {
 		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
-		return 1;
+		return FAILURE;
 	}
 
 	return 0;

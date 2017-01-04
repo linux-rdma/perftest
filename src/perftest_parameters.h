@@ -89,7 +89,8 @@
 #define HELP_EXIT	 (11)
 #define MTU_FIX	     (7)
 #define MAX_SIZE     (8388608)
-#define LINK_FAILURE (4)
+#define LINK_FAILURE (-1)
+#define LINK_UNSPEC (-2)
 #define MAX_OUT_READ_HERMON (16)
 #define MAX_OUT_READ        (4)
 #define UD_ADDITION         (40)
@@ -135,7 +136,7 @@
 
 /* Max and Min allowed values for perftest parameters. */
 #define MIN_TOS		(0)
-#define MAX_TOS		(256)
+#define MAX_TOS		(255)
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (3)
 #define MIN_ITER      (5)
@@ -230,7 +231,7 @@
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
 /* The type of the test */
-typedef enum { LAT , BW } TestType;
+typedef enum { LAT , BW , LAT_BY_BW } TestType;
 
 /* The type of the machine ( server or client actually). */
 typedef enum { SERVER , CLIENT , UNCHOSEN} MachineType;
@@ -271,6 +272,9 @@ enum ctx_device {
 	QLOGIC_E4		= 12,
 	QLOGIC_AH		= 13,
 	CHELSIO_T6		= 14,
+	CONNECTX5		= 15,
+	CONNECTX5EX		= 16
+
 };
 
 /* Units for rate limiter */
@@ -378,8 +382,8 @@ struct perftest_parameters {
 	float				limit_msgrate;
 	uint32_t			rem_ud_qpn;
 	uint32_t			rem_ud_qkey;
-	uint8_t				link_type;
-	uint8_t				link_type2;
+	int8_t				link_type;
+	int8_t				link_type2;
 	MachineType			machine;
 	PrintDataSide			side;
 	VerbType			verb;
@@ -433,6 +437,7 @@ struct perftest_parameters {
 	int 				raw_ipv6;
 	int 				report_per_port;
 	int 				use_odp;
+	int				use_hugepages;
 	int				use_promiscuous;
 	int				use_sniffer;
 	int				check_alive_exited;
@@ -451,6 +456,8 @@ struct perftest_parameters {
 	int				disable_fcs;
 	int				flows;
 	int				flows_burst;
+	uint32_t			reply_every;
+	int				perform_warm_up;
 };
 
 struct report_options {
@@ -514,7 +521,20 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
  *
  * Return Value :"IB", "Etherent" or "Unknown".
  */
-const char *link_layer_str(uint8_t link_layer);
+const char *link_layer_str(int8_t link_layer);
+
+/* str_link_layer
+ *
+ * Description : Try to parse a string into a verbs link layer type.
+ *
+ * link_layer   : (According to verbs.h) :
+ *      "IB"       -> IBV_LINK_LAYER_INFINIBAND.
+ *      "Ethernet" -> IBV_LINK_LAYER_ETHERNET.
+ *      otherwise  -> LINK_FAILURE.
+ *
+ * Return Value : IBV_LINK_LAYER or LINK_FAILURE
+ */
+const int str_link_layer(const char *str);
 
 /* parser
  *

@@ -559,16 +559,20 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 }
 
 /******************************************************************************
- *create_raw_eth_pkt - build raw Ethernet packet by user arguments
- *on bw test, build one packet and duplicate it on the buffer
- *on lat test, build only one packet on the buffer (for the ping pong method)
+ *Create_raw_eth_pkt - build raw Ethernet packet by user arguments.
+ *On bw test, build one packet and duplicate it on the buffer per QP.
+ *Alternatively, build multiple packets according to number of flows,
+ * again per QP
+ *On lat test, build only one packet on the buffer (for the ping pong method)
  ******************************************************************************/
 void create_raw_eth_pkt( struct perftest_parameters *user_param,
-		struct pingpong_context 	*ctx ,
+		struct pingpong_context 	*ctx,
+		void		 		*buf,
 		struct raw_ethernet_info	*my_dest_info,
 		struct raw_ethernet_info	*rem_dest_info)
 {
-	int offset = 0;
+	int pkt_offset = 0;
+	int flow_limit = 0;
 	int i, print_flag = 0;
 	struct ETH_header* eth_header;
 	uint16_t ip_next_protocol = 0;
@@ -581,32 +585,33 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
-	eth_header = (void*)ctx->buf[0];
+	eth_header = buf;
 
-	if (user_param->tst == BW) {
+	if (user_param->tst == BW || user_param->tst == LAT_BY_BW) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
 			print_flag = PRINT_ON;
-			offset = (ctx->cycle_buffer) * i; /* update the offset to next flow */
-			eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next flow */
+			pkt_offset = ctx->flow_buff_size * i; /* update the offset to next flow */
+			flow_limit = ctx->flow_buff_size * (i + 1);
+			eth_header = (void*)buf + pkt_offset;/* update the eth_header to next flow */
 			/* fill ctx buffer with same packets */
-			while (offset-(ctx->cycle_buffer * i) <= ctx->cycle_buffer-INC(ctx->size,ctx->cache_line_size)) {
+			while ((flow_limit - INC(ctx->size, ctx->cache_line_size)) >= pkt_offset) {
 				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 						    user_param, eth_type, ip_next_protocol,
-						    print_flag , ctx->size - RAWETH_ADDITION, i);
+						    print_flag, ctx->size - RAWETH_ADDITION, i);
 				print_flag = PRINT_OFF;
-				offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
-				eth_header = (void*)ctx->buf[0] + offset;/* update the eth_header to next packet in same flow */
+				pkt_offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
+				eth_header = (void*)buf + pkt_offset;/* update the eth_header to next packet in same flow */
 			}
 		}
 	} else if (user_param->tst == LAT) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
+			pkt_offset = ctx->flow_buff_size * i;
+			eth_header = (void*)buf + pkt_offset;
 			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 					    user_param, eth_type, ip_next_protocol,
-					    PRINT_ON ,ctx->size - RAWETH_ADDITION, i);
-			offset += INC(ctx->size, ctx->cache_line_size);
-			eth_header = (void*)ctx->buf[0] + offset;
+					    PRINT_ON, ctx->size - RAWETH_ADDITION, i);
 
 		}
 	}
@@ -866,12 +871,12 @@ int send_set_up_connection(
 		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
-		struct raw_ethernet_info* my_dest_info,
-		struct raw_ethernet_info* rem_dest_info)
+		struct raw_ethernet_info *my_dest_info,
+		struct raw_ethernet_info *rem_dest_info)
 {
 
 	union ibv_gid temp_gid;
-	int i;
+	int flow_index;
 
 	if (user_param->gid_index != -1) {
 		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
@@ -881,8 +886,8 @@ int send_set_up_connection(
 	}
 
 	if (user_param->machine == SERVER || user_param->duplex) {
-		for (i = 0; i < user_param->flows; i++)
-			set_up_flow_rules(&flow_rules[i], ctx, user_param, i);
+		for (flow_index = 0; flow_index < user_param->flows; flow_index++)
+			set_up_flow_rules(&flow_rules[flow_index], ctx, user_param, flow_index);
 	}
 
 	if (user_param->machine == CLIENT || user_param->duplex) {
@@ -989,7 +994,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	while ((user_param->test_type == DURATION && user_param->state != END_STATE) || totccnt < tot_iters || totrcnt < tot_iters) {
 
-		for (index=0; index < user_param->num_of_qps; index++) {
+		for (index = 0; index < user_param->num_of_qps; index++) {
 
 			while (((ctx->scnt[index] < iters) || ((firstRx == OFF) && (user_param->test_type == DURATION))) &&
 					((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) && (rcnt_for_qp[index] - ctx->scnt[index] > 0)) {
@@ -1041,7 +1046,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				#endif
 				if(err) {
 					fprintf(stderr, "Couldn't post send: qp %d scnt=%lu \n", index, ctx->scnt[index]);
-					return_value = 1;
+					return_value = FAILURE;
 					goto cleaning;
 				}
 
@@ -1085,7 +1090,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr, "Failed to notify events to CQ");
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -1124,7 +1129,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 		}
@@ -1162,7 +1167,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			} else if (ne < 0) {
 				fprintf(stderr, "poll CQ failed %d\n", ne);
-				return_value = 1;
+				return_value = FAILURE;
 				goto cleaning;
 			}
 			while (rwqe_sent - totccnt < user_param->rx_depth) {    /* Post more than buffer_size */
@@ -1172,7 +1177,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (user_param->verb_type == ACCL_INTF) {
 						if (ctx->qp_burst_family[0]->recv_burst(ctx->qp[0], ctx->rwr[0].sg_list, 1)) {
 							fprintf(stderr, "Couldn't post recv burst (accelerated verbs).\n");
-							return_value = 1;
+							return_value = FAILURE;
 							goto cleaning;
 						}
 					} else {
