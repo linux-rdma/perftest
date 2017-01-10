@@ -2861,7 +2861,7 @@ static int cycles_compare(const void *aptr, const void *bptr)
 /******************************************************************************
  *
  ******************************************************************************/
-
+#define LAT_MEASURE_TAIL (2)
 void print_report_lat (struct perftest_parameters *user_param)
 {
 
@@ -2901,6 +2901,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+
 	cycles_rtt_quotient = cycles_to_units / rtt_factor;
 	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
@@ -2909,7 +2910,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 	}
 
 	qsort(delta, measure_cnt, sizeof *delta, cycles_compare);
-
+	measure_cnt = measure_cnt - LAT_MEASURE_TAIL;
 	median = get_median(measure_cnt, delta);
 
 	/* calcualte average sum on sorted array*/
@@ -2941,8 +2942,8 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	latency = median / cycles_rtt_quotient;
 	stdev = sqrt(stdev_sum / measure_cnt);
-	iters_99 = ceil((measure_cnt - 1 ) * 0.99);
-	iters_99_9 = ceil((measure_cnt - 1) * 0.999);
+	iters_99 = ceil((measure_cnt) * 0.99);
+	iters_99_9 = ceil((measure_cnt) * 0.999);
 
 
 	if (user_param->output == OUTPUT_LAT)
@@ -2952,7 +2953,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 				(unsigned long)user_param->size,
 				user_param->iters,
 				delta[0] / cycles_rtt_quotient,
-				delta[user_param->iters - 2] / cycles_rtt_quotient,
+				delta[measure_cnt] / cycles_rtt_quotient,
 				latency,
 				average,
 				stdev,
