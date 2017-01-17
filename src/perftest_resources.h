@@ -837,4 +837,19 @@ int create_mr(struct pingpong_context *ctx,
  */
 int alloc_hugepage_region (struct pingpong_context *ctx);
 
+/* run_iter_fs_rate
+ *
+ * Description :
+ *
+ *	The main testing method for Flow steering creation
+ *
+ * Parameters :
+ *
+ *	ctx		- Test Context.
+ *	user_param	- user_parameters struct for this test.
+ *
+ */
+
+int run_iter_fs(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
 #endif /* PERFTEST_RESOURCES_H */

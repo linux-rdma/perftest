@@ -24,7 +24,7 @@ bin_SCRIPTS = run_perftest_loopback
 if HAVE_RAW_ETH
 libperftest_a_SOURCES += src/raw_ethernet_resources.c
 noinst_HEADERS += src/raw_ethernet_resources.h
-bin_PROGRAMS += raw_ethernet_bw raw_ethernet_lat raw_ethernet_burst_lat
+bin_PROGRAMS += raw_ethernet_bw raw_ethernet_lat raw_ethernet_burst_lat raw_ethernet_fs_rate
 else
 libperftest_a_SOURCES +=
 noinst_HEADERS +=
@@ -73,6 +73,8 @@ raw_ethernet_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 raw_ethernet_burst_lat_SOURCES = src/raw_ethernet_send_burst_lat.c
 raw_ethernet_burst_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
+raw_ethernet_fs_rate_SOURCES = src/raw_ethernet_fs_rate.c
+raw_ethernet_fs_rate_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5)
 
 else
 raw_ethernet_bw_SOURCES =

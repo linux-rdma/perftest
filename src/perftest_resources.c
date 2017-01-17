@@ -19,6 +19,7 @@
 #endif
 
 #include "perftest_resources.h"
+#include "raw_ethernet_resources.h"
 #include "config.h"
 
 #ifdef HAVE_VERBS_EXP
@@ -651,7 +652,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	tarr_size = (user_param->noPeak) ? 1 : user_param->iters*user_param->num_of_qps;
 	ALLOCATE(user_param->tposted, cycles_t, tarr_size);
 	memset(user_param->tposted, 0, sizeof(cycles_t)*tarr_size);
-	if (user_param->tst == LAT && user_param->test_type == DURATION)
+	if ((user_param->tst == LAT || user_param->tst == FS_RATE) && user_param->test_type == DURATION)
 		ALLOCATE(user_param->tcompleted, cycles_t, 1);
 
 	ALLOCATE(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
@@ -683,21 +684,25 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		memset(ctx->scnt, 0, user_param->num_of_qps * sizeof (uint64_t));
 		memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (uint64_t));
 
-	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && user_param->verb == SEND && user_param->machine == SERVER) {
+	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW)
+		   && user_param->verb == SEND && user_param->machine == SERVER) {
 
-		ALLOCATE(ctx->my_addr,uint64_t,user_param->num_of_qps);
-		ALLOCATE(user_param->tcompleted,cycles_t,1);
+		ALLOCATE(ctx->my_addr, uint64_t, user_param->num_of_qps);
+		ALLOCATE(user_param->tcompleted, cycles_t, 1);
+	} else if (user_param->tst == FS_RATE && user_param->test_type == ITERATIONS) {
+		ALLOCATE(user_param->tcompleted, cycles_t, tarr_size);
+		memset(user_param->tcompleted, 0, sizeof(cycles_t) * tarr_size);
 	}
 
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
-		ALLOCATE(ctx->sge_list,struct ibv_sge,user_param->num_of_qps*user_param->post_list);
+		ALLOCATE(ctx->sge_list, struct ibv_sge,user_param->num_of_qps * user_param->post_list);
 		#ifdef HAVE_VERBS_EXP
-		ALLOCATE(ctx->exp_wr,struct ibv_exp_send_wr,user_param->num_of_qps*user_param->post_list);
+		ALLOCATE(ctx->exp_wr, struct ibv_exp_send_wr, user_param->num_of_qps * user_param->post_list);
 		#endif
-		ALLOCATE(ctx->wr,struct ibv_send_wr,user_param->num_of_qps*user_param->post_list);
+		ALLOCATE(ctx->wr, struct ibv_send_wr, user_param->num_of_qps * user_param->post_list);
 		if ((user_param->verb == SEND && user_param->connection_type == UD ) || user_param->connection_type == DC) {
-			ALLOCATE(ctx->ah,struct ibv_ah*,user_param->num_of_qps);
+			ALLOCATE(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 		}
 	}
 
@@ -4859,6 +4864,120 @@ int check_packet_pacing_support(struct pingpong_context *ctx)
 	return attr.packet_pacing_caps.qp_rate_limit_max > 0 ? SUCCESS : FAILURE;
 }
 #endif
+
+int run_iter_fs(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
+
+	struct raw_ethernet_info	*my_dest_info = NULL;
+	struct raw_ethernet_info	*rem_dest_info = NULL;
+
+	#ifdef HAVE_RAW_ETH_EXP
+	struct ibv_exp_flow		**flow_create_result;
+	struct ibv_exp_flow_attr	**flow_rules;
+	#else
+	struct ibv_flow			**flow_create_result;
+	struct ibv_flow_attr		**flow_rules;
+	#endif
+	int 				flow_index = 0;
+	int				qp_index = 0;
+	int				retval = SUCCESS;
+	uint64_t			tot_fs_cnt    = 0;
+	uint64_t			allocated_flows = 0;
+	uint64_t			tot_iters = 0;
+
+	/* Allocate user input dependable structs */
+	ALLOCATE(my_dest_info, struct raw_ethernet_info, user_param->num_of_qps);
+	memset(my_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param->num_of_qps);
+	ALLOCATE(rem_dest_info, struct raw_ethernet_info, user_param->num_of_qps);
+	memset(rem_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param->num_of_qps);
+
+	if (user_param->test_type == ITERATIONS) {
+		user_param->flows = user_param->iters * user_param->num_of_qps;
+		allocated_flows = user_param->iters;
+	} else if (user_param->test_type == DURATION) {
+		allocated_flows = (2 * MAX_FS_PORT) - (user_param->server_port + user_param->client_port);
+	}
+
+
+	#ifdef HAVE_RAW_ETH_EXP
+        ALLOCATE(flow_create_result, struct ibv_exp_flow*, allocated_flows * user_param->num_of_qps);
+        ALLOCATE(flow_rules, struct ibv_exp_flow_attr*, allocated_flows * user_param->num_of_qps);
+	#else
+        ALLOCATE(flow_create_result, struct ibv_flow*, allocated_flows * user_param->num_of_qps);
+        ALLOCATE(flow_rules, struct ibv_flow_attr*, allocated_flows * user_param->num_of_qps);
+	#endif
+
+	if(user_param->test_type == DURATION) {
+		duration_param = user_param;
+		user_param->iters = 0;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		alarm(user_param->margin);
+		if (user_param->margin > 0)
+			alarm(user_param->margin);
+		else
+			catch_alarm(0); /* move to next state */
+	}
+	if (set_up_fs_rules(flow_rules, ctx, user_param, allocated_flows)) {
+			fprintf(stderr, "Unable to set up flow rules\n");
+			retval = FAILURE;
+			goto cleaning;
+	}
+
+	do {/* This loop runs once in Iteration mode */
+		for (qp_index = 0; qp_index < user_param->num_of_qps; qp_index++) {
+
+			for (flow_index = 0; flow_index < allocated_flows; flow_index++) {
+
+				if (user_param->test_type == ITERATIONS)
+					user_param->tposted[tot_fs_cnt] = get_cycles();
+				else if (user_param->test_type == DURATION && duration_param->state == END_STATE)
+					break;
+				#ifdef HAVE_RAW_ETH_EXP
+				flow_create_result[flow_index] =
+					ibv_exp_create_flow(ctx->qp[qp_index], flow_rules[(qp_index * allocated_flows) + flow_index]);
+				#else
+				flow_create_result[flow_index] =
+					ibv_create_flow(ctx->qp[qp_index], flow_rules[(qp_index * allocated_flows) + flow_index]);
+				#endif
+				if (user_param->test_type == ITERATIONS)
+					user_param->tcompleted[tot_fs_cnt] = get_cycles();
+				if (!flow_create_result[flow_index]) {
+					perror("error");
+					fprintf(stderr, "Couldn't attach QP\n");
+					retval = FAILURE;
+					goto cleaning;
+				}
+				if (user_param->test_type == ITERATIONS ||
+				   (user_param->test_type == DURATION && duration_param->state == SAMPLE_STATE))
+					tot_fs_cnt++;
+				tot_iters++;
+			}
+		}
+	} while (user_param->test_type == DURATION && duration_param->state != END_STATE);
+
+	if (user_param->test_type == DURATION && user_param->state == END_STATE)
+		user_param->iters = tot_fs_cnt;
+
+cleaning:
+	/* destroy open flows */
+	for (flow_index = 0; flow_index < tot_iters; flow_index++) {
+		#ifdef HAVE_RAW_ETH_EXP
+		if (ibv_exp_destroy_flow(flow_create_result[flow_index])) {
+		#else
+		if (ibv_destroy_flow(flow_create_result[flow_index])) {
+		#endif
+			perror("error");
+			fprintf(stderr, "Couldn't Destory flow\n");
+		}
+	}
+	free(flow_rules);
+	free(flow_create_result);
+	free(my_dest_info);
+	free(rem_dest_info);
+
+	return retval;
+}
+
 /******************************************************************************
  * End
  ******************************************************************************/
