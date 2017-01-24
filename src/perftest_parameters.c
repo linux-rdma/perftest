@@ -214,6 +214,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (verb != WRITE && connection_type != RawEth) {
 		printf("  -e, --events ");
 		printf(" Sleep on CQ events (default poll)\n");
+
+		printf("  -X, --vector=<completion vector> ");
+		printf(" Set <completion vector> used for events\n");
 	}
 
 	printf("  -f, --margin ");
@@ -581,6 +584,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_freq_f		= OFF;
 	user_param->connection_type	= (user_param->connection_type == RawEth) ? RawEth : RC;
 	user_param->use_event		= OFF;
+	user_param->eq_num		= 0;
+	user_param->use_eq_num		= OFF;
 	user_param->num_of_qps		= DEF_NUM_QPS;
 	user_param->gid_index		= DEF_GID_INDEX;
 	user_param->gid_index2		= DEF_GID_INDEX;
@@ -1293,6 +1298,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if((user_param->use_event == OFF) && user_param->use_eq_num == ON) {
+		fprintf(stderr, " Events must be enabled to select a completion vector\n");
+		exit(1);
+	}
+
 	#ifdef HAVE_ACCL_VERBS
 	if (user_param->verb_type != NORMAL_INTF || user_param->use_res_domain) {
 		user_param->is_exp_cq = 1;
@@ -1743,6 +1753,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "connection",		.has_arg = 1, .val = 'c' },
 			{ .name = "qp",			.has_arg = 1, .val = 'q' },
 			{ .name = "events",		.has_arg = 0, .val = 'e' },
+			{ .name = "vector",		.has_arg = 1, .val = 'X' },
 			{ .name = "inline_size",	.has_arg = 1, .val = 'I' },
 			{ .name = "outs",		.has_arg = 1, .val = 'o' },
 			{ .name = "mcg",		.has_arg = 0, .val = 'g' },
@@ -1837,7 +1848,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
 			{ 0 }
 		};
-		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:aFegzRvhbNVCHUOZP",long_options,NULL);
+		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:X:aFegzRvhbNVCHUOZP",long_options,NULL);
 
 		if (c == -1)
 			break;
@@ -1951,7 +1962,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->verb == WRITE) {
 					  fprintf(stderr," Events feature not available on WRITE verb\n");
 					  return 1;
-				  } break;
+				  }
+				  break;
+			case 'X':
+				  if (user_param->verb == WRITE) {
+					  fprintf(stderr, " Events feature not available on WRITE verb\n");
+					  return 1;
+				  }
+				  user_param->use_eq_num = ON;
+				  CHECK_VALUE(user_param->eq_num, int, MIN_EQ_NUM, MAX_EQ_NUM, "EQN");
+				  break;
 			case 'b': user_param->duplex = ON;
 				  if (user_param->tst == LAT) {
 					  fprintf(stderr," Bidirectional is only available in BW test\n");
@@ -2608,8 +2628,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf("Test\n");
 
 	if (user_param->use_event) {
-		printf(" Test with events.\n");
-
+		printf(" Test with events. Using %s_comp%d\n", user_param->ib_devname, user_param->eq_num);
 	}
 
 	if (user_param->use_mcg)

@@ -280,6 +280,21 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 int destroy_ctx(struct pingpong_context *ctx,
 				struct perftest_parameters *user_param);
 
+/* verify_params_with_device_context
+ *
+ * Description :
+ * 		Verify user params that require information from the ibv_context
+ *
+ * Parameters :
+ *	context - ibv_context
+ * 	user_param - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int verify_params_with_device_context(struct ibv_context *ctx,
+				      struct perftest_parameters *user_param);
+
+
 /* ctx_init
  *
  * Description :

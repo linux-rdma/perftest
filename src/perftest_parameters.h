@@ -158,6 +158,8 @@
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
 #define MAX_INLINE_UD (884)
+#define MIN_EQ_NUM    (0)
+#define MAX_EQ_NUM    (2048)
 
 /* Raw etherent defines */
 #define RAWETH_MIN_MSG_SIZE	(64)
@@ -357,6 +359,8 @@ struct perftest_parameters {
 	int				connection_type;
 	int				num_of_qps;
 	int				use_event;
+	int				eq_num;
+	int				use_eq_num;
 	int 				inline_size;
 	int				inline_recv_size;
 	int				out_reads;

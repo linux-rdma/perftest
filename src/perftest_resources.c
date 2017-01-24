@@ -993,9 +993,8 @@ int create_reg_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
 		   int tx_buffer_depth, int need_recv_cq)
 {
-
 	ctx->send_cq = ibv_create_cq(ctx->context,tx_buffer_depth *
-					user_param->num_of_qps,NULL,ctx->channel,0);
+					user_param->num_of_qps, NULL, ctx->channel, user_param->eq_num);
 	if (!ctx->send_cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
@@ -1003,7 +1002,7 @@ int create_reg_cqs(struct pingpong_context *ctx,
 
 	if (need_recv_cq) {
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth *
-						user_param->num_of_qps,NULL,ctx->channel,0);
+						user_param->num_of_qps, NULL, ctx->channel, user_param->eq_num);
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
 			return FAILURE;
@@ -1353,6 +1352,21 @@ int alloc_hugepage_region (struct pingpong_context *ctx)
     }
 
      return SUCCESS;
+}
+
+int verify_params_with_device_context(struct ibv_context *context,
+				      struct perftest_parameters *user_param)
+{
+	if(user_param->use_event) {
+		if(user_param->eq_num > context->num_comp_vectors) {
+			fprintf(stderr, " Completion vector specified is invalid\n");
+			fprintf(stderr, " Max completion vector = %d\n",
+				context->num_comp_vectors - 1);
+			return FAILURE;
+		}
+	}
+
+	return SUCCESS;
 }
 
 int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
