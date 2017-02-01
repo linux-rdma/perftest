@@ -878,13 +878,6 @@ int send_set_up_connection(
 	union ibv_gid temp_gid;
 	int flow_index;
 
-	if (user_param->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-	}
-
 	if (user_param->machine == SERVER || user_param->duplex) {
 		for (flow_index = 0; flow_index < user_param->flows; flow_index++)
 			set_up_flow_rules(&flow_rules[flow_index], ctx, user_param, flow_index);
