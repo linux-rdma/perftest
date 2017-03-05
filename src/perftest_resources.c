@@ -1280,11 +1280,15 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
 
 
-	/* Initialize buffer with random numbers */
+	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
 	if (!user_param->use_cuda) {
 		srand(time(NULL));
-		for (i = 0; i < ctx->buff_size; i++) {
-			((char*)ctx->buf[qp_index])[i] = (char)rand();
+		if (user_param->verb == WRITE && user_param->tst == LAT) {
+			memset(ctx->buf[qp_index], 0, ctx->buff_size);
+		} else {
+			for (i = 0; i < ctx->buff_size; i++) {
+				((char*)ctx->buf[qp_index])[i] = (char)rand();
+			}
 		}
 	}
 
