@@ -213,7 +213,7 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 double get_cpu_mhz(int no_cpu_freq_warn)
 {
 	#ifdef __s390x__
-	return sample_get_cpu_mgz();
+	return sample_get_cpu_mhz();
 	#else
 	double sample, proc, delta;
 	sample = sample_get_cpu_mhz();
