@@ -133,7 +133,7 @@ static double sample_get_cpu_mhz(void)
 	return b;
 }
 
-#ifndef __s390x__
+#if !defined(__s390x__) && !defined(__s390__)
 static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 {
 	FILE* f;
@@ -212,7 +212,7 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 
 double get_cpu_mhz(int no_cpu_freq_warn)
 {
-	#ifdef __s390x__
+	#if defined(__s390x__) || defined(__s390__)
 	return sample_get_cpu_mhz();
 	#else
 	double sample, proc, delta;

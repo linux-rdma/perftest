@@ -70,7 +70,7 @@ static inline cycles_t get_cycles()
 	asm volatile ("mov %0=ar.itc" : "=r" (ret));
 	return ret;
 }
-#elif defined(__s390x__)
+#elif defined(__s390x__) || defined(__s390__)
 typedef unsigned long long cycles_t;
 static inline cycles_t get_cycles(void)
 {
