@@ -1,0 +1,182 @@
+#!/bin/sh
+# Script to launch a multi device test on seperate processes.
+
+GET_HELP=0
+HAVE_CORES=0
+HAVE_DEVICES=0
+HAVE_IB_PORTS=0
+HAVE_GID_INDEXES=0
+HAVE_REMOTE_HOST=0
+HAVE_CMD=0
+BASE_TCP_PORT=15000
+
+
+function force_dependencies {
+	if [[ $GET_HELP -eq 1 ]]
+	then
+		print_usage
+		exit
+	fi
+
+	#mandatory flags
+	if [[ $HAVE_DEVICES -eq 0 ]]
+	then
+		echo "-d/--devices flag is mandatory"
+		exit
+	fi
+
+	if [[ $HAVE_CMD -eq 0 ]]
+	then
+		echo "-C/--cmd flag is mandatory"
+		exit
+	fi
+
+	#optional flags
+	#check that all arguments have enough params.
+	if [[ $HAVE_CORES -eq 1 ]]
+	then
+		if [[ ${#CORES_LIST[@]} -ne $EXPECTED_PARAMS ]]
+		then
+			echo "number of cores should be equal to number of devices (cores for each device)"
+			exit
+		fi
+	fi
+
+	if [[ $HAVE_IB_PORTS -eq 1 ]]
+	then
+		if [[ ${#IB_PORTS_LIST[@]} -ne $EXPECTED_PARAMS ]]
+		then
+			echo "number of ib ports should be equal to number of devices (ib_port for each device)"
+			exit
+		fi
+	fi
+
+	if [[ $HAVE_GID_INDEXES -eq 1 ]]
+	then
+		if [[ ${#GID_INDEXES_LIST[@]} -ne $EXPECTED_PARAMS ]]
+		then
+			echo "number of gid indexes should be equal to number of devices (gid_index for each device)"
+			exit
+		fi
+	fi
+}
+
+function run_commands {
+	for (( I=0 ; I < $EXPECTED_PARAMS ; I++ ))
+	do
+		cmd=""
+		if [[ $HAVE_CORES -eq 1 ]]
+		then
+			cmd="taskset -c ${CORES_LIST[$I]}"
+		fi
+
+		#mandatory:
+		cmd="$cmd $TEST_CMD -d ${DEVICE_LIST[$I]} -p $(($BASE_TCP_PORT+I))"
+
+		#optional:
+		if [[ $HAVE_IB_PORTS -eq 1 ]]
+		then
+			cmd="$cmd -i ${IB_PORTS_LIST[$I]}"
+		fi
+
+		if [[ $HAVE_GID_INDEXES -eq 1 ]]
+		then
+			cmd="$cmd -x ${GID_INDEXES_LIST[$I]}"
+		fi
+
+		if [[ $HAVE_REMOTE_HOST -eq 1 ]]
+		then
+			cmd="$cmd $REMOTE_HOST"
+		fi
+
+		if [[ $I -ne $(($EXPECTED_PARAMS-1)) ]]
+		then
+			cmd="$cmd &"
+		fi
+
+		eval $cmd
+	done
+}
+
+function print_usage {
+	echo -e "\nUsage:"
+	echo "    Server side: run_perftest_multi_device --devices dev1,dev2 --cmd \"<perftest command>\" [optional_flags]"
+	echo "    Client side: run_perftest_multi_device --devices dev1,dev2 --cmd \"<perftest command>\" --remote <server_name> [optional_flags]"
+	echo ""
+	echo "    ** Please make sure that <perftest command> does not include the <server_name> on both sides. **"
+	echo "       This should be added only by --remote flag on the Client side."
+
+	echo -e "\nMandatory flags:"
+	echo "    -d, --devices       List of IB devices, seperated by comma. This will override '-d, --ib-dev' flag if existed in the perftest command."
+	echo "                        i.e. --devices dev1,dev2"
+
+	echo "    -C, --cmd           A valid perftest command."
+	echo "                        i.e. --cmd \"ib_write_bw --size 64 --duration 3\""
+
+	echo -e "\nOptional flags:"
+	echo "    -c,  --cores        Pin each device to a specific core using taskset"
+	echo "                        i.e. --cores 0,1  - This will pin dev1 command to core 0 and dev2 command to core 1"
+
+	echo "    -i,  --ib_ports     Choose ib_port for each device. This will override '-i, --ib-port' flag if existed in the perftest command."
+	echo "                        i.e. --ib_ports 1,2  - dev1 will work with port 1 and dev2 will work with port 2"
+
+	echo "    -x,  --gid_indexes  Choose gid_index for each device. This will override '-x, --gid-index' flag if existed in the perftest command."
+	echo "                        i.e. --gid_indexes 3,7  - dev1 will work with gid_index 3 and dev2 will work with gid_index 7"
+
+	echo "    -r,  --remote       Sets the remote host to connect. This will set it as the client side."
+	echo "                        i.e. --remote <server_host_name> , or --remote <server_ip>."
+}
+
+#parser
+while [[ $# -ge 1 ]]
+do
+	key="$1"
+
+	case $key in
+		-h|--help)
+		GET_HELP=1
+		shift
+		;;
+		-c|--cores)
+		CORES_LIST=($(echo "$2" | tr "," " "))
+		HAVE_CORES=1
+		shift # past argument
+		;;
+		-d|--devices)
+		DEVICE_LIST=($(echo "$2" | tr "," " "))
+		HAVE_DEVICES=1
+		EXPECTED_PARAMS=${#DEVICE_LIST[@]}
+		shift # past argument
+		;;
+		-i|--ib_ports)
+		IB_PORTS_LIST=($(echo "$2" | tr "," " "))
+		HAVE_IB_PORTS=1
+		shift # past argument
+		;;
+		-x|--gid_indexes)
+		GID_INDEXES_LIST=($(echo "$2" | tr "," " "))
+		HAVE_GID_INDEXES=1
+		shift
+		;;
+		-C|--cmd)
+		TEST_CMD="$2"
+		HAVE_CMD=1
+		shift
+		;;
+		-r|--remote)
+		REMOTE_HOST="$2"
+		HAVE_REMOTE_HOST=1
+		shift
+		;;
+		*)
+		# unknown option - ignore
+		;;
+	esac
+	shift
+done
+
+force_dependencies
+
+run_commands
+
+exit
