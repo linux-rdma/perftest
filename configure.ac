@@ -291,6 +291,20 @@ if [test $HAVE_PACKET_PACING = yes]; then
 	AC_DEFINE([HAVE_PACKET_PACING], [1], [Have PACKET_PACING support])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[int x = IBV_OOO_RW_DATA_PLACEMENT;], [HAVE_OOO_ATTR=yes], [HAVE_OOO_ATTR=no])
+AM_CONDITIONAL([HAVE_OOO_ATTR], [test "x$HAVE_OOO_ATTR" = "xyes"])
+if [test $HAVE_OOO_ATTR = yes]; then
+	AC_DEFINE([HAVE_OOO_ATTR], [1], [Have Out of order data placement support])
+fi
+
+AC_TRY_LINK([#include <infiniband/verbs_exp.h>],
+	[int x = IBV_EXP_OOO_SUPPORT_RW_DATA_PLACEMENT;], [HAVE_EXP_OOO_ATTR=yes], [HAVE_EXP_OOO_ATTR=no])
+AM_CONDITIONAL([HAVE_EXP_OOO_ATTR], [test "x$HAVE_EXP_OOO_ATTR" = "xyes"])
+if [test $HAVE_EXP_OOO_ATTR = yes]; then
+	AC_DEFINE([HAVE_EXP_OOO_ATTR], [1], [Have Experimental Out of order data placement support])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
