@@ -472,6 +472,7 @@ struct perftest_parameters {
 	int				flows_burst;
 	uint32_t			reply_every;
 	int				perform_warm_up;
+	int				use_ooo;
 };
 
 struct report_options {

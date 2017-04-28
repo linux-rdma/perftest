@@ -1378,6 +1378,63 @@ int verify_params_with_device_context(struct ibv_context *context,
 	return SUCCESS;
 }
 
+static int verify_ooo_settings(struct pingpong_context *ctx,
+			       struct perftest_parameters *user_param)
+{
+	#ifdef HAVE_OOO_ATTR
+	struct ibv_device_attr_ex attr = { };
+	if (ibv_query_device_ex(ctx->context, NULL, &attr))
+	#elif HAVE_EXP_OOO_ATTR
+	struct ibv_exp_device_attr attr = { };
+	attr.comp_mask = IBV_EXP_DEVICE_ATTR_RESERVED - 1;
+	if (ibv_exp_query_device(ctx->context, &attr))
+	#endif
+		return FAILURE;
+
+	if (user_param->connection_type == RC) {
+		if (attr.ooo_caps.rc_caps == 0) {
+			fprintf(stderr, " OOO unsupported by HCA on RC QP\n");
+			return FAILURE;
+		} else {
+			return SUCCESS;
+		}
+	} else if (user_param->connection_type == XRC) {
+		if (attr.ooo_caps.xrc_caps == 0) {
+			fprintf(stderr, " OOO unsupported by HCA on XRC QP\n");
+			return FAILURE;
+		} else {
+			return SUCCESS;
+		}
+	} else if (user_param->connection_type == UD) {
+		if (attr.ooo_caps.ud_caps == 0) {
+			fprintf(stderr, " OOO unsupported by HCA on UD QP\n");
+			return FAILURE;
+		} else {
+			return SUCCESS;
+		}
+
+	#if HAVE_OOO_ATTR
+	} else if (user_param->connection_type == UC) {
+		if (attr.ooo_caps.uc_caps == 0) {
+			fprintf(stderr, " OOO unsupported by HCA on UC QP\n");
+			return FAILURE;
+		} else {
+			return SUCCESS;
+		}
+	#elif HAVE_EXP_OOO_ATTR
+	} else if (user_param->connection_type == DC) {
+		if (attr.ooo_caps.dc_caps == 0) {
+			fprintf(stderr, " OOO unsupported by HCA on DC QP\n");
+			return FAILURE;
+		} else {
+			return SUCCESS;
+		}
+	#endif
+	} else {
+		return FAILURE;
+	}
+}
+
 int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int i;
@@ -1392,6 +1449,15 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	struct ibv_exp_device_attr dattr;
 	memset(&dattr, 0, sizeof(dattr));
 	get_verbs_pointers(ctx);
+	#endif
+
+	#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+	if (user_param->use_ooo) {
+		if (verify_ooo_settings(ctx, user_param) != SUCCESS) {
+			fprintf(stderr, "Incompatible OOO settings\n");
+			return FAILURE;
+		}
+	}
 	#endif
 
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
@@ -2125,6 +2191,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	int flags = IBV_QP_STATE;
+	int ooo_flags = 0;
 
 	attr->qp_state = IBV_QPS_RTR;
 	attr->ah_attr.src_path_bits = 0;
@@ -2186,6 +2253,14 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 		flags |= IBV_QP_AV;
 	}
 
+	#ifdef HAVE_OOO_ATTR
+		ooo_flags |= IBV_QP_OOO_RW_DATA_PLACEMENT;
+	#elif HAVE_EXP_OOO_ATTR
+		ooo_flags |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
+	#endif
+
+	if (user_param->use_ooo)
+		flags |= ooo_flags;
 	return ibv_modify_qp(qp, attr, flags);
 }
 

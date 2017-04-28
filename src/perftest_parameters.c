@@ -497,7 +497,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      Note (1) in Latency under load test SW rate limit is forced\n");
 
 	}
-
+	#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+	printf("      --use_ooo ");
+	printf(" Use out of order data placement\n");
+	#endif
 	putchar('\n');
 }
 /******************************************************************************
@@ -701,6 +704,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->flows		= DEF_FLOWS;
 	user_param->flows_burst		= 1;
 	user_param->perform_warm_up	= 0;
+	user_param->use_ooo		= 0;
 }
 
 /******************************************************************************
@@ -1749,6 +1753,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int remote_mac_flag = 0;
 	static int reply_every_flag = 0;
 	static int perform_warm_up_flag = 0;
+	static int use_ooo_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -1870,6 +1875,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
 			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
 			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
+
+			#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+			{ .name = "use_ooo",		.has_arg = 0, .flag = &use_ooo_flag, .val = 1},
+			#endif
 			{ 0 }
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:X:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -2459,6 +2468,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	if (perform_warm_up_flag) {
 		user_param->perform_warm_up = 1;
 	}
+	if (use_ooo_flag)
+		user_param->use_ooo = 1;
+
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
