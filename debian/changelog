@@ -1,4 +1,4 @@
-perftest (3.4-0.1) stable; urgency=low
+perftest (4.1-1.0) stable; urgency=low
 
   * Initial release For Ubuntu (Closes: #182805)
 
