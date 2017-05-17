@@ -915,7 +915,6 @@ int send_set_up_connection(
 		struct raw_ethernet_info *rem_dest_info)
 {
 
-	union ibv_gid temp_gid;
 	int flow_index;
 
 	if (user_param->machine == SERVER || user_param->duplex) {

@@ -213,7 +213,7 @@
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 /* Result print format for latency tests. */
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f 		%-7.2f"
+#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
 #define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f        %-7.2f"
 
 #define REPORT_FMT_FS_RATE " %d          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
