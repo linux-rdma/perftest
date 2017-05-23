@@ -2899,7 +2899,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	cycles_rtt_quotient = cycles_to_units / rtt_factor;
+	cycles_rtt_quotient = cycles_to_units * rtt_factor;
 	if (user_param->r_flag->unsorted) {
 		printf("#, %s\n", units);
 		for (i = 0; i < measure_cnt; ++i)
