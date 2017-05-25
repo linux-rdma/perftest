@@ -97,6 +97,12 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+	/* Verify user parameters that require the device context,
+	 * the function will print the relevent error info. */
+	if (verify_params_with_device_context(ctx.context, &user_param)) {
+		return FAILURE;
+	}
+
 	#ifdef HAVE_MASKED_ATOMICS
 	if (check_masked_atomics_support(&ctx)) {
 		user_param.masked_atomics = 1;

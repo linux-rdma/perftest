@@ -174,6 +174,12 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+	/* Verify user parameters that require the device context,
+	 * the function will print the relevent error info. */
+	if (verify_params_with_device_context(ctx.context, &user_param)) {
+		return FAILURE;
+	}
+
 	/* See if MTU and link type are valid and supported. */
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");

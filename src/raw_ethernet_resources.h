@@ -298,4 +298,46 @@ static __inline void switch_smac_dmac(struct ibv_sge *sg)
 	memcpy((uint8_t *)eth_header->dst_mac  , tmp_mac ,sizeof(tmp_mac));
 }
 
+/* set_up_flow_rules
+ * Description: set the flow rules objects
+ *
+ *	Parameters:
+ *				flow_rules 	- Pointer to output, is set to header buffer and specification information
+ *				ctx 		- Test Context.
+ *				user_param 	- user_parameters struct for this test
+ *				local_port 	- the local port in the flow rule
+ *				remote_port 	- the remote port in the flow rule
+ */
+
+int set_up_flow_rules(
+		#ifdef HAVE_RAW_ETH_EXP
+		struct ibv_exp_flow_attr **flow_rules,
+		#else
+		struct ibv_flow_attr **flow_rules,
+		#endif
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		int local_port,
+		int remote_port);
+/* set_up_fs_rules
+ * Description: set the flow rules objects  for FS rate test
+ *
+ *	Parameters:
+ *				flow_rules 	- Pointer to output, is set to header buffer and specification information
+ *				ctx 		- Test Context.
+ *				user_param 	- user_parameters struct for this test
+ *				allocated_flows	- number of flow ruled that are allocated and ready to be set
+ *
+ */
+
+int set_up_fs_rules(
+		#ifdef HAVE_RAW_ETH_EXP
+		struct ibv_exp_flow_attr **flow_rules,
+		#else
+		struct ibv_flow_attr **flow_rules,
+		#endif
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		uint64_t allocated_flows);
+
 #endif /* RAW_ETHERNET_RESOURCES_H */

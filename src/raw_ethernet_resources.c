@@ -52,6 +52,7 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 #include "raw_ethernet_resources.h"
+#include "config.h"
 
 struct perftest_parameters* duration_param;
 
@@ -752,7 +753,7 @@ static void fill_ip_spec(struct ibv_flow_spec* spec_info,
 }
 #endif
 
-static int set_up_flow_rules(
+int set_up_flow_rules(
 		#ifdef HAVE_RAW_ETH_EXP
 		struct ibv_exp_flow_attr **flow_rules,
 		#else
@@ -760,9 +761,9 @@ static int set_up_flow_rules(
 		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
-		int flows_offset)
+		int local_port,
+		int remote_port)
 {
-
 	#ifdef HAVE_RAW_ETH_EXP
 	struct ibv_exp_flow_spec* spec_info;
 	struct ibv_exp_flow_attr* attr_info;
@@ -840,13 +841,11 @@ static int set_up_flow_rules(
 		#endif
 
 		if(user_param->machine == SERVER) {
-
-			spec_info->tcp_udp.val.dst_port = htons(user_param->server_port + flows_offset);
-			spec_info->tcp_udp.val.src_port = htons(user_param->client_port + flows_offset);
-
+			spec_info->tcp_udp.val.dst_port = htons(local_port);
+			spec_info->tcp_udp.val.src_port = htons(remote_port);
 		} else {
-			spec_info->tcp_udp.val.dst_port = htons(user_param->client_port + flows_offset);
-			spec_info->tcp_udp.val.src_port = htons(user_param->server_port + flows_offset);
+			spec_info->tcp_udp.val.src_port = htons(local_port);
+			spec_info->tcp_udp.val.dst_port = htons(remote_port);
 		}
 
 		memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
@@ -861,6 +860,47 @@ static int set_up_flow_rules(
 }
 
 /******************************************************************************
+ *set_fs_rate_rules - init flow struct for FS rate test
+ ******************************************************************************/
+int set_up_fs_rules(
+		#ifdef HAVE_RAW_ETH_EXP
+		struct ibv_exp_flow_attr **flow_rules,
+		#else
+		struct ibv_flow_attr **flow_rules,
+		#endif
+		struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		uint64_t allocated_flows) {
+
+
+	int				local_port = 0;
+	int				remote_port = 0;
+	int				last_local_index = 0;
+	int 				flow_index = 0;
+	int				qp_index = 0;
+	int				allowed_server_ports = MAX_FS_PORT - user_param->server_port;
+
+	for (qp_index = 0; qp_index < user_param->num_of_qps; qp_index++) {
+		for (flow_index = 0; flow_index < allocated_flows; flow_index++) {
+			if (set_up_flow_rules(&flow_rules[(qp_index * allocated_flows) + flow_index],
+					      ctx, user_param, local_port, remote_port)) {
+				fprintf(stderr, "Unable to set up flow rules\n");
+	                        return FAILURE;
+			}
+			if (flow_index <= allowed_server_ports) {
+				local_port = user_param->local_port + flow_index;
+				remote_port = user_param->remote_port;
+				last_local_index = flow_index;
+			} else {
+				local_port = user_param->local_port;
+				remote_port = user_param->remote_port + flow_index - last_local_index;
+			}
+		}
+	}
+	return SUCCESS;
+}
+
+/******************************************************************************2
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
 int send_set_up_connection(
@@ -875,19 +915,12 @@ int send_set_up_connection(
 		struct raw_ethernet_info *rem_dest_info)
 {
 
-	union ibv_gid temp_gid;
 	int flow_index;
-
-	if (user_param->gid_index != -1) {
-		if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&temp_gid)) {
-			DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-			return FAILURE;
-		}
-	}
 
 	if (user_param->machine == SERVER || user_param->duplex) {
 		for (flow_index = 0; flow_index < user_param->flows; flow_index++)
-			set_up_flow_rules(&flow_rules[flow_index], ctx, user_param, flow_index);
+			set_up_flow_rules(&flow_rules[flow_index], ctx,
+					  user_param, user_param->server_port + flow_index, user_param->client_port + flow_index);
 	}
 
 	if (user_param->machine == CLIENT || user_param->duplex) {

@@ -158,17 +158,22 @@
 #define MAX_CQ_MOD    (1024)
 #define MAX_INLINE    (912)
 #define MAX_INLINE_UD (884)
+#define MIN_EQ_NUM    (0)
+#define MAX_EQ_NUM    (2048)
 
 /* Raw etherent defines */
 #define RAWETH_MIN_MSG_SIZE	(64)
 #define MIN_MTU_RAW_ETERNET	(64)
 #define MAX_MTU_RAW_ETERNET	(9600)
+#define MIN_FS_PORT		(5000)
+#define MAX_FS_PORT		(65536)
 
 
 #define RESULT_LINE "---------------------------------------------------------------------------------------\n"
 
 #define RESULT_LINE_PER_PORT "-------------------------------------------------------------------------------------------------------------------------------------------------------------------\n"
-
+#define CYCLES	"cycles"
+#define USEC	"usec"
 /* The format of the results */
 #define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
 
@@ -190,6 +195,10 @@
 
 #define RESULT_EXT_CPU_UTIL "    CPU_Util[%%]\n"
 
+#define RESULT_FMT_FS_RATE " #flows	fs_min_time[usec]	fs_max_time[usec]	fs_typical_time[usec]	fs_avg_time[usec]	fps[flow per sec]"
+
+#define RESULT_FMT_FS_RATE_DUR " #flows		fs_avg_time[usec]    	fps[flow per sec]"
+
 /* Result print format */
 #define REPORT_FMT     " %-7lu    %-10lu       %-7.2lf            %-7.2lf		   %-7.6lf"
 
@@ -204,9 +213,12 @@
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 /* Result print format for latency tests. */
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f        %-7.2f              %-7.2f"
-
+#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
 #define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f        %-7.2f"
+
+#define REPORT_FMT_FS_RATE " %d          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
+
+#define REPORT_FMT_FS_RATE_DUR " %d               %-7.2f		%-7.2f"
 
 #define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
 { arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
@@ -231,7 +243,7 @@
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
 /* The type of the test */
-typedef enum { LAT , BW , LAT_BY_BW } TestType;
+typedef enum { LAT , BW , LAT_BY_BW, FS_RATE } TestType;
 
 /* The type of the machine ( server or client actually). */
 typedef enum { SERVER , CLIENT , UNCHOSEN} MachineType;
@@ -357,6 +369,8 @@ struct perftest_parameters {
 	int				connection_type;
 	int				num_of_qps;
 	int				use_event;
+	int				eq_num;
+	int				use_eq_num;
 	int 				inline_size;
 	int				inline_recv_size;
 	int				out_reads;
@@ -637,6 +651,17 @@ void print_report_lat (struct perftest_parameters *user_param);
  *
  */
 void print_report_lat_duration (struct perftest_parameters *user_param);
+
+/* print_report_fs_rate
+ *
+ * Description : Prints the Flow steering rate and avarage latency to create flow
+ *
+ * Parameters :
+ *
+ *   user_param  - the parameters parameters.
+ *
+ */
+void print_report_fs_rate (struct perftest_parameters *user_param);
 
 /* set_mtu
  *
