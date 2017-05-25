@@ -54,9 +54,6 @@
 int main(int argc, char *argv[])
 {
 	int				ret_parser,i = 0;
-	int				poll_buf_offset = 0;
-	volatile char			*poll_buf = NULL;
-	volatile char			*post_buf = NULL;
 	struct report_options		report;
 	struct pingpong_context		ctx;
 	struct pingpong_dest		*my_dest  = NULL;
@@ -231,18 +228,10 @@ int main(int argc, char *argv[])
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
-	if (user_param.use_xrc || user_param.connection_type == DC)
-		poll_buf_offset = 1;
-
 	if (user_param.test_method == RUN_ALL) {
 
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
-			/* Clear buffers between runs */
-			post_buf = (char*)ctx.buf[0] + user_param.size - 1;
-			poll_buf = (char*)ctx.buf[0] + (user_param.num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx.size, ctx.cycle_buffer) + user_param.size - 1;
-			*poll_buf = 0;
-			*post_buf = 0;
 			if(run_iter_lat_write(&ctx,&user_param)) {
 				fprintf(stderr,"Test exited with Error\n");
 				return FAILURE;
@@ -253,11 +242,6 @@ int main(int argc, char *argv[])
 
 	} else {
 
-		/* Initialize buffers before iteration */
-		post_buf = (char*)ctx.buf[0] + user_param.size - 1;
-		poll_buf = (char*)ctx.buf[0] + (user_param.num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx.size, ctx.cycle_buffer) + user_param.size - 1;
-		*poll_buf = 0;
-		*post_buf = 0;
 		if(run_iter_lat_write(&ctx,&user_param)) {
 			fprintf(stderr,"Test exited with Error\n");
 			return FAILURE;
