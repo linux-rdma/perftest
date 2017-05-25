@@ -1285,6 +1285,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		srand(time(NULL));
 		for (i = 0; i < ctx->buff_size; i++) {
 			((char*)ctx->buf[qp_index])[i] = (char)rand();
+			/* WRITE LAT could hang if any buffer value equals 1 */
+			if ((user_param->verb == WRITE) && (user_param->tst == LAT) && ((char*)ctx->buf[qp_index])[i] == 1){
+				((char*)ctx->buf[qp_index])[i] = 0;
+			}
 		}
 	}
 
