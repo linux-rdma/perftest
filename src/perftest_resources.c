@@ -1378,6 +1378,7 @@ int verify_params_with_device_context(struct ibv_context *context,
 	return SUCCESS;
 }
 
+#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
 static int verify_ooo_settings(struct pingpong_context *ctx,
 			       struct perftest_parameters *user_param)
 {
@@ -1434,7 +1435,7 @@ static int verify_ooo_settings(struct pingpong_context *ctx,
 		return FAILURE;
 	}
 }
-
+#endif
 int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int i;
