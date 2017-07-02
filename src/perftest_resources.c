@@ -14,6 +14,7 @@
 #include <sys/mman.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <pthread.h>
 #if defined(__FreeBSD__)
 #include <sys/stat.h>
 #endif
@@ -3603,7 +3604,6 @@ cleaning:
 
 	return return_value;
 }
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -3620,13 +3620,26 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
+	int 			single_thread_handler;
+	int 			thread_id;
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	duration_param=user_param;
-	signal(SIGALRM,catch_alarm_infintely);
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGALRM);
+	single_thread_handler = pthread_sigmask(SIG_BLOCK, &set, NULL);
+	if (single_thread_handler != 0){
+		printf("error when try to mask alram for signal to thread\n");
+		return FAILURE;
+	}
+
+	pthread_t print_thread;
+	thread_id = pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set );
+
 	alarm(user_param->duration);
 	user_param->iters = 0;
 
@@ -4879,13 +4892,38 @@ void check_alive(int sig)
 /******************************************************************************
  *
  ******************************************************************************/
-void catch_alarm_infintely(int sig)
+void catch_alarm_infintely()
 {
-	duration_param->tcompleted[0] = get_cycles();
 	print_report_bw(duration_param,NULL);
 	duration_param->iters = 0;
 	alarm(duration_param->duration);
 	duration_param->tposted[0] = get_cycles();
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+void *handle_signal_print_thread(void *sigmask)
+{
+	sigset_t *set = (sigset_t*)sigmask;
+	int rc;
+	int sig_caught;
+	while(1){
+		rc = sigwait(set, &sig_caught);
+		if (rc != 0){
+			printf("Error when try to wait for SIGALRM\n");
+			return FAILURE;
+		}
+		switch(sig_caught)
+		{
+			case SIGALRM:
+				catch_alarm_infintely();
+			default:
+				printf("Unspported signal caught %d, only SIGALRM is supported\n");
+				return FAILURE;
+		}
+	}
+
 }
 
 /******************************************************************************

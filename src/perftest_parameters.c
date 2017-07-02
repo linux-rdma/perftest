@@ -2759,7 +2759,10 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
 	long num_of_calculated_iters = user_param->iters;
+
 	int free_my_bw_rep = 0;
+	if (user_param->test_method == RUN_INFINITELY)
+		user_param->tcompleted[opt_posted]= get_cycles();
 
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
@@ -2770,8 +2773,8 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 
 	if (user_param->noPeak == OFF) {
 		/* Find the peak bandwidth unless asked not to in command line */
-		for (i = 0; i < user_param->iters * num_of_qps; ++i) {
-			for (j = i; j < user_param->iters * num_of_qps; ++j) {
+		for (i = 0; i < num_of_calculated_iters * num_of_qps; ++i) {
+			for (j = i; j < num_of_calculated_iters * num_of_qps; ++j) {
 				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
 				if (t < opt_delta) {
 					opt_delta  = t;
@@ -2791,7 +2794,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	run_inf_bi_factor = (user_param->duplex && user_param->test_method == RUN_INFINITELY) ? (user_param->verb == SEND ? 1 : 2) : 1 ;
 	tsize = run_inf_bi_factor * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : num_of_qps;
-	location_arr = (user_param->noPeak) ? 0 : user_param->iters*num_of_qps - 1;
+	location_arr = (user_param->noPeak) ? 0 : num_of_calculated_iters - 1;
 	/* support in GBS format */
 	format_factor = (user_param->report_fmt == MBS) ? 0x100000 : 125000000;
 
@@ -2816,7 +2819,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	}
 
 	my_bw_rep->size = (unsigned long)user_param->size;
-	my_bw_rep->iters = user_param->iters;
+	my_bw_rep->iters = num_of_calculated_iters;
 	my_bw_rep->bw_peak = (double)peak_up/peak_down;
 	my_bw_rep->bw_avg = bw_avg;
 	my_bw_rep->msgRate_avg = msgRate_avg;

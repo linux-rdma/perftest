@@ -733,7 +733,15 @@ void check_alive(int sig);
  *  Will be triggered every 5 sec and measure BW in this time frame.
  *
  */
-void catch_alarm_infintely(int sig) ;
+void catch_alarm_infintely();
+
+/* handle_signal_print_thread
+*
+* Description :
+* 	Handle thread creation for signal catching in run_infinitely mode
+*
+*/
+void *handle_signal_print_thread(void *sig_mask);
 
 /* ctx_modify_dc_qp_to_init.
  *
