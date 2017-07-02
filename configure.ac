@@ -306,6 +306,7 @@ if [test $HAVE_EXP_OOO_ATTR = yes]; then
 fi
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
+LIBS=$LIBS" -lpthread"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 AC_CONFIG_FILES([Makefile])
