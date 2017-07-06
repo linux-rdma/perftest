@@ -4914,13 +4914,11 @@ void *handle_signal_print_thread(void *sigmask)
 			printf("Error when try to wait for SIGALRM\n");
 			return FAILURE;
 		}
-		switch(sig_caught)
-		{
-			case SIGALRM:
+		if(sig_caught == SIGALRM)
 				catch_alarm_infintely();
-			default:
-				printf("Unspported signal caught %d, only SIGALRM is supported\n");
-				return FAILURE;
+		else {
+			printf("Unsupported signal caught %d, only signal %d is supported\n", sig_caught, SIGALRM);
+			return FAILURE;
 		}
 	}
 
