@@ -554,9 +554,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Trying to close this side resources\n");
 	}
 
-	/* Destory all test resources, including Mcast if exists */
+	/* Destroy all test resources, including Mcast if exists */
 	if (send_destroy_ctx(&ctx,&user_param,&mcg_params)) {
-		fprintf(stderr,"Couldn't Destory all SEND resources\n");
+		fprintf(stderr,"Couldn't destroy all SEND resources\n");
 		return FAILURE;
 	}
 	if (user_param.work_rdma_cm == ON) {

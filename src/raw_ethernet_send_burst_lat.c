@@ -258,7 +258,7 @@ int main(int argc, char *argv[])
 	if (user_param.machine == CLIENT)
 		print_report_lat(&user_param);
 
-	/* destory promisc flow */
+	/* destroy promisc flow */
 	if (user_param.use_promiscuous) {
 		#ifdef HAVE_RAW_ETH_EXP
 		if (ibv_exp_destroy_flow(flow_promisc)) {
@@ -266,7 +266,7 @@ int main(int argc, char *argv[])
 		if (ibv_destroy_flow(flow_promisc)) {
 		#endif
 			perror("error");
-			fprintf(stderr, "Couldn't Destory promisc flow\n");
+			fprintf(stderr, "Couldn't destroy promisc flow\n");
 			return FAILURE;
 		}
 	}
@@ -279,7 +279,7 @@ int main(int argc, char *argv[])
 		if (ibv_destroy_flow(flow_create_result[i])) {
 		#endif
 			perror("error");
-			fprintf(stderr, "Couldn't Destory flow\n");
+			fprintf(stderr, "Couldn't destroy flow\n");
 			return FAILURE;
 		}
 
