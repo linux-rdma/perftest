@@ -237,7 +237,7 @@ Special feature detailed explanation in tests:
     ./configure --disable-verbs_exp
     make
 
- 6. In te x390x platform virtualized environment the results shown by package test applications can be incorrect.
+ 6. In the x390x platform virtualized environment the results shown by package test applications can be incorrect.
 
  7. perftest-2.3 release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
     Currently, running dualport when port1-IB , port2-Ethernet still not working.
