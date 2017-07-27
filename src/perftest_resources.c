@@ -4971,7 +4971,7 @@ cleaning:
 		if (ibv_destroy_flow(flow_create_result[flow_index])) {
 		#endif
 			perror("error");
-			fprintf(stderr, "Couldn't Destory flow\n");
+			fprintf(stderr, "Couldn't destroy flow\n");
 		}
 	}
 	free(flow_rules);

@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_create_result[flow_index + qp_index * user_param.flows])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory flow\n");
+					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
 				}
 			}
@@ -436,7 +436,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_promisc[qp_index])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory flow\n");
+					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
 				}
 			}
@@ -452,7 +452,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_sniffer[qp_index])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory sniffer flow\n");
+					fprintf(stderr, "Couldn't destroy sniffer flow\n");
 					return FAILURE;
 				}
 			}
