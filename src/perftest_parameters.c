@@ -327,7 +327,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		}
 
 		printf("  -T, --tos=<tos value> ");
-		printf(" Set <tos_value> to RDMA-CM QPs. availible only with -R flag. values 0-256 (default off)\n");
+		printf(" Set <tos_value> to RDMA-CM QPs. available only with -R flag. values 0-256 (default off)\n");
 	}
 
 	printf("  -u, --qp-timeout=<timeout> ");
@@ -2008,7 +2008,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  } break;
 			case 'C':
 				  if (user_param->tst != LAT) {
-					  fprintf(stderr," Availible only on Latency tests\n");
+					  fprintf(stderr," Available only on Latency tests\n");
 					  return 1;
 				  }
 				  user_param->r_flag->cycles = ON;
