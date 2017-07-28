@@ -1004,8 +1004,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		user_param->rem_ud_qkey = event->param.ud.qkey;
 
 		ctx->ah[0] = ibv_create_ah(ctx->pd,&event->param.ud.ah_attr);
-
-		if (!ctx->ah) {
+		if (!ctx->ah[0]) {
 			printf(" Unable to create address handler for UD QP\n");
 			return FAILURE;
 		}
