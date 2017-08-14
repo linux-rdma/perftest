@@ -3610,6 +3610,8 @@ cleaning:
  ******************************************************************************/
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
+	uint64_t		totscnt = 0;
+	uint64_t		totccnt = 0;
 	int 			i,j = 0;
 	int 			index = 0,ne;
 	int 			err = 0;
@@ -3650,16 +3652,6 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
 
-	for (i=0; i < num_of_qps; i++)
-		for (j=0 ; j < user_param->post_list; j++) {
-			#ifdef HAVE_VERBS_EXP
-			if (user_param->use_exp == 1)
-				ctx->exp_wr[i*user_param->post_list +j].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-			else
-			#endif
-				ctx->wr[i*user_param->post_list +j].send_flags |= IBV_SEND_SIGNALED;
-		}
-
 	user_param->tposted[0] = get_cycles();
 
 	/* main loop for posting */
@@ -3668,7 +3660,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		/* main loop to run over all the qps and post each time n messages */
 		for (index =0 ; index < num_of_qps ; index++) {
 
-			while (ctx->scnt[index] < user_param->tx_depth) {
+			while ((totscnt - totccnt) < user_param->tx_depth) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = scnt_for_qp[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
@@ -3689,31 +3681,32 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				}
 				ctx->scnt[index] += user_param->post_list;
 				scnt_for_qp[index] += user_param->post_list;
+				totscnt += user_param->post_list;
 			}
 		}
+		if (totccnt < totscnt) {
+			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
 
+			if (ne > 0) {
 
-		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
-
-		if (ne > 0) {
-
-			for (i = 0; i < ne; i++) {
-				if (wc[i].status != IBV_WC_SUCCESS) {
-					NOTIFY_COMP_ERROR_SEND(wc[i],ctx->scnt[(int)wc[i].wr_id],ctx->scnt[(int)wc[i].wr_id]);
-					return_value = FAILURE;
-					goto cleaning;
+				for (i = 0; i < ne; i++) {
+					if (wc[i].status != IBV_WC_SUCCESS) {
+						NOTIFY_COMP_ERROR_SEND(wc[i],ctx->scnt[(int)wc[i].wr_id],ctx->scnt[(int)wc[i].wr_id]);
+						return_value = FAILURE;
+						goto cleaning;
+					}
+					ctx->scnt[(int)wc[i].wr_id]--;
+					user_param->iters++;
+					totccnt += user_param->cq_mod;
 				}
-				ctx->scnt[(int)wc[i].wr_id]--;
-				user_param->iters++;
-			}
 
-		} else if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n",ne);
-			return_value = FAILURE;
-			goto cleaning;
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n",ne);
+				return_value = FAILURE;
+				goto cleaning;
+			}
 		}
 	}
-
 cleaning:
 	free(scnt_for_qp);
 	free(wc);
