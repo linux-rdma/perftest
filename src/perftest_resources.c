@@ -3612,7 +3612,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 {
 	uint64_t		totscnt = 0;
 	uint64_t		totccnt = 0;
-	int 			i,j = 0;
+	int 			i = 0;
 	int 			index = 0,ne;
 	int 			err = 0;
 	#ifdef HAVE_VERBS_EXP
