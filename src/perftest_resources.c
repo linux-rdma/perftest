@@ -3640,7 +3640,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	}
 
 	pthread_t print_thread;
-	if (!pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set)){
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set) != 0){
 		printf("Fail to create thread \n");
 		return FAILURE;
 	}
