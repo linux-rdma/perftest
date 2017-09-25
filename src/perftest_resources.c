@@ -3615,6 +3615,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int 			i = 0;
 	int 			index = 0,ne;
 	int 			err = 0;
+	int			wc_id;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
 	#endif
@@ -3656,16 +3657,34 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 	/* main loop for posting */
 	while (1) {
-
-		/* main loop to run over all the qps and post each time n messages */
+	/* main loop to run over all the qps and post each time n messages */
 		for (index =0 ; index < num_of_qps ; index++) {
 
-			while ((totscnt - totccnt) < user_param->tx_depth) {
+			while ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = scnt_for_qp[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
+
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
+
+					#ifdef HAVE_VERBS_EXP
+					#ifdef HAVE_ACCL_VERBS
+					if (user_param->verb_type == ACCL_INTF)
+						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_QP_BURST_SIGNALED;
+					else {
+					#endif
+						if (user_param->use_exp == 1)
+							ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
+						else
+					#endif
+							ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+					#ifdef HAVE_ACCL_VERBS
+					}
+					#endif
+				}
+
 				#ifdef HAVE_VERBS_EXP
 				if (user_param->use_exp == 1)
 					err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
@@ -3682,6 +3701,26 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				ctx->scnt[index] += user_param->post_list;
 				scnt_for_qp[index] += user_param->post_list;
 				totscnt += user_param->post_list;
+
+				/* ask for completion on this wr */
+				if (user_param->post_list == 1 &&
+						(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
+							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
+					#ifdef HAVE_VERBS_EXP
+					#ifdef HAVE_ACCL_VERBS
+					if (user_param->verb_type == ACCL_INTF)
+						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_QP_BURST_SIGNALED;
+					else {
+					#endif
+						if (user_param->use_exp == 1)
+							ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
+						else
+					#endif
+							ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+					#ifdef HAVE_ACCL_VERBS
+					}
+					#endif
+				}
 			}
 		}
 		if (totccnt < totscnt) {
@@ -3695,9 +3734,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 						return_value = FAILURE;
 						goto cleaning;
 					}
-					ctx->scnt[(int)wc[i].wr_id]--;
-					user_param->iters++;
+					wc_id = (user_param->verb_type == ACCL_INTF) ?
+							0 : (int)wc[i].wr_id;
+					user_param->iters += user_param->cq_mod;
 					totccnt += user_param->cq_mod;
+					ctx->ccnt[wc_id] += user_param->cq_mod;
 				}
 
 			} else if (ne < 0) {
