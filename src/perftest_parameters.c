@@ -1138,7 +1138,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 		if (user_param->duplex && user_param->verb == SEND) {
 			printf(RESULT_LINE);
-			fprintf(stderr," run_infinitely not supported in SEND Bidirectional BW test\n");
+			fprintf(stderr," run_infinitely mode is not supported in SEND Bidirectional BW test\n");
+			exit(1);
+		}
+		if (user_param->rate_limit_type != DISABLE_RATE_LIMIT) {
+			printf(RESULT_LINE);
+			fprintf(stderr," run_infinitely does not support rate limit feature yet\n");
 			exit(1);
 		}
 	}
@@ -1965,7 +1970,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  break;
 			case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
 			case 'D': user_param->duration = strtol(optarg, NULL, 0);
-				printf("get the pcpc flag %s\n",optarg);
 				  if (user_param->duration <= 0) {
 					  fprintf(stderr," Duration period must be greater than 0\n");
 					  return 1;
