@@ -247,10 +247,10 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 	}
 }
 
+#ifdef HAVE_VERBS_EXP
 static int check_for_contig_pages_support(struct ibv_context *context)
 {
 	int answer;
-	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_device_attr attr;
 	memset(&attr,0,sizeof attr);
 	if (ibv_exp_query_device(context,&attr)) {
@@ -258,24 +258,9 @@ static int check_for_contig_pages_support(struct ibv_context *context)
 		return FAILURE;
 	}
 	answer = ( attr.exp_device_cap_flags &= IBV_EXP_DEVICE_MR_ALLOCATE) ? SUCCESS : FAILURE;
-	#else
-	struct ibv_device_attr attr;
-
-	if (ibv_query_device(context,&attr)) {
-		fprintf(stderr, "Couldn't get device attributes\n");
-		return FAILURE;
-	}
-
-	/*
-	 * We assume device driver support contig pages by enabling 23 bit in
-	 * device_cap_flag. this is defined as IBV_DEVICE_MR_ALLOCATE.
-	 * Warning: this bit can represent others things in different devices.
-	 */
-	answer = attr.device_cap_flags & (1 << 23) ? SUCCESS : FAILURE;
-	#endif
 	return answer;
 }
-
+#endif
 #ifdef HAVE_XRCD
 /******************************************************************************
  *
@@ -1463,7 +1448,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
+	#ifdef HAVE_VERBS_EXP
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
+	#endif
 
 	if (user_param->use_hugepages)
 		ctx->is_contig_supported = FAILURE;
