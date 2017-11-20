@@ -1471,6 +1471,11 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 	} else {
 
 		switch (attr.vendor_part_id) {
+			case 4099  : dev_fname = CONNECTX3; break;
+			case 4100  : dev_fname = CONNECTX3; break;
+			case 4103  : dev_fname = CONNECTX3_PRO; break;
+			case 4104  : dev_fname = CONNECTX3_PRO; break;
+			case 4113  : dev_fname = CONNECTIB; break;
 			case 4115  : dev_fname = CONNECTX4; break;
 			case 4116  : dev_fname = CONNECTX4; break;
 			case 4117  : dev_fname = CONNECTX4LX; break;
@@ -1479,11 +1484,10 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 4120  : dev_fname = CONNECTX5; break;
 			case 4121  : dev_fname = CONNECTX5EX; break;
 			case 4122  : dev_fname = CONNECTX5EX; break;
-			case 4113  : dev_fname = CONNECTIB; break;
-			case 4099  : dev_fname = CONNECTX3; break;
-			case 4100  : dev_fname = CONNECTX3; break;
-			case 4103  : dev_fname = CONNECTX3_PRO; break;
-			case 4104  : dev_fname = CONNECTX3_PRO; break;
+			case 4123  : dev_fname = CONNECTX6; break;
+			case 4124  : dev_fname = CONNECTX6; break;
+			case 41682 : dev_fname = BLUEFIELD; break;
+			case 41683 : dev_fname = BLUEFIELD; break;
 			case 26418 : dev_fname = CONNECTX2; break;
 			case 26428 : dev_fname = CONNECTX2; break;
 			case 26438 : dev_fname = CONNECTX2; break;
