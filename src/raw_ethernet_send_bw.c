@@ -398,14 +398,14 @@ int main(int argc, char *argv[])
 		if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw_infinitely(&ctx, &user_param)) {
-				fprintf(stderr, " Error occured while running infinitely! aborting ...\n");
+				fprintf(stderr, " Error occurred while running infinitely! aborting ...\n");
 				return FAILURE;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx, &user_param)) {
-				fprintf(stderr, " Error occured while running infinitely on server! aborting ...\n");
+				fprintf(stderr, " Error occurred while running infinitely on server! aborting ...\n");
 				return FAILURE;
 			}
 		}
@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_create_result[flow_index + qp_index * user_param.flows])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory flow\n");
+					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
 				}
 			}
@@ -436,7 +436,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_promisc[qp_index])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory flow\n");
+					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
 				}
 			}
@@ -452,7 +452,7 @@ int main(int argc, char *argv[])
 				if (ibv_destroy_flow(flow_sniffer[qp_index])) {
 				#endif
 					perror("error");
-					fprintf(stderr, "Couldn't Destory sniffer flow\n");
+					fprintf(stderr, "Couldn't destroy sniffer flow\n");
 					return FAILURE;
 				}
 			}

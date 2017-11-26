@@ -677,7 +677,7 @@ static int ethernet_server_connect(struct perftest_comm *comm)
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,comm->rdma_params->port,NULL,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		fprintf(stderr, "Problem in resolving basic address and port\n");
 		return 1;
 	}
 
@@ -871,7 +871,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		fprintf(stderr, "Problem in resolving basic address and port\n");
 		return FAILURE;
 	}
 
@@ -1069,7 +1069,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic adress and port\n");
+		fprintf(stderr, "Problem in resolving basic address and port\n");
 		return FAILURE;
 	}
 

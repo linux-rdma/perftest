@@ -3727,7 +3727,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 			}
 
 		} else if (ne < 0) {
-			fprintf(stderr, "Poll Recieve CQ failed %d\n", ne);
+			fprintf(stderr, "Poll Receive CQ failed %d\n", ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}
@@ -4971,7 +4971,7 @@ cleaning:
 		if (ibv_destroy_flow(flow_create_result[flow_index])) {
 		#endif
 			perror("error");
-			fprintf(stderr, "Couldn't Destory flow\n");
+			fprintf(stderr, "Couldn't destroy flow\n");
 		}
 	}
 	free(flow_rules);

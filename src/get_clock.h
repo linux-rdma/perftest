@@ -70,7 +70,15 @@ static inline cycles_t get_cycles()
 	asm volatile ("mov %0=ar.itc" : "=r" (ret));
 	return ret;
 }
-#elif defined(__s390x__)
+#elif defined(__ARM_ARCH_7A__)
+typedef unsigned long long cycles_t;
+static inline cycles_t get_cycles(void)
+{
+	cycles_t        clk;
+	asm volatile("mrrc p15, 0, %Q0, %R0, c14" : "=r" (clk));
+	return clk;
+}
+#elif defined(__s390x__) || defined(__s390__)
 typedef unsigned long long cycles_t;
 static inline cycles_t get_cycles(void)
 {
