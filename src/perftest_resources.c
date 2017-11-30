@@ -1171,7 +1171,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			return FAILURE;
 		}
-	} else
+	}
 	#endif
 
 	if (user_param->mmap_file != NULL) {
@@ -1427,6 +1427,8 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 {
 	int i;
 	int num_of_qps = user_param->num_of_qps / 2;
+
+	ctx->is_contig_supported = FAILURE;
 
 	#ifdef HAVE_ACCL_VERBS
 	enum ibv_exp_query_intf_status intf_status;
