@@ -1,23 +1,27 @@
 #!/bin/sh
 # trivial script to launch a loopback test on the same device
 # example: run_perftest_loopback 0 1 ib_write_bw -s 10
-
+os_type=$(uname)
+if [ $os_type == "FreeBSD" ]; then
+	cpu_bind_cmd="cpuset -l"
+else 
+	cpu_bind_cmd="taskset -c"
+fi
 if [ $# -lt 3 ] ; then
 	echo ""
         echo "Usage: run_perftest_loopback <server_core> <client_core> <test command>"
 	echo "example: run_perftest_loopback 0 1 ib_write_bw -s 10"
         exit 3
 fi
-
 server_core=$1
 client_core=$2
 shift 2
 
-taskset -c $server_core $* &
+$cpu_bind_cmd $server_core $* &
 #give server time to start
 sleep 1
 
-taskset -c $client_core $* localhost
+$cpu_bind_cmd  $client_core $* localhost
 
 status=$?
 
