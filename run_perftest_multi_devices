@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Script to launch a multi device test on seperate processes.
 
 GET_HELP=0
