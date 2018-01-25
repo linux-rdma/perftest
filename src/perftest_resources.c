@@ -1171,7 +1171,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			return FAILURE;
 		}
-	}
+	} else
 	#endif
 
 	if (user_param->mmap_file != NULL) {
