@@ -2334,6 +2334,14 @@ static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 	#ifdef HAVE_PACKET_PACING_EXP
 	if (user_param->rate_limit_type == PP_RATE_LIMIT) {
 		((struct ibv_exp_qp_attr*)_attr)->rate_limit = user_param->rate_limit;
+
+	#ifdef HAVE_PACKET_PACING_EXTENSION_EXP
+		((struct ibv_exp_qp_attr*)_attr)->burst_info.max_burst_sz =
+			user_param->burst_size;
+		((struct ibv_exp_qp_attr*)_attr)->burst_info.typical_pkt_sz =
+			user_param->typical_pkt_size;
+		((struct ibv_exp_qp_attr*)_attr)->comp_mask |= IBV_EXP_QP_ATTR_BURST_INFO;
+	#endif
 		flags |= IBV_EXP_QP_RATE_LIMIT;
 		return ibv_exp_modify_qp(qp, (struct ibv_exp_qp_attr*)_attr, flags);
 	}
@@ -2388,9 +2396,18 @@ int ctx_connect(struct pingpong_context *ctx,
 			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit;
 
 		#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
-		if (user_param->rate_limit_type == PP_RATE_LIMIT && (check_packet_pacing_support(ctx) == FAILURE)) {
-			fprintf(stderr, "Packet Pacing isn't supported.\n");
-			return FAILURE;
+		if (user_param->rate_limit_type == PP_RATE_LIMIT) {
+			if (check_packet_pacing_support(ctx) == FAILURE) {
+				fprintf(stderr, "Packet Pacing isn't supported.\n");
+				return FAILURE;
+			}
+			#if defined (HAVE_PACKET_PACING_EXTENSION_EXP)
+			if (check_packet_pacing_extension_support(ctx) == FAILURE &&
+			    (user_param->burst_size || user_param->typical_pkt_size)) {
+				fprintf(stderr, "Burst control isn't supported.\n");
+				return FAILURE;
+			}
+			#endif
 		}
 		#endif
 
@@ -4996,6 +5013,30 @@ int check_packet_pacing_support(struct pingpong_context *ctx)
 	return MASK_IS_SET(IBV_EXP_DEVICE_ATTR_PACKET_PACING_CAPS, attr.comp_mask) ?
 		SUCCESS : FAILURE;
 }
+
+#ifdef HAVE_PACKET_PACING_EXTENSION_EXP
+int check_packet_pacing_extension_support(struct pingpong_context *ctx)
+{
+	struct ibv_exp_device_attr attr;
+	memset(&attr, 0, sizeof (struct ibv_exp_device_attr));
+
+	attr.comp_mask = IBV_EXP_DEVICE_ATTR_PACKET_PACING_CAPS;
+
+	if (ibv_exp_query_device(ctx->context, &attr)) {
+		fprintf(stderr, "ibv_exp_query_device failed\n");
+		return FAILURE;
+	}
+
+	if (!MASK_IS_SET(IBV_EXP_DEVICE_ATTR_PACKET_PACING_CAPS, attr.comp_mask))
+		return FAILURE;
+
+	if (attr.packet_pacing_caps.cap_flags & IBV_EXP_QP_SUPPORT_BURST)
+		return SUCCESS;
+
+	return FAILURE;
+}
+#endif
+
 #elif HAVE_PACKET_PACING
 int check_packet_pacing_support(struct pingpong_context *ctx)
 {
