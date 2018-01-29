@@ -458,6 +458,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#ifdef HAVE_CUDA
 		printf("      --use_cuda ");
 		printf(" Use CUDA lib for GPU-Direct testing.\n");
+		printf("      --cuda_device ");
+                printf(" The number of cuda device to use\n");
 		#endif
 
 		#ifdef HAVE_VERBS_EXP
@@ -661,6 +663,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->is_rate_limit_type  = 0;
 	user_param->output		= -1;
 	user_param->use_cuda		= 0;
+	user_param->cuda_device		= 0;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -1745,6 +1748,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int dont_xchg_versions_flag = 0;
 	static int use_exp_flag = 0;
 	static int use_cuda_flag = 0;
+        static int cuda_device_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
@@ -1865,6 +1869,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
+                        { .name = "cuda_device",           .has_arg = 0, .flag = &cuda_device_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
@@ -2331,6 +2336,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (reply_every_flag) {
 					user_param->reply_every = strtol(optarg, NULL, 0);
 					reply_every_flag = 0;
+				}
+                                if (cuda_device_flag) {
+					user_param->cuda_device = strtol(optarg, NULL, 0);
+					if (user_param->cuda_device < 0){
+						fprintf(stderr," Invalid cuda device number");
+						return FAILURE;
+					}
+					user_param->use_cuda = 1;
 				}
 				if(vlan_pcp_flag) {
 					user_param->vlan_pcp = strtol(optarg, NULL, 0);
