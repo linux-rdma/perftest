@@ -458,8 +458,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#ifdef HAVE_CUDA
 		printf("      --use_cuda ");
 		printf(" Use CUDA lib for GPU-Direct testing.\n");
-		printf("      --cuda_device ");
-                printf(" The number of cuda device to use\n");
+		printf("      --cuda_device=<value> ");
+                printf(" The ID of cuda device to use\n");
 		#endif
 
 		#ifdef HAVE_VERBS_EXP
@@ -1869,7 +1869,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
-                        { .name = "cuda_device",           .has_arg = 0, .flag = &cuda_device_flag, .val = 1},
+                        { .name = "cuda_device",        .has_arg = 1, .flag = &cuda_device_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
