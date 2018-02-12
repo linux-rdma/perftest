@@ -1164,6 +1164,8 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 	#endif
 
+	ctx->is_contig_supported = FAILURE;
+
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		ctx->is_contig_supported = FAILURE;
@@ -1191,7 +1193,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		/* Allocating buffer for data, in case driver not support contig pages. */
 		if (ctx->is_contig_supported == FAILURE) {
 			#if defined(__FreeBSD__)
-			posix_memalign(ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
+			posix_memalign(&ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
 			#else
 			if (user_param->use_hugepages) {
 				if (alloc_hugepage_region(ctx) != SUCCESS){
@@ -1320,6 +1322,7 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 #define SHMAT_ADDR (void *)(0x0UL)
 #define SHMAT_FLAGS (0)
 
+#if !defined(__FreeBSD__)
 int alloc_hugepage_region (struct pingpong_context *ctx)
 {
     int buf_size;
@@ -1349,6 +1352,7 @@ int alloc_hugepage_region (struct pingpong_context *ctx)
 
      return SUCCESS;
 }
+#endif
 
 int verify_params_with_device_context(struct ibv_context *context,
 				      struct perftest_parameters *user_param)
