@@ -54,10 +54,7 @@ struct check_alive_data check_alive_data;
 
 /*----------------------------------------------------------------------------*/
 
-static CUdevice cuDevice;
-static CUcontext cuContext;
-
-static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+static int pp_init_gpu(struct pingpong_context *ctx,struct perftest_parameters *user_param,  size_t _size)
 {
 	const size_t gpu_page_size = 64*1024;
 	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
@@ -69,6 +66,7 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 	}
 
 	int deviceCount = 0;
+	int devID = user_param->cuda_device;
 	error = cuDeviceGetCount(&deviceCount);
 	if (error != CUDA_SUCCESS) {
 		printf("cuDeviceGetCount() returned %d\n", error);
@@ -80,28 +78,30 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 		return 1;
 	} else if (deviceCount == 1)
 		printf("There is 1 device supporting CUDA\n");
-	else
-		printf("There are %d devices supporting CUDA, picking first...\n", deviceCount);
-
-	int devID = 0;
+	else if (deviceCount > devID)
+		printf("There are %d devices supporting CUDA, picking %d...\n", deviceCount, devID);
+	else {
+                printf("Error- There are %d devices supporting CUDA, can not pick device %d...\n", deviceCount, devID);
+		return 1;
+	}
 
 	/* pick up device with zero ordinal (default, or devID) */
-	CUCHECK(cuDeviceGet(&cuDevice, devID));
+	CUCHECK(cuDeviceGet(&ctx->cuDevice, devID));
 
 	char name[128];
 	CUCHECK(cuDeviceGetName(name, sizeof(name), devID));
-	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), cuDevice, name);
+	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), ctx->cuDevice, name);
 	printf("creating CUDA Ctx\n");
 
 	/* Create context */
-	error = cuCtxCreate(&cuContext, CU_CTX_MAP_HOST, cuDevice);
+	error = cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxCreate() error=%d\n", error);
 		return 1;
 	}
 
 	printf("making it the current CUDA Ctx\n");
-	error = cuCtxSetCurrent(cuContext);
+	error = cuCtxSetCurrent(ctx->cuContext);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxSetCurrent() error=%d\n", error);
 		return 1;
@@ -131,7 +131,7 @@ static int pp_free_gpu(struct pingpong_context *ctx)
 	d_A = 0;
 
 	printf("destroying current CUDA Ctx\n");
-	CUCHECK(cuCtxDestroy(cuContext));
+	CUCHECK(cuCtxDestroy(ctx->cuContext));
 
 	return ret;
 }
@@ -1165,60 +1165,62 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#endif
 
 	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
+	if (user_param->use_cuda) 
+	{
 		ctx->is_contig_supported = FAILURE;
-		if(pp_init_gpu(ctx, ctx->buff_size)) {
+		if(pp_init_gpu(ctx, user_param , ctx->buff_size)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			return FAILURE;
 		}
-	}
+	} 
+	else
 	#endif
-
-	if (user_param->mmap_file != NULL) {
-		#if defined(__FreeBSD__)
-		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
-		#else
-		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
-		#endif
-		if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
-				 user_param->mmap_offset))
-		{
-			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return FAILURE;
-		}
-
-	} else {
-		/* Allocating buffer for data, in case driver not support contig pages. */
-		if (ctx->is_contig_supported == FAILURE) {
+	{
+		if (user_param->mmap_file != NULL) {
 			#if defined(__FreeBSD__)
-			posix_memalign(ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
+			posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
 			#else
-			if (user_param->use_hugepages) {
-				if (alloc_hugepage_region(ctx) != SUCCESS){
-					fprintf(stderr, "Failed to allocate hugepage region.\n");
-					return FAILURE;
-				}
-				memset(ctx->buf[qp_index], 0, ctx->buff_size);
-			} else if  (ctx->is_contig_supported == FAILURE) {
-				ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
-			}
+			ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
 			#endif
-			if (!ctx->buf[qp_index]) {
+			if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
+					 user_param->mmap_offset))
+			{
 				fprintf(stderr, "Couldn't allocate work buf.\n");
 				return FAILURE;
 			}
 
-			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
-			ctx->buf[qp_index] = NULL;
-			#ifdef HAVE_VERBS_EXP
-			exp_flags |= IBV_EXP_ACCESS_ALLOCATE_MR;
-			#else
-			flags |= (1 << 5);
-			#endif
+			/* Allocating buffer for data, in case driver not support contig pages. */
+			if (ctx->is_contig_supported == FAILURE) {
+				#if defined(__FreeBSD__)
+				posix_memalign(ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
+				#else
+				if (user_param->use_hugepages) {
+					if (alloc_hugepage_region(ctx) != SUCCESS){
+						fprintf(stderr, "Failed to allocate hugepage region.\n");
+						return FAILURE;
+					}
+					memset(ctx->buf[qp_index], 0, ctx->buff_size);
+				} else if  (ctx->is_contig_supported == FAILURE) {
+					ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
+				}
+				#endif
+				if (!ctx->buf[qp_index]) {
+					fprintf(stderr, "Couldn't allocate work buf.\n");
+					return FAILURE;
+				}
+
+				memset(ctx->buf[qp_index], 0, ctx->buff_size);
+			} else {
+				ctx->buf[qp_index] = NULL;
+				#ifdef HAVE_VERBS_EXP
+				exp_flags |= IBV_EXP_ACCESS_ALLOCATE_MR;
+				#else
+				flags |= (1 << 5);
+				#endif
+			}
 		}
 	}
-
 	if (user_param->verb == WRITE) {
 		flags |= IBV_ACCESS_REMOTE_WRITE;
 		#ifdef HAVE_VERBS_EXP

@@ -182,6 +182,10 @@ struct pingpong_context {
 	struct ibv_exp_cq_family		*recv_cq_family;
 	struct ibv_exp_qp_burst_family		**qp_burst_family;
 	#endif
+	#ifdef HAVE_CUDA
+	CUdevice 				cuDevice;
+	CUcontext 				cuContext;
+	#endif
 
 };
 
