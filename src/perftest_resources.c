@@ -1148,6 +1148,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	uint64_t exp_flags = IBV_EXP_ACCESS_LOCAL_WRITE;
 	#endif
 
+	#if defined(__FreeBSD__)
+	ctx->is_contig_supported = FAILURE;
+	#endif
+
 	/* ODP */
 	#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
 	if (user_param->use_odp) {
@@ -1164,7 +1168,6 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 	#endif
 
-	ctx->is_contig_supported = FAILURE;
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
