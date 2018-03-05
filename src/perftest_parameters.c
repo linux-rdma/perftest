@@ -599,6 +599,10 @@ void usage_raw_ethernet(TestType tst)
 	printf(" send IPv6 Packets.\n");
 	#endif
 
+	if (tst == BW) {
+		printf("      --raw_mcast ");
+		printf(" send raw ethernet multicast traffic. No need to specify dest MAC address\n");
+	}
 
 	printf("\n");
 
