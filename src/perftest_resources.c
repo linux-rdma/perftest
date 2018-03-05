@@ -2392,7 +2392,7 @@ int ctx_connect(struct pingpong_context *ctx,
 		memset(&attr, 0, sizeof attr);
 
 		if (user_param->rate_limit_type == HW_RATE_LIMIT)
-			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit;
+			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit_index;
 
 		#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
 		if (user_param->rate_limit_type == PP_RATE_LIMIT) {
@@ -2473,7 +2473,7 @@ int ctx_connect(struct pingpong_context *ctx,
 		if (user_param->rate_limit_type == HW_RATE_LIMIT) {
 			struct ibv_qp_attr qp_attr;
 			struct ibv_qp_init_attr init_attr;
-			int err, qp_static_rate=0;
+			int err, qp_static_rate = 0;
 
 			memset(&qp_attr,0,sizeof(struct ibv_qp_attr));
 			memset(&init_attr,0,sizeof(struct ibv_qp_init_attr));
@@ -2485,7 +2485,9 @@ int ctx_connect(struct pingpong_context *ctx,
 				qp_static_rate = (int)(qp_attr.ah_attr.static_rate);
 
 			//- Fall back to SW Limit only if flag undefined
-			if(err || (qp_static_rate != user_param->valid_hw_rate_limit)) {
+			if(err ||
+			   qp_static_rate != user_param->valid_hw_rate_limit_index ||
+			   user_param->link_type != IBV_LINK_LAYER_INFINIBAND) {
 				if(!user_param->is_rate_limit_type) {
 					user_param->rate_limit_type = SW_RATE_LIMIT;
 					fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit, providing SW rate limit \x1b[0m\n");

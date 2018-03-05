@@ -500,7 +500,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("        Note (2): When using PP rate_units is forced to Kbps.\n");
 
 		printf("      --rate_limit_type=<type>");
-		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit Not is specified HW limit is Default.\n");
+		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit is not specified HW limit is Default.\n");
 		printf("        Note: in Latency under load test SW rate limit is forced\n");
 
 	}
@@ -665,7 +665,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->burst_size		= 0;
 	user_param->typical_pkt_size	= 0;
 	user_param->rate_limit		= 0;
-	user_param->valid_hw_rate_limit	= 0;
+	user_param->valid_hw_rate_limit_index = 0;
 	user_param->rate_units		= GIGA_BIT_PS;
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
@@ -1235,7 +1235,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 				break;
 			case PACKET_PS:
 				printf(RESULT_LINE);
-				fprintf(stderr, " Failed: pps  rate limit units is not supported when setting HW rate limit\n");
+				fprintf(stderr, " Failed: pps rate limit units is not supported when setting HW rate limit\n");
 				exit(1);
 			default:
 				printf(RESULT_LINE);
@@ -1243,14 +1243,14 @@ static void force_dependecies(struct perftest_parameters *user_param)
 				exit(1);
 		}
 		if (rate_limit_gbps > 0) {
-			int rate_to_set = -1;
-			get_gbps_str_by_ibv_rate(user_param->rate_limit_str, &rate_to_set);
-			if (rate_to_set == -1) {
+			int rate_index_to_set = -1;
+			get_gbps_str_by_ibv_rate(user_param->rate_limit_str, &rate_index_to_set);
+			if (rate_index_to_set == -1) {
 				printf(RESULT_LINE);
 				fprintf(stderr, " Failed: Unknown rate limit value\n");
 				exit(1);
 			}
-			user_param->valid_hw_rate_limit = rate_to_set;
+			user_param->valid_hw_rate_limit_index = rate_index_to_set;
 		}
 	} else if (user_param->rate_limit_type == PP_RATE_LIMIT) {
 		if (user_param->rate_limit < 0) {
