@@ -1199,7 +1199,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			posix_memalign(&ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
 			#else
 			if (user_param->use_hugepages) {
-				if (alloc_hugepage_region(ctx) != SUCCESS){
+				if (alloc_hugepage_region(ctx, qp_index) != SUCCESS){
 					fprintf(stderr, "Failed to allocate hugepage region.\n");
 					return FAILURE;
 				}
@@ -1326,7 +1326,7 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 #define SHMAT_FLAGS (0)
 
 #if !defined(__FreeBSD__)
-int alloc_hugepage_region (struct pingpong_context *ctx)
+int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 {
     int buf_size;
     int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
@@ -1341,7 +1341,7 @@ int alloc_hugepage_region (struct pingpong_context *ctx)
     }
 
     /* attach shared memory */
-    ctx->buf = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
+    ctx->buf[qp_index] = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
     if (ctx->buf == (void *) -1) {
 	fprintf(stderr, "Failed to attach shared memory region\n");
 	return FAILURE;
