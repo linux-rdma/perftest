@@ -846,7 +846,7 @@ int create_mr(struct pingpong_context *ctx,
  * Return Value : SUCCESS, FAILURE.
  *
  */
-int alloc_hugepage_region (struct pingpong_context *ctx);
+int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index);
 
 /* run_iter_fs_rate
  *
