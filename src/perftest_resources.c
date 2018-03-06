@@ -1328,32 +1328,32 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 #if !defined(__FreeBSD__)
 int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 {
-    int buf_size;
-    int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
-    buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
+	int buf_size;
+	int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
+	buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
 
-    /* create hugepage shared region */
-    ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
-                        SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-    if (ctx->huge_shmid < 0) {
-        fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
-        return FAILURE;
-    }
+	/* create hugepage shared region */
+	ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
+				 SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
+	if (ctx->huge_shmid < 0) {
+		fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
+		return FAILURE;
+	}
 
-    /* attach shared memory */
-    ctx->buf[qp_index] = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
-    if (ctx->buf == (void *) -1) {
-	fprintf(stderr, "Failed to attach shared memory region\n");
-	return FAILURE;
-    }
+	/* attach shared memory */
+	ctx->buf[qp_index] = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
+	if (ctx->buf == (void *) -1) {
+		fprintf(stderr, "Failed to attach shared memory region\n");
+		return FAILURE;
+	}
 
-    /* Mark shmem for removal */
-    if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
-	fprintf(stderr, "Failed to mark shm for removal\n");
-	return FAILURE;
-    }
+	/* Mark shmem for removal */
+	if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
+		fprintf(stderr, "Failed to mark shm for removal\n");
+		return FAILURE;
+	}
 
-     return SUCCESS;
+	return SUCCESS;
 }
 #endif
 
