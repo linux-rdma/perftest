@@ -1876,15 +1876,19 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	}
 
 	if (user_param->work_rdma_cm) {
-		if (rdma_create_qp(ctx->cm_id,ctx->pd,&attr)) {
-			fprintf(stderr, " Couldn't create rdma QP - %s\n",strerror(errno));
-			return NULL;
+		if (rdma_create_qp(ctx->cm_id, ctx->pd, &attr)) {
+			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
+		} else {
+			qp = ctx->cm_id->qp;
 		}
-		qp = ctx->cm_id->qp;
 
 	} else {
 		qp = ibv_create_qp(ctx->pd,&attr);
 	}
+	if (errno == ENOMEM)
+		fprintf(stderr, "Requested SQ size might be too big. Try reducing TX depth and/or inline size.\n");
+		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
+
 	return qp;
 }
 
