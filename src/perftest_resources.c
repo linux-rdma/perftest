@@ -1455,6 +1455,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
+	ctx->is_contig_supported = FAILURE;
 	#ifdef HAVE_VERBS_EXP
 	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 	#endif
