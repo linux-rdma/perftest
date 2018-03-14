@@ -1455,12 +1455,11 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
+	ctx->is_contig_supported = FAILURE;
 	#ifdef HAVE_VERBS_EXP
-	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
+	if (!user_param->use_hugepages)
+		ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
 	#endif
-
-	if (user_param->use_hugepages)
-		ctx->is_contig_supported = FAILURE;
 
 	/* Allocating an event channel if requested. */
 	if (user_param->use_event) {
