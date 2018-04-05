@@ -1836,6 +1836,9 @@ struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
 		printf("  Actual inline-receive(%d) < requested inline-receive(%d)\n",
 				attr.max_inl_recv, user_param->inline_recv_size);
 
+	if (user_param->inline_size > attr.cap.max_inline_data)
+		user_param->inline_size = attr.cap.max_inline_data;
+
 	return qp;
 }
 #endif
@@ -1888,6 +1891,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	if (errno == ENOMEM)
 		fprintf(stderr, "Requested SQ size might be too big. Try reducing TX depth and/or inline size.\n");
 		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
+
+	if (user_param->inline_size > attr.cap.max_inline_data)
+		user_param->inline_size = attr.cap.max_inline_data;
 
 	return qp;
 }
