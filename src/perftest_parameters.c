@@ -1487,6 +1487,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 		/* Assuming it's Mellanox HCA or unknown.
 		If you want Inline support in other vendor devices, please send patch to gilr@dev.mellanox.co.il
 		*/
+	} else if (attr.vendor_id == 0x8086) {
+		dev_fname = INTEL_ALL;
 	} else {
 
 		switch (attr.vendor_part_id) {
