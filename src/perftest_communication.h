@@ -45,20 +45,18 @@
 #include "perftest_resources.h"
 
 /* Macro for 64 bit variables to switch to/from net */
-#if __BYTE_ORDER == __BIG_ENDIAN || __BYTE_ORDER == __LITTLE_ENDIAN
-#if __BYTE_ORDER == __BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 #define ntoh_64(x) (x)
 #define hton_64(x) (x)
 #define ntoh_double(x) (x)
 #define hton_double(x) (x)
-#else
+#elif BYTE_ORDER == LITTLE_ENDIAN
 #define ntoh_64(x) bswap_64(x)
 #define hton_64(x) bswap_64(x)
 #define ntoh_double(x) bswap_double(x)
 #define hton_double(x) bswap_double(x)
-#endif
 #else
-#error "Only BIG_ENDIAN and LITTLE_ENDIAN are supported."
+#error "Must set BYTE_ORDER"
 #endif
 
 /* long is 64-bit in LP64 mode, 32-bit in LLP64 mode. */
