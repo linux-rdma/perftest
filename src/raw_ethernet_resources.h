@@ -43,7 +43,6 @@
 #define UDP_PROTOCOL (0x11)
 #define TCP_PROTOCOL (0x06)
 #define IP_HEADER_LEN (20)
-#define DEFAULT_TTL (128)
 #define DEFAULT_IPV6_NEXT_HDR (0x3b)
 
 struct raw_ethernet_info {
@@ -251,10 +250,11 @@ int send_set_up_connection(
  * 		saddr - source IP address of the packet(network order)
  * 		daddr - destination IP address of the packet(network order)
  * 		pkt_size - size of the packet
+ *		hop_limit - hop limit (ttl for ipv4)
  *		flows_offset - current offset from the base flow
  */
 void gen_ip_header(void* ip_header_buff, uint32_t* saddr, uint32_t* daddr,
-		   uint8_t protocol, int pkt_size, int tos, int flows_offset);
+		   uint8_t protocol, int pkt_size, int hop_limit, int tos, int flows_offset);
 
 /* gen_udp_header .
 

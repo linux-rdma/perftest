@@ -117,8 +117,8 @@ static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
 }
 
 void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
-		     uint8_t protocol, int pkt_size, int tos, int is_l4, int
-		     is_tcp)
+		     uint8_t protocol, int pkt_size, int hop_limit, int tos, int is_l4,
+		     int is_tcp)
 {
 	struct IP_V6_header ip_header;
 
@@ -126,7 +126,7 @@ void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
 
 	ip_header.version = 6;
 	ip_header.nexthdr = protocol ? protocol : DEFAULT_IPV6_NEXT_HDR;
-	ip_header.hop_limit = DEFAULT_TTL;
+	ip_header.hop_limit = hop_limit;
 	ip_header.payload_len = htons(pkt_size - sizeof(struct IP_V6_header));
 	if (is_l4) {
 		if (is_tcp)
@@ -144,7 +144,7 @@ void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
  *
  ******************************************************************************/
 void gen_ipv4_header(void* ip_header_buffer, uint32_t* saddr, uint32_t* daddr,
-		     uint8_t protocol, int pkt_size, int tos, int flows_offset)
+		     uint8_t protocol, int pkt_size, int ttl, int tos, int flows_offset)
 {
 	struct IP_V4_header ip_header;
 
@@ -156,7 +156,7 @@ void gen_ipv4_header(void* ip_header_buffer, uint32_t* saddr, uint32_t* daddr,
 	ip_header.tot_len = htons(pkt_size);
 	ip_header.id = htons(0);
 	ip_header.frag_off = htons(0);
-	ip_header.ttl = DEFAULT_TTL;
+	ip_header.ttl = ttl;
 	ip_header.protocol = protocol;
 	ip_header.saddr = *saddr;
 	ip_header.daddr = *daddr;
@@ -592,11 +592,11 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 		if (user_param->raw_ipv6)
 			gen_ipv6_header(header_buff, my_dest_info->ip6,
 					rem_dest_info->ip6, ip_next_protocol,
-					pkt_size, user_param->tos,
+					pkt_size, user_param->hop_limit, user_param->tos,
 					is_udp_or_tcp, user_param->tcp);
 		else
 			gen_ipv4_header(header_buff, &my_dest_info->ip, &rem_dest_info->ip,
-					ip_next_protocol, pkt_size, user_param->tos, offset);
+					ip_next_protocol, pkt_size, user_param->hop_limit, user_param->tos, offset);
 	}
 
 	if(is_udp_or_tcp) {

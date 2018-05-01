@@ -259,6 +259,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	if (tst != FS_RATE) {
+		printf("  -L, --hop_limit=<hop_limit> ");
+		printf(" Set hop limit value (ttl for IPv4 RawEth QP). Values 0-255 (default %d)\n", DEF_HOP_LIMIT);
+
 		if (connection_type == RawEth) {
 			printf("  -m, --mtu=<mtu> ");
 			printf(" MTU size : 64 - 9600 (default port mtu)\n");
@@ -650,6 +653,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->test_type		= ITERATIONS;
 	user_param->state		= START_STATE;
 	user_param->tos			= DEF_TOS;
+	user_param->hop_limit		= DEF_HOP_LIMIT;
 	user_param->mac_fwd		= OFF;
 	user_param->report_fmt		= MBS;
 	user_param->report_both		= OFF;
@@ -1101,6 +1105,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 	} else if (user_param->tos != DEF_TOS && user_param->connection_type != RawEth) {
 		fprintf(stdout," TOS only valid for rdma_cm based QP and RawEth QP \n");
+		exit(1);
+	}
+
+	if (user_param->hop_limit != DEF_HOP_LIMIT && user_param->connection_type != RawEth) {
+		fprintf(stdout," Hop limit only valid for RawEth QP \n");
 		exit(1);
 	}
 
@@ -1831,6 +1840,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "comm_rdma_cm",	.has_arg = 0, .val = 'z' },
 			{ .name = "rdma_cm",		.has_arg = 0, .val = 'R' },
 			{ .name = "tos",		.has_arg = 1, .val = 'T' },
+			{ .name = "hop_limit",		.has_arg = 1, .val = 'L' },
 			{ .name = "help",		.has_arg = 0, .val = 'h' },
 			{ .name = "MGID",		.has_arg = 1, .val = 'M' },
 			{ .name = "rx-depth",		.has_arg = 1, .val = 'r' },
@@ -1926,7 +1936,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{ 0 }
 		};
-		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:E:J:j:K:k:X:aFegzRvhbNVCHUOZP",long_options,NULL);
+		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:L:E:J:j:K:k:X:aFegzRvhbNVCHUOZP",long_options,NULL);
 
 		if (c == -1)
 			break;
@@ -1940,6 +1950,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
 			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
 			case 'T': CHECK_VALUE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS"); break;
+			case 'L': CHECK_VALUE(user_param->hop_limit,int,MIN_HOP_LIMIT,MAX_HOP_LIMIT,"Hop Limit"); break;
 			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
 			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
 				  if (user_param->sl > MAX_SL) {

@@ -121,6 +121,7 @@
 #define DEF_INIT_MARGIN (-1)
 #define DEF_INLINE    (-1)
 #define DEF_TOS       (-1)
+#define DEF_HOP_LIMIT	(64)
 #define DEF_RETRY_COUNT (7)
 #define DEF_CACHE_LINE_SIZE (64)
 #define DEF_PAGE_SIZE (4096)
@@ -137,6 +138,8 @@
 /* Max and Min allowed values for perftest parameters. */
 #define MIN_TOS		(0)
 #define MAX_TOS		(255)
+#define MIN_HOP_LIMIT	(0)
+#define MAX_HOP_LIMIT	(255)
 #define MIN_IB_PORT   (1)
 #define MAX_IB_PORT   (3)
 #define MIN_ITER      (5)
@@ -411,6 +414,7 @@ struct perftest_parameters {
 	int				use_rss;
 	int				srq_exists;
 	int				tos;
+	int				hop_limit;
 	int				margin;
 	int 				is_bw_limit_passed;
 	int 				is_msgrate_limit_passed;
