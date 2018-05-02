@@ -432,9 +432,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
 
 		printf("      --report_gbits ");
-		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
-		printf("        Note: MB=2^20 byte, while Gb=10^9 bits. Use these formulas for conversion:\n");
-		printf("        Factor=10^9/(20^2*8)=119.2; MB=Gb_result * factor; Gb=MB_result / factor\n");
+		printf(" Report Max/Average BW of test in Gbit/sec (instead of MiB/sec)\n");
+		printf("        Note: MiB=2^20 byte, while Gb=10^9 bits. Use these formulas for conversion:\n");
+		printf("        Factor=10^9/(20^2*8)=119.2; MiB=Gb_result * factor; Gb=MB_result / factor\n");
 
 		if (connection_type != RawEth) {
 			printf("      --report-per-port ");
@@ -495,7 +495,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
-		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n");
+		printf(" [Mgp] Set the units for rate limit to MiBps (M), Gbps (g) or pps (p). default is Gbps (g).\n");
 		printf("        Note (1): pps not supported with HW limit.\n");
 		printf("        Note (2): When using PP rate_units is forced to Kbps.\n");
 
