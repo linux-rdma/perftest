@@ -770,6 +770,9 @@ int check_masked_atomics_support(struct pingpong_context *ctx);
 
 #if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
 int check_packet_pacing_support(struct pingpong_context *ctx);
+#if defined (HAVE_PACKET_PACING_EXTENSION_EXP)
+int check_packet_pacing_extension_support(struct pingpong_context *ctx);
+#endif
 #endif
 
 #ifdef HAVE_ACCL_VERBS

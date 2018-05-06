@@ -460,6 +460,7 @@ struct perftest_parameters {
 	double 				rate_limit;
 	int				valid_hw_rate_limit;
 	int 				burst_size;
+	int				typical_pkt_size;
 	enum 				rate_limiter_units rate_units;
 	enum 				rate_limiter_types rate_limit_type;
 	int				is_rate_limit_type;

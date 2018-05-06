@@ -433,6 +433,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
+		printf("        Note: MB=2^20 byte, while Gb=10^9 bits. Use these formulas for conversion:\n");
+		printf("        Factor=10^9/(20^2*8)=119.2; MB=Gb_result * factor; Gb=MB_result / factor\n");
 
 		if (connection_type != RawEth) {
 			printf("      --report-per-port ");
@@ -486,17 +488,20 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
 
+		printf("      --typical_pkt_size=<bytes>");
+		printf(" Set the size of packet to send in a burst. Only supports PP rate limiter\n");
+
 		printf("      --rate_limit=<rate>");
 		printf(" Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.\n");
 
 		printf("      --rate_units=<units>");
 		printf(" [Mgp] Set the units for rate limit to MBps (M), Gbps (g) or pps (p). default is Gbps (g).\n");
-		printf("      Note (1): pps not supported with HW limit.\n");
-		printf("      Note (2): When using PP rate_units is forced to Kbps.\n");
+		printf("        Note (1): pps not supported with HW limit.\n");
+		printf("        Note (2): When using PP rate_units is forced to Kbps.\n");
 
 		printf("      --rate_limit_type=<type>");
 		printf(" [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit Not is specified HW limit is Default.\n");
-		printf("      Note (1) in Latency under load test SW rate limit is forced\n");
+		printf("        Note: in Latency under load test SW rate limit is forced\n");
 
 	}
 	#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
@@ -654,6 +659,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->inline_recv_size	= 0;
 	user_param->tcp			= 0;
 	user_param->burst_size		= 0;
+	user_param->typical_pkt_size	= 0;
 	user_param->rate_limit		= 0;
 	user_param->valid_hw_rate_limit	= 0;
 	user_param->rate_units		= GIGA_BIT_PS;
@@ -1192,7 +1198,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->burst_size <= 0) {
 		if (user_param->rate_limit_type == SW_RATE_LIMIT)
 			fprintf(stderr," Setting burst size to tx depth = %d\n", user_param->tx_depth);
-		user_param->burst_size = user_param->tx_depth;
+
+		if (user_param->rate_limit_type != PP_RATE_LIMIT)
+			user_param->burst_size = user_param->tx_depth;
+	}
+
+	if (user_param->typical_pkt_size &&
+	    user_param->rate_limit_type != PP_RATE_LIMIT){
+		printf(RESULT_LINE);
+		fprintf(stderr," Typical packet size only supports PP rate limiter\n");
+		exit(1);
 	}
 
 	if (user_param->rate_limit_type == SW_RATE_LIMIT) {
@@ -1734,6 +1749,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int inline_recv_flag = 0;
 	static int tcp_flag = 0;
 	static int burst_size_flag = 0;
+	static int typical_pkt_size_flag = 0;
 	static int rate_limit_flag = 0;
 	static int rate_units_flag = 0;
 	static int rate_limit_type_flag = 0;
@@ -1855,6 +1871,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "inline_recv",	.has_arg = 1, .flag = &inline_recv_flag, .val = 1},
 			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
 			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
+			{ .name = "typical_pkt_size",	.has_arg = 1, .flag = &typical_pkt_size_flag, .val = 1},
 			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
 			{ .name = "rate_limit_type",	.has_arg = 1, .flag = &rate_limit_type_flag, .val = 1},
 			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
@@ -2161,6 +2178,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					burst_size_flag = 0;
+				}
+				if (typical_pkt_size_flag) {
+					user_param->typical_pkt_size = strtol(optarg,NULL,0);
+					if ((user_param->typical_pkt_size < 0) ||
+					    (user_param->typical_pkt_size > 0xFFFF)) {
+						fprintf(stderr, " Typical pkt size must be non-negative and less than 0xffff\n");
+						return FAILURE;
+					}
+					typical_pkt_size_flag = 0;
 				}
 				if (rate_units_flag) {
 					if (strcmp("M",optarg) == 0) {
