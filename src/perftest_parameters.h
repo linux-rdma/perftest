@@ -458,7 +458,7 @@ struct perftest_parameters {
 	/* Rate Limiter */
 	char				*rate_limit_str;
 	double 				rate_limit;
-	int				valid_hw_rate_limit;
+	int				valid_hw_rate_limit_index;
 	int 				burst_size;
 	int				typical_pkt_size;
 	enum 				rate_limiter_units rate_units;

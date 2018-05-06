@@ -1199,7 +1199,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			posix_memalign(&ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
 			#else
 			if (user_param->use_hugepages) {
-				if (alloc_hugepage_region(ctx) != SUCCESS){
+				if (alloc_hugepage_region(ctx, qp_index) != SUCCESS){
 					fprintf(stderr, "Failed to allocate hugepage region.\n");
 					return FAILURE;
 				}
@@ -1326,34 +1326,34 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 #define SHMAT_FLAGS (0)
 
 #if !defined(__FreeBSD__)
-int alloc_hugepage_region (struct pingpong_context *ctx)
+int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 {
-    int buf_size;
-    int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
-    buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
+	int buf_size;
+	int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
+	buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
 
-    /* create hugepage shared region */
-    ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
-                        SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-    if (ctx->huge_shmid < 0) {
-        fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
-        return FAILURE;
-    }
+	/* create hugepage shared region */
+	ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
+				 SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
+	if (ctx->huge_shmid < 0) {
+		fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
+		return FAILURE;
+	}
 
-    /* attach shared memory */
-    ctx->buf = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
-    if (ctx->buf == (void *) -1) {
-	fprintf(stderr, "Failed to attach shared memory region\n");
-	return FAILURE;
-    }
+	/* attach shared memory */
+	ctx->buf[qp_index] = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
+	if (ctx->buf == (void *) -1) {
+		fprintf(stderr, "Failed to attach shared memory region\n");
+		return FAILURE;
+	}
 
-    /* Mark shmem for removal */
-    if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
-	fprintf(stderr, "Failed to mark shm for removal\n");
-	return FAILURE;
-    }
+	/* Mark shmem for removal */
+	if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
+		fprintf(stderr, "Failed to mark shm for removal\n");
+		return FAILURE;
+	}
 
-     return SUCCESS;
+	return SUCCESS;
 }
 #endif
 
@@ -1876,15 +1876,19 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	}
 
 	if (user_param->work_rdma_cm) {
-		if (rdma_create_qp(ctx->cm_id,ctx->pd,&attr)) {
-			fprintf(stderr, " Couldn't create rdma QP - %s\n",strerror(errno));
-			return NULL;
+		if (rdma_create_qp(ctx->cm_id, ctx->pd, &attr)) {
+			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
+		} else {
+			qp = ctx->cm_id->qp;
 		}
-		qp = ctx->cm_id->qp;
 
 	} else {
 		qp = ibv_create_qp(ctx->pd,&attr);
 	}
+	if (errno == ENOMEM)
+		fprintf(stderr, "Requested SQ size might be too big. Try reducing TX depth and/or inline size.\n");
+		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
+
 	return qp;
 }
 
@@ -2392,7 +2396,7 @@ int ctx_connect(struct pingpong_context *ctx,
 		memset(&attr, 0, sizeof attr);
 
 		if (user_param->rate_limit_type == HW_RATE_LIMIT)
-			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit;
+			attr.ah_attr.static_rate = user_param->valid_hw_rate_limit_index;
 
 		#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
 		if (user_param->rate_limit_type == PP_RATE_LIMIT) {
@@ -2473,7 +2477,7 @@ int ctx_connect(struct pingpong_context *ctx,
 		if (user_param->rate_limit_type == HW_RATE_LIMIT) {
 			struct ibv_qp_attr qp_attr;
 			struct ibv_qp_init_attr init_attr;
-			int err, qp_static_rate=0;
+			int err, qp_static_rate = 0;
 
 			memset(&qp_attr,0,sizeof(struct ibv_qp_attr));
 			memset(&init_attr,0,sizeof(struct ibv_qp_init_attr));
@@ -2485,7 +2489,9 @@ int ctx_connect(struct pingpong_context *ctx,
 				qp_static_rate = (int)(qp_attr.ah_attr.static_rate);
 
 			//- Fall back to SW Limit only if flag undefined
-			if(err || (qp_static_rate != user_param->valid_hw_rate_limit)) {
+			if(err ||
+			   qp_static_rate != user_param->valid_hw_rate_limit_index ||
+			   user_param->link_type != IBV_LINK_LAYER_INFINIBAND) {
 				if(!user_param->is_rate_limit_type) {
 					user_param->rate_limit_type = SW_RATE_LIMIT;
 					fprintf(stderr, "\x1b[31mThe QP failed to accept HW rate limit, providing SW rate limit \x1b[0m\n");
