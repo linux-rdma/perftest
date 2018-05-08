@@ -624,25 +624,14 @@ static int get_best_gid_index (struct pingpong_context *ctx,
  ******************************************************************************/
 static int ethernet_client_connect(struct perftest_comm *comm)
 {
-	struct addrinfo *res, *t, *ailist;
+	struct addrinfo *res, *t;
 	struct addrinfo hints;
 	char *service;
-	int stat;
 
 	int sockfd = -1;
 	memset(&hints, 0, sizeof hints);
-	stat = getaddrinfo(comm->rdma_params->servername, NULL, NULL, &ailist);
-	if (stat != 0){
-		fprintf(stderr, "Check server address provided\n");
-		exit(1);
-	}
-	if (ailist->ai_family == AF_INET)
 	hints.ai_family   = AF_INET;
-	if (ailist->ai_family == AF_INET6)
-		hints.ai_family = AF_INET6;
 	hints.ai_socktype = SOCK_STREAM;
-
-	freeaddrinfo(ailist);
 
 	if (check_add_port(&service,comm->rdma_params->port,comm->rdma_params->servername,&hints,&res)) {
 		fprintf(stderr, "Problem in resolving basic address and port\n");
@@ -684,7 +673,7 @@ static int ethernet_server_connect(struct perftest_comm *comm)
 	int sockfd = -1, connfd;
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags    = AI_PASSIVE;
-	hints.ai_family   = AF_INET6;
+	hints.ai_family   = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,comm->rdma_params->port,NULL,&hints,&res)) {
