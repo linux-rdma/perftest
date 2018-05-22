@@ -603,11 +603,11 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 
 			gid_attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE;
 			if (ibv_exp_query_gid_attr(ctx->context, port, gid_index, &gid_attr))
-				return -1;
+				continue;
 			roce_version = gid_attr.type;
 
 			if (ibv_exp_query_gid_attr(ctx->context, port, i, &gid_attr))
-				return -1;
+				continue;
 			roce_version_rival = gid_attr.type;
 
 			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
