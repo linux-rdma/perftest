@@ -1191,6 +1191,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->retry_count		= user_param->retry_count;
 	comm->rdma_params->mr_per_qp		= user_param->mr_per_qp;
 	comm->rdma_params->dlid			= user_param->dlid;
+	comm->rdma_params->cycle_buffer         = user_param->cycle_buffer;
 
 	if (user_param->use_rdma_cm) {
 
