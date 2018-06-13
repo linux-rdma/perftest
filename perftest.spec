@@ -1,6 +1,6 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        4.2
+Version:        4.4
 Release:        0.0
 License:        BSD 3-Clause, GPL v2 or later
 Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz
