@@ -447,7 +447,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 		.port = port_num,
 		.access_flags = IBV_ACCESS_REMOTE_WRITE,
 		.min_rnr_timer = 2,
-		.tclass = 0,
+		.tclass = user_param->traffic_class,
 		.flow_label = 0,
 		.mtu = user_param->curr_mtu,
 		.pkey_index = user_param->pkey_index,
