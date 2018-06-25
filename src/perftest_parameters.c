@@ -1100,11 +1100,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->num_of_qps > 1) {
-			printf(RESULT_LINE);
-			fprintf(stdout," Perftest only supports 1 rmda_cm QP for now\n");
-			exit(1);
-		}
 		user_param->use_rdma_cm = ON;
 
 	} else if (user_param->tos != DEF_TOS && user_param->connection_type != RawEth) {

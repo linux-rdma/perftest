@@ -1760,6 +1760,9 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 	return SUCCESS;
 }
 
+/******************************************************************************
+*
+******************************************************************************/
 int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
 		struct pingpong_dest *rem_dest)
 {
@@ -1774,6 +1777,775 @@ int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
 
 	return 0;
 }
+
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_get_rdma_address(struct perftest_parameters *user_param,
+		struct rdma_addrinfo *hints, struct rdma_addrinfo **rai)
+{
+	int rc;
+	char port[6] = "", error_message[ERROR_MSG_SIZE] = "";
+
+	sprintf(port, "%d", user_param->port);
+	hints->ai_family = AF_INET;
+
+	rc = rdma_getaddrinfo(user_param->servername, port, hints, rai);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to get RDMA CM address info - Error: %s",
+			gai_strerror(rc));
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_request_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		struct rdma_conn_param *conn_param)
+{
+	int rc = SUCCESS, connection_index, needed;
+	char error_message[ERROR_MSG_SIZE] = "";
+	struct ibv_recv_wr recv_wr, *recv_failure;
+	struct ibv_sge sge;
+	struct cma_node *cm_node;
+
+	needed = ((user_param->connection_type == UD)
+				&& ((user_param->tst == BW && user_param->duplex)
+					|| (user_param->tst == LAT)));
+
+	if (!needed) {
+		return rc;
+	}
+
+	connection_index = ctx->cma_master.connection_index;
+	cm_node = &ctx->cma_master.nodes[connection_index];
+
+	recv_wr.next = NULL;
+	recv_wr.sg_list = &sge;
+	recv_wr.num_sge = 1;
+	recv_wr.wr_id = 0;
+
+	sge.length = UD_ADDITION + sizeof(uint32_t);
+	sge.lkey = ctx->mr[connection_index]->lkey;
+	sge.addr = (uintptr_t)ctx->buf[connection_index];
+
+	rc = ibv_post_recv(cm_node->cma_id->qp, &recv_wr, &recv_failure);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to post receive for connection %d for RDMA CM UD "
+			"request connection parameters.", connection_index);
+		goto error;
+	}
+
+	conn_param->qp_num = cm_node->cma_id->qp->qp_num;
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	int rc = SUCCESS, connection_index, needed, cqes;
+	char error_message[ERROR_MSG_SIZE] = "";
+	struct ibv_qp_attr attr;
+	struct ibv_qp_init_attr init_attr;
+	struct ibv_wc wc;
+	struct cma_node *cm_node;
+
+	needed = ((user_param->connection_type == UD)
+				&& ((user_param->tst == BW && user_param->duplex)
+					|| (user_param->tst == LAT)));
+
+	if (!needed) {
+		return rc;
+	}
+
+	connection_index = ctx->cma_master.connection_index;
+	do {
+		cqes = ibv_poll_cq(ctx->recv_cq, 1, &wc);
+	} while (cqes == 0);
+
+	rc = wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != 0;
+	if (rc) {
+		sprintf(error_message,
+			"Failed to poll CQ.\nBad WQE status when trying to create "
+			"AH for UD connection in RDMA CM:\n Status: %d ; ID: %d.",
+			(int)wc.status, (int)wc.wr_id);
+		goto error;
+	}
+
+	cm_node = &ctx->cma_master.nodes[connection_index];
+
+	ctx->ah[connection_index] = ibv_create_ah_from_wc(ctx->pd, &wc,
+		ctx->buf[connection_index], cm_node->cma_id->port_num);
+	ibv_query_qp(cm_node->cma_id->qp, &attr, IBV_QP_QKEY, &init_attr);
+	cm_node->remote_qpn = ntohl(wc.imm_data);
+	cm_node->remote_qkey = attr.qkey;
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_send_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int connection_index)
+{
+	int rc, cqes;
+	char error_message[ERROR_MSG_SIZE] = "";
+	struct ibv_send_wr send_wr, *bad_send_wr;
+	struct ibv_sge sge;
+	struct ibv_wc wc;
+	struct cma_node *cm_node;
+
+	cm_node = &ctx->cma_master.nodes[connection_index];
+
+	send_wr.next = NULL;
+	send_wr.sg_list = &sge;
+	send_wr.num_sge = 1;
+	send_wr.opcode = IBV_WR_SEND_WITH_IMM;
+	send_wr.send_flags = IBV_SEND_SIGNALED;
+	send_wr.wr_id = 0;
+	send_wr.imm_data = htonl(cm_node->cma_id->qp->qp_num);
+
+	send_wr.wr.ud.ah = ctx->ah[connection_index];
+	send_wr.wr.ud.remote_qpn = cm_node->remote_qpn;
+	send_wr.wr.ud.remote_qkey = cm_node->remote_qkey;
+
+	sge.length = sizeof(uint32_t);
+	sge.lkey = ctx->mr[connection_index]->lkey;
+	sge.addr = (uintptr_t)ctx->buf[connection_index];
+
+	rc = ibv_post_send(cm_node->cma_id->qp, &send_wr, &bad_send_wr);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to post send for connection %d for RDMA CM UD "
+			"send connection parameters.", connection_index);
+		goto error;
+	}
+
+	do {
+		cqes = ibv_poll_cq(ctx->send_cq, 1, &wc);
+	} while (cqes == 0);
+
+	rc = wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != 0;
+	if (rc) {
+		sprintf(error_message,
+			"Failed to poll CQ.\nBad WQE status when trying to send "
+			"UD connection parameters in RDMA CM:\n Status: %d ; ID: %d.",
+			(int)wc.status, (int)wc.wr_id);
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_establish_ud_connection(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param, struct rdma_cm_event *event)
+{
+	int rc = SUCCESS, connection_index, needed;
+	char *error_message = "";
+	struct cma_node *cm_node;
+
+	needed = user_param->connection_type == UD;
+
+	if (!needed) {
+		return rc;
+	}
+
+	connection_index = ctx->cma_master.disconnects_left;
+	cm_node = &ctx->cma_master.nodes[connection_index];
+	cm_node->remote_qpn = event->param.ud.qp_num;
+	cm_node->remote_qkey = event->param.ud.qkey;
+
+	ctx->ah[connection_index] = ibv_create_ah(ctx->pd,
+		&event->param.ud.ah_attr);
+	if (!ctx->ah[connection_index]) {
+		error_message = "Failed to create AH for RDMA CM connection.";
+		goto error;
+	}
+
+	if ((user_param->tst == BW && user_param->duplex)
+		|| (user_param->tst == LAT)) {
+		rc = rdma_cm_send_ud_connection_parameters(ctx, user_param,
+			connection_index);
+		if (rc) {
+			error_message = "Failed to send UD connection parameters "
+				"to the remote node.";
+			goto error;
+		}
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+void rdma_cm_connect_error(struct pingpong_context *ctx)
+{
+	ctx->cma_master.connects_left--;
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_address_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
+{
+	int rc;
+	char *error_message = "";
+
+	if (user_param->tos != DEF_TOS) {
+		rc = rdma_set_option(cma_id, RDMA_OPTION_ID,
+			RDMA_OPTION_ID_TOS, &user_param->tos, sizeof(user_param->tos));
+		if (rc) {
+			error_message = \
+				"Failed to set ToS(Type of Service) option for RDMA "
+				"CM connection.";
+			goto error;
+		}
+	}
+
+	rc = rdma_resolve_route(cma_id, 2000);
+	if (rc) {
+		error_message = "Failed to resolve RDMA CM route.";
+		rdma_cm_connect_error(ctx);
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_route_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
+{
+	int rc, connection_index;
+	char *error_message = "";
+	struct rdma_conn_param conn_param;
+
+	ctx->context = cma_id->verbs;
+	connection_index = ctx->cma_master.connection_index;
+
+	// Initialization of client contexts in case of first connection:
+	if (connection_index == 0) {
+		rc = ctx_init(ctx, user_param);
+		if (rc) {
+			error_message = "Failed to initialize RDMA contexts.";
+			goto error;
+		}
+	}
+
+	ctx->cm_id = cma_id;
+	rc = create_qp_main(ctx, user_param, connection_index, 0);
+	if (rc) {
+		error_message = "Failed to create QP.";
+		goto error;
+	}
+
+	memset(&conn_param, 0, sizeof conn_param);
+
+	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+		conn_param.responder_resources = user_param->out_reads;
+		conn_param.initiator_depth = user_param->out_reads;
+	}
+
+	conn_param.retry_count = user_param->retry_count;
+	conn_param.rnr_retry_count = user_param->retry_count;
+	conn_param.private_data = ctx->cma_master.rai->ai_connect;
+	conn_param.private_data_len = ctx->cma_master.rai->ai_connect_len;
+
+	rc = rdma_connect(cma_id, &conn_param);
+	if (rc) {
+		error_message = "Failed to connect through RDMA CM.";
+		goto error;
+	}
+
+	ctx->cma_master.nodes[connection_index].connected = 1;
+	ctx->cma_master.connection_index++;
+	return rc;
+
+error:
+	rdma_cm_connect_error(ctx);
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
+{
+	int rc, connection_index;
+	char *error_message = "";
+	struct cma_node *cm_node;
+	struct rdma_conn_param conn_param;
+
+	connection_index = ctx->cma_master.connection_index;
+
+	if (connection_index == user_param->num_of_qps) {
+		goto error_1;
+	}
+
+	cm_node = &ctx->cma_master.nodes[connection_index];
+	cm_node->cma_id = cma_id;
+
+	ctx->context = cma_id->verbs;
+	// Initialization of server contexts in case of first connection:
+	if (connection_index == 0) {
+		rc = ctx_init(ctx, user_param);
+		if (rc) {
+			error_message = "Failed to initialize RDMA contexts.";
+			goto error_2;
+		}
+	}
+
+	ctx->cm_id = cm_node->cma_id;
+	rc = create_qp_main(ctx, user_param, connection_index, 0);
+	if (rc) {
+		error_message = "Failed to create QP.";
+		goto error_2;
+	}
+
+	memset(&conn_param, 0, sizeof(conn_param));
+
+	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+		conn_param.responder_resources = user_param->out_reads;
+		conn_param.initiator_depth = user_param->out_reads;
+	}
+
+	conn_param.retry_count = user_param->retry_count;
+	conn_param.rnr_retry_count = user_param->retry_count;
+
+	rc = rdma_cm_request_ud_connection_parameters(ctx, user_param,
+		&conn_param);
+	if (rc) {
+		error_message = \
+			"Failed request UD connection parameters for RDMA CM.";
+		goto error_2;
+	}
+
+	rc = rdma_accept(ctx->cm_id, &conn_param);
+	if (rc) {
+		error_message = "Failed to accept RDMA CM connection.";
+		goto error_2;
+	}
+
+	rc = rdma_cm_initialize_ud_connection_parameters(ctx, user_param);
+	if (rc) {
+		error_message = \
+			"Failed to initialize UD connection parameters for RDMA CM.";
+		goto error_2;
+	}
+
+	ctx->cma_master.nodes[connection_index].connected = 1;
+	ctx->cma_master.connection_index++;
+	ctx->cma_master.connects_left--;
+	return rc;
+
+error_2:
+	cm_node->cma_id = NULL;
+	rdma_cm_connect_error(ctx);
+
+error_1:
+	rdma_reject(ctx->cm_id, NULL, 0);
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_connection_established_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_event *event)
+{
+	int rc = SUCCESS;
+	char *error_message = "";
+
+	rc = rdma_cm_establish_ud_connection(ctx, user_param, event);
+	if (rc) {
+		error_message = "Failed to establish UD connection for RDMA CM.";
+		goto error;
+	}
+
+	if (user_param->machine == CLIENT) {
+		ctx->cma_master.connects_left--;
+		ctx->cma_master.disconnects_left++;
+	}
+
+	return rc;
+
+error:
+	rdma_cm_connect_error(ctx);
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_event_error_handler(struct pingpong_context *ctx,
+		struct rdma_cm_event *event)
+{
+	char error_message[ERROR_MSG_SIZE] = "";
+
+	sprintf(error_message, "RDMA CM event error:\nEvent: %s; error: %d.\n",
+		rdma_event_str(event->event), event->status);
+	rdma_cm_connect_error(ctx);
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+void rdma_cm_disconnect_handler(struct pingpong_context *ctx)
+{
+	ctx->cma_master.disconnects_left--;
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_events_dispatcher(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id,
+		struct rdma_cm_event *event)
+{
+	int rc = SUCCESS;
+
+	switch (event->event) {
+	case RDMA_CM_EVENT_ADDR_RESOLVED:
+		rc = rdma_cm_address_handler(ctx, user_param, cma_id);
+		break;
+	case RDMA_CM_EVENT_ROUTE_RESOLVED:
+		rc = rdma_cm_route_handler(ctx, user_param, cma_id);
+		break;
+	case RDMA_CM_EVENT_CONNECT_REQUEST:
+		rc = rdma_cm_connection_request_handler(ctx, user_param, cma_id);
+		break;
+	case RDMA_CM_EVENT_ESTABLISHED:
+		rc = rdma_cm_connection_established_handler(ctx, user_param, event);
+		break;
+	case RDMA_CM_EVENT_ADDR_ERROR:
+	case RDMA_CM_EVENT_ROUTE_ERROR:
+	case RDMA_CM_EVENT_CONNECT_ERROR:
+	case RDMA_CM_EVENT_UNREACHABLE:
+	case RDMA_CM_EVENT_REJECTED:
+		rc = rdma_cm_event_error_handler(ctx, event);
+		break;
+	case RDMA_CM_EVENT_DISCONNECTED:
+		rdma_cm_disconnect_handler(ctx);
+		break;
+	case RDMA_CM_EVENT_DEVICE_REMOVAL:
+		/* Cleanup will occur after test completes. */
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_connect_events(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	int rc = SUCCESS;
+	char *error_message = "";
+	struct rdma_cm_event *event;
+
+	while (ctx->cma_master.connects_left) {
+		rc = rdma_get_cm_event(ctx->cma_master.channel, &event);
+		if (rc) {
+			error_message = "Failed to get RDMA CM event.";
+			goto error;
+		}
+
+		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
+		if (rc) {
+			error_message = "Failed to handle RDMA CM event.";
+			goto error;
+		}
+
+		rc = rdma_ack_cm_event(event);
+		if (rc) {
+			error_message = "Failed to ACK RDMA CM event after handling.";
+			goto error;
+		}
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	int rc = SUCCESS, i;
+	char *error_message = "";
+	struct rdma_cm_event *event;
+
+	if (!ctx->cma_master.disconnects_left
+		|| user_param->connection_type == UD)
+		return rc;
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (!ctx->cma_master.nodes[i].connected) {
+			continue;
+		}
+
+		ctx->cma_master.nodes[i].connected = 0;
+		rc = rdma_disconnect(ctx->cma_master.nodes[i].cma_id);
+		if (rc) {
+			error_message = "Failed to disconnect RDMA CM connection.";
+			goto error;
+		}
+	}
+
+	while (ctx->cma_master.disconnects_left) {
+		rc = rdma_get_cm_event(ctx->cma_master.channel, &event);
+		if (rc) {
+			error_message = "Failed to get RDMA CM event.";
+			goto error;
+		}
+
+		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
+		if (rc) {
+			error_message = "Failed to handle RDMA CM event.";
+			goto error;
+		}
+
+		rc = rdma_ack_cm_event(event);
+		if (rc) {
+			error_message = "Failed to ACK RDMA CM event after handling.";
+			goto error;
+		}
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_server_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+{
+	int rc;
+	char error_message[ERROR_MSG_SIZE] = "";
+	struct rdma_cm_id *listen_id;
+
+	rc = rdma_create_id(ctx->cma_master.channel, &listen_id, &ctx->cma_master,
+		hints->ai_port_space);
+	if (rc) {
+		sprintf(error_message, "Failed to create RDMA CM server control ID.");
+		goto error;
+	}
+
+	hints->ai_flags |= RAI_PASSIVE;
+	rc = rdma_cm_get_rdma_address(user_param, hints, &ctx->cma_master.rai);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to get RDMA CM address - Error: %s.", gai_strerror(rc));
+		goto error;
+	}
+
+	rc = rdma_bind_addr(listen_id, ctx->cma_master.rai->ai_src_addr);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to bind RDMA CM address on the server.");
+		goto error;
+	}
+
+	rc = rdma_listen(listen_id, 0);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to listen on RDMA CM server listen ID.");
+		goto error;
+	}
+
+	rc = rdma_cm_connect_events(ctx, user_param);
+	if (rc) {
+		goto error;
+	}
+
+	rc = rdma_destroy_id(listen_id);
+	if (rc) {
+		sprintf(error_message, "Failed to destroy RDMA CM server listen ID.");
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int _rdma_cm_client_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+{
+	int i, rc;
+	char error_message[ERROR_MSG_SIZE] = "";
+
+	rc = rdma_cm_get_rdma_address(user_param, hints, &ctx->cma_master.rai);
+	if (rc) {
+		sprintf(error_message,
+			"Failed to get RDMA CM address - Error: %s.", gai_strerror(rc));
+		goto error;
+	}
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		rc = rdma_resolve_addr(ctx->cma_master.nodes[i].cma_id,
+			ctx->cma_master.rai->ai_src_addr,
+			ctx->cma_master.rai->ai_dst_addr, 2000);
+		if (rc) {
+			sprintf(error_message, "Failed to resolve RDMA CM address.");
+			rdma_cm_connect_error(ctx);
+			goto error;
+		}
+	}
+
+	rc = rdma_cm_connect_events(ctx, user_param);
+	if (rc) {
+		sprintf(error_message, "Failed to connect RDMA CM events.");
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_client_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+{
+	int i, rc, max_retries = 10, delay = 100000;
+	char error_message[ERROR_MSG_SIZE] = "";
+
+	for (i = 0; i < max_retries; i++) {
+		rc = _rdma_cm_client_connection(ctx, user_param, hints);
+		if (!rc) {
+			return rc;
+		}
+
+		rc = rdma_cm_destroy_cma(ctx, user_param);
+		if (rc) {
+			sprintf(error_message, "Failed to destroy RDMA CM contexts.");
+			goto error;
+		}
+		usleep(delay);
+	}
+
+	sprintf(error_message,
+		"Failed to connect RDMA CM client, tried %d times.", max_retries);
+
+error:
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int create_rdma_cm_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct perftest_comm *comm,
+		struct pingpong_dest *my_dest, struct pingpong_dest *rem_dest)
+{
+	int rc;
+	char *error_message = "";
+	struct rdma_addrinfo hints;
+
+	memset(&hints, 0, sizeof(hints));
+	ctx->cma_master.connects_left = user_param->num_of_qps;
+
+	ctx->cma_master.channel = rdma_create_event_channel();
+	if (!ctx->cma_master.channel) {
+		error_message = "Failed to create RDMA CM event channel.";
+		goto error;
+	}
+
+	rc = rdma_cm_allocate_nodes(ctx, user_param, &hints);
+	if (rc) {
+		error_message = "Failed to allocate RDMA CM nodes.";
+		goto error;
+	}
+
+	rc = ctx_hand_shake(comm, &my_dest[0], &rem_dest[0]);
+	if (rc) {
+		error_message = "Failed to sync between client and server "
+			"before creating RDMA CM connection.";
+		goto error;
+	}
+
+	if (user_param->machine == CLIENT) {
+		rc = rdma_cm_client_connection(ctx, user_param, &hints);
+	} else {
+		rc = rdma_cm_server_connection(ctx, user_param, &hints);
+	}
+
+	if (rc) {
+		error_message = "Failed to create RDMA CM connection.";
+		goto error;
+	}
+
+	rc = ctx_hand_shake(comm, &my_dest[0], &rem_dest[0]);
+	if (rc) {
+		error_message = "Failed to sync between client and server "
+			"after creating RDMA CM connection.";
+		goto error;
+	}
+
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+
 /******************************************************************************
  * End
  ******************************************************************************/

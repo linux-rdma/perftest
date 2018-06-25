@@ -85,6 +85,8 @@
 #define PINGPONG_ATOMIC_WRID	(22)
 #define DEFF_QKEY		(0x11111111)
 
+#define ERROR_MSG_SIZE (128)
+
 #ifdef HAVE_XRCD
 #define SERVER_FD "/tmp/xrc_domain_server"
 #define CLIENT_FD "/tmp/xrc_domain_client"
@@ -126,7 +128,28 @@
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
+
+/* Represents RDMA CM node with needed information */
+struct cma_node {
+	struct rdma_cm_id *cma_id;
+	uint32_t remote_qpn;
+	uint32_t remote_qkey;
+	int id;
+	int connected;
+};
+
+/* Represents RDMA CM management needed information */
+struct cma {
+	struct rdma_event_channel* channel;
+	struct rdma_addrinfo* rai;
+	struct cma_node* nodes;
+	int connection_index;
+	int connects_left;
+	int disconnects_left;
+};
+
 struct pingpong_context {
+	struct cma cma_master;
 	struct rdma_event_channel		*cm_channel;
 	struct rdma_cm_id			*cm_id_control;
 	struct rdma_cm_id			*cm_id;
@@ -860,7 +883,81 @@ int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index);
  *	user_param	- user_parameters struct for this test.
  *
  */
-
 int run_iter_fs(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+
+/* rdma_cm_allocate_nodes:
+*
+* Description:
+*
+*    Allocates RDMA CM nodes.
+*    Allocates memory for the structures, creates RDMA CM IDs for every node.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    hints - RDMA address information.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param, struct rdma_addrinfo *hints);
+
+/* rdma_cm_destroy_qps:
+*
+* Description:
+*
+*    Destroys all RDMA CM QPs.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*
+* Return value:
+*    None.
+*
+*/
+void rdma_cm_destroy_qps(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param);
+
+/* rdma_cm_destroy_cma:
+*
+* Description:
+*
+*    Destroys RDMA CM resources.
+*    Destroys RDMA CM IDs for every QP, event channel,
+*    RDMA address info and frees RDMA CM nodes memory.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*
+* Return value:
+*    None.
+*
+*/
+int rdma_cm_destroy_cma(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param);
+
+/* error_handler:
+*
+* Description:
+*
+*    Error handler.
+*    Prints error message with ERRNO string and returns FAILURE.
+*
+* Parameters:
+*
+*    error_message - Error message.
+*
+* Return value:
+*    Failure: FAILURE(1).
+*
+*/
+int error_handler(char *error_message);
 
 #endif /* PERFTEST_RESOURCES_H */

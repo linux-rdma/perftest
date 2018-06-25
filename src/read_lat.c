@@ -53,7 +53,7 @@
  ******************************************************************************/
 int main(int argc, char *argv[])
 {
-	int                         ret_parser,i = 0;
+	int                         ret_parser, i = 0, rc;
 	struct report_options       report;
 	struct pingpong_context     ctx;
 	struct ibv_device           *ib_dev;
@@ -146,28 +146,16 @@ int main(int argc, char *argv[])
 	/* Allocate arrays */
 	alloc_ctx(&ctx,&user_param);
 
-	/* Create (if nessacery) the rdma_cm ids and channel. */
+	/* Create RDMA CM resources and connect through CM. */
 	if (user_param.work_rdma_cm == ON) {
-
-		if (user_param.machine == CLIENT) {
-			if (retry_rdma_connect(&ctx,&user_param)) {
-				fprintf(stderr,"Unable to perform rdma_client function\n");
-				return FAILURE;
-			}
-
-		} else {
-			if (create_rdma_resources(&ctx,&user_param)) {
-				fprintf(stderr," Unable to create the rdma_resources\n");
-				return FAILURE;
-			}
-			if (rdma_server_connect(&ctx,&user_param)) {
-				fprintf(stderr,"Unable to perform rdma_client function\n");
-				return FAILURE;
-			}
+		rc = create_rdma_cm_connection(&ctx, &user_param, &user_comm,
+			my_dest, rem_dest);
+		if (rc) {
+			fprintf(stderr,
+				"Failed to create RDMA CM connection with resources.\n");
+			return FAILURE;
 		}
-
 	} else {
-
 		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 		if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");

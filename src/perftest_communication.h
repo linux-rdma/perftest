@@ -432,6 +432,410 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 int ctx_check_gid_compatibility(struct pingpong_dest *my_dest,
 		struct pingpong_dest *rem_dest);
 
+/* rdma_cm_get_rdma_address:
+*
+* Description:
+*
+*    Provides transport independent address translation.
+*    Resolves the destination node, service address and returns
+*    information required to establish device communication.
+*
+* Parameters:
+*
+*    user_param - User parameters from the parser.
+*    hints - RDMA address information.
+*    rai - Returned RDMA address information.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_get_rdma_address(struct perftest_parameters *user_param,
+		struct rdma_addrinfo *hints, struct rdma_addrinfo **rai);
+
+/* rdma_cm_request_ud_connection_parameters:
+*
+* Description:
+*
+*    Request UD connection parameters in server side.
+*    Doing the request by posting WQE to the receive queue, to
+*    get the remote side connection parameters, remote QP number and QP key,
+*    after calling rdma_accept RDMA CM API function. Initializing the
+*    local QP number for the connection parameter.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    conn_param - RDMA connection parameters.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_request_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param,
+		struct rdma_conn_param *conn_param);
+
+/* rdma_cm_initialize_ud_connection_parameters:
+*
+* Description:
+*
+*    Initializes UD connection parameters in server side.
+*    Initializes remote node connection parameters needed for the received
+*    connection, remote QP number and QP key.
+*    Doing that by creating address handle from received WQE
+*    sent by the remote side.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param);
+
+/* rdma_cm_send_ud_connection_parameters:
+*
+* Description:
+*
+*    Sends UD connection parameters to the server side.
+*    Sends client's QP number to the server side as an immediate data
+*    in the WQE. Using the remote QP number and QP key received from
+*    RDMA CM connect event.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    connection_index - Connection index number.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_send_ud_connection_parameters(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, int connection_index);
+
+/* rdma_cm_establish_ud_connection:
+*
+* Description:
+*
+*    Establishes UD connection parameters in client side.
+*    Initializes remote node connection parameters needed for the received
+*    connection, by using the remote QP number and QP key received from
+*    RDMA CM connect event. Creates address handle by the received connect
+*    event UD address handle parameters. Sends to the remote node UD
+*    parameters.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    event - RDMA CM event.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_establish_ud_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_event *event);
+
+/* rdma_cm_connect_error:
+*
+* Description:
+*
+*    Represents connection error.
+*    Decreases the connections left parameter in the cma_master structure.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*
+* Return value:
+*    None.
+*
+*/
+void rdma_cm_connect_error(struct pingpong_context *ctx);
+
+/* rdma_cm_address_handler:
+*
+* Description:
+*
+*    Resolves RDMA route to the destination address in order
+*    to establish a connection, after receiving RDMA_CM_EVENT_ADDR_RESOLVED
+*    event from RDMA CM API.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    cma_id - RDMA CM ID.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_address_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id);
+
+/* rdma_cm_route_handler:
+*
+* Description:
+*
+*    Initializes context for the test per connection in the client side
+*    and connects through rdma_connect RDMA CM API function. After receiving
+*    RDMA_CM_EVENT_ADDR_RESOLVED event from RDMA CM API.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    cma_id - RDMA CM ID.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_route_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id);
+
+/* rdma_cm_connection_request_handler:
+*
+* Description:
+*
+*    Initializes context for the test per connection in the server side
+*    and connects through rdma_connect RDMA CM API function. After receiving
+*    RDMA_CM_EVENT_CONNECT_REQUEST event from RDMA CM API.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    cma_id - RDMA CM ID.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id);
+
+/* rdma_cm_connection_established_handler:
+*
+* Description:
+*
+*    Establishes connection in the client side by updating the connections
+*    and disconnections left counters in cma_master structure. Includes
+*    establishing UD connection, in case of UD connection chosen.
+*    After receiving RDMA_CM_EVENT_ESTABLISHED event from RDMA CM API.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    event - RDMA CM event.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_connection_established_handler(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_event *event);
+
+/* rdma_cm_event_error_handler:
+*
+* Description:
+*
+*    Handles RDMA CM events error by printing the event and the error.
+*    Calling rdma_cm_connect_error function to update connection left.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    event - RDMA CM event.
+*
+* Return value:
+*    FAILURE(1).
+*
+*/
+int rdma_cm_event_error_handler(struct pingpong_context *ctx,
+		struct rdma_cm_event *event);
+
+/* rdma_cm_disconnect_handler:
+*
+* Description:
+*
+*    Disconnects RDMA CM connection after receiving RDMA_CM_EVENT_DISCONNECTED
+*    event from RDMA CM API. Doing that by decreasing the connections
+*    left parameter in the cma_master structure.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*
+* Return value:
+*    None.
+*
+*/
+void rdma_cm_disconnect_handler(struct pingpong_context *ctx);
+
+/* rdma_cm_events_dispatcher:
+*
+* Description:
+*
+*    RDMA CM Events dispatcher.
+*    Receives events and directs to the appropriate function
+*    to handle the event.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    cma_id - RDMA CM ID.
+*    event - RDMA CM event.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_events_dispatcher(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id,
+		struct rdma_cm_event *event);
+
+/* rdma_cm_connect_events:
+*
+* Description:
+*
+*    RDMA CM connects events.
+*    Waits on events from rdma_get_cm_event RDMA CM API function, receives
+*    the events, forwards to the dispatcher to handle the event, finally ACKs
+*    the event to the RDMA CM API.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    cma_id - RDMA CM ID.
+*    event - RDMA CM event.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_connect_events(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param);
+
+/* rdma_cm_disconnect_nodes:
+*
+* Description:
+*
+*    Disconnects RDMA CM nodes.
+*    Disconnects the connection by calling rdma_disconnect RDMA CM API
+*    function for every RDMA CM ID and handling the disconnects events.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param);
+
+/* rdma_cm_server_connection:
+*
+* Description:
+*
+*    Initializes server side RDMA CM connection.
+*    Entry point to the server connection, server will connect and create
+*    all the needed structures for the requested number of QPs(connections).
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    hints - RDMA address information.
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_server_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints);
+
+/* _rdma_cm_client_connection:
+*
+* Description:
+*
+*    Initializes client side RDMA CM connection.
+*    Entry point to the client connection, client will connect and create
+*    all the needed structures for the requested number of QPs(connections).
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    hints - RDMA address information.
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int _rdma_cm_client_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints);
+
+/* _rdma_cm_client_connection:
+*
+* Description:
+*
+*    Wrapper function to rdma_cm_client_connection.
+*    Here the client will attempt to make several calls to
+*    rdma_cm_client_connection, in case the server is not ready at start.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    hints - RDMA address information.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int rdma_cm_client_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct rdma_addrinfo *hints);
+
+/* create_rdma_cm_connection:
+*
+* Description:
+*
+*    Creates RDMA CM connection.
+*    Entry point to create RDMA CM contexts and communication
+*    for server and client.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*    user_param - User parameters from the parser.
+*    comm - Communication information.
+*    my_dest - Local node destination communication information.
+*    rem_dest - Remote node destination communication information.
+*
+* Return value:
+*    rc - On success: SUCCESS(0), on failure: FAILURE(1).
+*
+*/
+int create_rdma_cm_connection(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param, struct perftest_comm *comm,
+		struct pingpong_dest *my_dest, struct pingpong_dest *rem_dest);
+
+
 #endif /* PERFTEST_COMMUNICATION_H */
 
 

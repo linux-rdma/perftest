@@ -727,7 +727,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 int destroy_ctx(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
-	int i, first, dereg_counter;
+	int i, first, dereg_counter, rc;
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
 
@@ -738,6 +738,14 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	dereg_counter = (user_param->mr_per_qp) ? user_param->num_of_qps : 1;
+
+	if (user_param->work_rdma_cm == ON) {
+		rc = rdma_cm_disconnect_nodes(ctx, user_param);
+		if (rc) {
+			fprintf(stderr, "Failed to disconnect RDMA CM nodes.\n");
+		}
+		rdma_cm_destroy_qps(ctx, user_param);
+	}
 
 	if (user_param->work_rdma_cm == ON)
 		rdma_disconnect(ctx->cm_id);
@@ -776,10 +784,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 				return test_result;
 		} else
 		#endif
-		if (ibv_destroy_qp(ctx->qp[i])) {
-			fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
-			test_result = 1;
-		}
+			if (user_param->work_rdma_cm == OFF) {
+				if (ibv_destroy_qp(ctx->qp[i])) {
+					fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
+					test_result = 1;
+				}
+			}
 	}
 
 	if (user_param->use_rss) {
@@ -917,6 +927,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->recv_sge_list);
 		free(ctx->rwr);
 	}
+
+	if (user_param->work_rdma_cm == ON) {
+		rdma_cm_destroy_cma(ctx, user_param);
+	}
+
 	return test_result;
 }
 
@@ -1560,6 +1575,14 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		}
 	}
 	#endif
+
+	/*
+	* QPs creation in RDMA CM flow will be done separately.
+	* Unless, the function called with RDMA CM connection contexts,
+	* need to verify the call with the existence of ctx->cm_id.
+	*/
+	if (!(user_param->work_rdma_cm == OFF || ctx->cm_id))
+		return SUCCESS;
 
 	for (i=0; i < user_param->num_of_qps; i++) {
 
@@ -2544,6 +2567,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 	int i,j;
 	int num_of_qps = user_param->num_of_qps;
 	int xrc_offset = 0;
+	uint32_t remote_qpn, remote_qkey;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
@@ -2658,14 +2682,14 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 					ctx->exp_wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
 					if (user_param->work_rdma_cm) {
-
-						ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
-						ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;
-
+						remote_qpn = ctx->cma_master.nodes[i].remote_qpn;
+						remote_qkey = ctx->cma_master.nodes[i].remote_qkey;
 					} else {
-						ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
-						ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[xrc_offset + i].qpn;
+						remote_qpn = rem_dest[xrc_offset + i].qpn;
+						remote_qkey = DEF_QKEY;
 					}
+					ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qkey = remote_qkey;
+					ctx->exp_wr[i*user_param->post_list + j].wr.ud.remote_qpn = remote_qpn;
 
 				#ifdef HAVE_DC
 				} else if (user_param->connection_type == DC) {
@@ -2707,6 +2731,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 	int i,j;
 	int num_of_qps = user_param->num_of_qps;
 	int xrc_offset = 0;
+	uint32_t remote_qpn, remote_qkey;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
@@ -2817,14 +2842,14 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
 					if (user_param->work_rdma_cm) {
-
-						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = user_param->rem_ud_qkey;
-						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = user_param->rem_ud_qpn;
-
+						remote_qpn = ctx->cma_master.nodes[i].remote_qpn;
+						remote_qkey = ctx->cma_master.nodes[i].remote_qkey;
 					} else {
-						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = DEF_QKEY;
-						ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn  = rem_dest[xrc_offset + i].qpn;
+						remote_qpn = rem_dest[xrc_offset + i].qpn;
+						remote_qkey = DEF_QKEY;
 					}
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = remote_qkey;
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn = remote_qpn;
 				}
 			}
 
@@ -5172,6 +5197,113 @@ cleaning:
 	free(rem_dest_info);
 
 	return retval;
+}
+
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+{
+	int rc = SUCCESS, i;
+	char *error_message = "";
+
+	if (user_param->connection_type == UD
+		|| user_param->connection_type == RawEth)
+		hints->ai_port_space = RDMA_PS_UDP;
+	else
+		hints->ai_port_space = RDMA_PS_TCP;
+
+	ALLOCATE(ctx->cma_master.nodes, struct cma_node, user_param->num_of_qps);
+	if (!ctx->cma_master.nodes) {
+		error_message = "Failed to allocate memory for RDMA CM nodes.";
+		goto error;
+	}
+
+	memset(ctx->cma_master.nodes, 0,
+		(sizeof *ctx->cma_master.nodes) * user_param->num_of_qps);
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		ctx->cma_master.nodes[i].id = i;
+		if (user_param->machine == CLIENT) {
+			rc = rdma_create_id(ctx->cma_master.channel,
+				&ctx->cma_master.nodes[i].cma_id, NULL, hints->ai_port_space);
+			if (rc) {
+				error_message = "Failed to create RDMA CM ID.";
+				goto error;
+			}
+		}
+	}
+
+	return rc;
+
+error:
+	while (--i >= 0) {
+		rc = rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
+		if (rc) {
+			error_message = "Failed to destroy RDMA CM ID.";
+			break;
+		}
+	}
+
+	free(ctx->cma_master.nodes);
+	return error_handler(error_message);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+void rdma_cm_destroy_qps(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param)
+{
+	int i;
+	struct cma_node *cm_node;
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		cm_node = &ctx->cma_master.nodes[i];
+		if (cm_node->cma_id->qp) {
+			rdma_destroy_qp(cm_node->cma_id);
+		}
+	}
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+int rdma_cm_destroy_cma(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param)
+{
+	int rc = SUCCESS, i;
+	char error_message[ERROR_MSG_SIZE] = "";
+	struct cma_node *cm_node;
+
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		cm_node = &ctx->cma_master.nodes[i];
+		rc = rdma_destroy_id(cm_node->cma_id);
+		if (rc) {
+			sprintf(error_message,
+				"Failed to destroy RDMA CM ID number %d.", i);
+			goto error;
+		}
+	}
+
+	rdma_destroy_event_channel(ctx->cma_master.channel);
+	if (ctx->cma_master.rai) {
+		rdma_freeaddrinfo(ctx->cma_master.rai);
+	}
+
+	free(ctx->cma_master.nodes);
+	return rc;
+
+error:
+	return error_handler(error_message);
+}
+
+int error_handler(char *error_message)
+{
+	fprintf(stderr, "%s\nERRNO: %s.\n", error_message, strerror(errno));
+	return FAILURE;
 }
 
 /******************************************************************************
