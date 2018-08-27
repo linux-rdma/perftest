@@ -45,7 +45,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <unistd.h>
-#include </usr/include/netinet/ip.h>
+#include <netinet/ip.h>
 #include <poll.h>
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
