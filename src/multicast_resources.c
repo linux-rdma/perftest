@@ -63,7 +63,7 @@ static void prepare_mcast_mad(uint8_t method,
 	ptr[1]                     = MANAGMENT_CLASS_SUBN_ADM;			/* MgmtClass */
 	ptr[2]                     = 0x02; 					/* ClassVersion */
 	ptr[3]                     = INSERTF(ptr[3], 0, method, 0, 7); 		/* Method */
-	(*(uint64_t *)(ptr + 8))   = htonll((uint64_t)DEF_TRANS_ID);             /* TransactionID */
+	(*(uint64_t *)(ptr + 8))   = htobe64((uint64_t)DEF_TRANS_ID);             /* TransactionID */
 	(*(uint16_t *)(ptr + 16))  = htons(SUBN_ADM_ATTR_MC_MEMBER_RECORD);      /* AttributeID */
 
 	ptr = samad_packet->SubnetAdminData;
@@ -84,7 +84,7 @@ static void prepare_mcast_mad(uint8_t method,
 		SUBN_ADM_COMPMASK_P_KEY | SUBN_ADM_COMPMASK_TCLASS | SUBN_ADM_COMPMASK_SL |
 		SUBN_ADM_COMPMASK_FLOW_LABEL | SUBN_ADM_COMPMASK_JOIN_STATE;
 
-	samad_packet->ComponentMask = htonll(comp_mask);
+	samad_packet->ComponentMask = htobe64(comp_mask);
 }
 
 /******************************************************************************

@@ -36,7 +36,6 @@
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>
 #endif
 
 #include <stdio.h>
@@ -45,14 +44,16 @@
 #include <signal.h>
 #include <getopt.h>
 #include <unistd.h>
-#include </usr/include/netinet/ip.h>
+#include <netinet/ip.h>
 #include <poll.h>
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 #include "raw_ethernet_resources.h"
-#include "config.h"
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 struct perftest_parameters* duration_param;
 

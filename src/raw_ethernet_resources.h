@@ -5,7 +5,6 @@
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>
 #endif
 
 #include <stdio.h>
@@ -13,12 +12,14 @@
 #include <string.h>
 #include <signal.h>
 #include <getopt.h>
-#include </usr/include/netinet/ip.h>
+#include <netinet/ip.h>
 #include <poll.h>
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
+
+#undef __LITTLE_ENDIAN
 #if defined(__FreeBSD__)
 #include <infiniband/byteorder.h>
 #else
