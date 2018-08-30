@@ -391,6 +391,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --inline_recv=<size> ");
 		printf(" Max size of message to be sent in inline receive\n");
 	}
+	if (verb == SEND) {
+		printf("      --use-srq ");
+		printf(" Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ \n");
+	}
 
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
