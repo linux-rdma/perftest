@@ -1437,6 +1437,8 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	int i;
 	int num_of_qps = user_param->num_of_qps / 2;
 
+	ctx->is_contig_supported = FAILURE;
+
 	#ifdef HAVE_ACCL_VERBS
 	enum ibv_exp_query_intf_status intf_status;
 	struct ibv_exp_query_intf_params intf_params;
@@ -1457,7 +1459,10 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
-	ctx->is_contig_supported = FAILURE;
+	#ifdef HAVE_VERBS_EXP
+	ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
+	#endif
+
 	#ifdef HAVE_VERBS_EXP
 	if (!user_param->use_hugepages)
 		ctx->is_contig_supported  = check_for_contig_pages_support(ctx->context);
