@@ -390,6 +390,7 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 	int port_num;
+	int access_flags = 0;
 
 	memset(&dattr,0,sizeof(struct ibv_exp_device_attr));
 
@@ -441,13 +442,20 @@ static int ctx_dc_tgt_create(struct pingpong_context *ctx,struct perftest_parame
 		}
 	}
 
+	if (user_param->verb == WRITE)
+		access_flags |= IBV_ACCESS_REMOTE_WRITE;
+	else if (user_param->verb == READ)
+		access_flags |= IBV_ACCESS_REMOTE_READ;
+	else if (user_param->verb == ATOMIC)
+		access_flags |= IBV_ACCESS_REMOTE_ATOMIC;
+
 	struct ibv_exp_dct_init_attr dctattr = {
 		.pd = ctx->pd,
 		.cq = (user_param->verb == SEND && (user_param->duplex || user_param->tst == LAT)) ? ctx->recv_cq : ctx->send_cq,
 		.srq = ctx->srq,
 		.dc_key = user_param->dct_key,
 		.port = port_num,
-		.access_flags = IBV_ACCESS_REMOTE_WRITE,
+		.access_flags = access_flags,
 		.min_rnr_timer = 2,
 		.tclass = user_param->traffic_class,
 		.flow_label = 0,
@@ -2580,7 +2588,7 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 
 		if (user_param->mac_fwd) {
 			if (user_param->mr_per_qp) {
-				ctx->sge_list[i*user_param->post_list].addr = 
+				ctx->sge_list[i*user_param->post_list].addr =
 					(uintptr_t)ctx->buf[0] + (num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 			} else {
 				ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
