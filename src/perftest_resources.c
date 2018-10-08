@@ -5214,7 +5214,7 @@ cleaning:
 int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
 {
-	int rc = SUCCESS, i;
+	int rc = SUCCESS, i = 0;
 	char *error_message = "";
 
 	if (user_param->connection_type == UD
