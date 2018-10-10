@@ -697,6 +697,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 		user_param->r_flag->cycles	= OFF;
 	}
 
+	if (user_param->tst == FS_RATE) {
+		user_param->r_flag->cycles	= OFF;
+	}
+
 	if (user_param->verb == ATOMIC) {
 		user_param->atomicType	= FETCH_AND_ADD;
 		user_param->size	= DEF_SIZE_ATOMIC;
