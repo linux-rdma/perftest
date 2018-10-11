@@ -2023,7 +2023,7 @@ int rdma_cm_address_handler(struct pingpong_context *ctx,
 
 	if (user_param->tos != DEF_TOS) {
 		rc = rdma_set_option(cma_id, RDMA_OPTION_ID,
-			RDMA_OPTION_ID_TOS, &user_param->tos, sizeof(user_param->tos));
+			RDMA_OPTION_ID_TOS, &user_param->tos, sizeof(uint8_t));
 		if (rc) {
 			error_message = \
 				"Failed to set ToS(Type of Service) option for RDMA "
