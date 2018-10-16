@@ -356,7 +356,7 @@ struct perftest_parameters {
 	enum ibv_mtu			curr_mtu;
 	uint64_t			size;
 	uint64_t			dct_key;
-	int				iters;
+	volatile int			iters;
 	uint64_t			iters_per_port[2];
 	uint64_t			*port_by_qp;
 	int				tx_depth;
