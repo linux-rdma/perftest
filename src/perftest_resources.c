@@ -3788,7 +3788,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 					}
 					wc_id = (user_param->verb_type == ACCL_INTF) ?
 							0 : (int)wc[i].wr_id;
+#ifdef __GNUC__
+					__sync_fetch_and_add(&user_param->iters, user_param->cq_mod);
+#else
 					user_param->iters += user_param->cq_mod;
+#endif
 					totccnt += user_param->cq_mod;
 					ctx->ccnt[wc_id] += user_param->cq_mod;
 				}
