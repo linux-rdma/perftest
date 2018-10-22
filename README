@@ -44,7 +44,7 @@ http://www.openib.org.
   latency. This means that the results may not be accurate for asymmetrical configurations.
 
 - On all unidirectional bandwidth benchmarks, the client measures the bandwidth.
-  On bidirectional bandwidth benchmarks, each side measured the bandwidth of
+  On bidirectional bandwidth benchmarks, each side measures the bandwidth of
   the traffic it initiates, and at the end of the measurement period, the server
   reports the result to the client, who combines them together.
 
@@ -98,8 +98,8 @@ ib_atomic_lat	latency test with atomic transactions
 ib_atomic_bw 	bandwidth test with atomic transactions
 
 Raw Ethernet interface benchmarks:
-raw_ethernet_send_lat  latency test over raw Etherent interface
-raw_ethernet_send_bw   bandwidth test over raw Etherent interface
+raw_ethernet_send_lat  latency test over raw Ethernet interface
+raw_ethernet_send_bw   bandwidth test over raw Ethernet interface
 
 ===============================================================================
 4. Running Tests
@@ -185,7 +185,7 @@ Options for raw_ethernet_send_bw:
   -E, --dest_mac			destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered
   -J, --server_ip			server ip address by this format X.X.X.X (using to send packets with IP header)
   -j, --client_ip			client ip address by this format X.X.X.X (using to send packets with IP header)
-  -K, --server_port			server udp port number (using to send packets with UPD header)
+  -K, --server_port			server udp port number (using to send packets with UDP header)
   -k, --client_port			client udp port number (using to send packets with UDP header)
   -Z, --server				choose server side for the current machine (--server/--client must be selected)
   -P, --client				choose client side for the current machine (--server/--client must be selected)
