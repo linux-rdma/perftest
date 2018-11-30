@@ -875,7 +875,7 @@ int destroy_rdma_resources(struct pingpong_context *ctx,
 /******************************************************************************
   + *
   + ******************************************************************************/
-struct ibv_device* ctx_find_dev(const char *ib_devname)
+struct ibv_device* ctx_find_dev(char **ib_devname)
 {
 	int num_of_device;
 	struct ibv_device **dev_list;
@@ -890,6 +890,11 @@ struct ibv_device* ctx_find_dev(const char *ib_devname)
 	}
 
 	if (!ib_devname) {
+		fprintf(stderr," Internal error, existing.\n");
+		return NULL;
+	}
+
+	if (!*ib_devname) {
 		ib_dev = dev_list[0];
 		if (!ib_dev) {
 			fprintf(stderr, "No IB devices found\n");
@@ -897,11 +902,15 @@ struct ibv_device* ctx_find_dev(const char *ib_devname)
 		}
 	} else {
 		for (; (ib_dev = *dev_list); ++dev_list)
-			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
+			if (!strcmp(ibv_get_device_name(ib_dev), *ib_devname))
 				break;
-		if (!ib_dev)
-			fprintf(stderr, "IB device %s not found\n", ib_devname);
+		if (!ib_dev) {
+			fprintf(stderr, "IB device %s not found\n", *ib_devname);
+			return NULL;
+		}
 	}
+
+	GET_STRING(*ib_devname, ibv_get_device_name(ib_dev));
 	return ib_dev;
 }
 
@@ -1215,6 +1224,10 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	if (user_param->work_rdma_cm == ON) {
 		rdma_cm_destroy_cma(ctx, user_param);
+	}
+
+	if (user_param->counter_ctx) {
+		counters_close(user_param->counter_ctx);
 	}
 
 	return test_result;

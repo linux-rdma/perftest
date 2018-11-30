@@ -59,6 +59,7 @@
 #include <malloc.h>
 #endif
 #include "get_clock.h"
+#include "perftest_counters.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -510,6 +511,7 @@ struct perftest_parameters {
 	int                             vlan_en;
 	uint32_t			vlan_pcp;
 	void 				(*print_eth_func)(void*);
+	struct counter_context		*counter_ctx;
 
 };
 

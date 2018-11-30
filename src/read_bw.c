@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 		user_param.num_of_qps *= 2;
 	}
 
-	ib_dev =ctx_find_dev(user_param.ib_devname);
+	ib_dev =ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev)
 		return 7;
 
