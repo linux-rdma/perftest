@@ -49,6 +49,8 @@ ib_write_bw
 ib_write_lat
 raw_ethernet_bw
 raw_ethernet_lat
+raw_ethernet_burst_lat
+raw_ethernet_fs_rate
 
 #Debian Stuff
 debian/compat
