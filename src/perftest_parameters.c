@@ -1543,6 +1543,29 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 32882 : dev_fname = QLOGIC_AH; break;
 			case 32883 : dev_fname = QLOGIC_AH; break;
 			case 32912 : dev_fname = QLOGIC_AH; break;
+			case 5638  : dev_fname = NETXTREME; break;
+			case 5652  : dev_fname = NETXTREME; break;
+			case 5824  : dev_fname = NETXTREME; break;
+			case 5825  : dev_fname = NETXTREME; break;
+			case 5827  : dev_fname = NETXTREME; break;
+			case 5839  : dev_fname = NETXTREME; break;
+			case 5846  : dev_fname = NETXTREME; break;
+			case 5847  : dev_fname = NETXTREME; break;
+			case 5848  : dev_fname = NETXTREME; break;
+			case 5849  : dev_fname = NETXTREME; break;
+			case 5855  : dev_fname = NETXTREME; break;
+			case 5858  : dev_fname = NETXTREME; break;
+			case 5859  : dev_fname = NETXTREME; break;
+			case 5861  : dev_fname = NETXTREME; break;
+			case 5867  : dev_fname = NETXTREME; break;
+			case 5869  : dev_fname = NETXTREME; break;
+			case 5871  : dev_fname = NETXTREME; break;
+			case 5872  : dev_fname = NETXTREME; break;
+			case 5873  : dev_fname = NETXTREME; break;
+			case 5968  : dev_fname = NETXTREME; break;
+			case 55296 : dev_fname = NETXTREME; break;
+			case 55298 : dev_fname = NETXTREME; break;
+			case 55300 : dev_fname = NETXTREME; break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
@@ -1708,6 +1731,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 					    ((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
 				default   : user_param->inline_size = 0;
 			}
+			if (current_dev == NETXTREME)
+				user_param->inline_size = 96;
 
 		} else {
 			user_param->inline_size = 0;
