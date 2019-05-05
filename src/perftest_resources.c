@@ -263,6 +263,251 @@ static int check_for_contig_pages_support(struct ibv_context *context)
 	return answer;
 }
 #endif
+
+/* _new_post_send.
+ *
+ * Description :
+ *
+ * Does efficient posting of work to a send
+ * queue using function calls instead of the struct based *ibv_post_send()*
+ * scheme. Inline is used to make sure that switch would be decided on
+ * compile time.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ *	inl         - use inline or not.
+ *	index       - qp index.
+ *	qpt         - qp type.
+ *	op          - RDMA operation code.
+ *
+ * Return Value : int.
+ *
+ */
+#ifdef HAVE_IBV_WR_API
+static inline int _new_post_send(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param, int inl, int index,
+	enum ibv_qp_type qpt, enum ibv_wr_opcode op)
+	__attribute__((always_inline));
+static inline int _new_post_send(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param, int inl, int index,
+	enum ibv_qp_type qpt, enum ibv_wr_opcode op)
+{
+	int rc;
+	int wr_index = index*user_param->post_list;
+	ibv_wr_start(ctx->qpx[index]);
+
+	ctx->qpx[index]->wr_id = ctx->wr[wr_index].wr_id;
+
+	switch (op) {
+	case IBV_WR_SEND:
+		ibv_wr_send(ctx->qpx[index]);
+		break;
+	case IBV_WR_RDMA_WRITE:
+		ibv_wr_rdma_write(
+			ctx->qpx[index],
+			ctx->wr[wr_index].wr.rdma.rkey,
+			ctx->wr[wr_index].wr.rdma.remote_addr);
+		break;
+	case IBV_WR_RDMA_READ:
+		ibv_wr_rdma_read(
+			ctx->qpx[index],
+			ctx->wr[wr_index].wr.rdma.rkey,
+			ctx->wr[wr_index].wr.rdma.remote_addr);
+		break;
+	case IBV_WR_ATOMIC_FETCH_AND_ADD:
+		ibv_wr_atomic_fetch_add(
+			ctx->qpx[index],
+			ctx->wr[wr_index].wr.atomic.rkey,
+			ctx->wr[wr_index].wr.atomic.remote_addr,
+			ctx->wr[wr_index].wr.atomic.compare_add);
+		break;
+	case IBV_WR_ATOMIC_CMP_AND_SWP:
+		ibv_wr_atomic_cmp_swp(
+			ctx->qpx[index],
+			ctx->wr[wr_index].wr.atomic.rkey,
+			ctx->wr[wr_index].wr.atomic.remote_addr,
+			ctx->wr[wr_index].wr.atomic.compare_add,
+			ctx->wr[wr_index].wr.atomic.swap);
+		break;
+	default:
+		fprintf(stderr, "Post send failed: unknown operation code.\n");;
+	}
+
+	if (qpt == IBV_QPT_UD) {
+		ibv_wr_set_ud_addr(
+			ctx->qpx[index],
+			ctx->wr[wr_index].wr.ud.ah,
+			ctx->wr[wr_index].wr.ud.remote_qpn,
+			ctx->wr[wr_index].wr.ud.remote_qkey);
+	}
+	#ifdef HAVE_XRCD
+	else if (qpt == IBV_QPT_XRC_SEND) {
+		ibv_wr_set_xrc_srqn(
+			ctx->qpx[index],
+			ctx->wr[wr_index].qp_type.xrc.remote_srqn);
+	}
+	#endif
+
+	if (inl) {
+		ibv_wr_set_inline_data(
+			ctx->qpx[index],
+			(void*)ctx->wr[wr_index].sg_list->addr,
+			user_param->size);
+	} else {
+		ibv_wr_set_sge(
+			ctx->qpx[index],
+			ctx->wr[wr_index].sg_list->lkey,
+			ctx->wr[wr_index].sg_list->addr,
+			user_param->size);
+	}
+	rc = ibv_wr_complete(ctx->qpx[index]);
+
+	return rc;
+}
+
+/* new_post_send_*.
+ *
+ * Description :
+ *
+ * Calls _new_post_send to do posting of work to a send
+ * queue using function calls instead of the struct based *ibv_post_send()*
+ * scheme. We need a lot of functions for each combination to make sure the
+ * condition in _new_post_send is decided in compile-time.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	index       - qp index.
+ *	user_param  - user_parameters struct for this test.
+ *
+ * Return Value : int.
+ *
+ */
+static int new_post_send_sge_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_SEND);
+}
+
+static int new_post_send_inl_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_SEND);
+}
+
+static int new_post_write_sge_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_write_inl_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_read_sge_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_READ);
+}
+
+static int new_post_atomic_fa_sge_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_FETCH_AND_ADD);
+}
+
+static int new_post_atomic_cs_sge_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_CMP_AND_SWP);
+}
+
+static int new_post_send_sge_ud(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UD, IBV_WR_SEND);
+}
+
+static int new_post_send_inl_ud(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UD, IBV_WR_SEND);
+}
+
+static int new_post_send_sge_uc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_SEND);
+}
+
+static int new_post_send_inl_uc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_SEND);
+}
+
+static int new_post_write_sge_uc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_write_inl_uc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE);
+}
+
+#ifdef HAVE_XRCD
+static int new_post_send_sge_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_SEND);
+}
+
+static int new_post_send_inl_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_SEND);
+}
+
+static int new_post_write_sge_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_write_inl_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_read_sge_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_READ);
+}
+
+static int new_post_atomic_fa_sge_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_FETCH_AND_ADD);
+}
+
+static int new_post_atomic_cs_sge_xrc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_CMP_AND_SWP);
+}
+#endif
+#endif
+
 #ifdef HAVE_XRCD
 /******************************************************************************
  *
@@ -335,6 +580,10 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,
 	struct ibv_qp* qp = NULL;
 	int num_of_qps = user_param->num_of_qps / 2;
 
+	#ifdef HAVE_IBV_WR_API
+	enum ibv_wr_opcode opcode;
+	#endif
+
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_qp_init_attr qp_init_attr;
 	#else
@@ -359,8 +608,30 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,
 		qp_init_attr.cap.max_send_sge = 1;
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
 		qp_init_attr.pd = ctx->pd;
+		#ifdef HAVE_IBV_WR_API
+		qp_init_attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+		#endif
 		qp_init_attr.cap.max_inline_data = user_param->inline_size;
 	}
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->verb == ATOMIC) {
+		opcode = opcode_atomic_array[user_param->atomicType];
+		if (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD)
+			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
+		else if (opcode == IBV_WR_ATOMIC_CMP_AND_SWP)
+			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
+	}
+	else {
+		opcode = opcode_verbs_array[user_param->verb];
+		if (opcode == IBV_WR_SEND)
+			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_SEND;
+		else if (opcode == IBV_WR_RDMA_WRITE)
+			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+		else if (opcode == IBV_WR_RDMA_READ)
+			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+	}
+	#endif
 
 	#ifdef HAVE_ACCL_VERBS
 	if (user_param->use_res_domain) {
@@ -653,6 +924,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(user_param->tcompleted, cycles_t, 1);
 
 	ALLOCATE(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
+	#ifdef HAVE_IBV_WR_API
+	ALLOCATE(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
+	#endif
 	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOCATE(ctx->buf, void* , user_param->num_of_qps);
 
@@ -904,6 +1178,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 	free(ctx->qp);
+	#ifdef HAVE_IBV_WR_API
+	free(ctx->qpx);
+	#endif
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
 
@@ -1672,6 +1949,9 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		fprintf(stderr, "Unable to create QP.\n");
 		return FAILURE;
 	}
+	#ifdef HAVE_IBV_WR_API
+	ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
+	#endif
 
 	return SUCCESS;
 }
@@ -1882,10 +2162,17 @@ struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
-	struct ibv_qp_init_attr attr;
 	struct ibv_qp* qp = NULL;
 
+	#ifdef HAVE_IBV_WR_API
+	enum ibv_wr_opcode opcode;
+	struct ibv_qp_init_attr_ex attr;
+	memset(&attr, 0, sizeof(struct ibv_qp_init_attr_ex));
+	#else
+	struct ibv_qp_init_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
+	#endif
+
 	attr.send_cq = ctx->send_cq;
 	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
 	attr.cap.max_send_wr  = user_param->tx_depth;
@@ -1914,16 +2201,45 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			  return NULL;
 	}
 
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->verb == ATOMIC) {
+		opcode = opcode_atomic_array[user_param->atomicType];
+		if(0);
+		else if (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD)
+			attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
+		else if (opcode == IBV_WR_ATOMIC_CMP_AND_SWP)
+			attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
+	}
+	else {
+		opcode = opcode_verbs_array[user_param->verb];
+		if(0);
+		else if (opcode == IBV_WR_SEND)
+			attr.send_ops_flags |= IBV_QP_EX_WITH_SEND;
+		else if (opcode == IBV_WR_RDMA_WRITE)
+			attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+		else if (opcode == IBV_WR_RDMA_READ)
+			attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+	}
+	attr.pd = ctx->pd;
+	attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
+	#endif
+
 	if (user_param->work_rdma_cm) {
+		#if !defined(HAVE_IBV_WR_API)
 		if (rdma_create_qp(ctx->cm_id, ctx->pd, &attr)) {
 			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
 		} else {
 			qp = ctx->cm_id->qp;
 		}
-
+		#endif
 	} else {
-		qp = ibv_create_qp(ctx->pd,&attr);
+		#ifdef HAVE_IBV_WR_API
+		qp = ibv_create_qp_ex(ctx->context, &attr);
+		#else
+		qp = ibv_create_qp(ctx->pd, &attr);
+		#endif
 	}
+
 	if (errno == ENOMEM) {
 		fprintf(stderr, "Requested SQ size might be too big. Try reducing TX depth and/or inline size.\n");
 		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
@@ -1937,7 +2253,6 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 
 	return qp;
 }
-
 
 #ifdef HAVE_MASKED_ATOMICS
 /******************************************************************************
@@ -2741,6 +3056,135 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 }
 #endif
 
+/* ctx_post_send_work_request_func_pointer.
+ *
+ * Description :
+ *
+ * Chooses the correct pointer to be used to call funtion for posting WR
+ * using new posting API.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ *
+ * Return Value : void.
+ *
+ */
+#ifdef HAVE_IBV_WR_API
+static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	int use_inl = user_param->size <= user_param->inline_size;
+	switch (user_param->connection_type) {
+	case RC:
+		switch (user_param->verb) {
+			case SEND:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_rc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_rc;
+				}
+				break;
+			case WRITE:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_rc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_rc;
+				}
+				break;
+			case READ:
+				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_rc;
+				break;
+			case ATOMIC:
+				if (user_param->atomicType == FETCH_AND_ADD) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_fa_sge_rc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_cs_sge_rc;
+				}
+				break;
+			default:
+				fprintf(stderr, "The post send properties are not supported on RC. \n");
+		}
+		break;
+	case UD:
+		switch (user_param->verb) {
+			case SEND:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_ud;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_ud;
+				}
+				break;
+			default:
+				fprintf(stderr, "The post send properties are not supported on UD. \n");
+		}
+		break;
+	case UC:
+		switch (user_param->verb) {
+			case SEND:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_uc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_uc;
+				}
+				break;
+			case WRITE:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_uc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_uc;
+				}
+				break;
+			default:
+				fprintf(stderr, "The post send properties are not supported on UD. \n");
+		}
+		break;
+	case XRC:
+		switch (user_param->verb) {
+			case SEND:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_xrc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_xrc;
+				}
+				break;
+			case WRITE:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_xrc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_xrc;
+				}
+				break;
+			case READ:
+				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_xrc;
+				break;
+			case ATOMIC:
+				if (user_param->atomicType == FETCH_AND_ADD) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_fa_sge_xrc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_cs_sge_xrc;
+				}
+				break;
+			default:
+				fprintf(stderr, "The post send properties are not supported on RC. \n");
+		}
+		break;
+	default:
+		fprintf(stderr, "Unsupported transport. \n");
+	}
+}
+#endif
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2757,7 +3201,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 		num_of_qps /= 2;
 		xrc_offset = num_of_qps;
 	}
-
+	#ifdef HAVE_IBV_WR_API
+	ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
 	for (i = 0; i < num_of_qps ; i++) {
 		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
@@ -3120,6 +3566,32 @@ cleaning:
 	return return_value;
 }
 
+/* post_send_method.
+ *
+ * Description :
+ *
+ * Does posting of work to a send queue.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	index       - qp index.
+ *	user_param  - user_parameters struct for this test.
+ *
+ * Return Value : int.
+ *
+ */
+static inline int post_send_method(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	#ifdef HAVE_IBV_WR_API
+	return (*ctx->new_post_send_work_request_func_pointer)(ctx, index, user_param);
+	#else
+	struct ibv_send_wr 	*bad_wr = NULL;
+	return ibv_post_send(ctx->qp[index], &ctx->wr[index*user_param->post_list], &bad_wr);
+	#endif
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -3133,12 +3605,12 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			err = 0;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
+	struct ibv_send_wr 	*bad_wr = NULL;
 	#ifdef HAVE_ACCL_VERBS
 	int pl_index;
 	struct ibv_sge		*sg_l;
 	#endif
 	#endif
-	struct ibv_send_wr 	*bad_wr = NULL;
 	struct ibv_wc 	   	*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	/* Rate Limiter*/
@@ -3229,7 +3701,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				is_sending_burst = 1;
 				burst_iter = 0;
 			}
-
 			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
 					!((user_param->rate_limit_type == SW_RATE_LIMIT ) && is_sending_burst == 0)) {
 
@@ -3251,7 +3722,12 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 							ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 						else
 					#endif
-							ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+						#else
+						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						#endif
+
 					#ifdef HAVE_ACCL_VERBS
 					}
 					#endif
@@ -3286,13 +3762,15 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 				#endif
 				#else
-				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
-				#endif
+
+				err = post_send_method(ctx, index, user_param);
 				if (err) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
 					return_value = FAILURE;
 					goto cleaning;
 				}
+				#endif
+
 				/* if we have more than single flow and the burst iter is the last one */
 				if (user_param->flows != DEF_FLOWS) {
 					if (++flows_burst_iter == user_param->flows_burst) {
@@ -3334,6 +3812,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
+
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
 						(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
@@ -3344,11 +3823,16 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_QP_BURST_SIGNALED;
 					else {
 					#endif
-						if (user_param->use_exp == 1)
+						if (user_param->use_exp == 1) {
 							ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
+						}
 						else
 					#endif
-							ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+						#else
+						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						#endif
 					#ifdef HAVE_ACCL_VERBS
 					}
 					#endif
@@ -3377,8 +3861,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					ne = ctx->send_cq_family->poll_cnt(ctx->send_cq, CTX_POLL_BATCH);
 				else
 				#endif
-					ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
-
+					ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 						wc_id = (user_param->verb_type == ACCL_INTF) ?
@@ -3682,9 +4165,9 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int			wc_id;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
+	struct ibv_send_wr 	*bad_wr = NULL;
 	#endif
 	uint64_t		*scnt_for_qp = NULL;
-	struct ibv_send_wr 	*bad_wr = NULL;
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
@@ -3743,7 +4226,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 							ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 						else
 					#endif
-							ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+						#else
+						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						#endif
 					#ifdef HAVE_ACCL_VERBS
 					}
 					#endif
@@ -3755,7 +4242,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				else
 					err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
 				#else
-				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
+				err = post_send_method(ctx, index, user_param);
 				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
@@ -3780,7 +4267,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 							ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 						else
 					#endif
-							ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+						#else
+						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						#endif
 					#ifdef HAVE_ACCL_VERBS
 					}
 					#endif
@@ -3954,8 +4445,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr 	*bad_exp_wr      = NULL;
-	#endif
 	struct ibv_send_wr 	*bad_wr      = NULL;
+	#endif
 	int 			num_of_qps = user_param->num_of_qps;
 	/* This is to ensure SERVER will not start to send packets before CLIENT start the test. */
 	int 			before_first_rx = ON;
@@ -4024,7 +4515,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+						#else
 						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+						#endif
 				}
 				if (user_param->noPeak == OFF)
 					user_param->tposted[totscnt] = get_cycles();
@@ -4040,7 +4535,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					err = (ctx->post_send_func_pointer)(ctx->qp[index],
 						&ctx->wr[index*user_param->post_list],&bad_wr);
 				#else
-				err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
+				err = post_send_method(ctx, index, user_param);
 				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
@@ -4071,7 +4566,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 					else
 					#endif
+						#ifdef HAVE_IBV_WR_API
+						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+						#else
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+						#endif
 				}
 			}
 		}
@@ -4291,8 +4790,8 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	volatile char           *post_buf = NULL;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr  *bad_exp_wr = NULL;
-	#endif
 	struct ibv_send_wr      *bad_wr = NULL;
+	#endif
 	struct ibv_wc           wc;
 
 	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
@@ -4308,7 +4807,11 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	} else {
 	#endif
 		ctx->wr[0].sg_list->length = user_param->size;
-		ctx->wr[0].send_flags      = IBV_SEND_SIGNALED;
+		#ifdef HAVE_IBV_WR_API
+		ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+		#else
+		ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
+		#endif
 		if (user_param->size <= user_param->inline_size)
 			ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 	#ifdef HAVE_VERBS_EXP
@@ -4362,7 +4865,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 			else
 				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
 			#else
-			err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
+			err = post_send_method(ctx, 0, user_param);
 			#endif
 			if (err) {
 				fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
@@ -4407,8 +4910,8 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	int		err = 0;
 	#ifdef HAVE_VERBS_EXP
 	struct 		ibv_exp_send_wr *bad_exp_wr = NULL;
-	#endif
 	struct 		ibv_send_wr *bad_wr = NULL;
+	#endif
 	struct 		ibv_wc wc;
 
 	int 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
@@ -4422,7 +4925,11 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	} else {
 	#endif
 		ctx->wr[0].sg_list->length = user_param->size;
+		#ifdef HAVE_IBV_WR_API
+		ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+		#else
 		ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
+		#endif
 	#ifdef HAVE_VERBS_EXP
 	}
 	#endif
@@ -4455,7 +4962,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		else
 			err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
 		#else
-		err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
+		err = post_send_method(ctx, 0, user_param);
 		#endif
 		if (err) {
 			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
@@ -4507,8 +5014,8 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	struct ibv_recv_wr	*bad_wr_recv;
 	#ifdef HAVE_VERBS_EXP
 	struct ibv_exp_send_wr	*bad_exp_wr;
-	#endif
 	struct ibv_send_wr	*bad_wr;
+	#endif
 	int  			firstRx = 1;
 	int 			size_per_qp = (user_param->use_srq) ?
 					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
@@ -4528,6 +5035,9 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		#endif
 			ctx->wr[0].sg_list->length = user_param->size;
 			ctx->wr[0].send_flags = 0;
+			#ifdef HAVE_IBV_WR_API
+			ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+			#endif
 		#ifdef HAVE_VERBS_EXP
 		}
 		#endif
@@ -4647,7 +5157,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 			else
 				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
 			#else
-			err = ibv_post_send(ctx->qp[0],&ctx->wr[0],&bad_wr);
+			err = post_send_method(ctx, 0, user_param);
 			#endif
 			if (err) {
 				fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);

@@ -49,9 +49,18 @@ AC_ARG_ENABLE([verbs_exp],
 [Disable Verbs Experimental])],
 [], [enable_verbs_exp=yes])
 
+AC_ARG_ENABLE([ibv_wr_api],
+[AS_HELP_STRING([--enable-ibv_wr_api],
+[Enable new post send API])],
+[enable_ibv_wr_api=yes], [enable_ibv_wr_api=no])
+
 AS_IF([test "x$enable_verbs_exp" = "xyes"],
       [USE_VERBS_EXP=yes],
         [USE_VERBS_EXP=no])
+
+AS_IF([test "x$enable_ibv_wr_api" = "xyes"],
+      [USE_IBV_WR_API=yes],
+        [USE_IBV_WR_API=no])
 
 AC_PREFIX_DEFAULT("/usr")
 
@@ -138,6 +147,16 @@ if [test $HAVE_VERBS_EXP = yes] && [test $USE_VERBS_EXP = yes]; then
         AC_DEFINE([HAVE_VERBS_EXP], [1], [Have verbs_exp header])
 else
 	HAVE_VERBS_EXP=no
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;],[HAVE_IBV_WR_API=yes],[HAVE_IBV_WR_API=no])
+AM_CONDITIONAL([HAVE_IBV_WR_API],[test "x$HAVE_IBV_WR_API" = "xyes"])
+if [test $HAVE_IBV_WR_API = yes] && [test $USE_IBV_WR_API = yes]; then
+        AC_DEFINE([HAVE_IBV_WR_API], [1], [Have new post send API support])
+else
+	HAVE_IBV_WR_API=no
 fi
 
 AC_TRY_LINK([

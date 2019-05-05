@@ -162,6 +162,11 @@ struct pingpong_context {
 	void					**buf;
 	struct ibv_ah				**ah;
 	struct ibv_qp				**qp;
+	#ifdef HAVE_IBV_WR_API
+	struct ibv_qp_ex			**qpx;
+	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
+		struct perftest_parameters *user_param);
+	#endif
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
