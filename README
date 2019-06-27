@@ -130,7 +130,7 @@ Common Options to all tests:
   -R, --rdma_cm				Connect QPs with rdma_cm and run test on those QPs
   -z, --com_rdma_cm			Communicate with rdma_cm module to exchange data - use regular QPs
   -m, --mtu=<mtu>			QP Mtu size (default: active_mtu from ibv_devinfo)
-  -c, --connection=<RC/UC/UD/XRC/DC>	Connection type RC/UC/UD/XRC/DC (default RC).
+  -c, --connection=<type>		Connection type RC/UC/UD/XRC/DC/SRD (default RC).
   -d, --ib-dev=<dev>			Use IB device <dev> (default: first device found)
   -i, --ib-port=<port>			Use network port <port> of IB device (default: 1)
   -s, --size=<size>			Size of message to exchange (default: 1)

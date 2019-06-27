@@ -19,11 +19,15 @@
 #include <sys/stat.h>
 #endif
 
-#include "perftest_resources.h"
-#include "raw_ethernet_resources.h"
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+#ifdef HAVE_SRD
+#include <infiniband/efadv.h>
+#endif
+
+#include "perftest_resources.h"
+#include "raw_ethernet_resources.h"
 
 #ifdef HAVE_VERBS_EXP
 static enum ibv_exp_wr_opcode exp_opcode_verbs_array[] = {IBV_EXP_WR_SEND,IBV_EXP_WR_RDMA_WRITE,IBV_EXP_WR_RDMA_READ};
@@ -972,7 +976,8 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->exp_wr, struct ibv_exp_send_wr, user_param->num_of_qps * user_param->post_list);
 		#endif
 		ALLOCATE(ctx->wr, struct ibv_send_wr, user_param->num_of_qps * user_param->post_list);
-		if ((user_param->verb == SEND && user_param->connection_type == UD ) || user_param->connection_type == DC) {
+		if ((user_param->verb == SEND && user_param->connection_type == UD) ||
+				user_param->connection_type == DC || user_param->connection_type == SRD) {
 			ALLOCATE(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 		}
 	}
@@ -1047,9 +1052,10 @@ int destroy_ctx(struct pingpong_context *ctx,
 		first = 0;
 	for (i = first; i < user_param->num_of_qps; i++) {
 
-		if (( (user_param->connection_type == DC && !((!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
-							|| ((user_param->duplex || user_param->tst == LAT) && (i >= num_of_qps)))) ||
-					user_param->connection_type == UD) && (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
+		if (((user_param->connection_type == DC && !((!(user_param->duplex || user_param->tst == LAT) && user_param->machine == SERVER)
+							|| ((user_param->duplex || user_param->tst == LAT) && i >= num_of_qps))) ||
+					user_param->connection_type == UD || user_param->connection_type == SRD) &&
+				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
 			if (ibv_destroy_ah(ctx->ah[i])) {
 				fprintf(stderr, "Failed to destroy AH\n");
 				test_result = 1;
@@ -2197,6 +2203,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_RAW_ETH
 		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 		#endif
+		#ifdef HAVE_SRD
+		case SRD: attr.qp_type = IBV_QPT_DRIVER; break;
+		#endif
 		default:  fprintf(stderr, "Unknown connection type \n");
 			  return NULL;
 	}
@@ -2231,6 +2240,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		} else {
 			qp = ctx->cm_id->qp;
 		}
+		#endif
+	} else if (user_param->connection_type == SRD) {
+		#ifdef HAVE_SRD
+		qp = efadv_create_driver_qp(ctx->pd, &attr, EFADV_QP_DRIVER_TYPE_SRD);
 		#endif
 	} else {
 		#ifdef HAVE_IBV_WR_API
@@ -2441,7 +2454,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		exp_flags = init_flag | IBV_EXP_QP_STATE | IBV_EXP_QP_PORT;
 		#endif
 
-	} else if (user_param->connection_type == UD) {
+	} else if (user_param->connection_type == UD || user_param->connection_type == SRD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
 
@@ -2593,7 +2606,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			attr->ah_attr.grh.hop_limit = 0xFF;
 			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
 		}
-		if (user_param->connection_type != UD) {
+		if (user_param->connection_type != UD && user_param->connection_type != SRD) {
 
 			attr->path_mtu = user_param->curr_mtu;
 			attr->dest_qp_num = dest->qpn;
@@ -2818,7 +2831,7 @@ int ctx_connect(struct pingpong_context *ctx,
 			}
 		}
 
-		if ((user_param->connection_type == UD || user_param->connection_type == DC) &&
+		if ((user_param->connection_type == UD || user_param->connection_type == DC || user_param->connection_type == SRD) &&
 				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
 
 			#ifdef HAVE_DC
@@ -2828,9 +2841,8 @@ int ctx_connect(struct pingpong_context *ctx,
 			#endif
 				ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
 
-
 			if (!ctx->ah[i]) {
-				fprintf(stderr, "Failed to create AH for UD\n");
+				fprintf(stderr, "Failed to create AH\n");
 				return FAILURE;
 			}
 		}
@@ -3304,7 +3316,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			} else if (user_param->verb == SEND) {
 
-				if (user_param->connection_type == UD) {
+				if (user_param->connection_type == UD || user_param->connection_type == SRD) {
 
 					ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
 					if (user_param->work_rdma_cm) {

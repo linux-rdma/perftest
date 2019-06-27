@@ -121,7 +121,7 @@
 #define INC(size,cache_line_size) ((size > cache_line_size) ? ((size%cache_line_size == 0) ?  \
 	       (size) : (cache_line_size*(size/cache_line_size+1))) : (cache_line_size))
 
-#define UD_MSG_2_EXP(size) ((log(size))/(log(2)))
+#define MSG_SZ_2_EXP(size) ((log(size)) / (log(2)))
 
 #define MASK_IS_SET(mask, attr)      (((mask)&(attr))!=0)
 
