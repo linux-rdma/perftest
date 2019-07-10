@@ -647,6 +647,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rx_depth		= user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
+	user_param->req_cq_mod		= 0;
 	user_param->cq_mod		= DEF_CQ_MOD;
 	user_param->iters		= (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport		= OFF;
@@ -975,9 +976,15 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		user_param->cq_mod = user_param->post_list;
-		printf(RESULT_LINE);
-		printf("Post List requested - CQ moderation will be the size of the post list\n");
+		if (!user_param->req_cq_mod) {
+			user_param->cq_mod = user_param->post_list;
+			printf(RESULT_LINE);
+			printf("Post List requested - CQ moderation will be the size of the post list\n");
+		} else if ((user_param->post_list % user_param->cq_mod) != 0) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Post list size must be a multiple of CQ moderation\n");
+			exit(1);
+		}
 	}
 
 	if (user_param->test_type==DURATION) {
@@ -2050,7 +2057,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					  return 1;
 				  } break;
-			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation"); break;
+			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");
+				  user_param->req_cq_mod = 1;
+				  break;
 			case 'A':
 				  if (user_param->verb != ATOMIC) {
 					  fprintf(stderr," You are not running the atomic_lat/bw test!\n");

@@ -2983,18 +2983,19 @@ void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
 			ctx->exp_wr[i*user_param->post_list + j].wr_id   = i;
 
 			if (j == (user_param->post_list - 1)) {
+				ctx->exp_wr[i*user_param->post_list + j].next = NULL;
+			} else {
+				ctx->exp_wr[i*user_param->post_list + j].next = &ctx->exp_wr[i*user_param->post_list+j+1];
+			}
+
+			if ((j + 1) % user_param->cq_mod == 0) {
 				#ifdef HAVE_ACCL_VERBS
 				if (user_param->verb_type == ACCL_INTF)
 					ctx->exp_wr[i*user_param->post_list + j].exp_send_flags = IBV_EXP_QP_BURST_SIGNALED;
 				else
 				#endif
 					ctx->exp_wr[i*user_param->post_list + j].exp_send_flags = IBV_EXP_SEND_SIGNALED;
-
-				ctx->exp_wr[i*user_param->post_list + j].next = NULL;
-			}
-
-			else {
-				ctx->exp_wr[i*user_param->post_list + j].next = &ctx->exp_wr[i*user_param->post_list+j+1];
+			} else {
 				ctx->exp_wr[i*user_param->post_list + j].exp_send_flags = 0;
 			}
 
@@ -3278,12 +3279,14 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->wr[i*user_param->post_list + j].wr_id   = i;
 
 			if (j == (user_param->post_list - 1)) {
-				ctx->wr[i*user_param->post_list + j].send_flags = IBV_SEND_SIGNALED;
 				ctx->wr[i*user_param->post_list + j].next = NULL;
+			} else {
+				ctx->wr[i*user_param->post_list + j].next = &ctx->wr[i*user_param->post_list+j+1];
 			}
 
-			else {
-				ctx->wr[i*user_param->post_list + j].next = &ctx->wr[i*user_param->post_list+j+1];
+			if ((j + 1) % user_param->cq_mod == 0) {
+				ctx->wr[i*user_param->post_list + j].send_flags = IBV_SEND_SIGNALED;
+			} else {
 				ctx->wr[i*user_param->post_list + j].send_flags = 0;
 			}
 
@@ -3726,7 +3729,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				is_sending_burst = 1;
 				burst_iter = 0;
 			}
-			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) && (ctx->scnt[index] - ctx->ccnt[index]) < (user_param->tx_depth) &&
+			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) &&
+					(ctx->scnt[index] - ctx->ccnt[index] + user_param->post_list) <= (user_param->tx_depth) &&
 					!((user_param->rate_limit_type == SW_RATE_LIMIT ) && is_sending_burst == 0)) {
 
 				if (ctx->send_rcredit) {
@@ -4237,7 +4241,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	/* main loop to run over all the qps and post each time n messages */
 		for (index =0 ; index < num_of_qps ; index++) {
 
-			while ((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) {
+			while ((ctx->scnt[index] - ctx->ccnt[index] + user_param->post_list) <= user_param->tx_depth) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = scnt_for_qp[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)

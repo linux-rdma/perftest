@@ -412,6 +412,7 @@ struct perftest_parameters {
 	int				rx_depth;
 	int				duplex;
 	int				noPeak;
+	int				req_cq_mod;
 	int				cq_mod;
 	int 				spec;
 	int 				dualport;
