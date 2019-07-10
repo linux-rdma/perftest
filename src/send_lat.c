@@ -147,10 +147,13 @@ static int send_destroy_ctx(struct pingpong_context *ctx,
 	int i;
 	if (user_param->use_mcg) {
 
-		for (i=0; i < user_param->num_of_qps; i++) {
-			if (ibv_detach_mcast(ctx->qp[i],&mcg_params->base_mgid,mcg_params->base_mlid)) {
-				fprintf(stderr, "Couldn't dettach QP to MultiCast group\n");
-				return FAILURE;
+		if (user_param->machine == SERVER)
+		{
+			for (i=0; i < user_param->num_of_qps; i++) {
+				if (ibv_detach_mcast(ctx->qp[i],&mcg_params->base_mgid,mcg_params->base_mlid)) {
+					fprintf(stderr, "Couldn't dettach QP to MultiCast group\n");
+					return FAILURE;
+				}
 			}
 		}
 
