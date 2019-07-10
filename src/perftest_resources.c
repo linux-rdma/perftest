@@ -3758,6 +3758,12 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						err = (ctx->post_send_func_pointer)(ctx->qp[index],
 							&ctx->wr[index*user_param->post_list],&bad_wr);
 					}
+					if (err) {
+						fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
+						return_value = FAILURE;
+						goto cleaning;
+					}
+
 				#ifdef HAVE_ACCL_VERBS
 				}
 				#endif
