@@ -2240,8 +2240,8 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#endif
 	}
 
-	if (errno == ENOMEM) {
-		fprintf(stderr, "Requested SQ size might be too big. Try reducing TX depth and/or inline size.\n");
+	if (qp == NULL && errno == ENOMEM) {
+		fprintf(stderr, "Requested QP size might be too big. Try reducing TX depth and/or inline size.\n");
 		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
 	}
 
