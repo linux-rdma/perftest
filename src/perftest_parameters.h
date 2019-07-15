@@ -290,9 +290,12 @@ enum ctx_device {
 	CONNECTX5		= 15,
 	CONNECTX5EX		= 16,
 	CONNECTX6		= 17,
-	BLUEFIELD		= 18,
-	INTEL_ALL		= 19,
-	NETXTREME		= 20
+	CONNECTX6DX		= 18,
+	MLX5GENVF		= 19,
+	BLUEFIELD		= 20,
+	BLUEFIELD2		= 21,
+	INTEL_ALL		= 22,
+	NETXTREME		= 23
 };
 
 /* Units for rate limiter */
