@@ -15,6 +15,9 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include "perftest_communication.h"
+#ifdef HAVE_SRD
+#include <infiniband/efadv.h>
+#endif
 #if defined(__FreeBSD__)
 #include <ctype.h>
 #endif
@@ -1768,24 +1771,54 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 			user_param->size = RAWETH_MIN_MSG_SIZE;
 		}
 	} else if (user_param->connection_type == SRD) {
-		struct ibv_port_attr port_attr;
+		if (user_param->verb == SEND) {
+			struct ibv_port_attr port_attr;
 
-		if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
-			fprintf(stderr, " Error when trying to query port\n");
-			exit(1);
-		}
-
-		if (user_param->size > port_attr.max_msg_sz) {
-			if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-				fprintf(stderr, " Max msg size is %u\n",
-					port_attr.max_msg_sz);
-				fprintf(stderr, " Changing to this size\n");
-				user_param->size = port_attr.max_msg_sz;
-			} else {
-				fprintf(stderr," Max message size in SRD cannot be greater than %u \n",
-					port_attr.max_msg_sz);
-				return FAILURE;
+			if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
+				fprintf(stderr, " Error when trying to query port\n");
+				exit(1);
 			}
+
+			if (user_param->size > port_attr.max_msg_sz) {
+				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
+					fprintf(stderr, " Max msg size is %u\n",
+						port_attr.max_msg_sz);
+					fprintf(stderr, " Changing to this size\n");
+					user_param->size = port_attr.max_msg_sz;
+				} else {
+					fprintf(stderr," Max message size in SRD cannot be greater than %u \n",
+						port_attr.max_msg_sz);
+					return FAILURE;
+				}
+			}
+		} else if (user_param->verb == READ) {
+#ifdef HAVE_SRD_WITH_RDMA_READ
+			struct efadv_device_attr efa_device_attr = {};
+
+			if (efadv_query_device(context, &efa_device_attr, sizeof(efa_device_attr))) {
+				fprintf(stderr, " Error when trying to query EFA device\n");
+				exit(1);
+			}
+			if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
+				fprintf(stderr, "Read verb is not supported with this EFA device\n");
+				exit(1);
+			}
+			if (user_param->size > efa_device_attr.max_rdma_size) {
+				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
+					fprintf(stderr, " Max RDMA request size is %u\n",
+						efa_device_attr.max_rdma_size);
+					fprintf(stderr, " Changing to this size\n");
+					user_param->size = efa_device_attr.max_rdma_size;
+				} else {
+					fprintf(stderr," Max RDMA read size in SRD cannot be greater than %u\n",
+						efa_device_attr.max_rdma_size);
+					return FAILURE;
+				}
+			}
+#else
+			fprintf(stderr, "SRD connection not possible in READ verb\n");
+			exit(1);
+#endif
 		}
 	}
 

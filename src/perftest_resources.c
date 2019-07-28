@@ -343,13 +343,18 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			fprintf(stderr, "Post send failed: unknown operation code.\n");;
 		}
 
-		if (qpt == IBV_QPT_UD ||
-			(qpt == IBV_QPT_DRIVER && connection_type == SRD)) {
+		if (qpt == IBV_QPT_UD) {
 			ibv_wr_set_ud_addr(
 				ctx->qpx[index],
 				wr->wr.ud.ah,
 				wr->wr.ud.remote_qpn,
 				wr->wr.ud.remote_qkey);
+		} else if (qpt == IBV_QPT_DRIVER && connection_type == SRD) {
+			ibv_wr_set_ud_addr(
+				ctx->qpx[index],
+				ctx->ah[index],
+				ctx->rem_qpn[index],
+				DEF_QKEY);
 		}
 		#ifdef HAVE_XRCD
 		else if (qpt == IBV_QPT_XRC_SEND) {
@@ -484,6 +489,12 @@ static int new_post_send_inl_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
 	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD);
+}
+
+static int new_post_read_sge_srd(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, SRD);
 }
 
 #ifdef HAVE_XRCD
@@ -1004,10 +1015,13 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 		ALLOCATE(ctx->exp_wr, struct ibv_exp_send_wr, user_param->num_of_qps * user_param->post_list);
 		#endif
 		ALLOCATE(ctx->wr, struct ibv_send_wr, user_param->num_of_qps * user_param->post_list);
+		ALLOCATE(ctx->rem_qpn, uint32_t, user_param->num_of_qps);
 		if ((user_param->verb == SEND && user_param->connection_type == UD) ||
 				user_param->connection_type == DC || user_param->connection_type == SRD) {
 			ALLOCATE(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 		}
+	} else if (user_param->verb == READ && user_param->connection_type == SRD) {
+		ALLOCATE(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
@@ -1080,10 +1094,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 		first = 0;
 	for (i = first; i < user_param->num_of_qps; i++) {
 
-		if (((user_param->connection_type == DC && !((!(user_param->duplex || user_param->tst == LAT) && user_param->machine == SERVER)
+		if ((((user_param->connection_type == DC && !((!(user_param->duplex || user_param->tst == LAT) && user_param->machine == SERVER)
 							|| ((user_param->duplex || user_param->tst == LAT) && i >= num_of_qps))) ||
 					user_param->connection_type == UD || user_param->connection_type == SRD) &&
-				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
+				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
+				(user_param->connection_type == SRD && user_param->verb == READ)) {
 			if (ibv_destroy_ah(ctx->ah[i])) {
 				fprintf(stderr, "Failed to destroy AH\n");
 				test_result = 1;
@@ -2873,8 +2888,9 @@ int ctx_connect(struct pingpong_context *ctx,
 			}
 		}
 
-		if ((user_param->connection_type == UD || user_param->connection_type == DC || user_param->connection_type == SRD) &&
-				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
+		if (((user_param->connection_type == UD || user_param->connection_type == DC || user_param->connection_type == SRD) &&
+				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
+				(user_param->connection_type == SRD && user_param->verb == READ)) {
 
 			#ifdef HAVE_DC
 			if(user_param->connection_type == DC)
@@ -3244,6 +3260,9 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_srd;
 				}
 				break;
+			case READ:
+				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_srd;
+				break;
 			default:
 				fprintf(stderr, "The post send properties are not supported on SRD.\n");
 		}
@@ -3264,7 +3283,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 	int i,j;
 	int num_of_qps = user_param->num_of_qps;
 	int xrc_offset = 0;
-	uint32_t remote_qpn, remote_qkey;
+	uint32_t remote_qkey;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
@@ -3342,7 +3361,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			if (user_param->verb == WRITE || user_param->verb == READ) {
 
 				ctx->wr[i*user_param->post_list + j].wr.rdma.rkey = rem_dest[xrc_offset + i].rkey;
-
+				if (user_param->connection_type == SRD)
+					ctx->rem_qpn[xrc_offset + i] = rem_dest[xrc_offset + i].qpn;
 				if (j > 0) {
 
 					ctx->wr[i*user_param->post_list + j].wr.rdma.remote_addr =
@@ -3379,14 +3399,14 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 					ctx->wr[i*user_param->post_list + j].wr.ud.ah = ctx->ah[i];
 					if (user_param->work_rdma_cm) {
-						remote_qpn = ctx->cma_master.nodes[i].remote_qpn;
+						ctx->rem_qpn[xrc_offset + i] = ctx->cma_master.nodes[i].remote_qpn;
 						remote_qkey = ctx->cma_master.nodes[i].remote_qkey;
 					} else {
-						remote_qpn = rem_dest[xrc_offset + i].qpn;
+						ctx->rem_qpn[xrc_offset + i] = rem_dest[xrc_offset + i].qpn;
 						remote_qkey = DEF_QKEY;
 					}
 					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qkey = remote_qkey;
-					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn = remote_qpn;
+					ctx->wr[i*user_param->post_list + j].wr.ud.remote_qpn = ctx->rem_qpn[xrc_offset + i];
 				}
 			}
 
