@@ -1703,8 +1703,8 @@ void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters 
  ******************************************************************************/
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm) {
 	int curr_mtu=0, rem_mtu=0;
-	char cur[2];
-	char rem[2];
+	char cur[sizeof(int)];
+	char rem[sizeof(int)];
 	int size_of_cur;
 	float rem_vers = atof(user_param->rem_version);
 
