@@ -115,11 +115,14 @@
 /* UD addition to the buffer. */
 #define IF_UD_ADD(type,cache_line_size) ((type == UD) ? (cache_line_size) : (0))
 
+#define ROUND_UP(value, alignment) (((value) % (alignment) == 0) ?  \
+		(value) : ((alignment) * ((value) / (alignment) + 1)))
+
 /* Macro that defines the address where we write in RDMA.
  * If message size is smaller then CACHE_LINE size then we write in CACHE_LINE jumps.
  */
-#define INC(size,cache_line_size) ((size > cache_line_size) ? ((size%cache_line_size == 0) ?  \
-	       (size) : (cache_line_size*(size/cache_line_size+1))) : (cache_line_size))
+#define INC(size, cache_line_size) ((size > cache_line_size) ? \
+		ROUND_UP(size, cache_line_size) : (cache_line_size))
 
 #define MSG_SZ_2_EXP(size) ((log(size)) / (log(2)))
 
