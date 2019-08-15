@@ -331,11 +331,15 @@ if [test $HAVE_EXP_OOO_ATTR = yes]; then
 	AC_DEFINE([HAVE_EXP_OOO_ATTR], [1], [Have Experimental Out of order data placement support])
 fi
 
-AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes LIBEFA=-lefa], [HAVE_SRD=no])
+if [test $HAVE_IBV_WR_API = yes]; then
+	AC_CHECK_LIB([efa], [efadv_create_qp_ex], [HAVE_SRD=yes], [HAVE_SRD=no])
+else
+	AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes], [HAVE_SRD=no])
+fi
 AM_CONDITIONAL([HAVE_SRD], [test "x$HAVE_SRD" = "xyes"])
-if [test $HAVE_SRD = yes] && [test $HAVE_IBV_WR_API = no]; then
+if [test $HAVE_SRD = yes]; then
 	AC_DEFINE([HAVE_SRD], [1], [Have SRD support])
-	AC_SUBST([LIBEFA])
+	AC_SUBST([LIBEFA], [-lefa])
 fi
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
