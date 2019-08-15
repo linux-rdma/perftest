@@ -162,7 +162,8 @@ Options for BW tests:
   -O, --dualport			Run test in dual-port mode (2 QPs). Both ports must be active (default OFF)
   -D, --duration=<sec> 			Run test for <sec> period of seconds
   -f, --margin=<sec> 			When in Duration, measure results within margins (default: 2)
-  -l, --post_list=<list size>		Post list of WQEs of <list size> size (instead of single post)
+  -l, --post_list=<list size>		Post list of send WQEs of <list size> size (instead of single post)
+      --recv_post_list=<list size>	Post list of receive WQEs of <list size> size (instead of single post)
   -q, --qp=<num of qp's>		Num of QPs running in the process (default: 1)
       --run_infinitely			Run test until interrupted by user, print results every 5 seconds
 
@@ -194,15 +195,16 @@ Options for raw_ethernet_send_bw:
 Special feature detailed explanation in tests:
 ----------------------------------------------
 
-  1. Usage of post_list feature (-l, --post_list=<list size>). 
-     In this case, each QP will prepare <list size> ibv_send_wr (instead of 1), and will chain them to each other.
-     In chaining we mean allocating <list_size> array, and setting 'next' pointer of each ibv_send_wr in the array
-     to point to the following element in the array. the last ibv_send_wr in the array will point to NULL.
-     In this case, when post sending the first ibv_send_wr in the list, will instruct the HW to post all of those WQEs.
-     Which means each post_send will post <list_size> messages. 
-     This feature is good we want to know the maximum message rate of QPs in a single process. 
-     Since we are limited to SW post_send (~ 10 Mpps, since we have ~ 500 ns between each SW post_send), we can see 
-     the true HW message rate when setting <list_size> of 64 (for example) since it's not depended on SW limitations. 
+  1. Usage of post_list feature (-l, --post_list=<list size> and --recv_post_list=<list size>)
+     In this case, each QP will prepare <list size> WQEs (instead of 1), and will chain them to each other.
+     In chaining we mean allocating <list_size> array, and setting 'next' pointer of each WQE in the array
+     to point to the following element in the array. the last WQE in the array will point to NULL.
+     In this case, when posting the first WQE in the list, will instruct the HW to post all of those WQEs.
+     Which means each post send/recv will post <list_size> messages.
+     This feature is good if we want to know the maximum message rate of QPs in a single process.
+     Since we are limited to SW posts (for example, on post_send ~ 10 Mpps, since we have ~ 500 ns between
+     each SW post_send), we can see the true HW message rate when setting <list_size> of 64 (for example)
+     since it's not depended on SW limitations.
 
   2. RDMA Connected Mode (CM)
      You can add the "-R" flag to all tests to connect the QPs from each side with the rdma_cm library.

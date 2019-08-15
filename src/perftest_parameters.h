@@ -413,6 +413,7 @@ struct perftest_parameters {
 	int 				spec;
 	int 				dualport;
 	int 				post_list;
+	int 				recv_post_list;
 	int				duration;
 	int 				use_srq;
 	int				use_xrc;

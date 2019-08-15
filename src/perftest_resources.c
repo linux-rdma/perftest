@@ -884,10 +884,11 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	}
 
 	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
-
-		ALLOCATE(ctx->recv_sge_list,struct ibv_sge,user_param->num_of_qps);
-		ALLOCATE(ctx->rwr,struct ibv_recv_wr,user_param->num_of_qps);
-		ALLOCATE(ctx->rx_buffer_addr,uint64_t,user_param->num_of_qps);
+		ALLOCATE(ctx->recv_sge_list, struct ibv_sge,
+			 user_param->num_of_qps * user_param->recv_post_list);
+		ALLOCATE(ctx->rwr, struct ibv_recv_wr,
+			 user_param->num_of_qps * user_param->recv_post_list);
+		ALLOCATE(ctx->rx_buffer_addr, uint64_t, user_param->num_of_qps);
 	}
 	if (user_param->mac_fwd == ON )
 		ctx->cycle_buffer = user_param->size * user_param->rx_depth;
@@ -2514,7 +2515,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			i = 0,j,k;
 	int			num_of_qps = user_param->num_of_qps;
 	struct ibv_recv_wr	*bad_wr_recv;
-	int			size_per_qp = user_param->rx_depth;
+	int			size_per_qp = user_param->rx_depth / user_param->recv_post_list;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) &&
 				(user_param->duplex || user_param->tst == LAT)) {
@@ -2525,6 +2526,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 
 	if (user_param->use_srq)
 		size_per_qp /= user_param->num_of_qps;
+	ctx->rposted = size_per_qp * user_param->recv_post_list;
 
 	if (user_param->use_rss) {
 		i = 1;
@@ -2532,52 +2534,70 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	}
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 		if (!user_param->mr_per_qp) {
-			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[0] +
+			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[0] +
 				(num_of_qps + k) * ctx->send_qp_buff_size;
 		} else {
-			ctx->recv_sge_list[i].addr  = (uintptr_t)ctx->buf[i];
+			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[i];
 		}
 
 		if (user_param->connection_type == UD)
-			ctx->recv_sge_list[i].addr += (ctx->cache_line_size - UD_ADDITION);
+			ctx->recv_sge_list[i * user_param->recv_post_list].addr += (ctx->cache_line_size - UD_ADDITION);
 
-		ctx->recv_sge_list[i].length = SIZE(user_param->connection_type,user_param->size,1);
-		ctx->recv_sge_list[i].lkey   = ctx->mr[i]->lkey;
+		ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i * user_param->recv_post_list].addr;
 
-		ctx->rwr[i].sg_list = &ctx->recv_sge_list[i];
-		ctx->rwr[i].wr_id   = i;
-		ctx->rwr[i].next    = NULL;
-		ctx->rwr[i].num_sge	= MAX_RECV_SGE;
+		for (j = 0; j < user_param->recv_post_list; j++) {
+			ctx->recv_sge_list[i * user_param->recv_post_list + j].length = SIZE(user_param->connection_type,user_param->size,1);
+			ctx->recv_sge_list[i * user_param->recv_post_list + j].lkey   = ctx->mr[i]->lkey;
 
-		ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i].addr;
+			if (j > 0) {
+				ctx->recv_sge_list[i * user_param->recv_post_list + j].addr = ctx->recv_sge_list[i * user_param->recv_post_list + j - 1].addr;
+
+				if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) {
+					increase_loc_addr(&ctx->recv_sge_list[i * user_param->recv_post_list + j],
+							user_param->size,
+							j,
+							ctx->rx_buffer_addr[i],
+							user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
+				}
+			}
+
+			ctx->rwr[i * user_param->recv_post_list + j].sg_list = &ctx->recv_sge_list[i * user_param->recv_post_list + j];
+			ctx->rwr[i * user_param->recv_post_list + j].num_sge = MAX_RECV_SGE;
+			ctx->rwr[i * user_param->recv_post_list + j].wr_id   = i;
+
+			if (j == (user_param->recv_post_list - 1))
+				ctx->rwr[i * user_param->recv_post_list + j].next = NULL;
+			else
+				ctx->rwr[i * user_param->recv_post_list + j].next = &ctx->rwr[i * user_param->recv_post_list + j + 1];
+		}
 
 		for (j = 0; j < size_per_qp ; ++j) {
 
 			if (user_param->use_srq) {
 
-				if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[i], &bad_wr_recv)) {
+				if (ibv_post_srq_recv(ctx->srq,&ctx->rwr[i * user_param->recv_post_list], &bad_wr_recv)) {
 					fprintf(stderr, "Couldn't post recv SRQ = %d: counter=%d\n",i,j);
 					return 1;
 				}
 
 			} else {
 
-				if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i],&bad_wr_recv)) {
+				if (ibv_post_recv(ctx->qp[i],&ctx->rwr[i * user_param->recv_post_list],&bad_wr_recv)) {
 					fprintf(stderr, "Couldn't post recv Qp = %d: counter=%d\n",i,j);
 					return 1;
 				}
 			}
 
-			if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) {
-
-				increase_loc_addr(&ctx->recv_sge_list[i],
+			if (user_param->recv_post_list == 1 && (user_param->tst == BW || user_param->tst == LAT_BY_BW) &&
+					user_param->size <= (ctx->cycle_buffer / 2)) {
+				increase_loc_addr(&ctx->recv_sge_list[i * user_param->recv_post_list],
 						user_param->size,
 						j,
 						ctx->rx_buffer_addr[i],
 						user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 			}
 		}
-		ctx->recv_sge_list[i].addr = ctx->rx_buffer_addr[i];
+		ctx->recv_sge_list[i * user_param->recv_post_list].addr = ctx->rx_buffer_addr[i];
 	}
 	return 0;
 }
@@ -2994,14 +3014,14 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int			i;
 	uint64_t		tot_iters;
 	uint64_t                *rcnt_for_qp = NULL;
+	uint64_t                *unused_recv_for_qp = NULL;
+	uint64_t                *posted_per_qp = NULL;
 	struct ibv_wc 		*wc          = NULL;
 	struct ibv_recv_wr  	*bad_wr_recv = NULL;
 	struct ibv_wc 		*swc = NULL;
 	long 			*scredit_for_qp = NULL;
 	int 			tot_scredit = 0;
 	int 			firstRx = 1;
-	int 			size_per_qp = (user_param->use_srq) ?
-					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	int 			return_value = 0;
 	int			wc_id;
 	int			recv_flows_index = 0;
@@ -3020,8 +3040,18 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
+	/* Number of receive WQEs available to be posted per QP.
+	 * Start with zero as all receive buffers are pre-posted.
+	 * Useful for recv_post_list mode. */
+	ALLOCATE(unused_recv_for_qp, uint64_t, user_param->num_of_qps);
+	memset(unused_recv_for_qp, 0, sizeof(uint64_t) * user_param->num_of_qps);
+
 	ALLOCATE(scredit_for_qp,long,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(long)*user_param->num_of_qps);
+
+	ALLOCATE(posted_per_qp, uint64_t, user_param->num_of_qps);
+	for (i = 0; i < user_param->num_of_qps; i++)
+		posted_per_qp[i] = ctx->rposted;
 
 	if (user_param->use_rss)
 		tot_iters = (uint64_t)user_param->iters*(user_param->num_of_qps-1);
@@ -3068,6 +3098,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					}
 					rcnt_for_qp[wc_id]++;
 					rcnt++;
+					unused_recv_for_qp[wc_id]++;
 					check_alive_data.current_totrcnt = rcnt;
 
 					if (user_param->test_type==DURATION && user_param->state == SAMPLE_STATE) {
@@ -3076,22 +3107,25 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						}
 						user_param->iters++;
 					}
-					if (user_param->test_type==DURATION || rcnt_for_qp[wc_id] + size_per_qp <= user_param->iters) {
+					if ((user_param->test_type==DURATION || posted_per_qp[wc_id] + user_param->recv_post_list <= user_param->iters) &&
+							unused_recv_for_qp[wc_id] >= user_param->recv_post_list) {
 						if (user_param->use_srq) {
-							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc_id],&bad_wr_recv)) {
+							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc_id * user_param->recv_post_list], &bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n", wc_id,rcnt);
 								return_value = FAILURE;
 								goto cleaning;
 							}
 
 						} else {
-							if (ibv_post_recv(ctx->qp[wc_id],&ctx->rwr[wc_id],&bad_wr_recv)) {
+							if (ibv_post_recv(ctx->qp[wc_id], &ctx->rwr[wc_id * user_param->recv_post_list], &bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%ld\n",wc_id,rcnt_for_qp[wc_id]);
 								return_value = 15;
 								goto cleaning;
 							}
-
 						}
+						unused_recv_for_qp[wc_id] -= user_param->recv_post_list;
+						posted_per_qp[wc_id] += user_param->recv_post_list;
+
 						if (user_param->flows != DEF_FLOWS) {
 							if (++recv_flows_burst == user_param->flows_burst) {
 								recv_flows_burst = 0;
@@ -3101,10 +3135,11 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 								ctx->recv_sge_list[0].addr = primary_recv_addr + address_flows_offset;
 							}
 						}
-						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
+						if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2) &&
+								user_param->recv_post_list == 1) {
 							increase_loc_addr(ctx->rwr[wc_id].sg_list,
 									user_param->size,
-									rcnt_for_qp[wc_id] + size_per_qp,
+									posted_per_qp[wc_id],
 									ctx->rx_buffer_addr[wc_id] + address_flows_offset,
 									user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 						}
@@ -3311,6 +3346,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
 	uint64_t                *rcnt_for_qp = NULL;
 	uint64_t                *ccnt_for_qp = NULL;
+	uint64_t                *unused_recv_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 	int 			return_value = 0;
 	int 			single_thread_handler;
@@ -3328,6 +3364,12 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 	ALLOCATE(ccnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(ccnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
+
+	/* Number of receive WQEs available to be posted per QP.
+	 * Start with zero as all receive buffers are pre-posted.
+	 * Useful for recv_post_list mode. */
+	ALLOCATE(unused_recv_for_qp, uint64_t, user_param->num_of_qps);
+	memset(unused_recv_for_qp, 0, sizeof(uint64_t) * user_param->num_of_qps);
 
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
@@ -3368,60 +3410,63 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 					goto cleaning;
 				}
 				user_param->iters++;
-				if (user_param->use_srq) {
+				unused_recv_for_qp[wc[i].wr_id]++;
+				if (unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list) {
+					if (user_param->use_srq) {
+						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
+							return_value = FAILURE;
+							goto cleaning;
+						}
 
-					if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-						fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
-						return_value = FAILURE;
-						goto cleaning;
+					} else {
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
+							return_value = 15;
+							goto cleaning;
+						}
 					}
+					unused_recv_for_qp[wc[i].wr_id] -= user_param->recv_post_list;
+				}
 
-				} else {
+				if (!user_param->use_srq && ctx->send_rcredit) {
+					rcnt_for_qp[wc[i].wr_id]++;
+					scredit_for_qp[wc[i].wr_id]++;
 
-					if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
-						fprintf(stderr, "Couldn't post recv Qp=%d\n",(int)wc[i].wr_id);
-						return_value = 15;
-						goto cleaning;
-					}
-					if (ctx->send_rcredit) {
-						rcnt_for_qp[wc[i].wr_id]++;
-						scredit_for_qp[wc[i].wr_id]++;
+					if (scredit_for_qp[wc[i].wr_id] == ctx->credit_cnt) {
+						struct ibv_send_wr *bad_wr = NULL;
+						ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
 
-						if (scredit_for_qp[wc[i].wr_id] == ctx->credit_cnt) {
-							struct ibv_send_wr *bad_wr = NULL;
-							ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
+						while (ccnt_for_qp[wc[i].wr_id] == user_param->tx_depth) {
+							int sne, j = 0;
 
-							while (ccnt_for_qp[wc[i].wr_id] == user_param->tx_depth) {
-								int sne, j = 0;
-
-								sne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,swc);
-								if (sne > 0) {
-									for (j = 0; j < sne; j++) {
-										if (swc[j].status != IBV_WC_SUCCESS) {
-											fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
-													swc[j].status,(int)swc[j].wr_id,
-													rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
-											return_value = FAILURE;
-											goto cleaning;
-										}
-										ccnt_for_qp[swc[j].wr_id]--;
+							sne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,swc);
+							if (sne > 0) {
+								for (j = 0; j < sne; j++) {
+									if (swc[j].status != IBV_WC_SUCCESS) {
+										fprintf(stderr, "Poll send CQ error status=%u qp %d credit=%lu scredit=%lu\n",
+												swc[j].status,(int)swc[j].wr_id,
+												rcnt_for_qp[swc[j].wr_id],ccnt_for_qp[swc[j].wr_id]);
+										return_value = FAILURE;
+										goto cleaning;
 									}
-
-								} else if (sne < 0) {
-									fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
-									return_value = FAILURE;
-									goto cleaning;
+									ccnt_for_qp[swc[j].wr_id]--;
 								}
-							}
-							if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
-								fprintf(stderr,"Couldn't post send qp %d credit=%lu\n",
-										(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+
+							} else if (sne < 0) {
+								fprintf(stderr, "Poll send CQ failed ne=%d\n",sne);
 								return_value = FAILURE;
 								goto cleaning;
 							}
-							ccnt_for_qp[wc[i].wr_id]++;
-							scredit_for_qp[wc[i].wr_id] = 0;
 						}
+						if (ibv_post_send(ctx->qp[wc[i].wr_id],&ctx->ctrl_wr[wc[i].wr_id],&bad_wr)) {
+							fprintf(stderr,"Couldn't post send qp %d credit=%lu\n",
+									(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
+							return_value = FAILURE;
+							goto cleaning;
+						}
+						ccnt_for_qp[wc[i].wr_id]++;
+						scredit_for_qp[wc[i].wr_id] = 0;
 					}
 				}
 			}
@@ -3455,6 +3500,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int 			ne = 0;
 	int 			err = 0;
 	uint64_t 		*rcnt_for_qp = NULL;
+	uint64_t 		*unused_recv_for_qp = NULL;
+	uint64_t		*posted_per_qp = NULL;
 	uint64_t 		tot_iters = 0;
 	uint64_t 		iters = 0;
 	int 			tot_scredit = 0;
@@ -3465,7 +3512,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int 			num_of_qps = user_param->num_of_qps;
 	/* This is to ensure SERVER will not start to send packets before CLIENT start the test. */
 	int 			before_first_rx = ON;
-	int 			size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	int 			return_value = 0;
 
 	#ifdef HAVE_IBV_WR_API
@@ -3480,6 +3526,16 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	memset(rcnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
+
+	/* Number of receive WQEs available to be posted per QP.
+	 * Start with zero as all receive buffers are pre-posted.
+	 * Useful for recv_post_list mode. */
+	ALLOCATE(unused_recv_for_qp, uint64_t, user_param->num_of_qps);
+	memset(unused_recv_for_qp, 0, sizeof(uint64_t) * user_param->num_of_qps);
+
+	ALLOCATE(posted_per_qp, uint64_t, user_param->num_of_qps);
+	for (i = 0; i < user_param->num_of_qps; i++)
+		posted_per_qp[i] = ctx->rposted;
 
 	if (user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
@@ -3596,6 +3652,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 
 				rcnt_for_qp[wc[i].wr_id]++;
+				unused_recv_for_qp[wc[i].wr_id]++;
 				totrcnt++;
 				check_alive_data.current_totrcnt = totrcnt;
 
@@ -3606,9 +3663,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 					user_param->iters++;
 				}
 
-				if (user_param->test_type==DURATION || rcnt_for_qp[wc[i].wr_id] + size_per_qp <= user_param->iters) {
+				if ((user_param->test_type==DURATION || posted_per_qp[wc[i].wr_id] + user_param->recv_post_list <= user_param->iters) &&
+						unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list) {
 					if (user_param->use_srq) {
-						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
 							return_value = FAILURE;
 							goto cleaning;
@@ -3616,17 +3674,20 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 					} else {
 
-						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
+						if (ibv_post_recv(ctx->qp[wc[i].wr_id],&ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n",(int)wc[i].wr_id,rcnt_for_qp[wc[i].wr_id]);
 							return_value = 15;
 							goto cleaning;
 						}
 					}
+					unused_recv_for_qp[wc[i].wr_id] -= user_param->recv_post_list;
+					posted_per_qp[wc[i].wr_id] += user_param->recv_post_list;
 
-					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
+					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2) &&
+							user_param->recv_post_list == 1) {
 						increase_loc_addr(ctx->rwr[wc[i].wr_id].sg_list,
 								user_param->size,
-								rcnt_for_qp[wc[i].wr_id] + size_per_qp -1,
+								posted_per_qp[wc[i].wr_id],
 								ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type,
 								ctx->cache_line_size,ctx->cycle_buffer);
 					}
