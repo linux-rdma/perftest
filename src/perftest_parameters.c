@@ -421,7 +421,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Create memory region for each qp.\n");
 	}
 
-	#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
+	#if defined HAVE_EX_ODP
 	printf("      --odp ");
 	printf(" Use On Demand Paging instead of Memory Registration.\n");
 	#endif
@@ -472,22 +472,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use CUDA lib for GPU-Direct testing.\n");
 		#endif
 
-		#ifdef HAVE_VERBS_EXP
-		printf("      --use_exp ");
-		printf(" Use Experimental verbs in data path. Default is OFF.\n");
-		#endif
-
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
-
-
-		#ifdef HAVE_ACCL_VERBS
-		printf("      --use_res_domain ");
-		printf(" Use shared resource domain\n");
-
-		printf("      --verb_type=<option> ");
-		printf(" Set verb type: normal, accl. Default is normal.\n");
-		#endif
 	}
 
 	if (tst == BW || tst == LAT_BY_BW) {
@@ -514,7 +500,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("        Note: in Latency under load test SW rate limit is forced\n");
 
 	}
-	#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+	#if defined HAVE_OOO_ATTR
 	printf("      --use_ooo ");
 	printf(" Use out of order data placement\n");
 	#endif
@@ -574,11 +560,6 @@ void usage_raw_ethernet(TestType tst)
 		printf("  -v, --mac_fwd ");
 		printf(" run mac forwarding test \n");
 
-		#ifdef HAVE_SCATTER_FCS
-		printf("      --disable_fcs ");
-		printf(" Disable Scatter FCS feature. (Scatter FCS is enabled by default when using --use_exp flag). \n");
-		#endif
-
 		printf("      --flows");
 		printf(" set number of TCP/UDP flows, starting from <src_port, dst_port>. \n");
 
@@ -591,7 +572,7 @@ void usage_raw_ethernet(TestType tst)
 		printf("      --reply_every ");
 		printf(" in latency test, receiver pong after number of received pings\n");
 
-		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
+		#if defined HAVE_SNIFFER
 		printf("      --sniffer");
 		printf(" run sniffer mode.\n");
 		#endif
@@ -715,7 +696,6 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_util_data.enable	= 0;
 	user_param->retry_count			= DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions		= 0;
-	user_param->use_exp			= 0;
 	user_param->ipv6			= 0;
 	user_param->report_per_port		= 0;
 	user_param->use_odp			= 0;
@@ -724,21 +704,16 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_sniffer			= 0;
 	user_param->check_alive_exited		= 0;
 	user_param->raw_mcast			= 0;
-	user_param->masked_atomics		= 0;
 	user_param->cache_line_size		= get_cache_line_size();
 	user_param->cycle_buffer		= sysconf(_SC_PAGESIZE);
 
 	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
-	user_param->verb_type		= NORMAL_INTF;
-	user_param->is_exp_cq		= 0;
-	user_param->is_exp_qp		= 0;
 	user_param->use_res_domain	= 0;
 	user_param->mr_per_qp		= 0;
 	user_param->dlid		= 0;
 	user_param->traffic_class	= 0;
-	user_param->disable_fcs		= 0;
 	user_param->flows		= DEF_FLOWS;
 	user_param->flows_burst		= 1;
 	user_param->perform_warm_up	= 0;
@@ -806,6 +781,7 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[5], optarg)==0) {
+		// TODO: remove when DC for rdma-core is supported
 		#ifdef HAVE_DC
 		*cptr = DC;
 		#else
@@ -1385,12 +1361,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->margin = user_param->duration / 4;
 	}
 
-	#if defined(HAVE_VERBS_EXP) && defined(HAVE_DC)
-	if (user_param->connection_type == DC) {
-		user_param->use_exp = 1;
-	}
-	#endif
-
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		if (user_param->tst != BW) {
@@ -1436,52 +1406,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr, " Events must be enabled to select a completion vector\n");
 		exit(1);
 	}
-
-	#ifdef HAVE_ACCL_VERBS
-	if (user_param->verb_type != NORMAL_INTF || user_param->use_res_domain) {
-		user_param->is_exp_cq = 1;
-		user_param->use_exp = 1;
-	}
-
-	if (user_param->verb_type == ACCL_INTF) {
-		if (user_param->connection_type != RC &&
-			user_param->connection_type != UC && user_param->connection_type != RawEth) {
-			fprintf(stderr, "Accelerated verbs support RC/UC/RAW_ETH connections only.\n");
-			exit(1);
-		}
-
-		if (user_param->verb != SEND) {
-			fprintf(stderr, "Accelerated verbs support SEND opcode only.\n");
-			exit(1);
-		}
-
-		if (user_param->num_of_qps > 1) {
-			fprintf(stderr, "Accelerated verbs in perftest support only 1 qp for now.\n");
-			exit(1);
-		}
-
-		if (user_param->tst != BW) {
-			fprintf(stderr, "Accelerated verbs in perftest supports only BW tests for now.\n");
-			exit(1);
-		}
-
-		if (user_param->duplex) {
-			fprintf(stderr, "Accelerated verbs in perftest supports only unidir tests for now\n");
-			exit(1);
-		}
-
-		if (user_param->test_method == RUN_INFINITELY) {
-			fprintf(stderr, "Accelerated verbs in perftest does not support Run Infinitely mode for now\n");
-			exit(1);
-		}
-	}
-	if (user_param->perform_warm_up &&
-	    !(user_param->tst == BW &&
-	    (user_param->verb == ATOMIC || user_param->verb == WRITE || user_param->verb == READ))) {
-		fprintf(stderr, "Perform warm up is available in ATOMIC, READ and WRITE BW tests only");
-		exit(1);
-	}
-	#endif
 
 	return;
 }
@@ -1867,7 +1791,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
-	static int use_exp_flag = 0;
 	static int use_cuda_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -1879,13 +1802,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_promiscuous_flag = 0;
 	static int use_sniffer_flag = 0;
 	static int raw_mcast_flag = 0;
-	static int verb_type_flag = 0;
 	static int use_res_domain_flag = 0;
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
 	static int wait_destroy_flag = 0;
-	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
 	static int force_link_flag = 0;
@@ -2002,24 +1923,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
 			{ .name = "use_hugepages",		.has_arg = 0, .flag = &hugepages_flag, .val = 1},
 			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
-			#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
+			#if defined HAVE_SNIFFER
 			{ .name = "sniffer",		.has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
 			#endif
 			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
-			#ifdef HAVE_VERBS_EXP
-			{ .name = "use_exp",		.has_arg = 0, .flag = &use_exp_flag, .val = 1},
-			#endif
-			#ifdef HAVE_ACCL_VERBS
-			{ .name = "verb_type",		.has_arg = 1, .flag = &verb_type_flag, .val = 1},
-			{ .name = "use_res_domain",	.has_arg = 0, .flag = &use_res_domain_flag, .val = 1},
-			#endif
+
 			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
 			{ .name = "tclass",		.has_arg = 1, .flag = &tclass_flag, .val = 1},
 			{ .name = "wait_destroy",	.has_arg = 1, .flag = &wait_destroy_flag, .val = 1},
-			#ifdef HAVE_SCATTER_FCS
-			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
-			#endif
 			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
 			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
 			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
@@ -2027,7 +1939,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "vlan_en",            .has_arg = 0, .flag = &vlan_en, .val = 1 },
 			{ .name = "vlan_pcp",		.has_arg = 1, .flag = &vlan_pcp_flag, .val = 1 },
 
-			#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+			#if defined HAVE_OOO_ATTR
 			{ .name = "use_ooo",		.has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
 			{ 0 }
@@ -2377,17 +2289,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					retry_count_flag = 0;
 				}
-				if (verb_type_flag) {
-					if (strcmp("normal",optarg) == 0) {
-						user_param->verb_type = NORMAL_INTF;
-					} else if (strcmp("accl",optarg) == 0) {
-						user_param->verb_type = ACCL_INTF;
-					} else {
-						fprintf(stderr, " Invalid verb type. Please choose normal/accl.\n");
-						return FAILURE;
-					}
-					verb_type_flag = 0;
-				}
 				if (mmap_file_flag) {
 					user_param->mmap_file = strdup(optarg);
 					mmap_file_flag = 0;
@@ -2524,10 +2425,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->dont_xchg_versions = 1;
 	}
 
-	if (use_exp_flag) {
-		user_param->use_exp = 1;
-	}
-
 	if (use_res_domain_flag) {
 		user_param->use_res_domain = 1;
 	}
@@ -2646,9 +2543,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->mr_per_qp = 1;
 	}
 
-	if (disable_fcs_flag) {
-		user_param->disable_fcs = 1;
-	}
 	if (perform_warm_up_flag) {
 		user_param->perform_warm_up = 1;
 	}

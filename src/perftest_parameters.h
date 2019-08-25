@@ -66,10 +66,6 @@
 #include <config.h>
 #endif
 
-#ifdef HAVE_VERBS_EXP
-#include <infiniband/verbs_exp.h>
-#endif
-
 #ifdef HAVE_CUDA
 #include CUDA_PATH
 #endif
@@ -312,12 +308,6 @@ enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RA
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
 
-/*Accelerated verbs */
-enum verbs_intf {
-	NORMAL_INTF,
-	ACCL_INTF,
-};
-
 struct cpu_util_data {
 	int enable;
 	long long ustat[2];
@@ -487,7 +477,6 @@ struct perftest_parameters {
 	int 				flow_label;
 	int 				retry_count;
 	int 				dont_xchg_versions;
-	int 				use_exp;
 	int 				ipv6;
 	int 				raw_ipv6;
 	int 				report_per_port;
@@ -500,21 +489,17 @@ struct perftest_parameters {
 	int				masked_atomics;
 	int				cycle_buffer;
 	int				cache_line_size;
-	enum verbs_intf			verb_type;
-	int				is_exp_cq;
-	int				is_exp_qp;
 	int				use_res_domain;
 	int				mr_per_qp;
 	uint16_t			dlid;
 	uint8_t				traffic_class;
 	uint32_t			wait_destroy;
-	int				disable_fcs;
 	int				flows;
 	int				flows_burst;
 	uint32_t			reply_every;
 	int				perform_warm_up;
 	int				use_ooo;
-	int                             vlan_en;
+	int				vlan_en;
 	uint32_t			vlan_pcp;
 	void 				(*print_eth_func)(void*);
 	struct counter_context		*counter_ctx;
@@ -567,9 +552,6 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
 	{IBV_RATE_300_GBPS, "300"},
 	{IBV_RATE_MAX, "MAX"}
 };
-
-
-
 
 /* link_layer_str
  *

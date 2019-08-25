@@ -527,7 +527,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	return 0;
 }
 
-
+//TODO: Move to another gid
 #ifdef HAVE_GID_ATTR
 enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
 
@@ -838,7 +838,6 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 	#endif
 
-	#ifdef HAVE_DC
 	if(user_param->machine == SERVER || user_param->duplex || user_param->tst == LAT) {
 		if (user_param->connection_type == DC) {
 			for (i=0; i < user_param->num_of_qps; i++) {
@@ -849,7 +848,6 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		}
 	}
-	#endif
 	return 0;
 }
 

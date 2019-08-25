@@ -153,11 +153,7 @@ struct TCP_header {
 }__attribute__((packed));
 
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
-#ifdef HAVE_RAW_ETH_EXP
-void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters* user_param);
-#else
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param);
-#endif
 //void print_ethernet_header(struct ETH_header* p_ethernet_header);
 void print_ethernet_header(void* p_ethernet_header);
 //void print_ethernet_vlan_header(struct ETH_vlan_header* p_ethernet_header);
@@ -232,11 +228,7 @@ int calc_flow_rules_size(struct perftest_parameters *user_param, int is_ip_heade
  */
 
 int send_set_up_connection(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct raw_ethernet_info* my_dest_info,
@@ -324,11 +316,7 @@ static __inline void switch_smac_dmac(struct ibv_sge *sg)
  */
 
 int set_up_flow_rules(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		int local_port,
@@ -345,11 +333,7 @@ int set_up_flow_rules(
  */
 
 int set_up_fs_rules(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		uint64_t allocated_flows);

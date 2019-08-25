@@ -66,20 +66,11 @@ int main(int argc, char *argv[])
 	int				ret_parser;
 	struct perftest_parameters	user_param;
 
-	#ifdef HAVE_RAW_ETH_EXP
-	struct ibv_exp_flow		**flow_create_result;
-	struct ibv_exp_flow_attr	**flow_rules;
-	struct ibv_exp_flow 		**flow_promisc = NULL ;
-	#ifdef HAVE_SNIFFER_EXP
-	struct ibv_exp_flow 		**flow_sniffer = NULL;
-	#endif
-	#else
 	struct ibv_flow			**flow_create_result;
 	struct ibv_flow_attr		**flow_rules;
 	struct ibv_flow 		**flow_promisc = NULL ;
 	#ifdef HAVE_SNIFFER
 	struct ibv_flow 		**flow_sniffer = NULL;
-	#endif
 	#endif
 	int 				flow_index, qp_index;
 	union ibv_gid mgid;
@@ -109,21 +100,12 @@ int main(int argc, char *argv[])
 	ALLOCATE(rem_dest_info, struct raw_ethernet_info, user_param.num_of_qps);
 	memset(rem_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param.num_of_qps);
 
-	#ifdef HAVE_RAW_ETH_EXP
-        ALLOCATE(flow_create_result, struct ibv_exp_flow*, user_param.flows * user_param.num_of_qps);
-        ALLOCATE(flow_rules, struct ibv_exp_flow_attr*, user_param.flows * user_param.num_of_qps);
-	#ifdef HAVE_SNIFFER_EXP
-	ALLOCATE(flow_sniffer, struct ibv_exp_flow*, user_param.num_of_qps);
-	#endif
-	ALLOCATE(flow_promisc, struct ibv_exp_flow*, user_param.num_of_qps);
-	#else
-        ALLOCATE(flow_create_result, struct ibv_flow*, user_param.flows * user_param.num_of_qps);
-        ALLOCATE(flow_rules, struct ibv_flow_attr*, user_param.flows * user_param.num_of_qps);
+	ALLOCATE(flow_create_result, struct ibv_flow*, user_param.flows * user_param.num_of_qps);
+	ALLOCATE(flow_rules, struct ibv_flow_attr*, user_param.flows * user_param.num_of_qps);
 	#ifdef HAVE_SNIFFER
 	ALLOCATE(flow_sniffer, struct ibv_flow*, user_param.num_of_qps);
 	#endif
-        ALLOCATE(flow_promisc, struct ibv_flow*, user_param.num_of_qps);
-        #endif
+	ALLOCATE(flow_promisc, struct ibv_flow*, user_param.num_of_qps);
 
 	if (user_param.raw_mcast) {
 		/* Transform IPv4 to Multicast MAC */
@@ -224,13 +206,8 @@ int main(int argc, char *argv[])
 		/* attaching the qp to the spec */
 		for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
 			for (flow_index = 0; flow_index < user_param.flows; flow_index++) {
-				#ifdef HAVE_RAW_ETH_EXP
-				flow_create_result[flow_index + qp_index * user_param.flows] =
-					ibv_exp_create_flow(ctx.qp[qp_index], flow_rules[flow_index]);
-				#else
 				flow_create_result[flow_index + qp_index * user_param.flows] =
 					ibv_create_flow(ctx.qp[qp_index], flow_rules[(qp_index * user_param.flows) + flow_index]);
-				#endif
 
 				if (!flow_create_result[flow_index + qp_index * user_param.flows]){
 					perror("error");
@@ -241,21 +218,6 @@ int main(int argc, char *argv[])
 		}
 
 		if (user_param.use_promiscuous) {
-			#ifdef HAVE_RAW_ETH_EXP
-			struct ibv_exp_flow_attr attr = {
-				.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
-				.num_of_specs = 0,
-				.port = user_param.ib_port,
-				.flags = 0
-			};
-
-			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
-				if ((flow_promisc[qp_index] = ibv_exp_create_flow(ctx.qp[qp_index], &attr)) == NULL) {
-					perror("error");
-					fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
-				}
-			}
-			#else
 			struct ibv_flow_attr attr = {
 				.type = IBV_FLOW_ATTR_ALL_DEFAULT,
 				.num_of_specs = 0,
@@ -269,32 +231,18 @@ int main(int argc, char *argv[])
 					fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
 				}
 			}
-			#endif
 		}
-		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
+		#if defined HAVE_SNIFFER
 		if (user_param.use_sniffer) {
-			#ifdef HAVE_RAW_ETH_EXP
-			struct ibv_exp_flow_attr attr = {
-				.type = IBV_EXP_FLOW_ATTR_SNIFFER,
-				.num_of_specs = 0,
-				.port = user_param.ib_port,
-				.flags = 0
-			};
-			#else
 			struct ibv_flow_attr attr = {
 				.type = IBV_FLOW_ATTR_SNIFFER,
 				.num_of_specs = 0,
 				.port = user_param.ib_port,
 				.flags = 0
 			};
-			#endif
 
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
-				#ifdef HAVE_RAW_ETH_EXP
-				if ((flow_sniffer[qp_index] = ibv_exp_create_flow(ctx.qp[qp_index], &attr)) == NULL) {
-				#else
 				if ((flow_sniffer[qp_index] = ibv_create_flow(ctx.qp[qp_index], &attr)) == NULL) {
-				#endif
 					perror("error");
 					fprintf(stderr, "Couldn't attach SNIFFER rule QP\n");
 				}
@@ -413,11 +361,7 @@ int main(int argc, char *argv[])
 		/* destroy open flows */
 		for (flow_index = 0; flow_index < user_param.flows; flow_index++) {
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
-				#ifdef HAVE_RAW_ETH_EXP
-				if (ibv_exp_destroy_flow(flow_create_result[flow_index + qp_index * user_param.flows])) {
-				#else
 				if (ibv_destroy_flow(flow_create_result[flow_index + qp_index * user_param.flows])) {
-				#endif
 					perror("error");
 					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
@@ -428,11 +372,7 @@ int main(int argc, char *argv[])
 
 		if (user_param.use_promiscuous) {
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
-				#ifdef HAVE_RAW_ETH_EXP
-				if (ibv_exp_destroy_flow(flow_promisc[qp_index])) {
-				#else
 				if (ibv_destroy_flow(flow_promisc[qp_index])) {
-				#endif
 					perror("error");
 					fprintf(stderr, "Couldn't destroy flow\n");
 					return FAILURE;
@@ -441,14 +381,10 @@ int main(int argc, char *argv[])
 			free(flow_promisc);
 		}
 
-		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
+		#if defined HAVE_SNIFFER
 		if (user_param.use_sniffer) {
 			for (qp_index = 0; qp_index < user_param.num_of_qps; qp_index++) {
-				#ifdef HAVE_RAW_ETH_EXP
-				if (ibv_exp_destroy_flow(flow_sniffer[qp_index])) {
-				#else
 				if (ibv_destroy_flow(flow_sniffer[qp_index])) {
-				#endif
 					perror("error");
 					fprintf(stderr, "Couldn't destroy sniffer flow\n");
 					return FAILURE;
