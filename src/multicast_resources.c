@@ -233,10 +233,8 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 	if (method == SUBN_ADM_METHOD_SET) {
 		get_mlid_from_mad((struct sa_mad_packet_t*)mad,&params->mlid);
 		params->mcast_state |= MCAST_IS_JOINED;
-		if (params->is_2nd_mgid_used == 0) {
-			sighandler_params = params;
-			signal(SIGINT,signalCatcher);
-		}
+		sighandler_params = params;
+		signal(SIGINT,signalCatcher);
 	} else {
 		params->mcast_state &= ~MCAST_IS_JOINED;
 	}
