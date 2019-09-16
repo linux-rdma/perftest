@@ -103,6 +103,7 @@
 
 struct perftest_comm {
 	struct pingpong_context    *rdma_ctx;
+	struct counter_context     *counter_ctx;
 	struct perftest_parameters *rdma_params;
 };
 

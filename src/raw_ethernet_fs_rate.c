@@ -93,13 +93,12 @@ int main(int argc, char *argv[])
 	memset(rem_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param.num_of_qps);
 
 	/* Finding the IB device selected (or default if no selected). */
-	ib_dev = ctx_find_dev(user_param.ib_devname);
+	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr, "Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
 		return FAILURE;
 	}
-	GET_STRING(user_param.ib_devname, ibv_get_device_name(ib_dev));
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
 		return FAILURE;

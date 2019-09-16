@@ -1217,6 +1217,12 @@ int create_comm_struct(struct perftest_comm *comm,
 		}
 	}
 
+	if ((user_param->counter_ctx) && (counters_open(user_param->counter_ctx,
+		user_param->ib_devname, user_param->ib_port))) {
+		fprintf(stderr," Unable to access performance counters\n");
+		return FAILURE;
+	}
+
 	return SUCCESS;
 }
 

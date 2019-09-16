@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Finding the IB device selected (or default if none is selected). */
-	ib_dev = ctx_find_dev(user_param.ib_devname);
+	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
 		return FAILURE;
