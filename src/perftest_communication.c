@@ -1474,10 +1474,13 @@ int ctx_xchg_data( struct perftest_comm *comm,
 		void *my_data,
 		void *rem_data,int size)
 {
-	if (comm->rdma_params->use_rdma_cm || comm->rdma_params->work_rdma_cm)
-		ctx_xchg_data_rdma(comm,my_data,rem_data,size);
-	else
-		ctx_xchg_data_ethernet(comm,my_data,rem_data,size);
+	if (comm->rdma_params->use_rdma_cm || comm->rdma_params->work_rdma_cm) {
+		if (ctx_xchg_data_rdma(comm,my_data,rem_data,size))
+			return 1;
+	} else {
+		if (ctx_xchg_data_ethernet(comm,my_data,rem_data,size))
+			return 1;
+	}
 
 	return 0;
 }
