@@ -52,6 +52,7 @@
 #define PERFTEST_RESOURCES_H
 
 #include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
 #if defined(__FreeBSD__)
@@ -167,6 +168,7 @@ struct pingpong_context {
 	struct ibv_qp				**qp;
 	#ifdef HAVE_IBV_WR_API
 	struct ibv_qp_ex			**qpx;
+	struct mlx5dv_qp_ex			**dv_qp;
 	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
 		struct perftest_parameters *user_param);
 	#endif
@@ -187,6 +189,7 @@ struct pingpong_context {
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
 	int					is_contig_supported;
+	uint32_t				*r_dctn;
 	uint32_t                                *ctrl_buf;
 	uint32_t                                *credit_buf;
 	struct ibv_mr                           *credit_mr;
@@ -336,15 +339,14 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
  *
  * Parameters :
  *
- *	pd      - The Protection domain , each the qp will be assigned to.
- *	send_cq - The CQ that will produce send CQE.
- *	recv_qp - The CQ that will produce recv CQE.
- *	param   - The parameters for the QP.
+ *	ctx - QP context.
+ *	user_param  - The perftest parameters.
+ *	qp_index   - The qp number to create.
  *
  * Return Value : Adress of the new QP.
  */
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
-							 struct perftest_parameters *user_param);
+			struct perftest_parameters *user_param, int qp_index);
 
 /* ctx_modify_qp_to_init.
  *
@@ -356,12 +358,13 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  * Parameters :
  *
  *	qp     - The QP that will be moved to INIT.
- *	param  - The parameters for the QP.
+ *	user_param  - The perftest parameters.
+ *	qp_index   - The qp number to create.
  *
  * Return Value : SUCCESS, FAILURE.
  *
  */
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag);
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int qp_index);
 
 /* ctx_connect.
  *

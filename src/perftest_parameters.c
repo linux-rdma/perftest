@@ -781,11 +781,10 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[5], optarg)==0) {
-		// TODO: remove when DC for rdma-core is supported
-		#ifdef HAVE_DC
+		#ifdef HAVE_IBV_WR_API
 		*cptr = DC;
 		#else
-		fprintf(stderr," DC not detected in libibverbs\n");
+		fprintf(stderr," DC not detected in libibverbs, IBV_WR API is needed\n");
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
@@ -1098,13 +1097,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->gid_index = 0;
 	}
 
-
-	if (user_param->verb == ATOMIC && user_param->connection_type == DC) {
-		printf(RESULT_LINE);
-		fprintf(stderr, " ATOMIC tests don't support DC transport\n");
-		exit(1);
-	}
-
 	if (user_param->work_rdma_cm) {
 
 		if (user_param->connection_type == UC) {
@@ -1192,7 +1184,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->connection_type == DC && !user_param->use_srq)
-		user_param->use_srq = 1;
+		user_param->use_srq = ON;
 
 	/* XRC Part */
 	if (user_param->connection_type == XRC) {

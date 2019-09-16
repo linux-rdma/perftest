@@ -33,6 +33,7 @@ static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_RDMA_WRITE,
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
 
 #define CPU_UTILITY "/proc/stat"
+#define DC_KEY 0xffeeddcc
 
 struct perftest_parameters* duration_param;
 struct check_alive_data check_alive_data;
@@ -264,7 +265,6 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	ibv_wr_start(ctx->qpx[index]);
 
 	ctx->qpx[index]->wr_id = ctx->wr[wr_index].wr_id;
-
 	switch (op) {
 	case IBV_WR_SEND:
 		ibv_wr_send(ctx->qpx[index]);
@@ -299,8 +299,14 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	default:
 		fprintf(stderr, "Post send failed: unknown operation code.\n");;
 	}
-
-	if (qpt == IBV_QPT_UD) {
+	if (qpt == IBV_QPT_DRIVER) {
+		mlx5dv_wr_set_dc_addr(
+			ctx->dv_qp[index],
+			ctx->ah[index],
+			ctx->r_dctn[index],
+			DC_KEY);
+	}
+	else if (qpt == IBV_QPT_UD) {
 		ibv_wr_set_ud_addr(
 			ctx->qpx[index],
 			ctx->wr[wr_index].wr.ud.ah,
@@ -350,6 +356,48 @@ static inline int _new_post_send(struct pingpong_context *ctx,
  * Return Value : int.
  *
  */
+static int new_post_write_sge_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_write_inl_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE);
+}
+
+static int new_post_read_sge_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ);
+}
+
+static int new_post_send_sge_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND);
+}
+
+static int new_post_send_inl_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND);
+}
+
+static int new_post_atomic_fa_sge_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_FETCH_AND_ADD);
+}
+
+static int new_post_atomic_cs_sge_dc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_CMP_AND_SWP);
+}
+
 static int new_post_send_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
@@ -727,6 +775,8 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
 	#ifdef HAVE_IBV_WR_API
 	ALLOCATE(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
+	ALLOCATE(ctx->dv_qp, struct mlx5dv_qp_ex*, user_param->num_of_qps);
+	ALLOCATE(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#endif
 	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOCATE(ctx->buf, void* , user_param->num_of_qps);
@@ -955,6 +1005,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	free(ctx->qp);
 	#ifdef HAVE_IBV_WR_API
 	free(ctx->qpx);
+	free(ctx->r_dctn);
 	#endif
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1374,8 +1425,29 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
-	if (user_param->use_srq && !user_param->use_xrc && (user_param->tst == LAT ||
-				user_param->machine == SERVER || user_param->duplex == ON)) {
+	if (user_param->use_srq && user_param->connection_type == DC &&
+			(user_param->tst == LAT ||
+			user_param->machine == SERVER ||
+			user_param->duplex == ON))
+	{
+		struct ibv_srq_init_attr_ex attr;
+			memset(&attr, 0, sizeof(attr));
+		attr.comp_mask = IBV_SRQ_INIT_ATTR_TYPE | IBV_SRQ_INIT_ATTR_PD;
+		attr.attr.max_wr = user_param->rx_depth;
+		attr.attr.max_sge = 1;
+		attr.pd = ctx->pd;
+
+		attr.srq_type = IBV_SRQT_BASIC;
+		ctx->srq = ibv_create_srq_ex(ctx->context, &attr);
+		if (!ctx->srq)  {
+			fprintf(stderr, "Couldn't create SRQ\n");
+			return FAILURE;
+		}
+	}
+
+	if (user_param->use_srq && user_param->connection_type != DC &&
+			!user_param->use_xrc && (user_param->tst == LAT ||
+			user_param->machine == SERVER || user_param->duplex == ON)) {
 
 		struct ibv_srq_init_attr attr = {
 			.attr = {
@@ -1384,7 +1456,6 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 				.max_sge = 1
 			}
 		};
-
 		ctx->srq = ibv_create_srq(ctx->pd, &attr);
 		if (!ctx->srq)  {
 			fprintf(stderr, "Couldn't create SRQ\n");
@@ -1418,9 +1489,8 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 int modify_qp_to_init(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int qp_index, int num_of_qps)
 {
-	uint64_t init_flag = 0;
-
-	if (ctx_modify_qp_to_init(ctx->qp[qp_index],user_param,init_flag)) {
+	if (ctx_modify_qp_to_init(ctx->qp[qp_index], user_param,
+		qp_index)) {
 		fprintf(stderr, "Failed to modify QP to INIT\n");
 		return FAILURE;
 	}
@@ -1440,7 +1510,7 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		ctx->qp[i] = ctx_xrc_qp_create(ctx, user_param, i);
 		#endif
 	} else {
-		ctx->qp[i] = ctx_qp_create(ctx, user_param);
+		ctx->qp[i] = ctx_qp_create(ctx, user_param, i);
 	}
 
 	if (ctx->qp[i] == NULL) {
@@ -1449,6 +1519,10 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 	}
 	#ifdef HAVE_IBV_WR_API
 	ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
+	if (user_param->connection_type == DC)
+	{
+		ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
+	}
 	#endif
 
 	return SUCCESS;
@@ -1463,14 +1537,18 @@ int create_qp_main(struct pingpong_context *ctx,
 }
 
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param)
+		struct perftest_parameters *user_param, int qp_index)
 {
 	struct ibv_qp* qp = NULL;
+	int dc_num_of_qps = user_param->num_of_qps / 2;
 
+	int is_dc_server_side = 0;
 	#ifdef HAVE_IBV_WR_API
 	enum ibv_wr_opcode opcode;
 	struct ibv_qp_init_attr_ex attr;
+	struct mlx5dv_qp_init_attr attr_dv;
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr_ex));
+	memset(&attr_dv, 0, sizeof(attr_dv));
 	#else
 	struct ibv_qp_init_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
@@ -1478,18 +1556,34 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 
 	attr.send_cq = ctx->send_cq;
 	attr.recv_cq = (user_param->verb == SEND) ? ctx->recv_cq : ctx->send_cq;
-	attr.cap.max_send_wr  = user_param->tx_depth;
-	attr.cap.max_send_sge = MAX_SEND_SGE;
-	attr.cap.max_inline_data = user_param->inline_size;
 
-	if (user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) {
+	is_dc_server_side = ((!(user_param->duplex || user_param->tst == LAT) &&
+						  (user_param->machine == SERVER)) ||
+						 ((user_param->duplex || user_param->tst == LAT) &&
+						  (qp_index >= dc_num_of_qps)));
+
+	if (!(user_param->connection_type == DC &&
+			is_dc_server_side)) {
+		attr.cap.max_send_wr  = user_param->tx_depth;
+		attr.cap.max_send_sge = MAX_SEND_SGE;
+		attr.cap.max_inline_data = user_param->inline_size;
+	}
+
+	if (user_param->use_srq &&
+			(user_param->tst == LAT ||
+			 user_param->machine == SERVER ||
+			 user_param->duplex == ON)) {
 		attr.srq = ctx->srq;
-		attr.cap.max_recv_wr  = 0;
-		attr.cap.max_recv_sge = 0;
+		if (user_param->connection_type != DC) {
+			attr.cap.max_recv_wr  = 0;
+			attr.cap.max_recv_sge = 0;
+		}
 	} else {
 		attr.srq = NULL;
-		attr.cap.max_recv_wr  = user_param->rx_depth;
-		attr.cap.max_recv_sge = MAX_RECV_SGE;
+		if (user_param->connection_type != DC) {
+			attr.cap.max_recv_wr  = user_param->rx_depth;
+			attr.cap.max_recv_sge = MAX_RECV_SGE;
+		}
 	}
 
 	switch (user_param->connection_type) {
@@ -1497,6 +1591,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
 		case UD : attr.qp_type = IBV_QPT_UD; break;
+		case DC : attr.qp_type = IBV_QPT_DRIVER; break;
 		#ifdef HAVE_RAW_ETH
 		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 		#endif
@@ -1544,7 +1639,26 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#endif
 	} else {
 		#ifdef HAVE_IBV_WR_API
-		qp = ibv_create_qp_ex(ctx->context, &attr);
+		if (user_param->connection_type == DC) {
+			attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
+
+			if (is_dc_server_side) {
+				attr.srq = ctx->srq;
+				attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCT;
+				attr_dv.dc_init_attr.dct_access_key = DC_KEY;
+				attr.comp_mask &= ~IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+			}
+			else {
+				attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCI;
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+				attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+			}
+
+			qp = mlx5dv_create_qp(ctx->context, &attr, &attr_dv);
+		} else {
+			qp = ibv_create_qp_ex(ctx->context, &attr);
+		}
 		#else
 		qp = ibv_create_qp(ctx->pd, &attr);
 		#endif
@@ -1567,13 +1681,14 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag)
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int qp_index)
 {
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
 
 	struct ibv_qp_attr attr;
 	int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+	int is_dc_server_side = 0;
 
 	static int portindex=0;  /* for dual-port support */
 	int ret = 0;
@@ -1582,10 +1697,15 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	attr.qp_state        = IBV_QPS_INIT;
 	attr.pkey_index      = user_param->pkey_index;
 
-	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
+	if ((user_param->connection_type == DC || user_param->use_xrc) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
+
+	is_dc_server_side = ((!(user_param->duplex || user_param->tst == LAT) &&
+						 (user_param->machine == SERVER)) ||
+						 ((user_param->duplex || user_param->tst == LAT) &&
+						 (qp_index >= num_of_qps)));
 
 	if (user_param->dualport==ON) {
 		if (portindex % num_of_qps < num_of_qps_per_port) {
@@ -1598,7 +1718,6 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		portindex++;
 
 	} else {
-
 		attr.port_num = user_param->ib_port;
 	}
 
@@ -1608,8 +1727,8 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 	} else if (user_param->connection_type == UD || user_param->connection_type == SRD) {
 		attr.qkey = DEFF_QKEY;
 		flags |= IBV_QP_QKEY;
-
-	} else {
+	} else if (!(user_param->connection_type == DC &&
+			!is_dc_server_side)) {
 		switch (user_param->verb) {
 			case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
 			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
@@ -1618,8 +1737,7 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 		}
 		flags |= IBV_QP_ACCESS_FLAGS;
 	}
-
-	ret = ibv_modify_qp(qp,&attr,flags);
+	ret = ibv_modify_qp(qp, &attr, flags);
 
 	if (ret) {
 		fprintf(stderr, "Failed to modify QP to INIT, ret=%d\n",ret);
@@ -1636,11 +1754,11 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *dest,
 		struct pingpong_dest *my_dest,
-		int qpindex)
+		int qp_index)
 {
 	int num_of_qps = user_param->num_of_qps;
 	int num_of_qps_per_port = user_param->num_of_qps / 2;
-
+	int is_dc_server_side = 0;
 	int flags = IBV_QP_STATE;
 	int ooo_flags = 0;
 
@@ -1651,51 +1769,85 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 	 * there are send qps and recv qps. the actual number of send/recv qps
 	 * is num_of_qps / 2.
 	 */
-	if ( user_param->use_xrc && (user_param->duplex || user_param->tst == LAT)) {
+	if ((user_param->connection_type == DC || user_param->use_xrc) && (user_param->duplex || user_param->tst == LAT)) {
 		num_of_qps /= 2;
 		num_of_qps_per_port = num_of_qps / 2;
 	}
-
+	is_dc_server_side = ((!(user_param->duplex || user_param->tst == LAT) &&
+						 (user_param->machine == SERVER)) ||
+						  ((user_param->duplex || user_param->tst == LAT) &&
+						 (qp_index >= num_of_qps)));
 	/* first half of qps are for ib_port and second half are for ib_port2
 	 * in xrc with bidirectional, the first half of qps are xrc_send qps and
 	 * the second half are xrc_recv qps. the first half of the send/recv qps
 	 * are for ib_port1 and the second half are for ib_port2
 	 */
-	if (user_param->dualport == ON && (qpindex % num_of_qps >= num_of_qps_per_port))
+	if (user_param->dualport == ON && (qp_index % num_of_qps >= num_of_qps_per_port))
 		attr->ah_attr.port_num = user_param->ib_port2;
 	else
 		attr->ah_attr.port_num = user_param->ib_port;
 
 	if (user_param->connection_type != RawEth) {
-
-		attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
-		attr->ah_attr.sl = user_param->sl;
-
-		if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
+		if (user_param->connection_type == DC)
+		{
+			if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
 				|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX) && user_param->dualport)) {
 
-			attr->ah_attr.is_global = 0;
-		} else {
-
-			attr->ah_attr.is_global  = 1;
-			attr->ah_attr.grh.dgid = dest->gid;
-			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
-			attr->ah_attr.grh.hop_limit = 0xFF;
-			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
-		}
-		if (user_param->connection_type != UD && user_param->connection_type != SRD) {
-
-			attr->path_mtu = user_param->curr_mtu;
-			attr->dest_qp_num = dest->qpn;
-			attr->rq_psn = dest->psn;
-
-			flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
-
-			if (user_param->connection_type == RC || user_param->connection_type == XRC) {
-
-				attr->max_dest_rd_atomic = my_dest->out_reads;
+				attr->ah_attr.is_global = 0;
+				attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
+				attr->ah_attr.sl = user_param->sl;
+			} else {
+				attr->ah_attr.is_global  = 1;
+				attr->ah_attr.grh.dgid = dest->gid;
+				attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
+				attr->ah_attr.grh.hop_limit = 0xFF;
+				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
+				attr->ah_attr.sl = 0;
+			}
+			if (is_dc_server_side) {
 				attr->min_rnr_timer = 12;
-				flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
+				attr->path_mtu = user_param->curr_mtu;
+
+				flags |= IBV_QP_AV |
+					IBV_QP_PATH_MTU |
+					IBV_QP_MIN_RNR_TIMER;
+			} //DCT
+			else {
+				attr->path_mtu = user_param->curr_mtu;
+				flags |= IBV_QP_PATH_MTU;
+			} //DCI
+		}
+		else
+		{
+			attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
+			attr->ah_attr.sl = user_param->sl;
+
+			if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
+					|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX) && user_param->dualport)) {
+
+				attr->ah_attr.is_global = 0;
+			} else {
+
+				attr->ah_attr.is_global  = 1;
+				attr->ah_attr.grh.dgid = dest->gid;
+				attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
+				attr->ah_attr.grh.hop_limit = 0xFF;
+				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
+			}
+			if (user_param->connection_type != UD && user_param->connection_type != SRD) {
+
+				attr->path_mtu = user_param->curr_mtu;
+				attr->dest_qp_num = dest->qpn;
+				attr->rq_psn = dest->psn;
+
+				flags |= (IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
+
+				if (user_param->connection_type == RC || user_param->connection_type == XRC) {
+
+					attr->max_dest_rd_atomic = my_dest->out_reads;
+					attr->min_rnr_timer = 12;
+					flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
+				}
 			}
 		}
 	}
@@ -1732,7 +1884,9 @@ static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
 		flags |= IBV_QP_SQ_PSN;
 		attr->sq_psn = my_dest->psn;
 
-		if (user_param->connection_type == RC || user_param->connection_type == XRC) {
+		if (user_param->connection_type == DC ||
+			user_param->connection_type == RC ||
+			user_param->connection_type == XRC) {
 
 			attr->timeout   = user_param->qp_timeout;
 			attr->retry_cnt = 7;
@@ -1769,12 +1923,7 @@ int ctx_connect(struct pingpong_context *ctx,
 	}
 	for (i=0; i < user_param->num_of_qps; i++) {
 
-		if (user_param->connection_type == DC) {
-			if ( ((!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
-						|| ((user_param->duplex || user_param->tst == LAT) && (i >= user_param->num_of_qps/2)))) {
-				continue;
-			}
-		}
+
 		memset(&attr, 0, sizeof attr);
 
 		if (user_param->rate_limit_type == HW_RATE_LIMIT)
@@ -1797,7 +1946,12 @@ int ctx_connect(struct pingpong_context *ctx,
 			fprintf(stderr, "Failed to modify QP %d to RTR\n",ctx->qp[i]->qp_num);
 			return FAILURE;
 		}
-
+		if (user_param->connection_type == DC) {
+			if ( ((!(user_param->duplex || user_param->tst == LAT) && (user_param->machine == SERVER) )
+				|| ((user_param->duplex || user_param->tst == LAT) && (i >= user_param->num_of_qps/2)))) {
+				continue;
+			}
+		}
 		if (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex) {
 			if(ctx_modify_qp_to_rts(ctx->qp[i], &attr, user_param, &dest[xrc_offset + i], &my_dest[i])) {
 				fprintf(stderr, "Failed to modify QP to RTS\n");
@@ -1883,6 +2037,39 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 {
 	int use_inl = user_param->size <= user_param->inline_size;
 	switch (user_param->connection_type) {
+	case DC:
+		switch (user_param->verb) {
+			case SEND:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_dc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_dc;
+				}
+				break;
+			case WRITE:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_dc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_dc;
+				}
+				break;
+			case READ:
+				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_dc;
+				break;
+			case ATOMIC:
+				if (user_param->atomicType == FETCH_AND_ADD) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_fa_sge_dc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_atomic_cs_sge_dc;
+				}
+				break;
+			default:
+				fprintf(stderr, "The post send properties are not supported on DC. \n");
+		}
+		break;
 	case RC:
 		switch (user_param->verb) {
 			case SEND:
@@ -2010,7 +2197,12 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 	#ifdef HAVE_IBV_WR_API
 	ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
+
 	for (i = 0; i < num_of_qps ; i++) {
+		if (user_param->connection_type == DC)
+		{
+			ctx->r_dctn[i] = rem_dest[xrc_offset + i].qpn;
+		}
 		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
 		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
 
@@ -2708,10 +2900,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			if (user_param->test_type == DURATION && user_param->state == END_STATE)
 				break;
 
-			if (user_param->connection_type == DC)
-				ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
-			else
-				ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
 
 			if (ne > 0) {
 				if (firstRx) {
@@ -3521,7 +3710,6 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	int 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 	int 		total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 	end_cycle, start_gap=0;
-
 	ctx->wr[0].sg_list->length = user_param->size;
 	#ifdef HAVE_IBV_WR_API
 	ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
@@ -3664,7 +3852,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					 */
 					if (user_param->test_type == DURATION || (rcnt + size_per_qp <= user_param->iters)) {
 						if (user_param->use_srq) {
-
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc.wr_id], &bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.wr_id, rcnt);
 								return 1;
