@@ -331,6 +331,13 @@ if [test $HAVE_EXP_OOO_ATTR = yes]; then
 	AC_DEFINE([HAVE_EXP_OOO_ATTR], [1], [Have Experimental Out of order data placement support])
 fi
 
+AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes LIBEFA=-lefa], [HAVE_SRD=no])
+AM_CONDITIONAL([HAVE_SRD], [test "x$HAVE_SRD" = "xyes"])
+if [test $HAVE_SRD = yes] && [test $HAVE_IBV_WR_API = no]; then
+	AC_DEFINE([HAVE_SRD], [1], [Have SRD support])
+	AC_SUBST([LIBEFA])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LIBS=$LIBS" -lpthread"
 AC_SUBST([LIBUMAD])

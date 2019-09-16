@@ -15,7 +15,7 @@
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
 #define HEX_BASE (16)
-static const char *connStr[] = {"RC","UC","UD","RawEth","XRC","DC"};
+static const char *connStr[] = {"RC","UC","UD","RawEth","XRC","DC","SRD"};
 static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
@@ -196,8 +196,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (connection_type != RawEth) {
 		if (verb == SEND) {
-			printf("  -c, --connection=<RC/XRC/UC/UD/DC> ");
-			printf(" Connection type RC/XRC/UC/UD/DC (default RC)\n");
+			printf("  -c, --connection=<RC/XRC/UC/UD/DC/SRD> ");
+			printf(" Connection type RC/XRC/UC/UD/DC/SRD (default RC)\n");
 		} else 	if (verb == WRITE) {
 			printf("  -c, --connection=<RC/XRC/UC/DC> ");
 			printf(" Connection type RC/XRC/UC/DC (default RC)\n");
@@ -807,8 +807,19 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		fprintf(stderr," DC not detected in libibverbs\n");
 		exit(1);
 		#endif
+	} else if (strcmp(connStr[6], optarg) == 0) {
+		#ifdef HAVE_SRD
+		if (verb != SEND) {
+			fprintf(stderr, " SRD connection only possible in SEND verb\n");
+			exit(1);
+		}
+		*cptr = SRD;
+		#else
+		fprintf(stderr, " SRD not detected in libibverbs\n");
+		exit(1);
+		#endif
 	} else {
-		fprintf(stderr," Invalid Connection type . please choose from {RC,UC,UD}\n");
+		fprintf(stderr, " Invalid Connection type. Please choose from {RC,UC,UD,XRC,DC,SRD}\n");
 		exit(1);
 	}
 }
@@ -1192,6 +1203,20 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	if (user_param->connection_type == SRD) {
+		if (user_param->work_rdma_cm == ON) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " SRD does not support RDMA_CM\n");
+			exit(1);
+		}
+		if (user_param->use_event == ON) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " SRD does not support events\n");
+			exit(1);
+		}
+		user_param->cq_mod = 1;
+	}
+
 	#ifndef HAVE_RSS_EXP
 	if (user_param->use_rss) {
 		printf(RESULT_LINE);
@@ -1569,6 +1594,7 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 55296 : dev_fname = NETXTREME; break;
 			case 55298 : dev_fname = NETXTREME; break;
 			case 55300 : dev_fname = NETXTREME; break;
+			case 61344 : dev_fname = EFA; break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
@@ -1736,6 +1762,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 			}
 			if (current_dev == NETXTREME)
 				user_param->inline_size = 96;
+			else if (current_dev == EFA)
+				user_param->inline_size = 32;
 
 		} else {
 			user_param->inline_size = 0;

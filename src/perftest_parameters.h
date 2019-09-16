@@ -79,6 +79,7 @@
 #define RawEth  (3)
 #define XRC (4)
 #define DC  (5)
+#define SRD (6)
 
 /* Genral control definitions */
 #define OFF	     (0)
@@ -295,7 +296,8 @@ enum ctx_device {
 	BLUEFIELD		= 20,
 	BLUEFIELD2		= 21,
 	INTEL_ALL		= 22,
-	NETXTREME		= 23
+	NETXTREME		= 23,
+	EFA			= 24,
 };
 
 /* Units for rate limiter */

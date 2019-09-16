@@ -1744,9 +1744,8 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 			fprintf(stderr," Changing to this MTU\n");
 		}
 		user_param->size = MTU_SIZE(user_param->curr_mtu);
-	}
-	/*checking msg size in raw ethernet*/
-	if (user_param->connection_type == RawEth){
+	} else if (user_param->connection_type == RawEth) {
+		/* checking msg size in raw ethernet */
 		if (user_param->size > user_param->curr_mtu) {
 			fprintf(stderr," Max msg size in RawEth is MTU %d\n",user_param->curr_mtu);
 			fprintf(stderr," Changing msg size to this MTU\n");
@@ -1754,6 +1753,21 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		} else if (user_param->size < RAWETH_MIN_MSG_SIZE) {
 			printf(" Min msg size for RawEth is 64B - changing msg size to 64 \n");
 			user_param->size = RAWETH_MIN_MSG_SIZE;
+		}
+	} else if (user_param->connection_type == SRD) {
+		struct ibv_port_attr port_attr;
+
+		if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
+			fprintf(stderr, " Error when trying to query port\n");
+			exit(1);
+		}
+
+		if (user_param->size > port_attr.max_msg_sz) {
+			if (user_param->test_method == RUN_ALL) {
+				fprintf(stderr, " Max msg size is %u\n", port_attr.max_msg_sz);
+				fprintf(stderr, " Changing to this size\n");
+			}
+			user_param->size = port_attr.max_msg_sz;
 		}
 	}
 
