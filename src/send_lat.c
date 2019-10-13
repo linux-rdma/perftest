@@ -73,6 +73,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_lid  = port_attr.sm_lid;
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_param->ib_port;
+	mcg_params->ib_ctx  = ctx->context;
 
 	if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
 		/* Request for Mcast group create registery in SM. */

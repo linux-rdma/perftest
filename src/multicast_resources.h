@@ -142,6 +142,7 @@ struct mcast_parameters {
 	/* In case it's a latency test. */
 	union ibv_gid		base_mgid;
 	int 			is_2nd_mgid_used;
+	struct ibv_context	*ib_ctx;
 };
 
 /* according to Table 195 in the IB spec 1.2.1 */

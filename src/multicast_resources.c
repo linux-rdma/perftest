@@ -73,7 +73,7 @@ static void prepare_mcast_mad(uint8_t method,
 	memcpy(&ptr[16],params->port_gid.raw, 16);
 
 	(*(uint32_t *)(ptr + 32)) = htonl(DEF_QKEY);
-	(*(uint16_t *)(ptr + 40)) = htons(params->pkey);
+	(*(uint16_t *)(ptr + 40)) = params->pkey;
 	ptr[39]                    = DEF_TCLASS;
 	ptr[44]                    = INSERTF(ptr[44], 4, DEF_SLL, 0, 4);
 	ptr[44]                    = INSERTF(ptr[44], 0, DEF_FLOW_LABLE, 16, 4);
@@ -171,6 +171,53 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 }
 
 /******************************************************************************
+ * Set pkey correctly for cases where non-default values are used (e.g. Azure setup)
+ ******************************************************************************/
+static int set_pkey(void *umad_buff, struct ibv_context *ctx, int port_num)
+{
+	struct ibv_device_attr device_attr;
+	int32_t partial_ix = -1;
+	uint16_t pkey = 0xffff;
+	uint16_t tmp_pkey;
+	uint16_t pkey_tbl;
+	uint16_t index;
+	int ret;
+	int i;
+
+	ret = ibv_query_device(ctx, &device_attr);
+	if (ret)
+		return ret;
+
+	pkey_tbl = device_attr.max_pkeys;
+	for (i = 0; i < pkey_tbl; i) {
+		ret = ibv_query_pkey(ctx, port_num, i, &tmp_pkey);
+		if (ret)
+			continue;
+
+		tmp_pkey = ntohs(tmp_pkey);
+		if ((pkey & 0x7fff) == (tmp_pkey & 0x7fff)) {
+			/* if there is full-member pkey take it.*/
+			if (tmp_pkey & 0x8000) {
+				index = i;
+				umad_set_pkey(umad_buff, index);
+				return 0;
+			}
+			if (partial_ix < 0)
+				partial_ix = i;
+		}
+	}
+
+	/*no full-member, if exists take the limited*/
+	if (partial_ix >= 0) {
+		index = partial_ix;
+		umad_set_pkey(umad_buff, index);
+		return 0;
+	}
+
+	return 1;
+}
+
+/******************************************************************************
  * join_multicast_group
  ******************************************************************************/
 int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
@@ -180,7 +227,7 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 	void *umad_buff = NULL;
 	void *mad = NULL;
 	int length = MAD_SIZE;
-	int test_result = 0;
+	int test_result = 1;
 
 	/* mlid will be assigned to the new LID after the join */
 	if (umad_init() < 0) {
@@ -208,6 +255,11 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 
 	mad = umad_get_mad(umad_buff);
 	prepare_mcast_mad(method,params,(struct sa_mad_packet_t *)mad);
+
+	if (set_pkey(umad_buff, params->ib_ctx, params->ib_port)) {
+		fprintf(stderr, "failed to set pkey index\n");
+		goto cleanup;
+	}
 
 	if (umad_set_addr(umad_buff,params->sm_lid,1,params->sm_sl,QP1_WELL_KNOWN_Q_KEY) < 0) {
 		fprintf(stderr, "failed to set the destination address of the SMP\n");
@@ -238,6 +290,7 @@ int join_multicast_group(subn_adm_method method,struct mcast_parameters *params)
 	} else {
 		params->mcast_state &= ~MCAST_IS_JOINED;
 	}
+	test_result = 0;
 
 cleanup:
 	if (umad_buff)
