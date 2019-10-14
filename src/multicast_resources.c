@@ -189,7 +189,7 @@ static int set_pkey(void *umad_buff, struct ibv_context *ctx, int port_num)
 		return ret;
 
 	pkey_tbl = device_attr.max_pkeys;
-	for (i = 0; i < pkey_tbl; i) {
+	for (i = 0; i < pkey_tbl; ++i) {
 		ret = ibv_query_pkey(ctx, port_num, i, &tmp_pkey);
 		if (ret)
 			continue;
