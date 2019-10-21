@@ -129,6 +129,8 @@
 #define DEF_PAGE_SIZE (4096)
 #define DEF_FLOWS (1)
 #define RATE_VALUES_COUNT (18)
+#define DISABLED_CQ_MOD_VALUE    (1)
+#define MSG_SIZE_CQ_MOD_LIMIT (8192)
 
 /* Optimal Values for Inline */
 #define DEF_INLINE_WRITE (220)
@@ -413,6 +415,7 @@ struct perftest_parameters {
 	int				duplex;
 	int				noPeak;
 	int				cq_mod;
+	int				req_cq_mod;
 	int 				spec;
 	int 				dualport;
 	int 				post_list;
