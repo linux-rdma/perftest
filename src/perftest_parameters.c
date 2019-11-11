@@ -933,7 +933,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
-	if (user_param->size > MSG_SIZE_CQ_MOD_LIMIT) {
+	if (user_param->size > MSG_SIZE_CQ_MOD_LIMIT &&
+		user_param->connection_type != UD &&
+		user_param->test_method != RUN_ALL)
+	{
 		if (!user_param->req_cq_mod) // user didn't request any cq_mod
 		{
 			user_param->cq_mod = DISABLED_CQ_MOD_VALUE;
