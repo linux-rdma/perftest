@@ -143,6 +143,67 @@ static int pp_free_gpu(struct pingpong_context *ctx)
 }
 #endif
 
+#ifdef HAVE_ROCM
+#define ASSERT(x)										\
+	do {											\
+	if (!(x)) {										\
+		fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__);	\
+	}											\
+} while (0)
+
+#define ROCM_CHECK(stmt)				\
+	do {					\
+	hipError_t result = (stmt);		\
+	ASSERT(hipSuccess == result);		\
+} while (0)
+
+/*----------------------------------------------------------------------------*/
+
+static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+{
+	const size_t gpu_page_size = 64*1024;
+	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
+
+	int deviceCount = 0;
+	hipError_t error = hipGetDeviceCount(&deviceCount);
+	if (error != hipSuccess) {
+		printf("hipDeviceGetCount() returned %d\n", error);
+		exit(1);
+	}
+	/* This function call returns 0 if there are no ROCM capable devices. */
+	if (deviceCount == 0) {
+		printf("There are no available device(s) that support ROCM\n");
+		return 1;
+    }
+
+	int devID = 0;
+
+	/* pick up device with zero ordinal (default, or devID) */
+	ROCM_CHECK(hipSetDevice(devID));
+
+	void * d_A;
+	error = hipMalloc(&d_A, size);
+	if (error != hipSuccess) {
+		printf("hipMalloc error=%d\n", error);
+		return 1;
+	}
+	ctx->buf[0] = (void *) d_A;
+
+	return 0;
+}
+
+static int pp_free_gpu(struct pingpong_context *ctx)
+{
+	int ret = 0;
+	void * d_A = (void *) ctx->buf[0];
+
+	hipFree(d_A);
+	d_A = 0;
+
+	return ret;
+}
+#endif
+
 static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
 			const char *fname, unsigned long offset)
 {
@@ -1181,6 +1242,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 	else
 	#endif
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm) {
+		pp_free_gpu(ctx);
+	}
+	else
+	#endif
 	if (user_param->mmap_file != NULL) {
 		pp_free_mmap(ctx);
 	} else if (ctx->is_contig_supported == FAILURE) {
@@ -1492,6 +1559,16 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
+		ctx->is_contig_supported = FAILURE;
+		if(pp_init_gpu(ctx, ctx->buff_size)) {
+			fprintf(stderr, "Couldn't allocate work buf.\n");
+			return FAILURE;
+		}
+	} else
+	#endif
+
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm) {
 		ctx->is_contig_supported = FAILURE;
 		if(pp_init_gpu(ctx, ctx->buff_size)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
