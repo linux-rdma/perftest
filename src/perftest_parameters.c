@@ -2027,7 +2027,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 			case 'p': user_param->port = strtol(optarg, NULL, 0); break;
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
-			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,MIN_IB_PORT,MAX_IB_PORT,"IB Port"); break;
+			case 'i': user_param->ib_port = strtol(optarg, NULL, 0);
+				  if (user_param->ib_port < MIN_IB_PORT) {
+					  fprintf(stderr, "IB Port can't be less than %d\n", MIN_IB_PORT);
+					  return 1;
+				  }
+				  break;
 			case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
 			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
 			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
