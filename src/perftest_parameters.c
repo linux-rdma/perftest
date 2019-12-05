@@ -966,7 +966,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->size = MAX_SIZE;
 
 	if (user_param->verb == ATOMIC && user_param->size != DEF_SIZE_ATOMIC) {
-		user_param->size = DEF_SIZE_ATOMIC;
+		printf(RESULT_LINE);
+		printf("Message size cannot be changed for Atomic tests \n");
+		exit (1);
 	}
 
 	if (user_param->use_srq && user_param->verb != SEND) {
