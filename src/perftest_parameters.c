@@ -995,9 +995,15 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		user_param->cq_mod = user_param->post_list;
-		printf(RESULT_LINE);
-		printf("Post List requested - CQ moderation will be the size of the post list\n");
+		if (!user_param->req_cq_mod) {
+			user_param->cq_mod = user_param->post_list;
+			printf(RESULT_LINE);
+			printf("Post List requested - CQ moderation will be the size of the post list\n");
+		} else if ((user_param->post_list % user_param->cq_mod) != 0) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Post list size must be a multiple of CQ moderation\n");
+			exit(1);
+		}
 	}
 
 	if (user_param->test_type==DURATION) {
@@ -2076,8 +2082,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  return 1;
 				  } break;
 			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");
-					  user_param->req_cq_mod = 1;
-					  break;
+				  user_param->req_cq_mod = 1;
+				  break;
 			case 'A':
 				  if (user_param->verb != ATOMIC) {
 					  fprintf(stderr," You are not running the atomic_lat/bw test!\n");
@@ -2944,14 +2950,20 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 
 	if (user_param->noPeak == OFF) {
 		/* Find the peak bandwidth unless asked not to in command line */
-		for (i = 0; i < num_of_calculated_iters * num_of_qps; ++i) {
-			for (j = i; j < num_of_calculated_iters * num_of_qps; ++j) {
+		for (i = 0; i < num_of_calculated_iters * num_of_qps; i += user_param->post_list) {
+			for (j = ROUND_UP(i + 1, user_param->cq_mod) - 1; j < num_of_calculated_iters * num_of_qps;
+					j += user_param->cq_mod) {
 				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
-				if (t < opt_delta) {
+				if (t < opt_delta)
 					opt_delta  = t;
-					opt_posted = i;
-					opt_completed = j;
-				}
+			}
+
+			/* Handle case where CQE was explicitly signaled on last iteration. */
+			if ((num_of_calculated_iters * num_of_qps) % user_param->cq_mod) {
+				j = num_of_calculated_iters * num_of_qps - 1;
+				t = (user_param->tcompleted[j] - user_param->tposted[i]) / (j - i + 1);
+				if (t < opt_delta)
+					opt_delta  = t;
 			}
 		}
 	}
