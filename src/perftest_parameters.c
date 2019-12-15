@@ -648,6 +648,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
 	user_param->req_cq_mod		= 0;
+	user_param->req_size 		= 0;
 	user_param->cq_mod		= DEF_CQ_MOD;
 	user_param->iters		= (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport		= OFF;
@@ -2133,6 +2134,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  size_factor = 1024*1024;
 				  }
 				  user_param->size = (uint64_t)strtol(optarg, NULL, 0) * size_factor;
+				  user_param->req_size = 1;
 				  if (user_param->size < 1 || user_param->size > (UINT_MAX / 2)) {
 					  fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
 					  return 1;
