@@ -2082,8 +2082,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  return 1;
 				  } break;
 			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");
-					  user_param->req_cq_mod = 1;
-					  break;
+				  user_param->req_cq_mod = 1;
+				  break;
 			case 'A':
 				  if (user_param->verb != ATOMIC) {
 					  fprintf(stderr," You are not running the atomic_lat/bw test!\n");
