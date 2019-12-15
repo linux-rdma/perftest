@@ -129,6 +129,8 @@
 #define DEF_PAGE_SIZE (4096)
 #define DEF_FLOWS (1)
 #define RATE_VALUES_COUNT (18)
+#define DISABLED_CQ_MOD_VALUE    (1)
+#define MSG_SIZE_CQ_MOD_LIMIT (8192)
 
 /* Optimal Values for Inline */
 #define DEF_INLINE_WRITE (220)
@@ -143,7 +145,6 @@
 #define MIN_HOP_LIMIT	(0)
 #define MAX_HOP_LIMIT	(255)
 #define MIN_IB_PORT   (1)
-#define MAX_IB_PORT   (3)
 #define MIN_ITER      (5)
 #define MAX_ITER      (100000000)
 #define MIN_TX 	      (1)
@@ -363,6 +364,7 @@ struct perftest_parameters {
 	int				mtu;
 	enum ibv_mtu			curr_mtu;
 	uint64_t			size;
+	int				req_size;
 	uint64_t			dct_key;
 	int				iters;
 	uint64_t			iters_per_port[2];
@@ -414,6 +416,7 @@ struct perftest_parameters {
 	int				noPeak;
 	int				req_cq_mod;
 	int				cq_mod;
+	int				req_cq_mod;
 	int 				spec;
 	int 				dualport;
 	int 				post_list;

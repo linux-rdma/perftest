@@ -3286,6 +3286,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			if ((j + 1) % user_param->cq_mod == 0) {
 				ctx->wr[i*user_param->post_list + j].send_flags = IBV_SEND_SIGNALED;
+        #ifdef HAVE_IBV_WR_API
+				ctx->qpx[i]->wr_flags = IBV_SEND_SIGNALED;
+				#endif
 			} else {
 				ctx->wr[i*user_param->post_list + j].send_flags = 0;
 			}

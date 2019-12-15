@@ -1747,12 +1747,16 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 	}
 
 	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
-
-		if (user_param->test_method == RUN_ALL) {
+		if (user_param->test_method == RUN_ALL || !user_param->req_size) {
 			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
 			fprintf(stderr," Changing to this MTU\n");
+			user_param->size = MTU_SIZE(user_param->curr_mtu);
 		}
-		user_param->size = MTU_SIZE(user_param->curr_mtu);
+		else
+		{
+			fprintf(stderr," Max message size in UD cannot be greater than MTU \n");
+			return FAILURE;
+		}
 	} else if (user_param->connection_type == RawEth) {
 		/* checking msg size in raw ethernet */
 		if (user_param->size > user_param->curr_mtu) {
