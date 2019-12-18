@@ -31,7 +31,7 @@
 #
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[5.70],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[5.71],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -45,13 +45,13 @@ AC_ARG_VAR(CUDA_H_PATH, help-string)
 AC_ARG_VAR(RANLIB, ranlib tool)
 
 AC_ARG_ENABLE([ibv_wr_api],
-[AS_HELP_STRING([--enable-ibv_wr_api],
-[Enable new post send API])],
-[enable_ibv_wr_api=yes], [enable_ibv_wr_api=no])
+[AS_HELP_STRING([--disable-ibv_wr_api],
+[Disable new post send API])],
+[disable_ibv_wr_api=yes], [disable_ibv_wr_api=no])
 
-AS_IF([test "x$enable_ibv_wr_api" = "xyes"],
-      [USE_IBV_WR_API=yes],
-        [USE_IBV_WR_API=no])
+AS_IF([test "x$disable_ibv_wr_api" = "xyes"],
+      [USE_IBV_WR_API=no],
+        [USE_IBV_WR_API=yes])
 
 AC_PREFIX_DEFAULT("/usr")
 
