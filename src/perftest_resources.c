@@ -1562,11 +1562,11 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 						 ((user_param->duplex || user_param->tst == LAT) &&
 						  (qp_index >= dc_num_of_qps)));
 
+	attr.cap.max_inline_data = user_param->inline_size;
 	if (!(user_param->connection_type == DC &&
 			is_dc_server_side)) {
 		attr.cap.max_send_wr  = user_param->tx_depth;
 		attr.cap.max_send_sge = MAX_SEND_SGE;
-		attr.cap.max_inline_data = user_param->inline_size;
 	}
 
 	if (user_param->use_srq &&
@@ -3616,8 +3616,14 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	#else
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 	#endif
-	if (user_param->size <= user_param->inline_size)
+	if (user_param->size <= user_param->inline_size) {
+		#ifdef HAVE_IBV_WR_API
+		ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
+		#else
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
+		#endif
+	}
+
 
 	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
@@ -3804,11 +3810,15 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->wr[0].sg_list->length = user_param->size;
 		ctx->wr[0].send_flags = 0;
 		#ifdef HAVE_IBV_WR_API
-		ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+		ctx->qpx[0]->wr_flags = 0;
 		#endif
 	}
 	if (user_param->size <= user_param->inline_size) {
+		#ifdef HAVE_IBV_WR_API
+		ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
+		#else
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
+		#endif
 	}
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
 			( (user_param->test_type == DURATION && user_param->state != END_STATE))) {
@@ -3896,7 +3906,11 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 
 			if (scnt % user_param->cq_mod == 0 || (user_param->test_type == ITERATIONS && scnt == user_param->iters)) {
 				poll = 1;
+				#ifdef HAVE_IBV_WR_API
+				ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+				#else
 				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
+				#endif
 			}
 
 			/* if we're in duration mode and the time is over, exit from this function */
@@ -3946,7 +3960,12 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 				poll = 0;
 
+				#ifdef HAVE_IBV_WR_API
+				ctx->qpx[0]->wr_flags &= ~IBV_SEND_SIGNALED;
+				#else
 				ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
+				#endif
+
 			}
 		}
 	}
