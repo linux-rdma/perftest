@@ -1632,6 +1632,12 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		} else {
 			qp = ctx->cm_id->qp;
 		}
+		#else
+		if (rdma_create_qp_ex(ctx->cm_id, &attr)) {
+			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
+		} else {
+			qp = ctx->cm_id->qp;
+		}
 		#endif
 	} else if (user_param->connection_type == SRD) {
 		#ifdef HAVE_SRD

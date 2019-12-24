@@ -1207,6 +1207,7 @@ int create_comm_struct(struct perftest_comm *comm,
 		ALLOCATE(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->buf, void* , user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
+		ALLOCATE(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps);
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
