@@ -1776,11 +1776,16 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 		}
 
 		if (user_param->size > port_attr.max_msg_sz) {
-			if (user_param->test_method == RUN_ALL) {
-				fprintf(stderr, " Max msg size is %u\n", port_attr.max_msg_sz);
+			if (user_param->test_method == RUN_ALL || !user_param->req_size) {
+				fprintf(stderr, " Max msg size is %u\n",
+					port_attr.max_msg_sz);
 				fprintf(stderr, " Changing to this size\n");
+				user_param->size = port_attr.max_msg_sz;
+			} else {
+				fprintf(stderr," Max message size in SRD cannot be greater than %u \n",
+					port_attr.max_msg_sz);
+				return FAILURE;
 			}
-			user_param->size = port_attr.max_msg_sz;
 		}
 	}
 
