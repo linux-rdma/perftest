@@ -4708,7 +4708,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 									ctx->ccnt[(int)credit_wc.wr_id] += user_param->cq_mod;
 
 									if (user_param->noPeak == OFF) {
-										if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+										if ((user_param->test_type == ITERATIONS && (totccnt > tot_iters)))
 											user_param->tcompleted[tot_iters - 1] = get_cycles();
 										else
 											user_param->tcompleted[totccnt-1] = get_cycles();
@@ -4770,7 +4770,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 					if (user_param->noPeak == OFF) {
 
-						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+						if ((user_param->test_type == ITERATIONS && (totccnt > tot_iters)))
 							user_param->tcompleted[tot_iters - 1] = get_cycles();
 						else
 							user_param->tcompleted[totccnt-1] = get_cycles();

@@ -1251,7 +1251,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 					if (user_param->noPeak == OFF) {
 
-						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+						if ((user_param->test_type == ITERATIONS && (totccnt > tot_iters)))
 							user_param->tcompleted[tot_iters - 1] = get_cycles();
 						else
 							user_param->tcompleted[totccnt - 1] = get_cycles();
