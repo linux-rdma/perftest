@@ -1092,7 +1092,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		for (index = 0; index < user_param->num_of_qps; index++) {
 
 			while (((ctx->scnt[index] < iters) || ((firstRx == OFF) && (user_param->test_type == DURATION))) &&
-					((ctx->scnt[index] - ctx->ccnt[index]) < user_param->tx_depth) && (rcnt_for_qp[index] - ctx->scnt[index] > 0)) {
+					((ctx->scnt[index] - ctx->ccnt[index] + user_param->post_list) <= user_param->tx_depth) && (rcnt_for_qp[index] - ctx->scnt[index] > 0)) {
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					#ifdef HAVE_VERBS_EXP
