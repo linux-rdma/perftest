@@ -3857,6 +3857,13 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	}
 
 
+	#ifdef HAVE_IBV_WR_API
+	/* Set the send function pointers per iteration, in order to take the
+	 * current interation msg size for inline calculations.
+	 */
+	ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
 
@@ -4053,6 +4060,14 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	if (user_param->size <= user_param->inline_size) {
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 	}
+
+	#ifdef HAVE_IBV_WR_API
+	/* Set the send function pointers per iteration, in order to take the
+	 * current interation msg size for inline calculations.
+	 */
+	ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
 			( (user_param->test_type == DURATION && user_param->state != END_STATE))) {
 
