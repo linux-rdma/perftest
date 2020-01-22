@@ -55,6 +55,7 @@
 
 #include <infiniband/verbs.h>
 #include <unistd.h>
+#include <inttypes.h>
 #if !defined(__FreeBSD__)
 #include <malloc.h>
 #endif
@@ -206,11 +207,11 @@
 #define RESULT_FMT_FS_RATE_DUR " #flows		fs_avg_time[usec]    	fps[flow per sec]"
 
 /* Result print format */
-#define REPORT_FMT     " %-7lu    %-10lu       %-7.2lf            %-7.2lf		   %-7.6lf"
+#define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf"
 
-#define REPORT_FMT_EXT     " %-7lu    %lu           %-7.6lf            %-7.6lf            %-7.6lf"
+#define REPORT_FMT_EXT " %-7lu    %" PRIu64 "           %-7.6lf            %-7.6lf            %-7.6lf"
 
-#define REPORT_FMT_PER_PORT     " %-7lu    %-10lu     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
+#define REPORT_FMT_PER_PORT     " %-7lu    %-10" PRIu64 "     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
 
 #define REPORT_EXT	"\n"
 
@@ -219,12 +220,12 @@
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
 /* Result print format for latency tests. */
-#define REPORT_FMT_LAT " %-7lu %d          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
-#define REPORT_FMT_LAT_DUR " %-7lu       %d            %-7.2f        %-7.2f"
+#define REPORT_FMT_LAT " %-7lu %" PRIu64 "          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
+#define REPORT_FMT_LAT_DUR " %-7lu       %" PRIu64 "            %-7.2f        %-7.2f"
 
-#define REPORT_FMT_FS_RATE " %d          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
+#define REPORT_FMT_FS_RATE "%" PRIu64 "          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
 
-#define REPORT_FMT_FS_RATE_DUR " %d               %-7.2f		%-7.2f"
+#define REPORT_FMT_FS_RATE_DUR  "%" PRIu64 "               %-7.2f		%-7.2f"
 
 #define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
 { arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
@@ -366,7 +367,7 @@ struct perftest_parameters {
 	uint64_t			size;
 	int				req_size;
 	uint64_t			dct_key;
-	int				iters;
+	uint64_t				iters;
 	uint64_t			iters_per_port[2];
 	uint64_t			*port_by_qp;
 	int				tx_depth;
