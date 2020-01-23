@@ -618,27 +618,33 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
 		qp_init_attr.pd = ctx->pd;
 		#ifdef HAVE_IBV_WR_API
-		qp_init_attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+		if (!user_param->use_old_post_send)
+			qp_init_attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
 		#endif
 		qp_init_attr.cap.max_inline_data = user_param->inline_size;
 	}
 
 	#ifdef HAVE_IBV_WR_API
-	if (user_param->verb == ATOMIC) {
-		opcode = opcode_atomic_array[user_param->atomicType];
-		if (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD)
-			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
-		else if (opcode == IBV_WR_ATOMIC_CMP_AND_SWP)
-			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
-	}
-	else {
-		opcode = opcode_verbs_array[user_param->verb];
-		if (opcode == IBV_WR_SEND)
-			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_SEND;
-		else if (opcode == IBV_WR_RDMA_WRITE)
-			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
-		else if (opcode == IBV_WR_RDMA_READ)
-			qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+	if (!user_param->use_old_post_send)
+	{
+		if (user_param->verb == ATOMIC)
+		{
+			opcode = opcode_atomic_array[user_param->atomicType];
+			if (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD)
+				qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
+			else if (opcode == IBV_WR_ATOMIC_CMP_AND_SWP)
+				qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
+		}
+		else
+		{
+			opcode = opcode_verbs_array[user_param->verb];
+			if (opcode == IBV_WR_SEND)
+				qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_SEND;
+			else if (opcode == IBV_WR_RDMA_WRITE)
+				qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+			else if (opcode == IBV_WR_RDMA_READ)
+				qp_init_attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+		}
 	}
 	#endif
 
@@ -1309,12 +1315,23 @@ int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 int verify_params_with_device_context(struct ibv_context *context,
 				      struct perftest_parameters *user_param)
 {
+	enum ctx_device current_dev = ib_dev_name(context);
 	if(user_param->use_event) {
 		if(user_param->eq_num > context->num_comp_vectors) {
 			fprintf(stderr, " Completion vector specified is invalid\n");
 			fprintf(stderr, " Max completion vector = %d\n",
 				context->num_comp_vectors - 1);
 			return FAILURE;
+		}
+	}
+
+	if (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3)
+	{
+		if (!user_param->use_old_post_send)
+		{
+			fprintf(stderr, " ConnectX-3 and ConnectX-3 Pro don't support new post send API!\n");
+			fprintf(stderr, " Fall back to old post send API\n");
+			user_param->use_old_post_send = 1;
 		}
 	}
 
@@ -1545,9 +1562,11 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	int is_dc_server_side = 0;
 	#ifdef HAVE_IBV_WR_API
 	enum ibv_wr_opcode opcode;
-	struct ibv_qp_init_attr_ex attr;
+	struct ibv_qp_init_attr attr;
+	struct ibv_qp_init_attr_ex attr_ex;
 	struct mlx5dv_qp_init_attr attr_dv;
-	memset(&attr, 0, sizeof(struct ibv_qp_init_attr_ex));
+	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
+	memset(&attr_ex, 0, sizeof(struct ibv_qp_init_attr_ex));
 	memset(&attr_dv, 0, sizeof(attr_dv));
 	#else
 	struct ibv_qp_init_attr attr;
@@ -1607,22 +1626,22 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		opcode = opcode_atomic_array[user_param->atomicType];
 		if(0);
 		else if (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD)
-			attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
 		else if (opcode == IBV_WR_ATOMIC_CMP_AND_SWP)
-			attr.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_CMP_AND_SWP;
 	}
 	else {
 		opcode = opcode_verbs_array[user_param->verb];
 		if(0);
 		else if (opcode == IBV_WR_SEND)
-			attr.send_ops_flags |= IBV_QP_EX_WITH_SEND;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_SEND;
 		else if (opcode == IBV_WR_RDMA_WRITE)
-			attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
 		else if (opcode == IBV_WR_RDMA_READ)
-			attr.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
 	}
-	attr.pd = ctx->pd;
-	attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
+	attr_ex.pd = ctx->pd;
+	attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
 	#endif
 
 	if (user_param->work_rdma_cm) {
@@ -1633,7 +1652,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			qp = ctx->cm_id->qp;
 		}
 		#else
-		if (rdma_create_qp_ex(ctx->cm_id, &attr)) {
+		if (rdma_create_qp_ex(ctx->cm_id, &attr_ex)) {
 			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
 		} else {
 			qp = ctx->cm_id->qp;
@@ -1645,29 +1664,46 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#endif
 	} else {
 		#ifdef HAVE_IBV_WR_API
-		if (user_param->connection_type == DC) {
-			attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
+		if (!user_param->use_old_post_send)
+		{
+			attr_ex.send_cq = attr.send_cq;
+			attr_ex.recv_cq = attr.recv_cq;
+			attr_ex.cap.max_send_wr = attr.cap.max_send_wr;
+			attr_ex.cap.max_send_sge = attr.cap.max_send_sge;
+			attr_ex.qp_type = attr.qp_type;
+			attr_ex.srq = attr.srq;
+			attr_ex.cap.max_inline_data = attr.cap.max_inline_data;
+			attr_ex.cap.max_recv_wr  = attr.cap.max_recv_wr;
+			attr_ex.cap.max_recv_sge = attr.cap.max_recv_sge;
 
-			if (is_dc_server_side) {
-				attr.srq = ctx->srq;
-				attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCT;
-				attr_dv.dc_init_attr.dct_access_key = DC_KEY;
-				attr.comp_mask &= ~IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-			}
-			else {
-				attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCI;
-				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
-				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
-				attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-			}
+			if (user_param->connection_type == DC)
+			{
+				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
 
-			qp = mlx5dv_create_qp(ctx->context, &attr, &attr_dv);
-		} else {
-			qp = ibv_create_qp_ex(ctx->context, &attr);
+				if (is_dc_server_side)
+				{
+					attr_ex.srq = ctx->srq;
+					attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCT;
+					attr_dv.dc_init_attr.dct_access_key = DC_KEY;
+					attr_ex.comp_mask &= ~IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+				}
+				else
+				{
+					attr_dv.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCI;
+					attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+					attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+				}
+				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+			}
+			else
+			{
+				qp = ibv_create_qp_ex(ctx->context, &attr_ex);
+			}
 		}
-		#else
-		qp = ibv_create_qp(ctx->pd, &attr);
+		else
 		#endif
+			qp = ibv_create_qp(ctx->pd, &attr);
 	}
 
 	if (qp == NULL && errno == ENOMEM) {
@@ -2266,7 +2302,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			if ((j + 1) % user_param->cq_mod == 0) {
 				ctx->wr[i*user_param->post_list + j].send_flags = IBV_SEND_SIGNALED;
 				#ifdef HAVE_IBV_WR_API
-				ctx->qpx[i]->wr_flags = IBV_SEND_SIGNALED;
+				if (!user_param->use_old_post_send)
+					ctx->qpx[i]->wr_flags = IBV_SEND_SIGNALED;
 				#endif
 			} else {
 				ctx->wr[i*user_param->post_list + j].send_flags = 0;
@@ -2584,7 +2621,7 @@ static inline int post_send_method(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
 	#ifdef HAVE_IBV_WR_API
-	if (user_param->connection_type != RawEth)
+	if (!user_param->use_old_post_send)
 		return (*ctx->new_post_send_work_request_func_pointer)(ctx, index, user_param);
 	#endif
 	struct ibv_send_wr 	*bad_wr = NULL;
@@ -2707,7 +2744,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 					#ifdef HAVE_IBV_WR_API
-					ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+					if (!user_param->use_old_post_send)
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
 					#endif
 				}
 
@@ -2758,7 +2796,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 						#ifdef HAVE_IBV_WR_API
-						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+						if (!user_param->use_old_post_send)
+							ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
 						#endif
 				}
 
@@ -3100,7 +3139,8 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 					#ifdef HAVE_IBV_WR_API
-					ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+					if (!user_param->use_old_post_send)
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
 					#endif
 				}
 
@@ -3120,7 +3160,8 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 					#ifdef HAVE_IBV_WR_API
-					ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+					if (!user_param->use_old_post_send)
+						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
 					#endif
 				}
 			}
@@ -3354,7 +3395,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 					#ifdef HAVE_IBV_WR_API
-					ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
+					if (!user_param->use_old_post_send)
+						ctx->qpx[index]->wr_flags &= ~IBV_SEND_SIGNALED;
 					#endif
 				}
 				if (user_param->noPeak == OFF)
@@ -3385,7 +3427,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 					#ifdef HAVE_IBV_WR_API
-					ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
+					if (!user_param->use_old_post_send)
+						ctx->qpx[index]->wr_flags |= IBV_SEND_SIGNALED;
 					#endif
 				}
 			}
@@ -3614,12 +3657,14 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 	#ifdef HAVE_IBV_WR_API
-	ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+	if (!user_param->use_old_post_send)
+		ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
 	#endif
 	if (user_param->size <= user_param->inline_size) {
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 		#ifdef HAVE_IBV_WR_API
-		ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
+		if (!user_param->use_old_post_send)
+			ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
 		#endif
 	}
 
@@ -3718,7 +3763,8 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 	#ifdef HAVE_IBV_WR_API
-	ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+	if (!user_param->use_old_post_send)
+		ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
 	#endif
 
 	/* Duration support in latency tests. */
@@ -3808,13 +3854,15 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->wr[0].sg_list->length = user_param->size;
 		ctx->wr[0].send_flags = 0;
 		#ifdef HAVE_IBV_WR_API
-		ctx->qpx[0]->wr_flags = 0;
+		if (!user_param->use_old_post_send)
+			ctx->qpx[0]->wr_flags = 0;
 		#endif
 	}
 	if (user_param->size <= user_param->inline_size) {
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 		#ifdef HAVE_IBV_WR_API
-		ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
+		if (!user_param->use_old_post_send)
+			ctx->qpx[0]->wr_flags |= IBV_SEND_INLINE;
 		#endif
 	}
 	while (scnt < user_param->iters || rcnt < user_param->iters ||
@@ -3905,7 +3953,8 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				poll = 1;
 				ctx->wr[0].send_flags |= IBV_SEND_SIGNALED;
 				#ifdef HAVE_IBV_WR_API
-				ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
+				if (!user_param->use_old_post_send)
+					ctx->qpx[0]->wr_flags |= IBV_SEND_SIGNALED;
 				#endif
 			}
 
@@ -3957,7 +4006,8 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				poll = 0;
 				ctx->wr[0].send_flags &= ~IBV_SEND_SIGNALED;
 				#ifdef HAVE_IBV_WR_API
-				ctx->qpx[0]->wr_flags &= ~IBV_SEND_SIGNALED;
+				if (!user_param->use_old_post_send)
+					ctx->qpx[0]->wr_flags &= ~IBV_SEND_SIGNALED;
 				#endif
 
 			}

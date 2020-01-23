@@ -482,6 +482,7 @@ struct perftest_parameters {
 	int 				report_per_port;
 	int 				use_odp;
 	int				use_hugepages;
+	int				use_old_post_send;
 	int				use_promiscuous;
 	int				use_sniffer;
 	int				check_alive_exited;
