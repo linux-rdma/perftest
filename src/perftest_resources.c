@@ -4539,7 +4539,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 		for (index=0; index < num_of_qps; index++) {
 			while (before_first_rx == OFF && (ctx->scnt[index] < iters || user_param->test_type == DURATION) &&
-					((ctx->scnt[index] + scredit_for_qp[index] - ctx->ccnt[index]) < user_param->tx_depth)) {
+					((ctx->scnt[index] + scredit_for_qp[index] - ctx->ccnt[index] + user_param->post_list) <= user_param->tx_depth)) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
@@ -4708,7 +4708,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 									ctx->ccnt[(int)credit_wc.wr_id] += user_param->cq_mod;
 
 									if (user_param->noPeak == OFF) {
-										if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+										if ((user_param->test_type == ITERATIONS && (totccnt > tot_iters)))
 											user_param->tcompleted[tot_iters - 1] = get_cycles();
 										else
 											user_param->tcompleted[totccnt-1] = get_cycles();
@@ -4770,7 +4770,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 					if (user_param->noPeak == OFF) {
 
-						if ((user_param->test_type == ITERATIONS && (totccnt >= tot_iters - 1)))
+						if ((user_param->test_type == ITERATIONS && (totccnt > tot_iters)))
 							user_param->tcompleted[tot_iters - 1] = get_cycles();
 						else
 							user_param->tcompleted[totccnt-1] = get_cycles();
