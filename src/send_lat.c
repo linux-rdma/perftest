@@ -348,10 +348,14 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	/* Set up connection one more time to send qpn properly for DC */
-	if (set_up_connection(&ctx,&user_param,my_dest)) {
-		fprintf(stderr," Unable to set up socket connection\n");
-		return FAILURE;
+	if (user_param.connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(&ctx, &user_param, my_dest))
+		{
+			fprintf(stderr, " Unable to set up socket connection\n");
+			return FAILURE;
+		}
 	}
 
 	/* Print this machine QP information */
