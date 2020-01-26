@@ -1645,6 +1645,15 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	}
 	attr_ex.pd = ctx->pd;
 	attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
+	attr_ex.send_cq = attr.send_cq;
+	attr_ex.recv_cq = attr.recv_cq;
+	attr_ex.cap.max_send_wr = attr.cap.max_send_wr;
+	attr_ex.cap.max_send_sge = attr.cap.max_send_sge;
+	attr_ex.qp_type = attr.qp_type;
+	attr_ex.srq = attr.srq;
+	attr_ex.cap.max_inline_data = attr.cap.max_inline_data;
+	attr_ex.cap.max_recv_wr  = attr.cap.max_recv_wr;
+	attr_ex.cap.max_recv_sge = attr.cap.max_recv_sge;
 	#endif
 
 	if (user_param->work_rdma_cm) {
@@ -1655,6 +1664,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			qp = ctx->cm_id->qp;
 		}
 		#else
+
 		if (rdma_create_qp_ex(ctx->cm_id, &attr_ex)) {
 			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
 		} else {
@@ -1669,16 +1679,6 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_IBV_WR_API
 		if (!user_param->use_old_post_send)
 		{
-			attr_ex.send_cq = attr.send_cq;
-			attr_ex.recv_cq = attr.recv_cq;
-			attr_ex.cap.max_send_wr = attr.cap.max_send_wr;
-			attr_ex.cap.max_send_sge = attr.cap.max_send_sge;
-			attr_ex.qp_type = attr.qp_type;
-			attr_ex.srq = attr.srq;
-			attr_ex.cap.max_inline_data = attr.cap.max_inline_data;
-			attr_ex.cap.max_recv_wr  = attr.cap.max_recv_wr;
-			attr_ex.cap.max_recv_sge = attr.cap.max_recv_sge;
-
 			if (user_param->connection_type == DC)
 			{
 				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;

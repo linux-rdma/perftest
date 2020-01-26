@@ -876,10 +876,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	if (res->ai_family != PF_INET) {
 		return FAILURE;
 	}
-
 	memcpy(&sin, res->ai_addr, sizeof(sin));
 	sin.sin_port = htons((unsigned short)user_param->port);
-
 	while (1) {
 
 		if (num_of_retry == 0) {
@@ -1190,6 +1188,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->mr_per_qp		= user_param->mr_per_qp;
 	comm->rdma_params->dlid			= user_param->dlid;
 	comm->rdma_params->cycle_buffer         = user_param->cycle_buffer;
+	comm->rdma_params->use_old_post_send = user_param->use_old_post_send;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1207,7 +1206,9 @@ int create_comm_struct(struct perftest_comm *comm,
 		ALLOCATE(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->buf, void* , user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
+		#ifdef HAVE_IBV_WR_API
 		ALLOCATE(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps);
+		#endif
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
