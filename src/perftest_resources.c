@@ -1415,7 +1415,6 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		}
 	}
 	#endif
-
 	ctx->is_contig_supported = FAILURE;
 
 	/* Allocating an event channel if requested. */
@@ -1507,7 +1506,6 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		return SUCCESS;
 
 	for (i=0; i < user_param->num_of_qps; i++) {
-
 		if (create_qp_main(ctx, user_param, i, num_of_qps)) {
 			fprintf(stderr, "Failed to create QP.\n");
 			return FAILURE;
@@ -1672,20 +1670,29 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	#endif
 
 	if (user_param->work_rdma_cm) {
-		#if !defined(HAVE_IBV_WR_API)
-		if (rdma_create_qp(ctx->cm_id, ctx->pd, &attr)) {
-			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
-		} else {
-			qp = ctx->cm_id->qp;
+		#ifdef HAVE_IBV_WR_API
+		if (!user_param->use_old_post_send)
+		{
+			if (rdma_create_qp_ex(ctx->cm_id, &attr_ex))
+			{
+				fprintf(stderr, "Couldn't create rdma new QP - %s\n", strerror(errno));
+			}
+			else
+			{
+				qp = ctx->cm_id->qp;
+			}
 		}
-		#else
-
-		if (rdma_create_qp_ex(ctx->cm_id, &attr_ex)) {
-			fprintf(stderr, "Couldn't create rdma QP - %s\n", strerror(errno));
-		} else {
-			qp = ctx->cm_id->qp;
-		}
+		else
 		#endif
+			if (rdma_create_qp(ctx->cm_id, ctx->pd, &attr))
+			{
+				fprintf(stderr, "Couldn't create rdma old QP - %s\n", strerror(errno));
+			}
+			else
+			{
+				qp = ctx->cm_id->qp;
+			}
+
 	} else if (user_param->connection_type == SRD) {
 		#ifdef HAVE_SRD
 		qp = efadv_create_driver_qp(ctx->pd, &attr, EFADV_QP_DRIVER_TYPE_SRD);
@@ -1726,7 +1733,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 
 	if (qp == NULL && errno == ENOMEM) {
 		fprintf(stderr, "Requested QP size might be too big. Try reducing TX depth and/or inline size.\n");
-		fprintf(stderr, "Current TX depth is %d and  inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
+		fprintf(stderr, "Current TX depth is %d and inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
 	}
 
 	if (user_param->inline_size > attr.cap.max_inline_data) {
@@ -1895,7 +1902,6 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
 			}
 			if (user_param->connection_type != UD && user_param->connection_type != SRD) {
-
 				attr->path_mtu = user_param->curr_mtu;
 				attr->dest_qp_num = dest->qpn;
 				attr->rq_psn = dest->psn;
@@ -2072,7 +2078,6 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *rem_dest)
 {
-
 	ctx_set_send_reg_wqes(ctx,user_param,rem_dest);
 }
 
