@@ -60,9 +60,13 @@ struct check_alive_data check_alive_data;
 static CUdevice cuDevice;
 static CUcontext cuContext;
 
-static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+static int pp_init_gpu(struct pingpong_context *ctx, size_t _size, int cuda_device_id)
 {
 	const size_t gpu_page_size = 64*1024;
+ 	int cuda_pci_bus_id;
+	int cuda_pci_device_id;
+	int index;
+	CUdevice cu_device;
 	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
 	printf("initializing CUDA\n");
 	CUresult error = cuInit(0);
@@ -81,18 +85,26 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 	if (deviceCount == 0) {
 		printf("There are no available device(s) that support CUDA\n");
 		return 1;
-	} else if (deviceCount == 1)
-		printf("There is 1 device supporting CUDA\n");
-	else
-		printf("There are %d devices supporting CUDA, picking first...\n", deviceCount);
+	}
+	if (cuda_device_id >= deviceCount) {
+		fprintf(stderr, "No such device ID (%d) exists in system\n", cuda_device_id);
+		return 1;
+	}
 
-	int devID = 0;
+	printf("Listing all CUDA devices in system:\n");
+	for (index = 0; index < deviceCount; index++) {
+		CUCHECK(cuDeviceGet(&cu_device, index));
+		cuDeviceGetAttribute(&cuda_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID , cu_device);
+		cuDeviceGetAttribute(&cuda_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID , cu_device);
+		printf("CUDA device %d: PCIe address is %02X:%02X\n", index, (unsigned int)cuda_pci_bus_id, (unsigned int)cuda_pci_device_id);
+  }
 
-	/* pick up device with zero ordinal (default, or devID) */
-	CUCHECK(cuDeviceGet(&cuDevice, devID));
+ 	printf("\nPicking device No. %d\n", cuda_device_id);
+
+	CUCHECK(cuDeviceGet(&cuDevice, cuda_device_id));
 
 	char name[128];
-	CUCHECK(cuDeviceGetName(name, sizeof(name), devID));
+	CUCHECK(cuDeviceGetName(name, sizeof(name), cuda_device_id));
 	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), cuDevice, name);
 	printf("creating CUDA Ctx\n");
 
@@ -1157,7 +1169,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		ctx->is_contig_supported = FAILURE;
-		if(pp_init_gpu(ctx, ctx->buff_size)) {
+		if(pp_init_gpu(ctx, ctx->buff_size, user_param->cuda_device_id)) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			return FAILURE;
 		}
@@ -1231,7 +1243,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 
 	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
+#ifdef HAVE_CUDA
 	if (!user_param->use_cuda) {
+#endif
 		srand(time(NULL));
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
@@ -1240,8 +1254,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 				((char*)ctx->buf[qp_index])[i] = (char)rand();
 			}
 		}
+#ifdef HAVE_CUDA
 	}
-
+#endif
 	return SUCCESS;
 }
 
