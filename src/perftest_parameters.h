@@ -520,7 +520,7 @@ struct perftest_parameters {
 	uint32_t			vlan_pcp;
 	void 				(*print_eth_func)(void*);
 	struct counter_context		*counter_ctx;
-
+	int 				disable_pcir;
 };
 
 struct report_options {

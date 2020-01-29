@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[5.61],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[5.62],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -242,6 +242,26 @@ AC_TRY_LINK([
 AM_CONDITIONAL([HAVE_SNIFFER],[test "x$HAVE_SNIFFER" = "xyes"])
 if [test $HAVE_SNIFFER = yes] && [test $HAVE_VERBS_EXP = no]; then
         AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
+fi
+
+CPU_IS_RO_COMPLIANT=yes
+# Actually this is check for being affected by a known issue
+# with Intel CPUs:
+# https://lore.kernel.org/patchwork/patch/820922/
+intel_no_ro_devices="6f01 6f02 6f03 6f04 6f05 6f06 6f07 6f08 6f09 6f0a 6f0b 6f0c 6f0d 6f0e 2f01 2f02 2f03 2f04 2f05 2f06 2f07 2f08 2f09 2f0a 2f0b 2f0c 2f0d 2f0e"
+for cpu_num in $intel_no_ro_devices; do
+	ro_nonsupported=$(lspci -nn | grep -i 8086:$cpu_num)
+	if [ test "$ro_nonsupported" ]; then
+		CPU_IS_RO_COMPLIANT=no
+	fi
+done
+
+AC_TRY_LINK([
+#include <infiniband/verbs_exp.h>],
+        [int x = IBV_EXP_ACCESS_RELAXED_ORDERING;],[HAVE_RO=yes], [HAVE_RO=no])
+AM_CONDITIONAL([HAVE_RO],[test "x$HAVE_RO" = "xyes"])
+if [test $HAVE_RO = yes] && [test "x$CPU_IS_RO_COMPLIANT" = "xyes"] && [test $HAVE_VERBS_EXP = yes]; then
+        AC_DEFINE([HAVE_RO], [1], [Enable Relaxed Ordering])
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],

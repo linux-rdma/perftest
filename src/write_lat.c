@@ -84,6 +84,12 @@ int main(int argc, char *argv[])
 		user_param.num_of_qps *= 2;
 	}
 
+	/* In case of ib_write_lat, PCI relaxed ordering should be disabled since we're polling for data change
+	 * of last packet so in case of relaxed odering we might get the last packet in wrong order thus the test
+	 * would be incorrect
+	 */
+	user_param.disable_pcir = 1;
+
 	/* Finding the IB device selected (or defalut if no selected). */
 	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {

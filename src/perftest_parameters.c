@@ -494,6 +494,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
 
+		#if defined HAVE_RO
+		printf("      --disable_pcie_relaxed");
+		printf(" Disable PCIe relaxed ordering\n");
+		#endif
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
@@ -743,6 +747,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->flows_burst		= 1;
 	user_param->perform_warm_up	= 0;
 	user_param->use_ooo		= 0;
+	user_param->disable_pcir	= 0;
 }
 
 /******************************************************************************
@@ -1875,6 +1880,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int dont_xchg_versions_flag = 0;
 	static int use_exp_flag = 0;
 	static int use_cuda_flag = 0;
+	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
@@ -2032,7 +2038,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
 			{ .name = "vlan_en",            .has_arg = 0, .flag = &vlan_en, .val = 1 },
 			{ .name = "vlan_pcp",		.has_arg = 1, .flag = &vlan_pcp_flag, .val = 1 },
-
+			#if defined HAVE_RO
+			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
+			#endif
 			#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
 			{ .name = "use_ooo",		.has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
@@ -2541,6 +2549,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	if (use_cuda_flag) {
 		user_param->use_cuda = 1;
 	}
+
+	if (disable_pcir_flag) {
+		user_param->disable_pcir = 1;
+	}
+
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}
@@ -2861,7 +2874,11 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf(" Dual-port       : %s\t\tDevice         : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
 	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
 	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
-
+	#ifdef HAVE_RO
+	printf(" PCIe relax order: %s\n", user_param->disable_pcir ? "OFF"  : "ON");
+	#else
+	printf(" PCIe relax order: %s\n", "Unsupported");
+	#endif
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
 	}

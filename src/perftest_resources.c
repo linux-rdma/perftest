@@ -1599,7 +1599,11 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		exp_flags |= IBV_EXP_ACCESS_REMOTE_ATOMIC;
 		#endif
 	}
-
+	#ifdef HAVE_RO
+	if (user_param->disable_pcir == 0) {
+		flags |= IBV_EXP_ACCESS_RELAXED_ORDERING;
+	}
+	#endif
 	/* Allocating Memory region and assigning our buffer to it. */
 	#ifdef HAVE_VERBS_EXP
 	if (ctx->is_contig_supported == SUCCESS || user_param->use_odp) {
