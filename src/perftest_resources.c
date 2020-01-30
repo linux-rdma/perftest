@@ -1347,8 +1347,8 @@ int verify_params_with_device_context(struct ibv_context *context,
 	{
 		if (!user_param->use_old_post_send)
 		{
-			fprintf(stderr, " ConnectX-3 and ConnectX-3 Pro don't support new post send API!\n");
-			fprintf(stderr, " Fall back to old post send API\n");
+			fprintf(stderr, " Warning: ConnectX-3 and ConnectX-3 Pro don't support WR postsend API!\n");
+			fprintf(stderr, " Warning: Falling back to ibv_post_send() API\n");
 			user_param->use_old_post_send = 1;
 		}
 	}
