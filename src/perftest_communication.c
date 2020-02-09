@@ -2321,7 +2321,7 @@ int rdma_cm_connect_events(struct pingpong_context *ctx,
 		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
 		if (rc) {
 			error_message = "Failed to handle RDMA CM event.";
-			goto error;
+			goto ack;
 		}
 
 		rc = rdma_ack_cm_event(event);
@@ -2332,7 +2332,8 @@ int rdma_cm_connect_events(struct pingpong_context *ctx,
 	}
 
 	return rc;
-
+ack:
+	rdma_ack_cm_event(event);
 error:
 	return error_handler(error_message);
 }
@@ -2374,7 +2375,7 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
 		if (rc) {
 			error_message = "Failed to handle RDMA CM event.";
-			goto error;
+			goto ack;
 		}
 
 		rc = rdma_ack_cm_event(event);
@@ -2385,7 +2386,8 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 	}
 
 	return rc;
-
+ack:
+	rdma_ack_cm_event(event);
 error:
 	return error_handler(error_message);
 }
