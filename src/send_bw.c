@@ -540,7 +540,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Failed to close connection between server and client\n");
 		fprintf(stderr," Trying to close this side resources\n");
 	}
-	user_param.work_rdma_cm = OFF;
+
 	/* Destroy all test resources, including Mcast if exists */
 	if (send_destroy_ctx(&ctx,&user_param,&mcg_params)) {
 		fprintf(stderr,"Couldn't destroy all SEND resources\n");
