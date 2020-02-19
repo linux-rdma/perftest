@@ -471,8 +471,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
 		#ifdef HAVE_CUDA
-		printf("      --use_cuda ");
-		printf(" Use CUDA lib for GPU-Direct testing.\n");
+		printf("      --use_cuda=<cuda device id>");
+		printf(" Use CUDA secific device for GPU-Direct testing\n");
 		#endif
 
 		printf("      --use_hugepages ");
@@ -482,6 +482,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (tst == BW || tst == LAT_BY_BW) {
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
+
+		printf("      --disable_pcie_relaxed");
+		printf(" Disable PCIe relaxed ordering\n");
 
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
@@ -667,7 +670,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
 	user_param->output		= -1;
+#ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
+	user_param->cuda_device_id		= 0;
+#endif
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -722,6 +728,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->flows_burst		= 1;
 	user_param->perform_warm_up	= 0;
 	user_param->use_ooo		= 0;
+	user_param->disable_pcir	= 0;
 }
 
 /******************************************************************************
@@ -1805,7 +1812,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
+#ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
+#endif
+	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
@@ -1849,90 +1859,92 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	while (1) {
 		static const struct option long_options[] = {
-			{.name = "port",		.has_arg = 1, .val = 'p' },
-			{.name = "ib-dev",		.has_arg = 1, .val = 'd' },
-			{.name = "ib-port",		.has_arg = 1, .val = 'i' },
-			{.name = "mtu",		.has_arg = 1, .val = 'm' },
-			{.name = "size",		.has_arg = 1, .val = 's' },
-			{.name = "iters",		.has_arg = 1, .val = 'n' },
-			{.name = "tx-depth",		.has_arg = 1, .val = 't' },
-			{.name = "qp-timeout",		.has_arg = 1, .val = 'u' },
-			{.name = "sl",			.has_arg = 1, .val = 'S' },
-			{.name = "gid-index",		.has_arg = 1, .val = 'x' },
-			{.name = "all",		.has_arg = 0, .val = 'a' },
-			{.name = "CPU-freq",		.has_arg = 0, .val = 'F' },
-			{.name = "connection",		.has_arg = 1, .val = 'c' },
-			{.name = "qp",			.has_arg = 1, .val = 'q' },
-			{.name = "events",		.has_arg = 0, .val = 'e' },
-			{.name = "vector",		.has_arg = 1, .val = 'X' },
-			{.name = "inline_size",	.has_arg = 1, .val = 'I' },
-			{.name = "outs",		.has_arg = 1, .val = 'o' },
-			{.name = "mcg",		.has_arg = 0, .val = 'g' },
-			{.name = "comm_rdma_cm",	.has_arg = 0, .val = 'z' },
-			{.name = "rdma_cm",		.has_arg = 0, .val = 'R' },
-			{.name = "tos",		.has_arg = 1, .val = 'T' },
-			{.name = "hop_limit",		.has_arg = 1, .val = 'L' },
-			{.name = "help",		.has_arg = 0, .val = 'h' },
-			{.name = "MGID",		.has_arg = 1, .val = 'M' },
-			{.name = "rx-depth",		.has_arg = 1, .val = 'r' },
-			{.name = "bidirectional",	.has_arg = 0, .val = 'b' },
-			{.name = "cq-mod",		.has_arg = 1, .val = 'Q' },
-			{.name = "noPeak",		.has_arg = 0, .val = 'N' },
-			{.name = "version",		.has_arg = 0, .val = 'V' },
-			{.name = "report-cycles",	.has_arg = 0, .val = 'C' },
-			{.name = "report-histogrm",	.has_arg = 0, .val = 'H' },
-			{.name = "report-unsorted",	.has_arg = 0, .val = 'U' },
-			{.name = "atomic_type",	.has_arg = 1, .val = 'A' },
-			{.name = "dualport",		.has_arg = 0, .val = 'O' },
-			{.name = "post_list",		.has_arg = 1, .val = 'l' },
-			{.name = "duration",		.has_arg = 1, .val = 'D' },
-			{.name = "margin",		.has_arg = 1, .val = 'f' },
-			{.name = "source_mac",		.has_arg = 1, .val = 'B' },
-			{.name = "dest_mac",		.has_arg = 1, .val = 'E' },
-			{.name = "dest_ip",		.has_arg = 1, .val = 'J' },
-			{.name = "source_ip",		.has_arg = 1, .val = 'j' },
-			{.name = "dest_port",		.has_arg = 1, .val = 'K' },
-			{.name = "source_port",	.has_arg = 1, .val = 'k' },
-			{.name = "ethertype",		.has_arg = 1, .val = 'Y' },
-			{.name = "limit_bw",		.has_arg = 1, .val = 'w' },
-			{.name = "limit_msgrate",	.has_arg = 1, .val = 'y' },
-			{.name = "server",		.has_arg = 0, .val = 'Z' },
-			{.name = "client",		.has_arg = 0, .val = 'P' },
-			{.name = "mac_fwd",		.has_arg = 0, .val = 'v' },
-			{.name = "use_rss",		.has_arg = 0, .val = 'G' },
-			{.name = "report-counters",	.has_arg = 1, .val = 'W' },
-			{.name = "force-link",		.has_arg = 1, .flag = &force_link_flag, .val = 1},
-			{.name = "remote_mac",		.has_arg = 1, .flag = &remote_mac_flag, .val = 1 },
-			{.name = "local_mac",		.has_arg = 1, .flag = &local_mac_flag, .val = 1 },
-			{.name = "remote_ip",		.has_arg = 1, .flag = &remote_ip_flag, .val = 1 },
-			{.name = "local_ip",		.has_arg = 1, .flag = &local_ip_flag, .val = 1 },
-			{.name = "remote_port",	.has_arg = 1, .flag = &remote_port_flag, .val = 1 },
-			{.name = "local_port",		.has_arg = 1, .flag = &local_port_flag, .val = 1 },
-			{.name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
-			{.name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
-			{.name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
-			{.name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
-			{.name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
-			{.name = "pkey_index",		.has_arg = 1, .flag = &pkey_flag, .val = 1},
-			{.name = "inline_recv",	.has_arg = 1, .flag = &inline_recv_flag, .val = 1},
-			{.name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
-			{.name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
-			{.name = "typical_pkt_size",	.has_arg = 1, .flag = &typical_pkt_size_flag, .val = 1},
-			{.name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
-			{.name = "rate_limit_type",	.has_arg = 1, .flag = &rate_limit_type_flag, .val = 1},
-			{.name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
-			{.name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
-			{.name = "cpu_util",		.has_arg = 0, .flag = &cpu_util_flag, .val = 1},
-			{.name = "latency_gap",	.has_arg = 1, .flag = &latency_gap_flag, .val = 1},
-			{.name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
-			{.name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
-			{.name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
-			{.name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
-			{.name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
-			{.name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
-			{.name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
+			{ .name = "port",		.has_arg = 1, .val = 'p' },
+			{ .name = "ib-dev",		.has_arg = 1, .val = 'd' },
+			{ .name = "ib-port",		.has_arg = 1, .val = 'i' },
+			{ .name = "mtu",		.has_arg = 1, .val = 'm' },
+			{ .name = "size",		.has_arg = 1, .val = 's' },
+			{ .name = "iters",		.has_arg = 1, .val = 'n' },
+			{ .name = "tx-depth",		.has_arg = 1, .val = 't' },
+			{ .name = "qp-timeout",		.has_arg = 1, .val = 'u' },
+			{ .name = "sl",			.has_arg = 1, .val = 'S' },
+			{ .name = "gid-index",		.has_arg = 1, .val = 'x' },
+			{ .name = "all",		.has_arg = 0, .val = 'a' },
+			{ .name = "CPU-freq",		.has_arg = 0, .val = 'F' },
+			{ .name = "connection",		.has_arg = 1, .val = 'c' },
+			{ .name = "qp",			.has_arg = 1, .val = 'q' },
+			{ .name = "events",		.has_arg = 0, .val = 'e' },
+			{ .name = "vector",		.has_arg = 1, .val = 'X' },
+			{ .name = "inline_size",	.has_arg = 1, .val = 'I' },
+			{ .name = "outs",		.has_arg = 1, .val = 'o' },
+			{ .name = "mcg",		.has_arg = 0, .val = 'g' },
+			{ .name = "comm_rdma_cm",	.has_arg = 0, .val = 'z' },
+			{ .name = "rdma_cm",		.has_arg = 0, .val = 'R' },
+			{ .name = "tos",		.has_arg = 1, .val = 'T' },
+			{ .name = "hop_limit",		.has_arg = 1, .val = 'L' },
+			{ .name = "help",		.has_arg = 0, .val = 'h' },
+			{ .name = "MGID",		.has_arg = 1, .val = 'M' },
+			{ .name = "rx-depth",		.has_arg = 1, .val = 'r' },
+			{ .name = "bidirectional",	.has_arg = 0, .val = 'b' },
+			{ .name = "cq-mod",		.has_arg = 1, .val = 'Q' },
+			{ .name = "noPeak",		.has_arg = 0, .val = 'N' },
+			{ .name = "version",		.has_arg = 0, .val = 'V' },
+			{ .name = "report-cycles",	.has_arg = 0, .val = 'C' },
+			{ .name = "report-histogrm",	.has_arg = 0, .val = 'H' },
+			{ .name = "report-unsorted",	.has_arg = 0, .val = 'U' },
+			{ .name = "atomic_type",	.has_arg = 1, .val = 'A' },
+			{ .name = "dualport",		.has_arg = 0, .val = 'O' },
+			{ .name = "post_list",		.has_arg = 1, .val = 'l' },
+			{ .name = "duration",		.has_arg = 1, .val = 'D' },
+			{ .name = "margin",		.has_arg = 1, .val = 'f' },
+			{ .name = "source_mac",		.has_arg = 1, .val = 'B' },
+			{ .name = "dest_mac",		.has_arg = 1, .val = 'E' },
+			{ .name = "dest_ip",		.has_arg = 1, .val = 'J' },
+			{ .name = "source_ip",		.has_arg = 1, .val = 'j' },
+			{ .name = "dest_port",		.has_arg = 1, .val = 'K' },
+			{ .name = "source_port",	.has_arg = 1, .val = 'k' },
+			{ .name = "ethertype",		.has_arg = 1, .val = 'Y' },
+			{ .name = "limit_bw",		.has_arg = 1, .val = 'w' },
+			{ .name = "limit_msgrate",	.has_arg = 1, .val = 'y' },
+			{ .name = "server",		.has_arg = 0, .val = 'Z' },
+			{ .name = "client",		.has_arg = 0, .val = 'P' },
+			{ .name = "mac_fwd",		.has_arg = 0, .val = 'v' },
+			{ .name = "use_rss",		.has_arg = 0, .val = 'G' },
+			{ .name = "report-counters",	.has_arg = 1, .val = 'W' },
+			{ .name = "force-link",		.has_arg = 1, .flag = &force_link_flag, .val = 1},
+			{ .name = "remote_mac",		.has_arg = 1, .flag = &remote_mac_flag, .val = 1 },
+			{ .name = "local_mac",		.has_arg = 1, .flag = &local_mac_flag, .val = 1 },
+			{ .name = "remote_ip",		.has_arg = 1, .flag = &remote_ip_flag, .val = 1 },
+			{ .name = "local_ip",		.has_arg = 1, .flag = &local_ip_flag, .val = 1 },
+			{ .name = "remote_port",	.has_arg = 1, .flag = &remote_port_flag, .val = 1 },
+			{ .name = "local_port",		.has_arg = 1, .flag = &local_port_flag, .val = 1 },
+			{ .name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
+			{ .name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
+			{ .name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
+			{ .name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
+			{ .name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
+			{ .name = "pkey_index",		.has_arg = 1, .flag = &pkey_flag, .val = 1},
+			{ .name = "inline_recv",	.has_arg = 1, .flag = &inline_recv_flag, .val = 1},
+			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
+			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
+			{ .name = "typical_pkt_size",	.has_arg = 1, .flag = &typical_pkt_size_flag, .val = 1},
+			{ .name = "rate_limit",		.has_arg = 1, .flag = &rate_limit_flag, .val = 1},
+			{ .name = "rate_limit_type",	.has_arg = 1, .flag = &rate_limit_type_flag, .val = 1},
+			{ .name = "rate_units",		.has_arg = 1, .flag = &rate_units_flag, .val = 1},
+			{ .name = "output",		.has_arg = 1, .flag = &verbosity_output_flag, .val = 1},
+			{ .name = "cpu_util",		.has_arg = 0, .flag = &cpu_util_flag, .val = 1},
+			{ .name = "latency_gap",	.has_arg = 1, .flag = &latency_gap_flag, .val = 1},
+			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
+			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
+			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
+			#ifdef HAVE_CUDA
+			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
+			#endif
+			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
+			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
+			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
 			#ifdef HAVE_IPV6
-			{.name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
+			{ .name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
 			#endif
 			{.name = "report-per-port", .has_arg = 0, .flag = &report_per_port_flag, .val = 1},
 			{.name = "odp", .has_arg = 0, .flag = &odp_flag, .val = 1},
@@ -1954,7 +1966,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "perform_warm_up", .has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
 			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
 			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
-
+			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
 			#if defined HAVE_OOO_ATTR
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
@@ -2289,6 +2301,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					latency_gap_flag = 0;
 				}
+#ifdef HAVE_CUDA
+				if (use_cuda_flag) {
+					user_param->use_cuda = 1;
+					user_param->cuda_device_id = strtol(optarg, NULL, 0);
+					if (user_param->cuda_device_id < 0)
+					{
+						fprintf(stderr, "Invalid CUDA device %d\n", user_param->cuda_device_id);
+						return FAILURE;
+					}
+					use_cuda_flag = 0;
+				}
+#endif
 				if (flow_label_flag) {
 					user_param->flow_label = strtol(optarg,NULL,0);
 					if (user_param->flow_label < 0) {
@@ -2445,9 +2469,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->use_res_domain = 1;
 	}
 
-	if (use_cuda_flag) {
-		user_param->use_cuda = 1;
+	if (disable_pcir_flag) {
+		user_param->disable_pcir = 1;
 	}
+
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}
@@ -2768,6 +2793,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf(" Dual-port       : %s\t\tDevice         : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
 	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
 	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
+	printf(" PCIe relax order: %s\n", user_param->disable_pcir ? "OFF"  : "ON");
 
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
@@ -2853,7 +2879,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	int run_inf_bi_factor;
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
-	long num_of_calculated_iters = user_param->iters;
+	uint64_t num_of_calculated_iters = user_param->iters;
 
 	int free_my_bw_rep = 0;
 	if (user_param->test_method == RUN_INFINITELY)

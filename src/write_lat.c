@@ -80,6 +80,12 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+	/* In case of ib_write_bw, PCI relaxed ordering should be disabled since we're polling for data change
+	 * of last packet so in case of relaxed odering we might get the last packet in wrong order thus the test
+	 * would be incorrect
+	 */
+	user_param.disable_pcir = 1;
+
 	if (user_param.use_xrc || user_param.connection_type == DC) {
 		user_param.num_of_qps *= 2;
 	}

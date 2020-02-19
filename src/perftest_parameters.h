@@ -448,7 +448,10 @@ struct perftest_parameters {
 	int				buff_size;
 	int             		pkey_index;
 	int				raw_qos;
+#ifdef HAVE_CUDA
 	int				use_cuda;
+	int				cuda_device_id;
+#endif
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
@@ -503,8 +506,8 @@ struct perftest_parameters {
 	int				vlan_en;
 	uint32_t			vlan_pcp;
 	void 				(*print_eth_func)(void*);
+	int				disable_pcir;
 	struct counter_context		*counter_ctx;
-
 };
 
 struct report_options {

@@ -1215,6 +1215,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	}
 
+	if (user_param->disable_pcir == 0) {
+		flags |= IBV_ACCESS_RELAXED_ORDERING;
+	}
 	/* Allocating Memory region and assigning our buffer to it. */
 	ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
 
