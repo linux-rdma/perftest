@@ -1869,7 +1869,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 				attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
 				attr->ah_attr.grh.hop_limit = 0xFF;
 				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
-				attr->ah_attr.sl = 0;
+				attr->ah_attr.sl = user_param->sl;
 			}
 			if (is_dc_server_side) {
 				attr->min_rnr_timer = 12;
@@ -1881,7 +1881,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			} //DCT
 			else {
 				attr->path_mtu = user_param->curr_mtu;
-				flags |= IBV_QP_PATH_MTU;
+				flags |= IBV_QP_AV | IBV_QP_PATH_MTU;
 			} //DCI
 		}
 		else
