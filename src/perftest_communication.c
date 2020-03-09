@@ -1669,6 +1669,18 @@ void exchange_versions(struct perftest_comm *user_comm, struct perftest_paramete
 /******************************************************************************
  *
  ******************************************************************************/
+void check_version_compatibility(struct perftest_parameters *user_param)
+{
+	if ((atof(user_param->rem_version) < 5.70))
+	{
+		fprintf(stderr, "Current implementation is not compatible with versions older than 5.70\n");
+		exit(1);
+	}
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters *user_param)
 {
 	int rem_cycle_buffer = 0;

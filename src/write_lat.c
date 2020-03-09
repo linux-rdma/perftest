@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 	}
 
 	exchange_versions(&user_comm, &user_param);
-
+	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
 	/* See if MTU and link type are valid and supported. */
@@ -211,10 +211,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* Set up connection one more time to send qpn properly for DC */
-	if (set_up_connection(&ctx,&user_param,my_dest)) {
-		fprintf(stderr," Unable to set up socket connection\n");
-		return FAILURE;
+	if (user_param.connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(&ctx,&user_param,my_dest)) {
+			fprintf(stderr," Unable to set up socket connection\n");
+			return FAILURE;
+		}
 	}
 
 	/* Print this machine QP information */

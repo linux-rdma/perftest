@@ -409,6 +409,14 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
  */
 void exchange_versions (struct perftest_comm *user_comm, struct perftest_parameters *user_param);
 
+/* check_dc_compatibility.
+ *
+ * Description :
+ * 	Check compatibility between old and new implementation.
+ *
+ */
+void check_version_compatibility(struct perftest_parameters *user_param);
+
 /* check_sys_data.
  *
  * Description :

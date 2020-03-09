@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
 	}
 
 	exchange_versions(&user_comm, &user_param);
-
+	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
 	/* See if MTU and link type are valid and supported. */
