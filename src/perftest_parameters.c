@@ -920,9 +920,18 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	/* we disable cq_mod for large message size to prevent from incorrect BW calculation
+	 *    (and also because it is not needed)
+	 * we don't disable cq_mod for UD because it doesn't support large enough messages
+	 * we don't disable cq_mod for RUN_ALL mode because we cannot change it in accordance to
+	 *    message size during RUN_ALL run
+	 * we don't disable cq_mod for use_event, because having a lot of processes with use_event leads
+	 *     to bugs (probably due to issues with events processing, thus we have less events)
+	 */
 	if (user_param->size > MSG_SIZE_CQ_MOD_LIMIT &&
 		user_param->connection_type != UD &&
-		user_param->test_method != RUN_ALL)
+		user_param->test_method != RUN_ALL &&
+		!user_param->use_event)
 	{
 		if (!user_param->req_cq_mod) // user didn't request any cq_mod
 		{
