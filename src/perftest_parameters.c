@@ -973,6 +973,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
+	if (user_param->use_srq && user_param->num_of_qps > user_param->rx_depth) {
+		printf(RESULT_LINE);
+		printf(" Using SRQ depth should be greater than number of QPs.\n");
+		exit (1);
+	}
+
 	if (user_param->dualport == ON) {
 
 		user_param->num_of_qps *= 2;
@@ -990,7 +996,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		#ifdef HAVE_IBV_WR_API
+#ifdef HAVE_IBV_WR_API
 		printf(RESULT_LINE);
 		fprintf(stderr, " Post list greater than 1 is not supported with new WR API\n");
 		exit(1);
