@@ -1855,53 +1855,32 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 		attr->ah_attr.port_num = user_param->ib_port;
 
 	if (user_param->connection_type != RawEth) {
-		if (user_param->connection_type == DC)
-		{
-			attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
-			attr->ah_attr.sl = user_param->sl;
+		attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
+		attr->ah_attr.sl = user_param->sl;
 
-			if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
+		if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
 				|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX) && user_param->dualport)) {
 
-				attr->ah_attr.is_global = 0;
-			} else {
-				attr->ah_attr.is_global  = 1;
-				attr->ah_attr.grh.dgid = dest->gid;
-				attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
-				attr->ah_attr.grh.hop_limit = 0xFF;
-				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
-			}
-			if (is_dc_server_side) {
-				attr->min_rnr_timer = 12;
-				attr->path_mtu = user_param->curr_mtu;
+			attr->ah_attr.is_global = 0;
+		} else {
 
-				flags |= IBV_QP_AV |
-					IBV_QP_PATH_MTU |
-					IBV_QP_MIN_RNR_TIMER;
-			} //DCT
-			else {
+			attr->ah_attr.is_global  = 1;
+			attr->ah_attr.grh.dgid = dest->gid;
+			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
+			attr->ah_attr.grh.hop_limit = 0xFF;
+			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
+		}
+		if (user_param->connection_type != UD && user_param->connection_type != SRD) {
+			if (user_param->connection_type == DC) {
 				attr->path_mtu = user_param->curr_mtu;
 				flags |= IBV_QP_AV | IBV_QP_PATH_MTU;
-			} //DCI
-		}
-		else
-		{
-			attr->ah_attr.dlid = (user_param->dlid) ? user_param->dlid : dest->lid;
-			attr->ah_attr.sl = user_param->sl;
-
-			if (((attr->ah_attr.port_num == user_param->ib_port) && (user_param->gid_index == DEF_GID_INDEX))
-					|| ((attr->ah_attr.port_num == user_param->ib_port2) && (user_param->gid_index2 == DEF_GID_INDEX) && user_param->dualport)) {
-
-				attr->ah_attr.is_global = 0;
-			} else {
-
-				attr->ah_attr.is_global  = 1;
-				attr->ah_attr.grh.dgid = dest->gid;
-				attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
-				attr->ah_attr.grh.hop_limit = 0xFF;
-				attr->ah_attr.grh.traffic_class = user_param->traffic_class;
+				if (is_dc_server_side)
+				{
+					attr->min_rnr_timer = 12;
+					flags |= IBV_QP_MIN_RNR_TIMER;
+				} //DCT
 			}
-			if (user_param->connection_type != UD && user_param->connection_type != SRD) {
+			else {
 				attr->path_mtu = user_param->curr_mtu;
 				attr->dest_qp_num = dest->qpn;
 				attr->rq_psn = dest->psn;
