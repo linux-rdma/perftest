@@ -996,16 +996,25 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		if (!user_param->req_cq_mod)
+		if (user_param->tst == BW || user_param->tst == LAT_BY_BW)
 		{
-			user_param->cq_mod = user_param->post_list;
-			printf(RESULT_LINE);
-			printf("Post List requested - CQ moderation will be the size of the post list\n");
+			if (!user_param->req_cq_mod)
+			{
+				user_param->cq_mod = user_param->post_list;
+				printf(RESULT_LINE);
+				printf("Post List requested - CQ moderation will be the size of the post list\n");
+			}
+			else if ((user_param->post_list % user_param->cq_mod) != 0)
+			{
+				printf(RESULT_LINE);
+				fprintf(stderr, "Post list size must be a multiple of CQ moderation\n");
+				exit(1);
+			}
 		}
-		else if ((user_param->post_list % user_param->cq_mod) != 0)
+		else
 		{
 			printf(RESULT_LINE);
-			fprintf(stderr, "Post list size must be a multiple of CQ moderation\n");
+			fprintf(stderr, "Post list is supported in BW tests only\n");
 			exit(1);
 		}
 	}
