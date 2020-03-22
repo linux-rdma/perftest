@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[5.84],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[5.85],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -154,6 +154,14 @@ AC_TRY_LINK([
 AM_CONDITIONAL([HAVE_SNIFFER],[test "x$HAVE_SNIFFER" = "xyes"])
 if [test $HAVE_SNIFFER = yes]; then
         AC_DEFINE([HAVE_SNIFFER], [1], [Enable Sniffer Flow Specification])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],
+        [int x = IBV_ACCESS_RELAXED_ORDERING;],[HAVE_RO=yes], [HAVE_RO=no])
+AM_CONDITIONAL([HAVE_RO],[test "x$HAVE_RO" = "xyes"])
+if [test $HAVE_RO = yes]; then
+        AC_DEFINE([HAVE_RO], [1], [Enable Relaxed Ordering])
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
