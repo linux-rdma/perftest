@@ -2257,10 +2257,6 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 		num_of_qps /= 2;
 		xrc_offset = num_of_qps;
 	}
-	#ifdef HAVE_IBV_WR_API
-	if (user_param->connection_type != RawEth)
-		ctx_post_send_work_request_func_pointer(ctx, user_param);
-	#endif
 
 	for (i = 0; i < num_of_qps ; i++) {
 		if (user_param->connection_type == DC)
@@ -2675,8 +2671,12 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
 
-	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
 
+	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
 		duration_param->state = START_STATE;
@@ -2917,6 +2917,11 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int			recv_flows_burst = 0;
 	int			address_flows_offset =0;
 
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
@@ -3104,6 +3109,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int 			return_value = 0;
 	int 			single_thread_handler;
 
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
@@ -3210,6 +3220,11 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	uint64_t                *ccnt_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 	int 			return_value = 0;
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
 
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
@@ -3336,6 +3351,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int 			before_first_rx = ON;
 	int 			size_per_qp = (user_param->use_srq) ? user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	int 			return_value = 0;
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
 
 	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -3647,6 +3667,11 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 		end_cycle, start_gap=0;
 
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 
@@ -3746,6 +3771,12 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	int 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 	int 		total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 	end_cycle, start_gap=0;
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 
@@ -3832,6 +3863,12 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	cycles_t 		end_cycle, start_gap=0;
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	if (user_param->connection_type != RawEth) {
 		ctx->wr[0].sg_list->length = user_param->size;
 		ctx->wr[0].send_flags = 0;
@@ -3997,6 +4034,11 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
 	int wc_id;
 
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ALLOCATE(wc, struct ibv_wc, user_param->burst_size);
 
 	/* main loop for polling */
@@ -4074,6 +4116,12 @@ int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters 
 	int			burst_iter = 0;
 	int			is_sending_burst = 0;
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
 	ALLOCATE(wc, struct ibv_wc, user_param->burst_size);
 
 	tot_iters = (uint64_t)user_param->iters;
