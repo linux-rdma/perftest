@@ -527,38 +527,45 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	return 0;
 }
 
-//TODO: Move to another gid
-#ifdef HAVE_GID_ATTR
+// declaration is copied from rdma-core, since it is made private there.
+enum ibv_gid_type
+{
+	IBV_GID_TYPE_IB_ROCE_V1,
+	IBV_GID_TYPE_ROCE_V2,
+};
+
+int ibv_query_gid_type(struct ibv_context *context, uint8_t port_num,
+	unsigned int index, enum ibv_gid_type *type);
+
+
 enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
 
 struct roce_version_sorted_enum {
-	enum ibv_exp_roce_gid_type type;
+	enum ibv_gid_type type;
 	int rate;
 };
 
 /* This struct defines which RoCE version is more important for default usage */
-struct roce_version_sorted_enum roce_versions_sorted [] = {
-	{IBV_EXP_IB_ROCE_V1_GID_TYPE, 1},
-	{IBV_EXP_ROCE_V2_GID_TYPE, 2},
-	{IBV_EXP_ROCE_V1_5_GID_TYPE, 3}
+struct roce_version_sorted_enum roce_versions_sorted[] = {
+	{IBV_GID_TYPE_IB_ROCE_V1, 1},
+	{IBV_GID_TYPE_ROCE_V2, 2},
 };
 
-int find_roce_version_rate (int roce_ver)
-{
+int find_roce_version_rate(enum ibv_gid_type roce_ver) {
 	int i;
 	int arr_len = GET_ARRAY_SIZE(roce_versions_sorted);
 
-	for (i = 0; i < arr_len; i++) {
+	for (i = 0; i < arr_len; i++)
+	{
 		if (roce_versions_sorted[i].type == roce_ver)
 			return roce_versions_sorted[i].rate;
 	}
-
 	return -1;
 }
 
-/* RoCE V1.5 > V2 > V1
+/* RoCE V2 > V1
  * other RoCE versions will be ignored until added to roce_versions_sorted array */
-static int check_better_roce_version (int roce_ver, int roce_ver_rival)
+static int check_better_roce_version(enum ibv_gid_type roce_ver, enum ibv_gid_type roce_ver_rival)
 {
 	int roce_ver_rate = find_roce_version_rate(roce_ver);
 	int roce_ver_rate_rival = find_roce_version_rate(roce_ver_rival);
@@ -570,7 +577,6 @@ static int check_better_roce_version (int roce_ver, int roce_ver_rival)
 	else
 		return EQUAL;
 }
-#endif
 
 static int get_best_gid_index (struct pingpong_context *ctx,
 		  struct perftest_parameters *user_param,
@@ -596,24 +602,18 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			gid_index = i;
 		else if (!is_ipv4_rival && is_ipv4 && user_param->ipv6)
 			gid_index = i;
-#ifdef HAVE_GID_ATTR
 		else {
-			int roce_version, roce_version_rival;
-			struct ibv_exp_gid_attr gid_attr;
+			enum ibv_gid_type roce_version, roce_version_rival;
 
-			gid_attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE;
-			if (ibv_exp_query_gid_attr(ctx->context, port, gid_index, &gid_attr))
+			if (ibv_query_gid_type(ctx->context, port, gid_index, &roce_version))
 				continue;
-			roce_version = gid_attr.type;
 
-			if (ibv_exp_query_gid_attr(ctx->context, port, i, &gid_attr))
+			if (ibv_query_gid_type(ctx->context, port, i, &roce_version_rival))
 				continue;
-			roce_version_rival = gid_attr.type;
 
 			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
-				gid_index = i;
+			 	gid_index = i;
 		}
-#endif
 	}
 
 	return gid_index;
