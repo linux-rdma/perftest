@@ -3675,11 +3675,22 @@ cleaning:
 static inline int post_send_method(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
+	#ifdef HAVE_VERBS_EXP
+	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
+	struct ibv_send_wr 	*bad_wr = NULL;
+	if (user_param->use_exp == 1)
+		return (ctx->exp_post_send_func_pointer)(ctx->qp[index],
+				&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
+	else
+		return (ctx->post_send_func_pointer)(ctx->qp[index],
+				&ctx->wr[index*user_param->post_list],&bad_wr);
+	#else
 	#ifdef HAVE_IBV_WR_API
 	return (*ctx->new_post_send_work_request_func_pointer)(ctx, index, user_param);
 	#else
 	struct ibv_send_wr 	*bad_wr = NULL;
 	return ibv_post_send(ctx->qp[index], &ctx->wr[index*user_param->post_list], &bad_wr);
+	#endif
 	#endif
 }
 
@@ -3695,8 +3706,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t	   	tot_iters;
 	int			err = 0;
 	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
-	struct ibv_send_wr 	*bad_wr = NULL;
 	#ifdef HAVE_ACCL_VERBS
 	int pl_index;
 	struct ibv_sge		*sg_l;
@@ -3838,14 +3847,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					ctx->qp_burst_family[index]->send_flush(ctx->qp[index]);
 				} else {
 				#endif
-					if (user_param->use_exp == 1) {
-						err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],
-						&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
-					}
-					else {
-						err = (ctx->post_send_func_pointer)(ctx->qp[index],
-							&ctx->wr[index*user_param->post_list],&bad_wr);
-					}
+					err = post_send_method(ctx, index, user_param);
 					if (err) {
 						fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
 						return_value = FAILURE;
@@ -4252,10 +4254,6 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int 			index = 0,ne;
 	int 			err = 0;
 	int			wc_id;
-	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_send_wr 	*bad_exp_wr = NULL;
-	struct ibv_send_wr 	*bad_wr = NULL;
-	#endif
 	uint64_t		*scnt_for_qp = NULL;
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
@@ -4321,14 +4319,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 					#endif
 				}
 
-				#ifdef HAVE_VERBS_EXP
-				if (user_param->use_exp == 1)
-					err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
-				else
-					err = (ctx->post_send_func_pointer)(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
-				#else
 				err = post_send_method(ctx, index, user_param);
-				#endif
 				if (err) {
 					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
 					return_value = FAILURE;
@@ -4524,10 +4515,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 	struct ibv_wc 		*wc = NULL;
 	struct ibv_wc 		*wc_tx = NULL;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
-	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_send_wr 	*bad_exp_wr      = NULL;
-	struct ibv_send_wr 	*bad_wr      = NULL;
-	#endif
 	int 			num_of_qps = user_param->num_of_qps;
 	/* This is to ensure SERVER will not start to send packets before CLIENT start the test. */
 	int 			before_first_rx = ON;
@@ -4604,16 +4591,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				if (user_param->test_type == DURATION && duration_param->state == END_STATE)
 					break;
 
-				#ifdef HAVE_VERBS_EXP
-				if (user_param->use_exp == 1)
-					err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],
-						&ctx->exp_wr[index*user_param->post_list],&bad_exp_wr);
-				else
-					err = (ctx->post_send_func_pointer)(ctx->qp[index],
-						&ctx->wr[index*user_param->post_list],&bad_wr);
-				#else
 				err = post_send_method(ctx, index, user_param);
-				#endif
+
 				if (err) {
 					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
 					return_value = FAILURE;
@@ -4861,12 +4840,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int 			poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
-	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_send_wr  *bad_exp_wr = NULL;
-	struct ibv_send_wr      *bad_wr = NULL;
-	#endif
 	struct ibv_wc           wc;
-
 	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 	int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 		end_cycle, start_gap=0;
@@ -4928,14 +4902,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 				user_param->tposted[scnt] = get_cycles();
 
 			*post_buf = (char)++scnt;
-			#ifdef HAVE_VERBS_EXP
-			if (user_param->use_exp == 1)
-				err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
-			else
-				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
-			#else
 			err = post_send_method(ctx, 0, user_param);
-			#endif
 			if (err) {
 				fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
 				return 1;
@@ -4977,10 +4944,6 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	uint64_t	scnt = 0;
 	int 		ne;
 	int		err = 0;
-	#ifdef HAVE_VERBS_EXP
-	struct 		ibv_exp_send_wr *bad_exp_wr = NULL;
-	struct 		ibv_send_wr *bad_wr = NULL;
-	#endif
 	struct 		ibv_wc wc;
 
 	int 		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
@@ -5021,14 +4984,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		if (user_param->test_type == ITERATIONS)
 			user_param->tposted[scnt++] = get_cycles();
 
-		#ifdef HAVE_VERBS_EXP
-		if (user_param->use_exp == 1)
-			err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
-		else
-			err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
-		#else
 		err = post_send_method(ctx, 0, user_param);
-		#endif
 		if (err) {
 			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
 			return 1;
@@ -5077,10 +5033,6 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			err = 0;
 	struct ibv_wc		wc;
 	struct ibv_recv_wr	*bad_wr_recv;
-	#ifdef HAVE_VERBS_EXP
-	struct ibv_exp_send_wr	*bad_exp_wr;
-	struct ibv_send_wr	*bad_wr;
-	#endif
 	int  			firstRx = 1;
 	int 			size_per_qp = (user_param->use_srq) ?
 					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
@@ -5213,14 +5165,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				break;
 
 			/* send the packet that's in index 0 on the buffer */
-			#ifdef HAVE_VERBS_EXP
-			if (user_param->use_exp == 1)
-				err = (ctx->exp_post_send_func_pointer)(ctx->qp[0],&ctx->exp_wr[0],&bad_exp_wr);
-			else
-				err = (ctx->post_send_func_pointer)(ctx->qp[0],&ctx->wr[0],&bad_wr);
-			#else
 			err = post_send_method(ctx, 0, user_param);
-			#endif
 			if (err) {
 				fprintf(stderr,"Couldn't post send: scnt=%lu \n",scnt);
 				return 1;
