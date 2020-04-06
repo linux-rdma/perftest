@@ -52,7 +52,9 @@
 #define PERFTEST_RESOURCES_H
 
 #include <infiniband/verbs.h>
+#if defined(HAVE_MLX5DV)
 #include <infiniband/mlx5dv.h>
+#endif
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
 #if defined(__FreeBSD__)
@@ -168,7 +170,9 @@ struct pingpong_context {
 	struct ibv_qp				**qp;
 	#ifdef HAVE_IBV_WR_API
 	struct ibv_qp_ex			**qpx;
+	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_ex			**dv_qp;
+	#endif
 	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
 		struct perftest_parameters *user_param);
 	#endif

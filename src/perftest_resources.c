@@ -317,7 +317,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		default:
 			fprintf(stderr, "Post send failed: unknown operation code.\n");
 		}
-
+		#ifdef HAVE_MLX5DV
 		if (qpt == IBV_QPT_DRIVER)
 		{
 			mlx5dv_wr_set_dc_addr(
@@ -326,7 +326,9 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 				ctx->r_dctn[index],
 				DC_KEY);
 		}
-		else if (qpt == IBV_QPT_UD)
+		else
+		#endif
+		if (qpt == IBV_QPT_UD)
 		{
 			ibv_wr_set_ud_addr(
 				ctx->qpx[index],
@@ -809,7 +811,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
 	#ifdef HAVE_IBV_WR_API
 	ALLOCATE(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
+	#ifdef HAVE_MLX5DV
 	ALLOCATE(ctx->dv_qp, struct mlx5dv_qp_ex*, user_param->num_of_qps);
+	#endif
 	ALLOCATE(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#endif
 	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
@@ -1571,10 +1575,12 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 	}
 	#ifdef HAVE_IBV_WR_API
 	ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
+	#ifdef HAVE_MLX5DV
 	if (user_param->connection_type == DC)
 	{
 		ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
 	}
+	#endif
 	#endif
 
 	return SUCCESS;
@@ -1599,10 +1605,12 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	enum ibv_wr_opcode opcode;
 	struct ibv_qp_init_attr attr;
 	struct ibv_qp_init_attr_ex attr_ex;
+	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_init_attr attr_dv;
+	memset(&attr_dv, 0, sizeof(attr_dv));
+	#endif
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
 	memset(&attr_ex, 0, sizeof(struct ibv_qp_init_attr_ex));
-	memset(&attr_dv, 0, sizeof(attr_dv));
 	#else
 	struct ibv_qp_init_attr attr;
 	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
@@ -1645,7 +1653,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		case RC : attr.qp_type = IBV_QPT_RC; break;
 		case UC : attr.qp_type = IBV_QPT_UC; break;
 		case UD : attr.qp_type = IBV_QPT_UD; break;
+		#ifdef HAVE_IBV_WR_API
 		case DC : attr.qp_type = IBV_QPT_DRIVER; break;
+		#endif
 		#ifdef HAVE_RAW_ETH
 		case RawEth : attr.qp_type = IBV_QPT_RAW_PACKET; break;
 		#endif
@@ -1720,6 +1730,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_IBV_WR_API
 		if (!user_param->use_old_post_send)
 		{
+			#ifdef HAVE_MLX5DV
 			if (user_param->connection_type == DC)
 			{
 				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -1741,12 +1752,11 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
 			else
-			{
+			#endif // HAVE_MLX5DV
 				qp = ibv_create_qp_ex(ctx->context, &attr_ex);
-			}
 		}
 		else
-		#endif
+		#endif // HAVE_IBV_WR_API
 			qp = ibv_create_qp(ctx->pd, &attr);
 	}
 

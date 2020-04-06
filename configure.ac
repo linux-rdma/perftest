@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[5.87],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[5.88],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -112,6 +112,7 @@ AC_TRY_LINK([],
 AM_CONDITIONAL([IS_FREEBSD],[test "x$IS_FREEBSD" = "xyes"])
 if test $IS_FREEBSD = yes; then
 	AC_DEFINE([IS_FREEBSD], [1], [OS is FreeBSD])
+	LIBMLX5=-lmlx5
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
@@ -126,11 +127,21 @@ AC_TRY_LINK([
 #include <infiniband/verbs.h>],
         [int x = IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;],[HAVE_IBV_WR_API=yes],[HAVE_IBV_WR_API=no])
 AM_CONDITIONAL([HAVE_IBV_WR_API],[test "x$HAVE_IBV_WR_API" = "xyes"])
+# TODO: Add appropriate check. Currently we consider that if rdma-core
+# has new post send, it also has ibv_query_gid_type
+if [test $HAVE_IBV_WR_API = yes]; then
+	AC_DEFINE([HAVE_GID_TYPE], [1], [Have a way to check gid type])
+fi
 if [test $HAVE_IBV_WR_API = yes] && [test $USE_IBV_WR_API = yes]; then
         AC_DEFINE([HAVE_IBV_WR_API], [1], [Have new post send API support])
 else
 	HAVE_IBV_WR_API=no
 fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
+        [int x = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;],[HAVE_MLX5DV=yes], [HAVE_MLX5DV=no])
+AM_CONDITIONAL([HAVE_MLX5DV],[test "x$HAVE_MLX5DV" = "xyes"])
 
 AC_TRY_LINK([
 #include <infiniband/verbs.h>],
@@ -211,6 +222,13 @@ AM_CONDITIONAL([HAVE_SRD], [test "x$HAVE_SRD" = "xyes"])
 if [test $HAVE_SRD = yes] && [test $HAVE_IBV_WR_API = no]; then
 	AC_DEFINE([HAVE_SRD], [1], [Have SRD support])
 	AC_SUBST([LIBEFA])
+fi
+
+AC_CHECK_LIB([mlx5], [mlx5dv_create_qp], [HAVE_MLX5DV_LIB=yes LIBMLX5=-lmlx5], [HAVE_MLX5DV_LIB=no])
+AM_CONDITIONAL([HAVE_MLX5DV_LIB], [test "x$HAVE_MLX5DV_LIB" = "xyes"])
+if [test $HAVE_MLX5DV_LIB = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_MLX5DV], [1], [Have Direct Verbs support])
+	AC_SUBST([LIBMLX5])
 fi
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"

@@ -527,7 +527,8 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	return 0;
 }
 
-// declaration is copied from rdma-core, since it is made private there.
+#ifdef HAVE_GID_TYPE
+// declaration is copied from rdma-core, since it is private there.
 enum ibv_gid_type
 {
 	IBV_GID_TYPE_IB_ROCE_V1,
@@ -577,6 +578,7 @@ static int check_better_roce_version(enum ibv_gid_type roce_ver, enum ibv_gid_ty
 	else
 		return EQUAL;
 }
+#endif
 
 static int get_best_gid_index (struct pingpong_context *ctx,
 		  struct perftest_parameters *user_param,
@@ -602,6 +604,7 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			gid_index = i;
 		else if (!is_ipv4_rival && is_ipv4 && user_param->ipv6)
 			gid_index = i;
+#ifdef HAVE_GID_TYPE
 		else {
 			enum ibv_gid_type roce_version, roce_version_rival;
 
@@ -614,8 +617,8 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
 			 	gid_index = i;
 		}
+#endif
 	}
-
 	return gid_index;
 }
 

@@ -52,11 +52,8 @@ endif
 
 if IS_FREEBSD
 LIBMLX4= -lmlx4
-LIBMLX5= -lmlx5
 else
 LIBMLX4=
-LIBMLX5= -lmlx5
-
 endif
 
 ib_send_bw_SOURCES = src/send_bw.c src/multicast_resources.c src/multicast_resources.h

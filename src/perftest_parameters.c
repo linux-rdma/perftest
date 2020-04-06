@@ -793,10 +793,10 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[5], optarg)==0) {
-		#ifdef HAVE_IBV_WR_API
+		#ifdef HAVE_MLX5DV
 		*cptr = DC;
 		#else
-		fprintf(stderr," DC not detected in libibverbs, IBV_WR API is needed\n");
+		fprintf(stderr," DC not supported, mlx5dv.h is needed\n");
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
@@ -1242,8 +1242,8 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	{
 		#ifndef HAVE_IBV_WR_API
 		printf(RESULT_LINE);
-		fprintf(stderr, " new post send flow is not supported\n");
-		exit(1);
+		fprintf(stderr, " new post send flow is not supported, falling back to ibv_post_send\n");
+		user_param->use_old_post_send = 1;
 		#endif
 	}
 
