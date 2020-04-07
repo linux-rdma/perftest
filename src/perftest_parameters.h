@@ -357,8 +357,9 @@ struct perftest_parameters {
 	uint64_t			size;
 	int				req_size;
 	uint64_t			dct_key;
-	uint64_t				iters;
+	uint64_t			iters;
 	uint64_t			iters_per_port[2];
+	uint64_t			last_iters;
 	uint64_t			*port_by_qp;
 	int				tx_depth;
 	uint8_t				qp_timeout;

@@ -3146,6 +3146,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 	alarm(user_param->duration);
 	user_param->iters = 0;
+	user_param->last_iters = 0;
 
 	/* Will be 0, in case of Duration (look at force_dependencies or in the exp above) */
 	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
@@ -4317,7 +4318,7 @@ void check_alive(int sig)
 void catch_alarm_infintely()
 {
 	print_report_bw(duration_param,NULL);
-	duration_param->iters = 0;
+	duration_param->last_iters = duration_param->iters;
 	alarm(duration_param->duration);
 	duration_param->tposted[0] = get_cycles();
 }

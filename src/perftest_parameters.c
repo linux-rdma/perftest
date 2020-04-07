@@ -2916,8 +2916,14 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	uint64_t num_of_calculated_iters = user_param->iters;
 
 	int free_my_bw_rep = 0;
-	if (user_param->test_method == RUN_INFINITELY)
+	if (user_param->test_method == RUN_INFINITELY) {
 		user_param->tcompleted[opt_posted]= get_cycles();
+		/*
+                 * cumulative iterations may reach maximum and restarts from 0
+                 * then iters < last_iters
+                 */
+		num_of_calculated_iters = (uint64_t)(user_param->iters - user_param->last_iters);
+	}
 
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
