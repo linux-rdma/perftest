@@ -177,9 +177,13 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
     }
 
 	int devID = 0;
+	hipDeviceProp_t prop = {0};
 
 	/* pick up device with zero ordinal (default, or devID) */
 	ROCM_CHECK(hipSetDevice(devID));
+	ROCM_CHECK(hipGetDeviceProperties(&prop, devID));
+	printf("Using HIP Device with Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
+           prop.name, prop.pciBusID, prop.gcnArch);
 
 	void * d_A;
 	error = hipMalloc(&d_A, size);
