@@ -1,9 +1,0 @@
-# How to build
-
-$ ./autogen.sh
-$ ./configure --prefix=$PWD/install --enable-rocm --with-rocm=/opt/rocm
-$ make && make install
-
-# How to run
-$ numactl -C 1 ./ib_send_bw -a -F --use_rocm
-$ numactl -C 1 ./ib_send_bw <hostname> -a -F --use_rocm
