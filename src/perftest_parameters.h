@@ -459,7 +459,7 @@ struct perftest_parameters {
 	int             		pkey_index;
 	int				raw_qos;
 	int				use_cuda;
-	int				use_rocm;
+	int				rocm_dev;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */

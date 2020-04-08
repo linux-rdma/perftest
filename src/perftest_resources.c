@@ -159,7 +159,7 @@ static int pp_free_gpu(struct pingpong_context *ctx)
 
 /*----------------------------------------------------------------------------*/
 
-static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+static int pp_init_rocm(struct pingpong_context *ctx, size_t _size, int devID)
 {
 	const size_t gpu_page_size = 64*1024;
 	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
@@ -170,20 +170,18 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 		printf("hipDeviceGetCount() returned %d\n", error);
 		exit(1);
 	}
-	/* This function call returns 0 if there are no ROCM capable devices. */
-	if (deviceCount == 0) {
-		printf("There are no available device(s) that support ROCM\n");
+
+	if (devID > deviceCount-1) {
+		printf("Requested ROCm device %d but found only %d device(s)\n", devID, deviceCount);
 		return 1;
-    }
+	}
 
-	int devID = 0;
-	hipDeviceProp_t prop = {0};
-
-	/* pick up device with zero ordinal (default, or devID) */
 	ROCM_CHECK(hipSetDevice(devID));
+
+	hipDeviceProp_t prop = {0};
 	ROCM_CHECK(hipGetDeviceProperties(&prop, devID));
-	printf("Using HIP Device with Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
-           prop.name, prop.pciBusID, prop.gcnArch);
+	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
+		   devID, prop.name, prop.pciBusID, prop.gcnArch);
 
 	void * d_A;
 	error = hipMalloc(&d_A, size);
@@ -196,7 +194,7 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 	return 0;
 }
 
-static int pp_free_gpu(struct pingpong_context *ctx)
+static int pp_free_rocm(struct pingpong_context *ctx)
 {
 	int ret = 0;
 	void * d_A = (void *) ctx->buf[0];
@@ -1247,8 +1245,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 	else
 	#endif
 	#ifdef HAVE_ROCM
-	if (user_param->use_rocm) {
-		pp_free_gpu(ctx);
+	if (user_param->rocm_dev != -1) {
+		pp_free_rocm(ctx);
 	}
 	else
 	#endif
@@ -1572,10 +1570,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	#endif
 
 	#ifdef HAVE_ROCM
-	if (user_param->use_rocm) {
+	if (user_param->rocm_dev != -1) {
 		ctx->is_contig_supported = FAILURE;
-		if(pp_init_gpu(ctx, ctx->buff_size)) {
-			fprintf(stderr, "Couldn't allocate work buf.\n");
+		if(pp_init_rocm(ctx, ctx->buff_size, user_param->rocm_dev)) {
+			fprintf(stderr, "Couldn't allocate work buf on ROCm device.\n");
 			return FAILURE;
 		}
 	} else

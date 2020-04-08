@@ -473,8 +473,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#endif
 
 		#ifdef HAVE_ROCM
-		printf("      --use_rocm ");
-		printf(" Use ROCM lib for GPU-Direct testing.\n");
+		printf("      --use_rocm=<devid> ");
+		printf(" Transfer data to/from selected ROCm device. Default is 0.\n");
 		#endif
 
 		#ifdef HAVE_VERBS_EXP
@@ -687,7 +687,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->is_rate_limit_type  = 0;
 	user_param->output		= -1;
 	user_param->use_cuda		= 0;
-	user_param->use_rocm		= 0;
+	user_param->rocm_dev		= -1;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -1383,7 +1383,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	#endif
 
 	#ifdef HAVE_ROCM
-	if (user_param->use_rocm && user_param->mmap_file != NULL) {
+	if (user_param->rocm_dev != -1 && user_param->mmap_file != NULL) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"You cannot use ROCM and an mmap'd file at the same time\n");
 		exit(1);
@@ -1976,7 +1976,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
-			{ .name = "use_rocm",		.has_arg = 0, .flag = &use_rocm_flag, .val = 1},
+			{ .name = "use_rocm",		.has_arg = 2, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
@@ -2385,6 +2385,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->wait_destroy = (uint32_t)strtol(optarg, NULL, 0);
 					wait_destroy_flag = 0;
 				}
+				if (use_rocm_flag) {
+					if (optarg != NULL) {
+						user_param->rocm_dev = (uint16_t)strtol(optarg, NULL, 0);
+					} else {
+						user_param->rocm_dev = 0;
+					}
+					use_rocm_flag = 0;
+				}
 				if (flows_flag) {
 					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
 					if (user_param->flows == 0) {
@@ -2511,10 +2519,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (use_cuda_flag) {
 		user_param->use_cuda = 1;
-	}
-
-	if (use_rocm_flag) {
-		user_param->use_rocm = 1;
 	}
 
 	if (report_both_flag) {
@@ -2877,7 +2881,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 		temp = 1;
 
 #ifdef HAVE_ROCM
-	printf(" Use ROCm memory : %s\n", user_param->use_rocm ? "ON" : "OFF");
+	printf(" Use ROCm memory : %s\n", user_param->rocm_dev != -1 ? "ON" : "OFF");
 #endif
 
 	printf(" Data ex. method : %s",exchange_state[temp]);
