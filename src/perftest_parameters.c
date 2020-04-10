@@ -472,7 +472,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		#ifdef HAVE_CUDA
 		printf("      --use_cuda=<cuda device id>");
-		printf(" Use CUDA secific device for GPU-Direct testing\n");
+		printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
 		#endif
 
 		printf("      --use_hugepages ");
