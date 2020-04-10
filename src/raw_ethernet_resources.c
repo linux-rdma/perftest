@@ -55,7 +55,7 @@
 #include <config.h>
 #endif
 
-struct perftest_parameters* duration_param;
+extern struct perftest_parameters* duration_param;
 
 int check_flow_steering_support(char *dev_name)
 {
