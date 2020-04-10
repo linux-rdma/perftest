@@ -814,8 +814,8 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
 		#ifdef HAVE_SRD
-		if (verb != SEND) {
-			fprintf(stderr, " SRD connection only possible in SEND verb\n");
+		if (verb != SEND && verb != READ ) {
+			fprintf(stderr, " SRD connection only possible in SEND/READ verbs\n");
 			exit(1);
 		}
 		*cptr = SRD;
@@ -995,11 +995,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		#ifdef HAVE_IBV_WR_API
-		printf(RESULT_LINE);
-		fprintf(stderr, " Post list greater than 1 is not supported with new WR API\n");
-		exit(1);
-		#endif
 		if (!user_param->req_cq_mod) {
 			user_param->cq_mod = user_param->post_list;
 			printf(RESULT_LINE);
