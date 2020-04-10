@@ -2484,7 +2484,7 @@ int ctx_alloc_credit(struct pingpong_context *ctx,
 	int flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
 	int i;
 
-	ALLOCATE(ctx->ctrl_buf,uint32_t,user_param->num_of_qps);
+	ALLOCATE(ctx->ctrl_buf,uint32_t,2*user_param->num_of_qps);
 	memset(&ctx->ctrl_buf[0],0,buf_size);
 
 	ctx->credit_buf = (uint32_t *)ctx->ctrl_buf + user_param->num_of_qps;

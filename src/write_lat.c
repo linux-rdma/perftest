@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	/* In case of ib_write_bw, PCI relaxed ordering should be disabled since we're polling for data change
+	/* In case of ib_write_lat, PCI relaxed ordering should be disabled since we're polling for data change
 	 * of last packet so in case of relaxed odering we might get the last packet in wrong order thus the test
 	 * would be incorrect
 	 */
