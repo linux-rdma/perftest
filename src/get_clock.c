@@ -39,7 +39,7 @@
 /* #define GET_CPU_MHZ_FROM_PROC 1 */
 
 /* For gettimeofday */
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 #include <sys/time.h>
 
 #include <unistd.h>

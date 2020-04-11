@@ -80,7 +80,13 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	if(user_param.use_xrc || user_param.connection_type == DC) {
+	/* In case of ib_write_lat, PCI relaxed ordering should be disabled since we're polling for data change
+	 * of last packet so in case of relaxed odering we might get the last packet in wrong order thus the test
+	 * would be incorrect
+	 */
+	user_param.disable_pcir = 1;
+
+	if (user_param.use_xrc || user_param.connection_type == DC) {
 		user_param.num_of_qps *= 2;
 	}
 
@@ -94,6 +100,14 @@ int main(int argc, char *argv[])
 	/* Getting the relevant context from the device */
 	ctx.context = ibv_open_device(ib_dev);
 	if (!ctx.context) {
+		fprintf(stderr, " Couldn't get context for the device\n");
+		return FAILURE;
+	}
+
+	/* Verify user parameters that require the device context,
+	 * the function will print the relevent error info. */
+	if (verify_params_with_device_context(ctx.context, &user_param))
+	{
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
 	}
@@ -123,7 +137,7 @@ int main(int argc, char *argv[])
 	}
 
 	exchange_versions(&user_comm, &user_param);
-
+	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
 	/* See if MTU and link type are valid and supported. */
@@ -166,16 +180,12 @@ int main(int argc, char *argv[])
 	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
 
-	for (i=0; i < user_param.num_of_qps; i++)
-		ctx_print_pingpong_data(&my_dest[i],&user_comm);
-
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
 		return FAILURE;
 	}
 
-	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		/* shaking hands and gather the other side info. */
@@ -184,7 +194,6 @@ int main(int argc, char *argv[])
 			return FAILURE;
 		}
 
-		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	};
 
 	if (user_param.work_rdma_cm == OFF) {
@@ -200,6 +209,31 @@ int main(int argc, char *argv[])
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return FAILURE;
 		}
+	}
+
+	if (user_param.connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(&ctx,&user_param,my_dest)) {
+			fprintf(stderr," Unable to set up socket connection\n");
+			return FAILURE;
+		}
+	}
+
+	/* Print this machine QP information */
+	for (i=0; i < user_param.num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],&user_comm);
+
+	user_comm.rdma_params->side = REMOTE;
+
+	for (i=0; i < user_param.num_of_qps; i++) {
+
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			return FAILURE;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	/* An additional handshake is required after moving qp to RTR. */

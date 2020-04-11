@@ -55,7 +55,7 @@
 #include <config.h>
 #endif
 
-struct perftest_parameters* duration_param;
+extern struct perftest_parameters* duration_param;
 
 int check_flow_steering_support(char *dev_name)
 {
@@ -216,46 +216,25 @@ static int get_ip_size(int is_ipv6)
 {
 #ifdef HAVE_IPV6
 	if (is_ipv6)
-#ifdef HAVE_RAW_ETH_EXP
-		return sizeof(struct ibv_exp_flow_spec_ipv6_ext);
-#else
 		return sizeof(struct ibv_flow_spec_ipv6);
 #endif
-#endif /* HAVE_IPV6 */
 
-#ifdef HAVE_RAW_ETH_EXP
-#ifdef HAVE_IPV4_EXT
-		return sizeof(struct ibv_exp_flow_spec_ipv4_ext);
-#else
-		return sizeof(struct ibv_exp_flow_spec_ipv4);
-#endif /* HAVE_IPV4_EXT */
-#else
 #ifdef HAVE_IPV4_EXT
 		return sizeof(struct ibv_flow_spec_ipv4_ext);
 #else
 		return sizeof(struct ibv_flow_spec_ipv4);
 #endif /* HAVE_IPV4_EXT */
-#endif
 }
 
 /******************************************************************************
  * print test specification
  ******************************************************************************/
-#ifdef HAVE_RAW_ETH_EXP
-void print_spec(struct ibv_exp_flow_attr* flow_rules,struct perftest_parameters* user_param)
-{
-	struct ibv_exp_flow_spec* spec_info = NULL;
-	#ifdef HAVE_IPV6
-	struct ibv_exp_flow_spec_ipv6_ext *ipv6_spec;
-	#endif
-#else
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param)
 {
 		struct ibv_flow_spec* spec_info = NULL;
 		#ifdef HAVE_IPV6
 		struct ibv_flow_spec_ipv6 *ipv6_spec;
 		#endif
-#endif
 		void* header_buff = (void*)flow_rules;
 		int ip_size = get_ip_size(user_param->raw_ipv6);
 
@@ -268,13 +247,10 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			return;
 		}
 
-		#ifdef HAVE_RAW_ETH_EXP
-		header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
-		spec_info = (struct ibv_exp_flow_spec*)header_buff;
-		#else
+
 		header_buff = header_buff + sizeof(struct ibv_flow_attr);
 		spec_info = (struct ibv_flow_spec*)header_buff;
-		#endif
+
 		printf("MAC attached  : %02X:%02X:%02X:%02X:%02X:%02X\n",
 				spec_info->eth.val.dst_mac[0],
 				spec_info->eth.val.dst_mac[1],
@@ -290,18 +266,10 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			char str_ip6_s[INET6_ADDRSTRLEN] = {0};
 			char str_ip6_d[INET6_ADDRSTRLEN] = {0};
 			#endif
-			#ifdef HAVE_RAW_ETH_EXP
-			header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
-			spec_info = (struct ibv_exp_flow_spec*)header_buff;
-			#ifdef HAVE_IPV6
-			ipv6_spec = &spec_info->ipv6_ext;
-			#endif
-			#else
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			#ifdef HAVE_IPV6
 			ipv6_spec = &spec_info->ipv6;
-			#endif
 			#endif
 			if (!user_param->raw_ipv6) {
 				uint32_t dst_ip = spec_info->ipv4.val.dst_ip;
@@ -687,40 +655,16 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
  ******************************************************************************/
 int calc_flow_rules_size(struct perftest_parameters *user_param, int is_ip_header,int is_udp_header)
 {
-	#ifdef HAVE_RAW_ETH_EXP
-	int tot_size = sizeof(struct ibv_exp_flow_attr);
-	tot_size += sizeof(struct ibv_exp_flow_spec_eth);
-	if (is_ip_header)
-		tot_size += get_ip_size(user_param->raw_ipv6);
-	if (is_udp_header)
-		tot_size += sizeof(struct ibv_exp_flow_spec_tcp_udp);
-	#else
 	int tot_size = sizeof(struct ibv_flow_attr);
 	tot_size += sizeof(struct ibv_flow_spec_eth);
 	if (is_ip_header)
 		tot_size += get_ip_size(user_param->raw_ipv6);
 	if (is_udp_header)
 		tot_size += sizeof(struct ibv_flow_spec_tcp_udp);
-	#endif
 
 	return tot_size;
 }
 
-#ifdef HAVE_RAW_ETH_EXP
-static void fill_ip_common(struct ibv_exp_flow_spec* spec_info,
-			   struct perftest_parameters *user_param)
-{
-	#ifdef HAVE_IPV6
-	struct ibv_exp_flow_spec_ipv6_ext *ipv6_spec = &spec_info->ipv6_ext;
-	static const char ipv6_mask[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-					 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-	#endif
-	#ifdef HAVE_IPV4_EXT
-	struct ibv_exp_flow_spec_ipv4_ext *ipv4_spec = &spec_info->ipv4_ext;
-	#else
-	struct ibv_exp_flow_spec_ipv4 *ipv4_spec = &spec_info->ipv4;
-	#endif /* HAVE_IPV4_EXT */
-#else
 static void fill_ip_common(struct ibv_flow_spec* spec_info,
 			   struct perftest_parameters *user_param)
 {
@@ -734,7 +678,6 @@ static void fill_ip_common(struct ibv_flow_spec* spec_info,
 	#else
 	struct ibv_flow_spec_ipv4 *ipv4_spec = &spec_info->ipv4;
 	#endif
-#endif
 
 	if(user_param->machine == SERVER) {
 		if (user_param->raw_ipv6) {
@@ -773,27 +716,6 @@ static void fill_ip_common(struct ibv_flow_spec* spec_info,
 	}
 }
 
-#ifdef HAVE_RAW_ETH_EXP
-static void fill_exp_ip_spec(struct ibv_exp_flow_spec* spec_info,
-			     struct perftest_parameters *user_param)
-{
-	if (user_param->raw_ipv6) {
-		#ifdef HAVE_IPV6
-		spec_info->ipv6.type = IBV_EXP_FLOW_SPEC_IPV6_EXT;
-		spec_info->ipv6.size = sizeof(struct ibv_exp_flow_spec_ipv6_ext);
-		#endif
-	} else {
-		#ifdef HAVE_IPV4_EXT
-		spec_info->ipv4.type = IBV_EXP_FLOW_SPEC_IPV4_EXT;
-		spec_info->ipv4.size = sizeof(struct ibv_exp_flow_spec_ipv4_ext);
-		#else
-		spec_info->ipv4.type = IBV_EXP_FLOW_SPEC_IPV4;
-		spec_info->ipv4.size = sizeof(struct ibv_exp_flow_spec_ipv4);
-		#endif
-	}
-	fill_ip_common(spec_info, user_param);
-}
-#else
 static void fill_ip_spec(struct ibv_flow_spec* spec_info,
 			 struct perftest_parameters *user_param)
 {
@@ -813,26 +735,16 @@ static void fill_ip_spec(struct ibv_flow_spec* spec_info,
 	}
 	fill_ip_common(spec_info, user_param);
 }
-#endif
 
 int set_up_flow_rules(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		int local_port,
 		int remote_port)
 {
-	#ifdef HAVE_RAW_ETH_EXP
-	struct ibv_exp_flow_spec* spec_info;
-	struct ibv_exp_flow_attr* attr_info;
-	#else
 	struct ibv_flow_spec* spec_info;
 	struct ibv_flow_attr* attr_info;
-	#endif
 
 	void* header_buff;
 	int flow_rules_size;
@@ -845,13 +757,8 @@ int set_up_flow_rules(
 
 	memset(header_buff, 0, flow_rules_size);
 
-	#ifdef HAVE_RAW_ETH_EXP
-	*flow_rules = (struct ibv_exp_flow_attr*)header_buff;
-	attr_info = (struct ibv_exp_flow_attr*)header_buff;
-	#else
 	*flow_rules = (struct ibv_flow_attr*)header_buff;
 	attr_info = (struct ibv_flow_attr*)header_buff;
-	#endif
 
 	attr_info->size = flow_rules_size;
 	attr_info->priority = 0;
@@ -859,19 +766,11 @@ int set_up_flow_rules(
 	attr_info->port = user_param->ib_port;
 	attr_info->flags = 0;
 
-	#ifdef HAVE_RAW_ETH_EXP
-	attr_info->type = IBV_EXP_FLOW_ATTR_NORMAL;
-	header_buff = header_buff + sizeof(struct ibv_exp_flow_attr);
-	spec_info = (struct ibv_exp_flow_spec*)header_buff;
-	spec_info->eth.type = IBV_EXP_FLOW_SPEC_ETH;
-	spec_info->eth.size = sizeof(struct ibv_exp_flow_spec_eth);
-	#else
 	attr_info->type = IBV_FLOW_ATTR_NORMAL;
 	header_buff = header_buff + sizeof(struct ibv_flow_attr);
 	spec_info = (struct ibv_flow_spec*)header_buff;
 	spec_info->eth.type = IBV_FLOW_SPEC_ETH;
 	spec_info->eth.size = sizeof(struct ibv_flow_spec_eth);
-	#endif
 
 	spec_info->eth.val.ether_type = 0;
 
@@ -879,28 +778,16 @@ int set_up_flow_rules(
 
 	memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
 	if(user_param->is_server_ip || user_param->is_client_ip) {
-		#ifdef HAVE_RAW_ETH_EXP
-		header_buff = header_buff + sizeof(struct ibv_exp_flow_spec_eth);
-		spec_info = (struct ibv_exp_flow_spec*)header_buff;
-		fill_exp_ip_spec(spec_info, user_param);
-		#else
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 		fill_ip_spec(spec_info, user_param);
-		#endif
 	}
 
 	if(user_param->is_server_port && user_param->is_client_port) {
 		header_buff = header_buff + get_ip_size(user_param->raw_ipv6);
-		#ifdef HAVE_RAW_ETH_EXP
-		spec_info = (struct ibv_exp_flow_spec*)header_buff;
-		spec_info->tcp_udp.type = (user_param->tcp) ? IBV_EXP_FLOW_SPEC_TCP : IBV_EXP_FLOW_SPEC_UDP;
-		spec_info->tcp_udp.size = sizeof(struct ibv_exp_flow_spec_tcp_udp);
-		#else
 		spec_info = (struct ibv_flow_spec*)header_buff;
 		spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
 		spec_info->tcp_udp.size = sizeof(struct ibv_flow_spec_tcp_udp);
-		#endif
 
 		if(user_param->machine == SERVER) {
 			spec_info->tcp_udp.val.dst_port = htons(local_port);
@@ -925,11 +812,7 @@ int set_up_flow_rules(
  *set_fs_rate_rules - init flow struct for FS rate test
  ******************************************************************************/
 int set_up_fs_rules(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		uint64_t allocated_flows) {
@@ -966,11 +849,7 @@ int set_up_fs_rules(
  *send_set_up_connection - init raw_ethernet_info and ibv_flow_spec to user args
  ******************************************************************************/
 int send_set_up_connection(
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr **flow_rules,
-		#else
 		struct ibv_flow_attr **flow_rules,
-		#endif
 		struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct raw_ethernet_info *my_dest_info,
@@ -1055,15 +934,11 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	struct ibv_wc		*wc = NULL;
 	struct ibv_wc		*wc_tx = NULL;
 	struct ibv_recv_wr	*bad_wr_recv = NULL;
-	#if defined(HAVE_VERBS_EXP)
-	struct ibv_exp_send_wr	*bad_exp_wr = NULL;
-	#endif
 	struct ibv_send_wr	*bad_wr = NULL;
 	int			firstRx = 1;
 	int 			rwqe_sent = user_param->rx_depth;
 	int			return_value = 0;
 	int			wc_id;
-
 	ALLOCATE(wc, struct ibv_wc, CTX_POLL_BATCH);
 	ALLOCATE(wc_tx, struct ibv_wc, CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -1095,20 +970,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					((ctx->scnt[index] - ctx->ccnt[index] + user_param->post_list) <= user_param->tx_depth) && (rcnt_for_qp[index] - ctx->scnt[index] > 0)) {
 
 				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
-					#ifdef HAVE_VERBS_EXP
-					#ifdef HAVE_ACCL_VERBS
-					if (user_param->verb_type == ACCL_INTF)
-						ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_QP_BURST_SIGNALED;
-					else {
-					#endif
-						if (user_param->use_exp == 1)
-							ctx->exp_wr[index].exp_send_flags &= ~IBV_EXP_SEND_SIGNALED;
-						else
-					#endif
-							ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
-					#ifdef HAVE_ACCL_VERBS
-					}
-					#endif
+						ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
 
 				if (user_param->noPeak == OFF)
@@ -1118,27 +980,8 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					break;
 				switch_smac_dmac(ctx->wr[index*user_param->post_list].sg_list);
 
-				#ifdef HAVE_VERBS_EXP
-				#ifdef HAVE_ACCL_VERBS
-				if (user_param->verb_type == ACCL_INTF) {
-					struct ibv_sge *sg_l = ctx->exp_wr[index*user_param->post_list].sg_list;
-					err = ctx->qp_burst_family[index]->send_burst(ctx->qp[index], sg_l, 1, ctx->exp_wr[index].exp_send_flags);
-				} else {
-				#endif
-					if (user_param->use_exp == 1) {
-						err = (ctx->exp_post_send_func_pointer)(ctx->qp[index],
-							&ctx->exp_wr[index*user_param->post_list], &bad_exp_wr);
-					}
-					else {
-						err = (ctx->post_send_func_pointer)(ctx->qp[index],
-							&ctx->wr[index*user_param->post_list],&bad_wr);
-					}
-				#ifdef HAVE_ACCL_VERBS
-				}
-				#endif
-				#else
 				err = ibv_post_send(ctx->qp[index], &ctx->wr[index*user_param->post_list], &bad_wr);
-				#endif
+
 				if(err) {
 					fprintf(stderr, "Couldn't post send: qp %d scnt=%lu \n", index, ctx->scnt[index]);
 					return_value = FAILURE;
@@ -1146,13 +989,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
-					#ifdef HAVE_VERBS_EXP
-					if (user_param->use_exp == 1)
-						increase_loc_addr(ctx->exp_wr[index].sg_list, user_param->size,
-								  ctx->scnt[index], ctx->my_addr[index], 0,
-								  ctx->cache_line_size, ctx->cycle_buffer);
-					else
-					#endif
 						increase_loc_addr(ctx->wr[index].sg_list, user_param->size,
 								  ctx->scnt[index], ctx->my_addr[index], 0,
 								  ctx->cache_line_size, ctx->cycle_buffer);
@@ -1163,20 +999,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				if (user_param->post_list == 1 &&
 					(ctx->scnt[index]%user_param->cq_mod == (user_param->cq_mod - 1) ||
 						(user_param->test_type == ITERATIONS && ctx->scnt[index] == (iters - 1)))) {
-					#ifdef HAVE_VERBS_EXP
-					#ifdef HAVE_ACCL_VERBS
-					if (user_param->verb_type == ACCL_INTF)
-						ctx->exp_wr[index].exp_send_flags |= IBV_EXP_QP_BURST_SIGNALED;
-					else {
-					#endif
-						if (user_param->use_exp == 1)
-							ctx->exp_wr[index].exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-						else
-					#endif
 							ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
-					#ifdef HAVE_ACCL_VERBS
-					}
-					#endif
 				}
 			}
 		}
@@ -1192,11 +1015,6 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 		if ((user_param->test_type == ITERATIONS && (totrcnt < tot_iters)) ||
 			(user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			#ifdef HAVE_ACCL_VERBS
-			if (user_param->verb_type == ACCL_INTF)
-				ne = ctx->recv_cq_family->poll_cnt(ctx->recv_cq, CTX_POLL_BATCH);
-			else
-			#endif
 				ne = ibv_poll_cq(ctx->recv_cq, CTX_POLL_BATCH, wc);
 
 			if (ne > 0) {
@@ -1210,13 +1028,10 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				for (i = 0; i < ne; i++) {
-					wc_id = (user_param->verb_type == ACCL_INTF) ?
-						0 : (int)wc[i].wr_id;
+					wc_id = (int)wc[i].wr_id;
 
-					if (user_param->verb_type != ACCL_INTF) {
-						if (wc[i].status != IBV_WC_SUCCESS) {
-							NOTIFY_COMP_ERROR_RECV(wc[i], totrcnt);
-						}
+					if (wc[i].status != IBV_WC_SUCCESS) {
+						NOTIFY_COMP_ERROR_RECV(wc[i], totrcnt);
 					}
 
 					rcnt_for_qp[wc_id]++;
@@ -1229,22 +1044,13 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 		}
 		if ((totccnt < tot_iters) || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
-			#ifdef HAVE_ACCL_VERBS
-			if (user_param->verb_type == ACCL_INTF)
-				ne = ctx->send_cq_family->poll_cnt(ctx->send_cq, CTX_POLL_BATCH);
-			else
-			#endif
-				ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
-
+			ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-					wc_id = (user_param->verb_type == ACCL_INTF) ?
-						0 : (int)wc[i].wr_id;
+					wc_id = (int)wc[i].wr_id;
 
-					if (user_param->verb_type != ACCL_INTF) {
-						if (wc_tx[i].status != IBV_WC_SUCCESS)
-							NOTIFY_COMP_ERROR_SEND(wc_tx[i], totscnt, totccnt);
-					}
+					if (wc_tx[i].status != IBV_WC_SUCCESS)
+						NOTIFY_COMP_ERROR_SEND(wc_tx[i], totscnt, totccnt);
 
 					totccnt += user_param->cq_mod;
 					ctx->ccnt[wc_id] += user_param->cq_mod;
@@ -1268,23 +1074,11 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			while (rwqe_sent - totccnt < user_param->rx_depth) {    /* Post more than buffer_size */
 				if (user_param->test_type==DURATION ||
 					rcnt_for_qp[0] + user_param->rx_depth <= user_param->iters) {
-					#ifdef HAVE_ACCL_VERBS
-					if (user_param->verb_type == ACCL_INTF) {
-						if (ctx->qp_burst_family[0]->recv_burst(ctx->qp[0], ctx->rwr[0].sg_list, 1)) {
-							fprintf(stderr, "Couldn't post recv burst (accelerated verbs).\n");
-							return_value = FAILURE;
-							goto cleaning;
-						}
-					} else {
-					#endif
 						if (ibv_post_recv(ctx->qp[0], &ctx->rwr[0], &bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n", 0, rcnt_for_qp[0]);
 							return_value = 15;
 							goto cleaning;
 						}
-					#ifdef HAVE_ACCL_VERBS
-					}
-					#endif
 
 					if (SIZE(user_param->connection_type, user_param->size, !(int)user_param->machine) <= (ctx->cycle_buffer / 2)) {
 						increase_loc_addr(ctx->rwr[0].sg_list,

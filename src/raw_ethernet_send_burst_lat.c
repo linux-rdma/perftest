@@ -64,15 +64,9 @@ int main(int argc, char *argv[])
 	struct raw_ethernet_info	my_dest_info,rem_dest_info;
 	int				ret_parser;
 	struct perftest_parameters	user_param;
-	#ifdef HAVE_RAW_ETH_EXP
-	struct ibv_exp_flow		**flow_create_result;
-	struct ibv_exp_flow_attr	**flow_rules;
-	struct ibv_exp_flow 		*flow_promisc = NULL;
-	#else
 	struct ibv_flow			**flow_create_result;
 	struct ibv_flow_attr		**flow_rules;
 	struct ibv_flow 		*flow_promisc = NULL;
-	#endif
 	struct report_options		report;
 	int				i;
 
@@ -103,13 +97,8 @@ int main(int argc, char *argv[])
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
 		return FAILURE;
 	}
-	#ifdef HAVE_RAW_ETH_EXP
-	ALLOCATE(flow_create_result, struct ibv_exp_flow*, user_param.flows);
-	ALLOCATE(flow_rules, struct ibv_exp_flow_attr*, user_param.flows);
-	#else
 	ALLOCATE(flow_create_result, struct ibv_flow*, user_param.flows);
 	ALLOCATE(flow_rules, struct ibv_flow_attr*, user_param.flows);
-	#endif
 
 
 	/*this is a bidirectional test, so we need to let the init functions
@@ -176,11 +165,7 @@ int main(int argc, char *argv[])
 
 	/* attaching the qp to the spec */
 	for (i = 0; i < user_param.flows; i++) {
-		#ifdef HAVE_RAW_ETH_EXP
-		flow_create_result[i] = ibv_exp_create_flow(ctx.qp[0], flow_rules[i]);
-		#else
 		flow_create_result[i] = ibv_create_flow(ctx.qp[0], flow_rules[i]);
-		#endif
 
 		if (!flow_create_result[i]){
 			perror("error");
@@ -190,19 +175,6 @@ int main(int argc, char *argv[])
 	}
 
 	if (user_param.use_promiscuous) {
-		#ifdef HAVE_RAW_ETH_EXP
-		struct ibv_exp_flow_attr attr = {
-			.type = IBV_EXP_FLOW_ATTR_ALL_DEFAULT,
-			.num_of_specs = 0,
-			.port = user_param.ib_port,
-			.flags = 0
-		};
-
-		if ((flow_promisc = ibv_exp_create_flow(ctx.qp[0], &attr)) == NULL) {
-			perror("error");
-			fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
-		}
-		#else
 		struct ibv_flow_attr attr = {
 			.type = IBV_FLOW_ATTR_ALL_DEFAULT,
 			.num_of_specs = 0,
@@ -214,7 +186,6 @@ int main(int argc, char *argv[])
 			perror("error");
 			fprintf(stderr, "Couldn't attach promiscuous rule QP\n");
 		}
-		#endif
 	}
 
 	/* build ONE Raw Ethernet packets on ctx buffer */
@@ -258,11 +229,7 @@ int main(int argc, char *argv[])
 
 	/* destroy promisc flow */
 	if (user_param.use_promiscuous) {
-		#ifdef HAVE_RAW_ETH_EXP
-		if (ibv_exp_destroy_flow(flow_promisc)) {
-		#else
 		if (ibv_destroy_flow(flow_promisc)) {
-		#endif
 			perror("error");
 			fprintf(stderr, "Couldn't destroy promisc flow\n");
 			return FAILURE;
@@ -271,11 +238,7 @@ int main(int argc, char *argv[])
 
 	/* destroy flow */
 	for (i = 0; i < user_param.flows; i++) {
-		#ifdef HAVE_RAW_ETH_EXP
-		if (ibv_exp_destroy_flow(flow_create_result[i])) {
-		#else
 		if (ibv_destroy_flow(flow_create_result[i])) {
-		#endif
 			perror("error");
 			fprintf(stderr, "Couldn't destroy flow\n");
 			return FAILURE;

@@ -90,6 +90,14 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+	/* Verify user parameters that require the device context,
+	 * the function will print the relevent error info. */
+	if (verify_params_with_device_context(ctx.context, &user_param))
+	{
+		fprintf(stderr, " Couldn't get context for the device\n");
+		return FAILURE;
+	}
+
 	/* See if MTU and link type are valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
@@ -115,7 +123,7 @@ int main(int argc, char *argv[])
 	}
 	sleep(1);
 	exchange_versions(&user_comm, &user_param);
-
+	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
 	/* See if MTU and link type are valid and supported. */
@@ -158,21 +166,12 @@ int main(int argc, char *argv[])
 	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
 
-
-	/* Print this machine QP information */
-	for (i=0; i < user_param.num_of_qps; i++)
-		ctx_print_pingpong_data(&my_dest[i],&user_comm);
-
-
-	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
-
-		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
@@ -188,6 +187,32 @@ int main(int argc, char *argv[])
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
 			return FAILURE;
 		}
+	}
+
+	if (user_param.connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(&ctx, &user_param, my_dest))
+		{
+			fprintf(stderr," Unable to set up socket connection\n");
+			return FAILURE;
+		}
+	}
+
+	/* Print this machine QP information */
+	for (i=0; i < user_param.num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],&user_comm);
+
+	user_comm.rdma_params->side = REMOTE;
+
+	for (i=0; i < user_param.num_of_qps; i++) {
+
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			return FAILURE;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	/* An additional handshake is required after moving qp to RTR. */

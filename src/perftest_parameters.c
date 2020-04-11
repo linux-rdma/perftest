@@ -421,7 +421,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Create memory region for each qp.\n");
 	}
 
-	#if defined HAVE_EX_ODP || defined HAVE_EXP_ODP
+	#if defined HAVE_EX_ODP
 	printf("      --odp ");
 	printf(" Use On Demand Paging instead of Memory Registration.\n");
 	#endif
@@ -429,6 +429,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
 	printf(" Latency measurement is Average calculation \n");
+
+	printf("      --use_old_post_send");
+	printf(" Use old post send flow (ibv_post_send).\n");
 
 	if (tst != FS_RATE) {
 		printf("      --perform_warm_up");
@@ -468,32 +471,22 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
 		#ifdef HAVE_CUDA
-		printf("      --use_cuda ");
-		printf(" Use CUDA lib for GPU-Direct testing.\n");
-		#endif
-
-		#ifdef HAVE_VERBS_EXP
-		printf("      --use_exp ");
-		printf(" Use Experimental verbs in data path. Default is OFF.\n");
+		printf("      --use_cuda=<cuda device id>");
+		printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
 		#endif
 
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
-
-
-		#ifdef HAVE_ACCL_VERBS
-		printf("      --use_res_domain ");
-		printf(" Use shared resource domain\n");
-
-		printf("      --verb_type=<option> ");
-		printf(" Set verb type: normal, accl. Default is normal.\n");
-		#endif
 	}
 
 	if (tst == BW || tst == LAT_BY_BW) {
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
 
+		#if defined HAVE_RO
+		printf("      --disable_pcie_relaxed");
+		printf(" Disable PCIe relaxed ordering\n");
+		#endif
 		printf("\n Rate Limiter:\n");
 		printf("      --burst_size=<size>");
 		printf(" Set the amount of messages to send in a burst when using rate limiter\n");
@@ -514,7 +507,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("        Note: in Latency under load test SW rate limit is forced\n");
 
 	}
-	#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
+	#if defined HAVE_OOO_ATTR
 	printf("      --use_ooo ");
 	printf(" Use out of order data placement\n");
 	#endif
@@ -574,11 +567,6 @@ void usage_raw_ethernet(TestType tst)
 		printf("  -v, --mac_fwd ");
 		printf(" run mac forwarding test \n");
 
-		#ifdef HAVE_SCATTER_FCS
-		printf("      --disable_fcs ");
-		printf(" Disable Scatter FCS feature. (Scatter FCS is enabled by default when using --use_exp flag). \n");
-		#endif
-
 		printf("      --flows");
 		printf(" set number of TCP/UDP flows, starting from <src_port, dst_port>. \n");
 
@@ -591,7 +579,7 @@ void usage_raw_ethernet(TestType tst)
 		printf("      --reply_every ");
 		printf(" in latency test, receiver pong after number of received pings\n");
 
-		#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
+		#if defined HAVE_SNIFFER
 		printf("      --sniffer");
 		printf(" run sniffer mode.\n");
 		#endif
@@ -683,7 +671,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
 	user_param->output		= -1;
+#ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
+	user_param->cuda_device_id		= 0;
+#endif
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -715,34 +706,30 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_util_data.enable	= 0;
 	user_param->retry_count			= DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions		= 0;
-	user_param->use_exp			= 0;
 	user_param->ipv6			= 0;
 	user_param->report_per_port		= 0;
 	user_param->use_odp			= 0;
 	user_param->use_hugepages		= 0;
+	user_param->use_old_post_send		= 0;
 	user_param->use_promiscuous		= 0;
 	user_param->use_sniffer			= 0;
 	user_param->check_alive_exited		= 0;
 	user_param->raw_mcast			= 0;
-	user_param->masked_atomics		= 0;
 	user_param->cache_line_size		= get_cache_line_size();
 	user_param->cycle_buffer		= sysconf(_SC_PAGESIZE);
 
 	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
-	user_param->verb_type		= NORMAL_INTF;
-	user_param->is_exp_cq		= 0;
-	user_param->is_exp_qp		= 0;
 	user_param->use_res_domain	= 0;
 	user_param->mr_per_qp		= 0;
 	user_param->dlid		= 0;
 	user_param->traffic_class	= 0;
-	user_param->disable_fcs		= 0;
 	user_param->flows		= DEF_FLOWS;
 	user_param->flows_burst		= 1;
 	user_param->perform_warm_up	= 0;
 	user_param->use_ooo		= 0;
+	user_param->disable_pcir	= 0;
 }
 
 /******************************************************************************
@@ -806,10 +793,10 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[5], optarg)==0) {
-		#ifdef HAVE_DC
+		#ifdef HAVE_MLX5DV
 		*cptr = DC;
 		#else
-		fprintf(stderr," DC not detected in libibverbs\n");
+		fprintf(stderr," DC not supported, mlx5dv.h is needed\n");
 		exit(1);
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
@@ -934,9 +921,18 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	/* we disable cq_mod for large message size to prevent from incorrect BW calculation
+	 *    (and also because it is not needed)
+	 * we don't disable cq_mod for UD because it doesn't support large enough messages
+	 * we don't disable cq_mod for RUN_ALL mode because we cannot change it in accordance to
+	 *    message size during RUN_ALL run
+	 * we don't disable cq_mod for use_event, because having a lot of processes with use_event leads
+	 *     to bugs (probably due to issues with events processing, thus we have less events)
+	 */
 	if (user_param->size > MSG_SIZE_CQ_MOD_LIMIT &&
 		user_param->connection_type != UD &&
-		user_param->test_method != RUN_ALL)
+		user_param->test_method != RUN_ALL &&
+		!user_param->use_event)
 	{
 		if (!user_param->req_cq_mod) // user didn't request any cq_mod
 		{
@@ -978,6 +974,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
+	if (user_param->use_srq && user_param->num_of_qps > user_param->rx_depth) {
+		printf(RESULT_LINE);
+		printf(" Using SRQ depth should be greater than number of QPs.\n");
+		exit (1);
+	}
+
 	if (user_param->dualport == ON) {
 
 		user_param->num_of_qps *= 2;
@@ -995,18 +997,25 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->post_list > 1) {
-		#ifdef HAVE_IBV_WR_API
-		printf(RESULT_LINE);
-		fprintf(stderr, " Post list greater than 1 is not supported with new WR API\n");
-		exit(1);
-		#endif
-		if (!user_param->req_cq_mod) {
-			user_param->cq_mod = user_param->post_list;
+		if (user_param->tst == BW || user_param->tst == LAT_BY_BW)
+		{
+			if (!user_param->req_cq_mod)
+			{
+				user_param->cq_mod = user_param->post_list;
+				printf(RESULT_LINE);
+				printf("Post List requested - CQ moderation will be the size of the post list\n");
+			}
+			else if ((user_param->post_list % user_param->cq_mod) != 0)
+			{
+				printf(RESULT_LINE);
+				fprintf(stderr, "Post list size must be a multiple of CQ moderation\n");
+				exit(1);
+			}
+		}
+		else
+		{
 			printf(RESULT_LINE);
-			printf("Post List requested - CQ moderation will be the size of the post list\n");
-		} else if ((user_param->post_list % user_param->cq_mod) != 0) {
-			printf(RESULT_LINE);
-			fprintf(stderr, " Post list size must be a multiple of CQ moderation\n");
+			fprintf(stderr, "Post list is supported in BW tests only\n");
 			exit(1);
 		}
 	}
@@ -1041,8 +1050,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->connection_type == RawEth) {
-
-		if (user_param->test_method == RUN_ALL) {
+		user_param->use_old_post_send = 1;
+		if (user_param->test_method == RUN_ALL)
+		{
 			fprintf(stderr, "Raw Ethernet tests do not support -a / --all flag.\n");
 			exit(1);
 		}
@@ -1122,13 +1132,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->gid_index = 0;
 	}
 
-
-	if (user_param->verb == ATOMIC && user_param->connection_type == DC) {
-		printf(RESULT_LINE);
-		fprintf(stderr, " ATOMIC tests don't support DC transport\n");
-		exit(1);
-	}
-
 	if (user_param->work_rdma_cm) {
 
 		if (user_param->connection_type == UC) {
@@ -1183,6 +1186,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if(user_param->connection_type == UC && user_param->use_odp) {
+		printf(RESULT_LINE);
+		fprintf(stderr," ODP does not support UC\n");
+		exit(1);
+	}
+
 	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
 
@@ -1216,7 +1225,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->connection_type == DC && !user_param->use_srq)
-		user_param->use_srq = 1;
+		user_param->use_srq = ON;
 
 	/* XRC Part */
 	if (user_param->connection_type == XRC) {
@@ -1229,10 +1238,27 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->use_srq = ON;
 	}
 
-	if(user_param->connection_type == DC) {
-		if (user_param->work_rdma_cm == ON) {
+	if (!user_param->use_old_post_send)
+	{
+		#ifndef HAVE_IBV_WR_API
+		printf(RESULT_LINE);
+		fprintf(stderr, " new post send flow is not supported, falling back to ibv_post_send\n");
+		user_param->use_old_post_send = 1;
+		#endif
+	}
+
+	if (user_param->connection_type == DC)
+	{
+		if (user_param->use_old_post_send)
+		{
 			printf(RESULT_LINE);
-			fprintf(stderr," DC does not support RDMA_CM\n");
+			fprintf(stderr, " DC does not support old post send flow\n");
+			exit(1);
+		}
+		if (user_param->work_rdma_cm == ON)
+		{
+			printf(RESULT_LINE);
+			fprintf(stderr, " DC does not support RDMA_CM\n");
 			exit(1);
 		}
 	}
@@ -1385,12 +1411,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->margin = user_param->duration / 4;
 	}
 
-	#if defined(HAVE_VERBS_EXP) && defined(HAVE_DC)
-	if (user_param->connection_type == DC) {
-		user_param->use_exp = 1;
-	}
-	#endif
-
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
 		if (user_param->tst != BW) {
@@ -1436,52 +1456,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr, " Events must be enabled to select a completion vector\n");
 		exit(1);
 	}
-
-	#ifdef HAVE_ACCL_VERBS
-	if (user_param->verb_type != NORMAL_INTF || user_param->use_res_domain) {
-		user_param->is_exp_cq = 1;
-		user_param->use_exp = 1;
-	}
-
-	if (user_param->verb_type == ACCL_INTF) {
-		if (user_param->connection_type != RC &&
-			user_param->connection_type != UC && user_param->connection_type != RawEth) {
-			fprintf(stderr, "Accelerated verbs support RC/UC/RAW_ETH connections only.\n");
-			exit(1);
-		}
-
-		if (user_param->verb != SEND) {
-			fprintf(stderr, "Accelerated verbs support SEND opcode only.\n");
-			exit(1);
-		}
-
-		if (user_param->num_of_qps > 1) {
-			fprintf(stderr, "Accelerated verbs in perftest support only 1 qp for now.\n");
-			exit(1);
-		}
-
-		if (user_param->tst != BW) {
-			fprintf(stderr, "Accelerated verbs in perftest supports only BW tests for now.\n");
-			exit(1);
-		}
-
-		if (user_param->duplex) {
-			fprintf(stderr, "Accelerated verbs in perftest supports only unidir tests for now\n");
-			exit(1);
-		}
-
-		if (user_param->test_method == RUN_INFINITELY) {
-			fprintf(stderr, "Accelerated verbs in perftest does not support Run Infinitely mode for now\n");
-			exit(1);
-		}
-	}
-	if (user_param->perform_warm_up &&
-	    !(user_param->tst == BW &&
-	    (user_param->verb == ATOMIC || user_param->verb == WRITE || user_param->verb == READ))) {
-		fprintf(stderr, "Perform warm up is available in ATOMIC, READ and WRITE BW tests only");
-		exit(1);
-	}
-	#endif
 
 	return;
 }
@@ -1867,8 +1841,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
-	static int use_exp_flag = 0;
+#ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
+#endif
+	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
@@ -1876,16 +1852,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
 	static int hugepages_flag = 0;
+	static int old_post_send_flag = 0;
 	static int use_promiscuous_flag = 0;
 	static int use_sniffer_flag = 0;
 	static int raw_mcast_flag = 0;
-	static int verb_type_flag = 0;
 	static int use_res_domain_flag = 0;
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
 	static int wait_destroy_flag = 0;
-	static int disable_fcs_flag = 0;
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
 	static int force_link_flag = 0;
@@ -1991,46 +1966,42 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
-			{ .name = "use_cuda",		.has_arg = 0, .flag = &use_cuda_flag, .val = 1},
+			#ifdef HAVE_CUDA
+			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
+			#endif
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
 			#ifdef HAVE_IPV6
 			{ .name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
 			#endif
-			{ .name = "report-per-port",	.has_arg = 0, .flag = &report_per_port_flag, .val = 1},
-			{ .name = "odp",		.has_arg = 0, .flag = &odp_flag, .val = 1},
-			{ .name = "use_hugepages",		.has_arg = 0, .flag = &hugepages_flag, .val = 1},
-			{ .name = "promiscuous",	.has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
-			#if defined HAVE_SNIFFER || defined HAVE_SNIFFER_EXP
-			{ .name = "sniffer",		.has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
+			{.name = "report-per-port", .has_arg = 0, .flag = &report_per_port_flag, .val = 1},
+			{.name = "odp", .has_arg = 0, .flag = &odp_flag, .val = 1},
+			{.name = "use_hugepages", .has_arg = 0, .flag = &hugepages_flag, .val = 1},
+			{.name = "use_old_post_send", .has_arg = 0, .flag = &old_post_send_flag, .val = 1},
+			{.name = "promiscuous", .has_arg = 0, .flag = &use_promiscuous_flag, .val = 1},
+			#if defined HAVE_SNIFFER
+			{.name = "sniffer", .has_arg = 0, .flag = &use_sniffer_flag, .val = 1},
 			#endif
-			{ .name = "raw_mcast",		.has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
-			#ifdef HAVE_VERBS_EXP
-			{ .name = "use_exp",		.has_arg = 0, .flag = &use_exp_flag, .val = 1},
-			#endif
-			#ifdef HAVE_ACCL_VERBS
-			{ .name = "verb_type",		.has_arg = 1, .flag = &verb_type_flag, .val = 1},
-			{ .name = "use_res_domain",	.has_arg = 0, .flag = &use_res_domain_flag, .val = 1},
-			#endif
-			{ .name = "mr_per_qp",		.has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
-			{ .name = "dlid",		.has_arg = 1, .flag = &dlid_flag, .val = 1},
-			{ .name = "tclass",		.has_arg = 1, .flag = &tclass_flag, .val = 1},
-			{ .name = "wait_destroy",	.has_arg = 1, .flag = &wait_destroy_flag, .val = 1},
-			#ifdef HAVE_SCATTER_FCS
-			{ .name = "disable_fcs",	.has_arg = 0, .flag = &disable_fcs_flag, .val = 1},
-			#endif
-			{ .name = "flows",		.has_arg = 1, .flag = &flows_flag, .val = 1},
-			{ .name = "flows_burst",	.has_arg = 1, .flag = &flows_burst_flag, .val = 1},
-			{ .name = "reply_every",	.has_arg = 1, .flag = &reply_every_flag, .val = 1},
-			{ .name = "perform_warm_up",	.has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
-			{ .name = "vlan_en",            .has_arg = 0, .flag = &vlan_en, .val = 1 },
-			{ .name = "vlan_pcp",		.has_arg = 1, .flag = &vlan_pcp_flag, .val = 1 },
+			{.name = "raw_mcast", .has_arg = 0, .flag = &raw_mcast_flag, .val = 1},
 
-			#if defined HAVE_OOO_ATTR || defined HAVE_EXP_OOO_ATTR
-			{ .name = "use_ooo",		.has_arg = 0, .flag = &use_ooo_flag, .val = 1},
+			{.name = "mr_per_qp", .has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
+			{.name = "dlid", .has_arg = 1, .flag = &dlid_flag, .val = 1},
+			{.name = "tclass", .has_arg = 1, .flag = &tclass_flag, .val = 1},
+			{.name = "wait_destroy", .has_arg = 1, .flag = &wait_destroy_flag, .val = 1},
+			{.name = "flows", .has_arg = 1, .flag = &flows_flag, .val = 1},
+			{.name = "flows_burst", .has_arg = 1, .flag = &flows_burst_flag, .val = 1},
+			{.name = "reply_every", .has_arg = 1, .flag = &reply_every_flag, .val = 1},
+			{.name = "perform_warm_up", .has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
+			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
+			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
+			#if defined HAVE_RO
+			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
 			#endif
-			{ 0 }
+			#if defined HAVE_OOO_ATTR
+			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
+			#endif
+			{0}
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:L:E:J:j:K:k:X:W:aFegzRvhbNVCHUOZP",long_options,NULL);
 
@@ -2361,6 +2332,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					latency_gap_flag = 0;
 				}
+#ifdef HAVE_CUDA
+				if (use_cuda_flag) {
+					user_param->use_cuda = 1;
+					user_param->cuda_device_id = strtol(optarg, NULL, 0);
+					if (user_param->cuda_device_id < 0)
+					{
+						fprintf(stderr, "Invalid CUDA device %d\n", user_param->cuda_device_id);
+						return FAILURE;
+					}
+					use_cuda_flag = 0;
+				}
+#endif
 				if (flow_label_flag) {
 					user_param->flow_label = strtol(optarg,NULL,0);
 					if (user_param->flow_label < 0) {
@@ -2376,17 +2359,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					retry_count_flag = 0;
-				}
-				if (verb_type_flag) {
-					if (strcmp("normal",optarg) == 0) {
-						user_param->verb_type = NORMAL_INTF;
-					} else if (strcmp("accl",optarg) == 0) {
-						user_param->verb_type = ACCL_INTF;
-					} else {
-						fprintf(stderr, " Invalid verb type. Please choose normal/accl.\n");
-						return FAILURE;
-					}
-					verb_type_flag = 0;
 				}
 				if (mmap_file_flag) {
 					user_param->mmap_file = strdup(optarg);
@@ -2524,17 +2496,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->dont_xchg_versions = 1;
 	}
 
-	if (use_exp_flag) {
-		user_param->use_exp = 1;
-	}
-
 	if (use_res_domain_flag) {
 		user_param->use_res_domain = 1;
 	}
 
-	if (use_cuda_flag) {
-		user_param->use_cuda = 1;
+	if (disable_pcir_flag) {
+		user_param->disable_pcir = 1;
 	}
+
 	if (report_both_flag) {
 		user_param->report_both = 1;
 	}
@@ -2630,6 +2599,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->use_hugepages = 1;
 	}
 
+	if(old_post_send_flag) {
+		user_param->use_old_post_send = 1;
+	}
+
 	if (use_promiscuous_flag) {
 		user_param->use_promiscuous = 1;
 	}
@@ -2646,9 +2619,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->mr_per_qp = 1;
 	}
 
-	if (disable_fcs_flag) {
-		user_param->disable_fcs = 1;
-	}
 	if (perform_warm_up_flag) {
 		user_param->perform_warm_up = 1;
 	}
@@ -2762,7 +2732,6 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 int check_link(struct ibv_context *context,struct perftest_parameters *user_param)
 {
 	user_param->transport_type = context->device->transport_type;
-
 	if (set_link_layer(context, user_param) == FAILURE){
 		fprintf(stderr, " Couldn't set the link layer\n");
 		return FAILURE;
@@ -2855,7 +2824,11 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf(" Dual-port       : %s\t\tDevice         : %s\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
 	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
 	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
-
+	#ifdef HAVE_RO
+	printf(" PCIe relax order: %s\n", user_param->disable_pcir ? "OFF"  : "ON");
+	#else
+	printf(" PCIe relax order: %s\n", "Unsupported");
+	#endif
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
 	}
@@ -2940,11 +2913,17 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	int run_inf_bi_factor;
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
-	long num_of_calculated_iters = user_param->iters;
+	uint64_t num_of_calculated_iters = user_param->iters;
 
 	int free_my_bw_rep = 0;
-	if (user_param->test_method == RUN_INFINITELY)
+	if (user_param->test_method == RUN_INFINITELY) {
 		user_param->tcompleted[opt_posted]= get_cycles();
+		/*
+                 * cumulative iterations may reach maximum and restarts from 0
+                 * then iters < last_iters
+                 */
+		num_of_calculated_iters = (uint64_t)(user_param->iters - user_param->last_iters);
+	}
 
 	cycles_t t,opt_delta, peak_up, peak_down,tsize;
 
