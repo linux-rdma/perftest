@@ -1,4 +1,3 @@
-#
 # Copyright (C) 2001-2011 Mellanox Technologies Ltd.  All rights reserved.
 #
 # This software is available to you under a choice of one of two
@@ -28,7 +27,6 @@
 # ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-#
 dnl Process this file with autoconf to produce a configure script.
 
 AC_INIT([perftest],[5.60],[linux-rdma@vger.kernel.org])
