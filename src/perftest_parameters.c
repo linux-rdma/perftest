@@ -1584,6 +1584,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 4124  : dev_fname = CONNECTX6; break;
 			case 4125  : dev_fname = CONNECTX6DX; break;
 			case 4126  : dev_fname = MLX5GENVF; break;
+			case 4127  : dev_fname = CONNECTX6LX; break;
+			case 4129  : dev_fname = CONNECTX7; break;
 			case 41682 : dev_fname = BLUEFIELD; break;
 			case 41683 : dev_fname = BLUEFIELD; break;
 			case 41686 : dev_fname = BLUEFIELD2; break;
