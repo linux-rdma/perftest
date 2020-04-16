@@ -297,6 +297,8 @@ enum ctx_device {
 	INTEL_ALL		= 22,
 	NETXTREME		= 23,
 	EFA			= 24,
+	CONNECTX6LX		= 25,
+	CONNECTX7		= 26,
 };
 
 /* Units for rate limiter */
