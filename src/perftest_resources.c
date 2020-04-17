@@ -63,10 +63,8 @@ struct check_alive_data check_alive_data;
 static CUdevice cuDevice;
 static CUcontext cuContext;
 
-static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
+static int pp_init_gpu(struct pingpong_context *ctx)
 {
-	const size_t gpu_page_size = 64*1024;
-	size_t size = (_size + gpu_page_size - 1) & ~(gpu_page_size - 1);
 	printf("initializing CUDA\n");
 	CUresult error = cuInit(0);
 	if (error != CUDA_SUCCESS) {
@@ -113,33 +111,13 @@ static int pp_init_gpu(struct pingpong_context *ctx, size_t _size)
 		return 1;
 	}
 
-	printf("cuMemAlloc() of a %zd bytes GPU buffer\n", size);
-	CUdeviceptr d_A;
-	error = cuMemAlloc(&d_A, size);
-	if (error != CUDA_SUCCESS) {
-		printf("cuMemAlloc error=%d\n", error);
-		return 1;
-	}
-	printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A,
-	       (void *) d_A);
-	ctx->buf[0] = (void*)d_A;
-
 	return 0;
 }
 
-static int pp_free_gpu(struct pingpong_context *ctx)
+static void pp_free_gpu(struct pingpong_context *ctx)
 {
-	int ret = 0;
-	CUdeviceptr d_A = (CUdeviceptr) ctx->buf[0];
-
-	printf("deallocating RX GPU buffer\n");
-	cuMemFree(d_A);
-	d_A = 0;
-
 	printf("destroying current CUDA Ctx\n");
 	CUCHECK(cuCtxDestroy(cuContext));
-
-	return ret;
 }
 #endif
 
@@ -1211,6 +1189,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
+		for (i = 0; i < dereg_counter; i++) {
+			CUdeviceptr d_A = (CUdeviceptr)ctx->buf[i];
+
+			printf("deallocating RX GPU buffer %016llx\n", d_A);
+			cuMemFree(d_A);
+			d_A = 0;
+		}
 		pp_free_gpu(ctx);
 	}
 	else
@@ -1526,11 +1511,25 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
+		CUdeviceptr d_A;
+		int error;
+		const size_t gpu_page_size = 64 * 1024;
+		size_t size = (ctx->buff_size + gpu_page_size - 1) &
+			~(gpu_page_size - 1);
+
 		ctx->is_contig_supported = FAILURE;
-		if(pp_init_gpu(ctx, ctx->buff_size)) {
-			fprintf(stderr, "Couldn't allocate work buf.\n");
+
+		printf("cuMemAlloc() of a %zd bytes GPU buffer\n",
+		       ctx->buff_size);
+		error = cuMemAlloc(&d_A, size);
+		if (error != CUDA_SUCCESS) {
+			printf("cuMemAlloc error=%d\n", error);
 			return FAILURE;
 		}
+
+		printf("allocated GPU buffer address at %016llx pointer=%p\n",
+		       d_A, (void *)d_A);
+		ctx->buf[qp_index] = (void *)d_A;
 	} else
 	#endif
 
@@ -1837,6 +1836,15 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		ctx->res_domain = create_res_domain(ctx, user_param);
 		if (!ctx->res_domain) {
 			fprintf(stderr, "Couldn't create resource domain\n");
+			return FAILURE;
+		}
+	}
+	#endif
+
+	#ifdef HAVE_CUDA
+	if (user_param->use_cuda) {
+		if (pp_init_gpu(ctx)) {
+			fprintf(stderr, "Couldn't init GPU context\n");
 			return FAILURE;
 		}
 	}
