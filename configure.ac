@@ -229,11 +229,20 @@ if [test $HAVE_EXP_OOO_ATTR = yes]; then
 	AC_DEFINE([HAVE_EXP_OOO_ATTR], [1], [Have Experimental Out of order data placement support])
 fi
 
-AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes LIBEFA=-lefa], [HAVE_SRD=no])
+if [test $HAVE_IBV_WR_API = yes]; then
+	AC_CHECK_LIB([efa], [efadv_create_qp_ex], [HAVE_SRD=yes], [HAVE_SRD=no])
+	AC_TRY_LINK([#include <infiniband/efadv.h>],
+		    [int x = EFADV_DEVICE_ATTR_CAPS_RDMA_READ;], [HAVE_RDMA_READ_SRD=yes], [HAVE_RDMA_READ_SRD=no])
+	if [test $HAVE_RDMA_READ_SRD = yes]; then
+		AC_DEFINE([HAVE_SRD_WITH_RDMA_READ], [1], [Have SRD with RDMA read support])
+	fi
+else
+	AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes], [HAVE_SRD=no])
+fi
 AM_CONDITIONAL([HAVE_SRD], [test "x$HAVE_SRD" = "xyes"])
-if [test $HAVE_SRD = yes] && [test $HAVE_IBV_WR_API = no]; then
+if [test $HAVE_SRD = yes]; then
 	AC_DEFINE([HAVE_SRD], [1], [Have SRD support])
-	AC_SUBST([LIBEFA])
+	AC_SUBST([LIBEFA], [-lefa])
 fi
 
 AC_CHECK_LIB([mlx5], [mlx5dv_create_qp], [HAVE_MLX5DV_LIB=yes LIBMLX5=-lmlx5], [HAVE_MLX5DV_LIB=no])
