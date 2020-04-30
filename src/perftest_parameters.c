@@ -444,7 +444,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MB/sec)\n");
 		printf("        Note: MB=2^20 byte, while Gb=10^9 bits. Use these formulas for conversion:\n");
-		printf("        Factor=10^9/(20^2*8)=119.2; MB=Gb_result * factor; Gb=MB_result / factor\n");
+		printf("        Factor=10^9/(2^20*8)=119.2; MB=Gb_result * factor; Gb=MB_result / factor\n");
 
 		if (connection_type != RawEth) {
 			printf("      --report-per-port ");
