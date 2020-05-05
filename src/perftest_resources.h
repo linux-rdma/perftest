@@ -52,6 +52,9 @@
 #define PERFTEST_RESOURCES_H
 
 #include <infiniband/verbs.h>
+#if defined(HAVE_MLX5DV)
+#include <infiniband/mlx5dv.h>
+#endif
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
 #if defined(__FreeBSD__)
@@ -167,6 +170,9 @@ struct pingpong_context {
 	struct ibv_qp				**qp;
 	#ifdef HAVE_IBV_WR_API
 	struct ibv_qp_ex			**qpx;
+	#ifdef HAVE_MLX5DV
+	struct mlx5dv_qp_ex			**dv_qp;
+	#endif
 	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
 		struct perftest_parameters *user_param);
 	#endif
@@ -179,7 +185,6 @@ struct pingpong_context {
 	uint64_t				*my_addr;
 	uint64_t				*rx_buffer_addr;
 	uint64_t				*rem_addr;
-	uint32_t 				*rem_qpn;
 	uint64_t				buff_size;
 	uint64_t				send_qp_buff_size;
 	uint64_t				flow_buff_size;
@@ -188,6 +193,7 @@ struct pingpong_context {
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
 	int					is_contig_supported;
+	uint32_t				*r_dctn;
 	uint32_t                                *ctrl_buf;
 	uint32_t                                *credit_buf;
 	struct ibv_mr                           *credit_mr;
@@ -201,20 +207,6 @@ struct pingpong_context {
 	struct ibv_xrcd				*xrc_domain;
 	int 					fd;
 	#endif
-	#if defined(HAVE_VERBS_EXP)
-        drv_exp_post_send_func			exp_post_send_func_pointer;
-        drv_post_send_func			post_send_func_pointer;
-	drv_poll_cq_func			poll_cq_func_pointer;
-	struct ibv_exp_dct			**dct;
-	struct ibv_exp_send_wr			*exp_wr;
-	#endif
-	#ifdef HAVE_ACCL_VERBS
-	struct ibv_exp_res_domain		*res_domain;
-	struct ibv_exp_cq_family		*send_cq_family;
-	struct ibv_exp_cq_family		*recv_cq_family;
-	struct ibv_exp_qp_burst_family		**qp_burst_family;
-	#endif
-
 };
 
  struct pingpong_dest {
@@ -351,15 +343,14 @@ int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param
  *
  * Parameters :
  *
- *	pd      - The Protection domain , each the qp will be assigned to.
- *	send_cq - The CQ that will produce send CQE.
- *	recv_qp - The CQ that will produce recv CQE.
- *	param   - The parameters for the QP.
+ *	ctx - QP context.
+ *	user_param  - The perftest parameters.
+ *	qp_index   - The qp number to create.
  *
  * Return Value : Adress of the new QP.
  */
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
-							 struct perftest_parameters *user_param);
+			struct perftest_parameters *user_param, int qp_index);
 
 /* ctx_modify_qp_to_init.
  *
@@ -371,12 +362,13 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
  * Parameters :
  *
  *	qp     - The QP that will be moved to INIT.
- *	param  - The parameters for the QP.
+ *	user_param  - The perftest parameters.
+ *	qp_index   - The qp number to create.
  *
  * Return Value : SUCCESS, FAILURE.
  *
  */
-int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, uint64_t init_flag);
+int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param, int qp_index);
 
 /* ctx_connect.
  *
@@ -398,24 +390,6 @@ int ctx_connect(struct pingpong_context *ctx,
 				struct pingpong_dest *dest,
 				struct perftest_parameters *user_param,
 				struct pingpong_dest *my_dest);
-
-/* ctx_set_send_exp_wqes.
- *
- * Description :
- *
- *	Prepare the exp send work request templates for all QPs
- *
- * Parameters :
- *
- *	ctx     - Test Context.
- *	user_param  - user_parameters struct for this test.
- *  rem_dest   - pingpong_dest struct of the remote side.
- *
- */
-void ctx_set_send_exp_wqes(struct pingpong_context *ctx,
-					   struct perftest_parameters *user_param,
-					   struct pingpong_dest *rem_dest);
-
 
 /* ctx_set_send_regwqes.
  *
@@ -686,25 +660,6 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel)
 	return 0;
 }
 
-#if defined(HAVE_VERBS_EXP)
-static __inline void increase_exp_rem_addr(struct ibv_exp_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer)
-{
-	if (verb == ATOMIC)
-		wr->wr.atomic.remote_addr += INC(size,cache_line_size);
-
-	else
-		wr->wr.rdma.remote_addr += INC(size,cache_line_size);
-
-	if ( ((scnt+1) % (cycle_buffer/ INC(size,cache_line_size))) == 0) {
-
-		if (verb == ATOMIC)
-			wr->wr.atomic.remote_addr = prim_addr;
-
-		else
-			wr->wr.rdma.remote_addr = prim_addr;
-	}
-}
-#endif
 static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer)
 {
 	if (verb == ATOMIC)
@@ -776,58 +731,17 @@ void catch_alarm_infintely();
 */
 void *handle_signal_print_thread(void *sig_mask);
 
-/* ctx_modify_dc_qp_to_init.
- *
- * Description :
- *
- *	Modifies the given QP to INIT state , according to attributes in param.
- *  The relevent attributes are ib_port, connection_type and verb.
- *
- * Parameters :
- *
- *	qp     - The QP that will be moved to INIT.
- *	param  - The parameters for the QP.
- *
- * Return Value : SUCCESS, FAILURE.
- *
- */
-int ctx_modify_dc_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_param);
-
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
-#ifdef HAVE_MASKED_ATOMICS
-struct ibv_qp* ctx_atomic_qp_create(struct pingpong_context *ctx,
-					struct perftest_parameters *user_param);
-int check_masked_atomics_support(struct pingpong_context *ctx);
-#endif
-
-#if defined (HAVE_PACKET_PACING_EXP) || defined (HAVE_PACKET_PACING)
+#if defined (HAVE_PACKET_PACING)
 int check_packet_pacing_support(struct pingpong_context *ctx);
-#if defined (HAVE_PACKET_PACING_EXTENSION_EXP)
-int check_packet_pacing_extension_support(struct pingpong_context *ctx);
-#endif
-#endif
-
-#ifdef HAVE_ACCL_VERBS
-struct ibv_exp_res_domain* create_res_domain(struct pingpong_context *ctx,
-						struct perftest_parameters *user_param);
 #endif
 
 int create_reg_qp_main(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int i, int num_of_qps);
 
-#ifdef HAVE_VERBS_EXP
-int create_exp_qp_main(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, int i, int num_of_qps);
-#endif
-
 int create_qp_main(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int i, int num_of_qps);
-
-#ifdef HAVE_VERBS_EXP
-struct ibv_qp* ctx_exp_qp_create(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, int qp_index);
-#endif
 
 int modify_qp_to_init(struct pingpong_context *ctx,
                 struct perftest_parameters *user_param, int qp_index, int num_of_qps);

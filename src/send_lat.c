@@ -74,6 +74,7 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_param->ib_port;
 	mcg_params->ib_ctx  = ctx->context;
+	mcg_params->ib_devname = user_param->ib_devname;
 
 	if (!strcmp(link_layer_str(user_param->link_type),"IB")) {
 		/* Request for Mcast group create registery in SM. */
@@ -248,7 +249,7 @@ int main(int argc, char *argv[])
 	}
 
 	exchange_versions(&user_comm, &user_param);
-
+	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
 	/* See if MTU and link type are valid and supported. */
@@ -291,10 +292,6 @@ int main(int argc, char *argv[])
 	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
 
-	for (i=0; i < user_param.num_of_qps; i++)
-		ctx_print_pingpong_data(&my_dest[i],&user_comm);
-
-	user_comm.rdma_params->side = REMOTE;
 	for (i=0; i < user_param.num_of_qps; i++) {
 
 		/* shaking hands and gather the other side info. */
@@ -302,8 +299,6 @@ int main(int argc, char *argv[])
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
 			return FAILURE;
 		}
-
-		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	if (user_param.work_rdma_cm == OFF) {
@@ -352,6 +347,32 @@ int main(int argc, char *argv[])
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
 		return FAILURE;
+	}
+
+	if (user_param.connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(&ctx, &user_param, my_dest))
+		{
+			fprintf(stderr, " Unable to set up socket connection\n");
+			return FAILURE;
+		}
+	}
+
+	/* Print this machine QP information */
+	for (i=0; i < user_param.num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],&user_comm);
+
+	user_comm.rdma_params->side = REMOTE;
+
+	for (i=0; i < user_param.num_of_qps; i++) {
+
+		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			return FAILURE;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	if (user_param.use_event) {

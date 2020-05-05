@@ -15,9 +15,6 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include "perftest_communication.h"
-#ifdef HAVE_SRD
-#include <infiniband/efadv.h>
-#endif
 #if defined(__FreeBSD__)
 #include <ctype.h>
 #endif
@@ -530,38 +527,46 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	return 0;
 }
 
+#ifdef HAVE_GID_TYPE
+// declaration is copied from rdma-core, since it is private there.
+enum ibv_gid_type
+{
+	IBV_GID_TYPE_IB_ROCE_V1,
+	IBV_GID_TYPE_ROCE_V2,
+};
 
-#ifdef HAVE_GID_ATTR
+int ibv_query_gid_type(struct ibv_context *context, uint8_t port_num,
+	unsigned int index, enum ibv_gid_type *type);
+
+
 enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
 
 struct roce_version_sorted_enum {
-	enum ibv_exp_roce_gid_type type;
+	enum ibv_gid_type type;
 	int rate;
 };
 
 /* This struct defines which RoCE version is more important for default usage */
-struct roce_version_sorted_enum roce_versions_sorted [] = {
-	{IBV_EXP_IB_ROCE_V1_GID_TYPE, 1},
-	{IBV_EXP_ROCE_V2_GID_TYPE, 2},
-	{IBV_EXP_ROCE_V1_5_GID_TYPE, 3}
+struct roce_version_sorted_enum roce_versions_sorted[] = {
+	{IBV_GID_TYPE_IB_ROCE_V1, 1},
+	{IBV_GID_TYPE_ROCE_V2, 2},
 };
 
-int find_roce_version_rate (int roce_ver)
-{
+int find_roce_version_rate(enum ibv_gid_type roce_ver) {
 	int i;
 	int arr_len = GET_ARRAY_SIZE(roce_versions_sorted);
 
-	for (i = 0; i < arr_len; i++) {
+	for (i = 0; i < arr_len; i++)
+	{
 		if (roce_versions_sorted[i].type == roce_ver)
 			return roce_versions_sorted[i].rate;
 	}
-
 	return -1;
 }
 
-/* RoCE V1.5 > V2 > V1
+/* RoCE V2 > V1
  * other RoCE versions will be ignored until added to roce_versions_sorted array */
-static int check_better_roce_version (int roce_ver, int roce_ver_rival)
+static int check_better_roce_version(enum ibv_gid_type roce_ver, enum ibv_gid_type roce_ver_rival)
 {
 	int roce_ver_rate = find_roce_version_rate(roce_ver);
 	int roce_ver_rate_rival = find_roce_version_rate(roce_ver_rival);
@@ -599,26 +604,21 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			gid_index = i;
 		else if (!is_ipv4_rival && is_ipv4 && user_param->ipv6)
 			gid_index = i;
-#ifdef HAVE_GID_ATTR
+#ifdef HAVE_GID_TYPE
 		else {
-			int roce_version, roce_version_rival;
-			struct ibv_exp_gid_attr gid_attr;
+			enum ibv_gid_type roce_version, roce_version_rival;
 
-			gid_attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE;
-			if (ibv_exp_query_gid_attr(ctx->context, port, gid_index, &gid_attr))
+			if (ibv_query_gid_type(ctx->context, port, gid_index, &roce_version))
 				continue;
-			roce_version = gid_attr.type;
 
-			if (ibv_exp_query_gid_attr(ctx->context, port, i, &gid_attr))
+			if (ibv_query_gid_type(ctx->context, port, i, &roce_version_rival))
 				continue;
-			roce_version_rival = gid_attr.type;
 
 			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
-				gid_index = i;
+			 	gid_index = i;
 		}
 #endif
 	}
-
 	return gid_index;
 }
 
@@ -841,7 +841,6 @@ int set_up_connection(struct pingpong_context *ctx,
 	}
 	#endif
 
-	#ifdef HAVE_DC
 	if(user_param->machine == SERVER || user_param->duplex || user_param->tst == LAT) {
 		if (user_param->connection_type == DC) {
 			for (i=0; i < user_param->num_of_qps; i++) {
@@ -852,7 +851,6 @@ int set_up_connection(struct pingpong_context *ctx,
 			}
 		}
 	}
-	#endif
 	return 0;
 }
 
@@ -881,10 +879,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	if (res->ai_family != PF_INET) {
 		return FAILURE;
 	}
-
 	memcpy(&sin, res->ai_addr, sizeof(sin));
 	sin.sin_port = htons((unsigned short)user_param->port);
-
 	while (1) {
 
 		if (num_of_retry == 0) {
@@ -1195,6 +1191,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->mr_per_qp		= user_param->mr_per_qp;
 	comm->rdma_params->dlid			= user_param->dlid;
 	comm->rdma_params->cycle_buffer         = user_param->cycle_buffer;
+	comm->rdma_params->use_old_post_send = user_param->use_old_post_send;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1212,6 +1209,9 @@ int create_comm_struct(struct perftest_comm *comm,
 		ALLOCATE(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->buf, void* , user_param->num_of_qps);
 		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
+		#ifdef HAVE_IBV_WR_API
+		ALLOCATE(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps);
+		#endif
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
@@ -1672,6 +1672,18 @@ void exchange_versions(struct perftest_comm *user_comm, struct perftest_paramete
 /******************************************************************************
  *
  ******************************************************************************/
+void check_version_compatibility(struct perftest_parameters *user_param)
+{
+	if ((atof(user_param->rem_version) < 5.70))
+	{
+		fprintf(stderr, "Current implementation is not compatible with versions older than 5.70\n");
+		exit(1);
+	}
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters *user_param)
 {
 	int rem_cycle_buffer = 0;
@@ -1771,54 +1783,19 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 			user_param->size = RAWETH_MIN_MSG_SIZE;
 		}
 	} else if (user_param->connection_type == SRD) {
-		if (user_param->verb == SEND) {
-			struct ibv_port_attr port_attr;
+		struct ibv_port_attr port_attr;
 
-			if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
-				fprintf(stderr, " Error when trying to query port\n");
-				exit(1);
-			}
-
-			if (user_param->size > port_attr.max_msg_sz) {
-				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-					fprintf(stderr, " Max msg size is %u\n",
-						port_attr.max_msg_sz);
-					fprintf(stderr, " Changing to this size\n");
-					user_param->size = port_attr.max_msg_sz;
-				} else {
-					fprintf(stderr," Max message size in SRD cannot be greater than %u \n",
-						port_attr.max_msg_sz);
-					return FAILURE;
-				}
-			}
-		} else if (user_param->verb == READ) {
-#ifdef HAVE_SRD_WITH_RDMA_READ
-			struct efadv_device_attr efa_device_attr = {};
-
-			if (efadv_query_device(context, &efa_device_attr, sizeof(efa_device_attr))) {
-				fprintf(stderr, " Error when trying to query EFA device\n");
-				exit(1);
-			}
-			if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
-				fprintf(stderr, "Read verb is not supported with this EFA device\n");
-				exit(1);
-			}
-			if (user_param->size > efa_device_attr.max_rdma_size) {
-				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-					fprintf(stderr, " Max RDMA request size is %u\n",
-						efa_device_attr.max_rdma_size);
-					fprintf(stderr, " Changing to this size\n");
-					user_param->size = efa_device_attr.max_rdma_size;
-				} else {
-					fprintf(stderr," Max RDMA read size in SRD cannot be greater than %u\n",
-						efa_device_attr.max_rdma_size);
-					return FAILURE;
-				}
-			}
-#else
-			fprintf(stderr, "SRD connection not possible in READ verb\n");
+		if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
+			fprintf(stderr, " Error when trying to query port\n");
 			exit(1);
-#endif
+		}
+
+		if (user_param->size > port_attr.max_msg_sz) {
+			if (user_param->test_method == RUN_ALL) {
+				fprintf(stderr, " Max msg size is %u\n", port_attr.max_msg_sz);
+				fprintf(stderr, " Changing to this size\n");
+			}
+			user_param->size = port_attr.max_msg_sz;
 		}
 	}
 
