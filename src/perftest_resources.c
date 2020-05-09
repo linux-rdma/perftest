@@ -1394,12 +1394,25 @@ int verify_params_with_device_context(struct ibv_context *context,
 		}
 	}
 
-	if (current_dev == CONNECTX3_PRO || current_dev == CONNECTX3)
+	// those are devices supporting new post send
+	if (current_dev != CONNECTIB &&
+		current_dev != CONNECTX4 &&
+		current_dev != CONNECTX4LX &&
+		current_dev != CONNECTX5 &&
+		current_dev != CONNECTX5EX &&
+		current_dev != CONNECTX6 &&
+		current_dev != CONNECTX6DX &&
+		current_dev != CONNECTX6LX &&
+		current_dev != CONNECTX7 &&
+		current_dev != MLX5GENVF &&
+		current_dev != BLUEFIELD &&
+		current_dev != BLUEFIELD2 &&
+		current_dev != EFA)
 	{
 		if (!user_param->use_old_post_send)
 		{
-			fprintf(stderr, " Warning: ConnectX-3 and ConnectX-3 Pro don't support WR postsend API!\n");
-			fprintf(stderr, " Warning: Falling back to ibv_post_send() API\n");
+			fprintf(stderr, " Warning: The device chosen doesn't support WR post send API!\n");
+			fprintf(stderr, " Warning: Falling back to using ibv_post_send()\n");
 			user_param->use_old_post_send = 1;
 		}
 	}
