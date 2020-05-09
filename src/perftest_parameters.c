@@ -2831,6 +2831,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	#else
 	printf(" PCIe relax order: %s\n", "Unsupported");
 	#endif
+	printf(" ibv_wr* API     : %s\n", user_param->use_old_post_send ? "OFF" : "ON");
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
 	}
