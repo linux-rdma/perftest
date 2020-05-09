@@ -1411,8 +1411,6 @@ int verify_params_with_device_context(struct ibv_context *context,
 	{
 		if (!user_param->use_old_post_send)
 		{
-			fprintf(stderr, " Warning: The device chosen doesn't support WR post send API!\n");
-			fprintf(stderr, " Warning: Falling back to using ibv_post_send()\n");
 			user_param->use_old_post_send = 1;
 		}
 	}
