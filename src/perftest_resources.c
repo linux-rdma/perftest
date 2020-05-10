@@ -1384,7 +1384,6 @@ int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 int verify_params_with_device_context(struct ibv_context *context,
 				      struct perftest_parameters *user_param)
 {
-	enum ctx_device current_dev = ib_dev_name(context);
 	if(user_param->use_event) {
 		if(user_param->eq_num > context->num_comp_vectors) {
 			fprintf(stderr, " Completion vector specified is invalid\n");
@@ -1393,28 +1392,6 @@ int verify_params_with_device_context(struct ibv_context *context,
 			return FAILURE;
 		}
 	}
-
-	// those are devices supporting new post send
-	if (current_dev != CONNECTIB &&
-		current_dev != CONNECTX4 &&
-		current_dev != CONNECTX4LX &&
-		current_dev != CONNECTX5 &&
-		current_dev != CONNECTX5EX &&
-		current_dev != CONNECTX6 &&
-		current_dev != CONNECTX6DX &&
-		current_dev != CONNECTX6LX &&
-		current_dev != CONNECTX7 &&
-		current_dev != MLX5GENVF &&
-		current_dev != BLUEFIELD &&
-		current_dev != BLUEFIELD2 &&
-		current_dev != EFA)
-	{
-		if (!user_param->use_old_post_send)
-		{
-			user_param->use_old_post_send = 1;
-		}
-	}
-
 	return SUCCESS;
 }
 
@@ -1579,6 +1556,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	for (i=0; i < user_param->num_of_qps; i++) {
 		if (create_qp_main(ctx, user_param, i, num_of_qps)) {
 			fprintf(stderr, "Failed to create QP.\n");
+			if (user_param->connection_type == DC) {
+				fprintf(stderr, "DC is not supported for the divice chosen.\n");
+			}
 			return FAILURE;
 		}
 
@@ -1618,9 +1598,9 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 	}
 
 	if (ctx->qp[i] == NULL) {
-		fprintf(stderr, "Unable to create QP.\n");
-		return FAILURE;
-	}
+			return FAILURE;
+		}
+
 	#ifdef HAVE_IBV_WR_API
 	ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
 	#ifdef HAVE_MLX5DV
@@ -1639,6 +1619,12 @@ int create_qp_main(struct pingpong_context *ctx,
 {
 	int ret;
 	ret = create_reg_qp_main(ctx, user_param, i, num_of_qps);
+	// this can happen if device doesn't support ibv_wr_* post send API
+	if (ret == FAILURE && errno == EOPNOTSUPP)
+	{
+		user_param->use_old_post_send = 1;
+		ret = create_reg_qp_main(ctx, user_param, i, num_of_qps);
+	}
 	return ret;
 }
 
