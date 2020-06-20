@@ -704,10 +704,25 @@ int check_add_port(char **service,int port,
 	number = getaddrinfo(servername,*service,hints,res);
 
 	if (number < 0) {
-		fprintf(stderr, "%s for %s:%d\n", gai_strerror(number), servername, port);
+		fprintf(stderr, "%s for ai_family: %x service: %s port: %d\n",
+			gai_strerror(number), hints->ai_family, servername, port);
 		return FAILURE;
 	}
+	return SUCCESS;
+}
 
+/******************************************************************************
+ *
+ ******************************************************************************/
+int sockaddr_set_port(struct sockaddr *sin,int port)
+{
+	switch (sin->sa_family) {
+	case AF_INET:  ((struct sockaddr_in*) sin)->sin_port = htons(port);
+	case AF_INET6:  ((struct sockaddr_in6*) sin)->sin6_port = htons(port);
+	default:
+		fprintf(stderr, "ai_family: %x is not yet supported\n", sin->sa_family);
+		return FAILURE;
+	}
 	return SUCCESS;
 }
 

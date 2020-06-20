@@ -636,7 +636,7 @@ static int ethernet_client_connect(struct perftest_comm *comm)
 
 	int sockfd = -1;
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family   = AF_INET;
+	hints.ai_family   = comm->rdma_params->ai_family;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,comm->rdma_params->port,comm->rdma_params->servername,&hints,&res)) {
@@ -679,7 +679,7 @@ static int ethernet_server_connect(struct perftest_comm *comm)
 	int sockfd = -1, connfd;
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags    = AI_PASSIVE;
-	hints.ai_family   = AF_INET;
+	hints.ai_family   = comm->rdma_params->ai_family;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,comm->rdma_params->port,NULL,&hints,&res)) {
@@ -688,6 +688,8 @@ static int ethernet_server_connect(struct perftest_comm *comm)
 	}
 
 	for (t = res; t; t = t->ai_next) {
+		if (t->ai_family != comm->rdma_params->ai_family)
+			continue;
 		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
 
 		if (sockfd >= 0) {
@@ -864,14 +866,14 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 {
 	char *service;
 	int temp,num_of_retry= NUM_OF_RETRIES;
-	struct sockaddr_in sin;
+	struct sockaddr sin;
 	struct addrinfo *res;
 	struct rdma_cm_event *event;
 	struct rdma_conn_param conn_param;
 	struct addrinfo hints;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family   = AF_INET;
+	hints.ai_family   = user_param->ai_family;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
@@ -879,11 +881,11 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		return FAILURE;
 	}
 
-	if (res->ai_family != PF_INET) {
+	if (res->ai_family != user_param->ai_family) {
 		return FAILURE;
 	}
-	memcpy(&sin, res->ai_addr, sizeof(sin));
-	sin.sin_port = htons((unsigned short)user_param->port);
+	sin = *res->ai_addr;
+	sockaddr_set_port(&sin, (unsigned short)user_param->port);
 	while (1) {
 
 		if (num_of_retry == 0) {
@@ -891,7 +893,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 			return FAILURE;
 		}
 
-		if (rdma_resolve_addr(ctx->cm_id, NULL,(struct sockaddr *)&sin,2000)) {
+		if (rdma_resolve_addr(ctx->cm_id, NULL, &sin,2000)) {
 			fprintf(stderr, "rdma_resolve_addr failed\n");
 			return FAILURE;
 		}
@@ -1062,11 +1064,11 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	struct rdma_conn_param conn_param;
 	struct addrinfo hints;
 	char *service;
-	struct sockaddr_in sin;
+	struct sockaddr sin;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags    = AI_PASSIVE;
-	hints.ai_family   = AF_INET;
+	hints.ai_family   = user_param->ai_family;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (check_add_port(&service,user_param->port,user_param->servername,&hints,&res)) {
@@ -1074,13 +1076,12 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return FAILURE;
 	}
 
-	if (res->ai_family != PF_INET) {
+	if (res->ai_family != user_param->ai_family) {
 		return FAILURE;
 	}
-	memcpy(&sin, res->ai_addr, sizeof(sin));
-	sin.sin_port = htons((unsigned short)user_param->port);
-
-	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
+	sin = *res->ai_addr;
+	sockaddr_set_port(&sin, (unsigned short)user_param->port);
+	if (rdma_bind_addr(ctx->cm_id_control, &sin)) {
 		fprintf(stderr," rdma_bind_addr failed\n");
 		return 1;
 	}
@@ -1175,6 +1176,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	memset(comm->rdma_params, 0, sizeof(struct perftest_parameters));
 
 	comm->rdma_params->port		   	= user_param->port;
+	comm->rdma_params->ai_family	   	= user_param->ai_family;
 	comm->rdma_params->sockfd      		= -1;
 	comm->rdma_params->gid_index   		= user_param->gid_index;
 	comm->rdma_params->gid_index2 		= user_param->gid_index2;
@@ -1869,7 +1871,7 @@ int rdma_cm_get_rdma_address(struct perftest_parameters *user_param,
 	char port[6] = "", error_message[ERROR_MSG_SIZE] = "";
 
 	sprintf(port, "%d", user_param->port);
-	hints->ai_family = AF_INET;
+	hints->ai_family = user_param->ai_family;
 
 	rc = rdma_getaddrinfo(user_param->servername, port, hints, rai);
 	if (rc) {

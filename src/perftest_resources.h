@@ -243,6 +243,19 @@ int check_add_port(char **service,int port,
 				   struct addrinfo *hints,
 				   struct addrinfo **res);
 
+/* sockaddr_set_port
+ *
+ * Description : Initialize port for given sockaddr structure
+ *
+ * Parameters :
+ *	service - an empty char** to contain the service name.
+ *  port - The selected port on which the server will listen.
+ *  sin - sockaddr params for the connection.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int sockaddr_set_port(struct sockaddr *sin,int port);
+
 /* ctx_find_dev
  *
  * Description : Returns the device corresponding to ib_devname
