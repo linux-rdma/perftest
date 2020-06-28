@@ -554,6 +554,33 @@ static int new_post_atomic_cs_sge_xrc(struct pingpong_context *ctx, int index,
 #endif
 #endif
 
+/* post_send_method.
+ *
+ * Description :
+ *
+ * Does posting of work to a send queue.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	index       - qp index.
+ *	user_param  - user_parameters struct for this test.
+ *
+ * Return Value : int.
+ *
+ */
+static inline int post_send_method(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	#ifdef HAVE_IBV_WR_API
+	if (!user_param->use_old_post_send)
+		return (*ctx->new_post_send_work_request_func_pointer)(ctx, index, user_param);
+	#endif
+	struct ibv_send_wr 	*bad_wr = NULL;
+	return ibv_post_send(ctx->qp[index], &ctx->wr[index*user_param->post_list], &bad_wr);
+
+}
+
 #ifdef HAVE_XRCD
 /******************************************************************************
  *
@@ -2649,7 +2676,6 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 {
 	int 			ne,index,warmindex,warmupsession;
 	int 			err = 0;
-	struct ibv_send_wr 	*bad_wr = NULL;
 	struct ibv_wc 		wc;
 	struct ibv_wc 		*wc_for_cleaning = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
@@ -2661,6 +2687,11 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 	warmupsession = (user_param->post_list == 1) ? user_param->tx_depth : user_param->post_list;
 	ALLOCATE(wc_for_cleaning,struct ibv_wc,user_param->tx_depth);
 
+#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+#endif
+
 	/* Clean up the pipe */
 	ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,wc_for_cleaning);
 
@@ -2668,8 +2699,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 
 		for (warmindex = 0 ;warmindex < warmupsession ;warmindex += user_param->post_list) {
 
-			err = ibv_post_send(ctx->qp[index],&ctx->wr[index*user_param->post_list],&bad_wr);
-
+			err = post_send_method(ctx, index, user_param);
 			if (err) {
 				fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
 				return_value = FAILURE;
@@ -2700,33 +2730,6 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 cleaning:
 	free(wc_for_cleaning);
 	return return_value;
-}
-
-/* post_send_method.
- *
- * Description :
- *
- * Does posting of work to a send queue.
- *
- * Parameters :
- *
- *	ctx         - Test Context.
- *	index       - qp index.
- *	user_param  - user_parameters struct for this test.
- *
- * Return Value : int.
- *
- */
-static inline int post_send_method(struct pingpong_context *ctx, int index,
-	struct perftest_parameters *user_param)
-{
-	#ifdef HAVE_IBV_WR_API
-	if (!user_param->use_old_post_send)
-		return (*ctx->new_post_send_work_request_func_pointer)(ctx, index, user_param);
-	#endif
-	struct ibv_send_wr 	*bad_wr = NULL;
-	return ibv_post_send(ctx->qp[index], &ctx->wr[index*user_param->post_list], &bad_wr);
-
 }
 
 /******************************************************************************
