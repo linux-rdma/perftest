@@ -3311,6 +3311,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	uint64_t                *ccnt_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 	int 			return_value = 0;
+	int 			single_thread_handler;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -3329,6 +3330,28 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGALRM);
+	single_thread_handler = pthread_sigmask(SIG_BLOCK, &set, NULL);
+	if (single_thread_handler != 0)
+	{
+		printf("error when try to mask alram for signal to thread\n");
+		return FAILURE;
+	}
+	duration_param=user_param;
+	pthread_t print_thread;
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void *)&set) != 0)
+	{
+		printf("Fail to create thread \n");
+		return FAILURE;
+	}
+
+	alarm(user_param->duration);
+	user_param->iters = 0;
+	user_param->last_iters = 0;
+	user_param->tposted[0] = get_cycles();
+
 	while (1) {
 
 		ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
@@ -3342,7 +3365,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 					return_value = FAILURE;
 					goto cleaning;
 				}
-
+				user_param->iters++;
 				if (user_param->use_srq) {
 
 					if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id],&bad_wr_recv)) {
