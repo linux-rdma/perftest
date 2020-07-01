@@ -1,3 +1,149 @@
+perftest (4.4-0.29-8-gba04f65) unstable; urgency=low
+
+  * Add SRD support for new IBV send WR API
+  * Forbid messages larger than SRD max msg size
+  * Add SRD support for RDMA read
+  * Add ipv6 address support for initial communication.
+  * Update debian package config
+  * Add debian/changelog_update.sh helper script
+
+ -- Dmitry Monakhov <dmtrmonakhov@yandex-team.ru>  Wed, 01 Jul 2020 13:59:15 +0300
+
+perftest (4.4-0.29) unstable; urgency=low
+
+  * Change the Internal version to be backward compatible
+  * Fix for commit da2e8f107b8fdf0c712a428c061e45b79fabdfbb
+  * Force the run_infinitely mode to not support rate limit
+  * Remove contig support from regular verbs
+  * Add CX6 and BlueField device id's
+  * Added FreeBSD OS support
+  * Fix for commit a9df5ed7f04484b6838ee2b48246be1ab66513f1
+  * Add support for packet pacing extension
+  * Explain Gb/s to MB/s conversion.
+  * rpmlint: Fix bogus date warnings
+  * rpmlint: Remove RPM Groups tag
+  * Set default un-support for contig memory
+  * These code changes are done to include support for IPv6 address in
+    perftest. With this perftest should work fine witn both IPv4 and
+    IPv6 addresses.
+  * Add raw_mcast option description to help message
+  * Fix HW rate limit for RoCE devices
+  * Fix hugepages support
+  * Change spaces to tabs in alloc_hugepage_region()
+  * Suggest reducing requested SQ size on QP creation failed
+  * Support in the shel scripts for FreeBSD
+  * FreeBSD format type support with byte order respect
+  * Revert "Merge pull request #30 from AnandBibhuti/master"
+  * Change size of mtu buffer exchange to prevent overflow
+  * Ignore gid attribute query error for invalid gid
+  * Fixed RDMA CM flow on FreeBSD
+  * Fixed print to be in correct scope - inside if clause
+  * Add support to control hop limit(ttl) parameter for RawEth QP
+  * Fixed traffic class settings for DCT creation
+  * Changed perftest.spec RPM version to much MLNX_OFED
+  * Added group tag to the sepc file
+  * Added --use-srq flag description to the usage
+  * Fixed freebsd compilation warnings
+  * Added RDMA CM multi QP support
+  * Fixed ibv_read_bw on DC connection for MLNX_OFED-4.5
+  * Fixed rdma-cm related compilation warnings on FreeBSD
+  * Fixed compilation errors if glibc is old (e.g. XenServer 6.5)
+  * Fixed ToS(Type of Service) variable size issue
+  * Fix typos in README
+  * Added missing executables to .gitignore
+  * Add Intel devices to the perftest device list
+  * Use no greater than the max supported inline data size
+  * Use bash for run_perftest_multi_devices
+  * Do not hard code location of netinet/ip.h
+  * Changed fs-rate report to show results in usec instead of CPU cycles
+  * perftest: add Broadcom's netxtreme pci ids
+  * Added new post_send API usage for RC,UC,UD,XRC
+  * Fixed unused-but-set-variable warning in case of exp verbs are used
+  * Fixed false error reporting for ib_send_lat with MultiCast
+  * Fixed false error reporting on QP creation
+  * Added support for ConnectX6-Dx and Bluefield 2
+  * Added performance counter display
+  * Move to a more portable shebang in run_perftest_multi_devices
+  * Add EFA and SRD support for ib_send_* tests
+  * check for error return value in ctx_xchg_data
+  * Fixed incorrect behavior of ibv_send_lat with multicast.
+  * Fixes for multicast tests on setups with non-default pkeys
+  * Fixed a type in setting pkey
+  * Adjust default CQ moderation value according to message size
+  * Fixed IBV_WR API BW tests behaviour without CQ moderation
+  * Turned off disabling CQ moderation for --all and UD
+  * Remove the checking of ib_port max value
+  * Turned off --size flag for atomic tests
+  * Made messages larger than MTU forbidden for UD
+  * Allow overriding CQ moderation on post list mode (#58)
+  * Forbid --post-list flag if configured with --enable-ibv_wr_api
+  * Fix loop condition in some BW tests
+  * Fix completed timestamp in some cases
+  * In ctx_alloc_credit function in perftest_resources.c file, ctrl_buf
+    is allocated a size of user_param->num_of_qps however it is being
+    memset to a size of buf_size:
+  * Made iteration counter uint64 to prevent overflow
+  * adding ack event for RDMA_CM bad flows
+  * Fix multiple definition of duration_param
+  * Replace '_BSD_SOURCE' with '_DEFAULT_SOURCE'
+  * Bug fix - Failed to deallocate PD - Device or resource busy #52
+  * Removed some features that are not supported in rdma-core
+  * Added DC support for rdma-core
+  * Fixing latency bugs for ibv_wr_api
+  * Made ibv_wr_api default during the build
+  * Added RDMA CM support over rdma-core
+  * Add raw_ethernet_bw support with new post send API
+  * Removed extra setting up connection for non-DC connections
+  * Version increment to 5.72
+  * Added falling back to old post send API for ConnectX-3
+  * Fix latency multicast flow
+  * Enable PCIe relaxed ordering by default
+  * Fix for QP create flow to make RDMACM support both post send flows
+  * Add support for choosing CUDA device
+  * Added RDMA CM support for ConnectX-3
+  * Changed message for ConnectX-3 to be warnings
+  * Added devname to mcast parameters
+  * Fix DC with --sl flag
+  * Fix CUDA runs with mr_per_qp flag
+  * Support post list mode with new IBV send WR API
+  * Add SRD support for new IBV send WR API
+  * Forbid messages larger than SRD max msg size
+  * Add SRD support for RDMA read
+  * Add a warning that ODP is not supported with UC
+  * Added version check to warn user if incompatible versions used
+  * Fixed a typo in comment to check_version_compatibility description
+  * Aligned configure.ac format to internal standart
+  * Fixed DC failure on infiniband if --gid-index provided
+  * Removed disabling CQ moderation for --events flag
+  * Forced depth of SRQ to be not less than number of QPs
+  * Refactored modify_qp_to_rtr()
+  * Support post list mode with new IBV send WR API
+  * Forbid post list mode for non-BW tests.
+  * Hide relaxed ordering if it is not supported by verbs.h
+  * Fixed latency at low message size with --all flag
+  * Fixed choosing gid_index (RoCE v2 is prefered now)
+  * Compilation fixes for legacy-libs and FreeBSD
+  * Ported bugfixes from community
+  * Fix race condition issue on iteration
+  * Fixed wording in --use-cuda flag help
+  * resources: moving all ifdefs around post_send_method inside
+  * Update configure.ac to internal standart
+  * Removed disabling CQ moderation for --events flag
+  * Added support for ConnectX-6Lx and ConnectX-7
+  * Added support for ConnectX-6Lx and ConnectX-7
+  * Fix CUDA runs with mr_per_qp flag
+  * Disabled RO for Broadwell and Haswell
+  * Add PCIe relaxed ordering mark for memory registration
+  * Add SRD support for new IBV send WR API
+  * Forbid messages larger than SRD max msg size
+  * Add SRD support for RDMA read
+  * Fix typo in the calculation of the factor between MB/s and Gb/s
+  * Fix typo in the calculation of the factor between MB/s and Gb/s
+  * Fallback to ibv_post_send() for devices not supporting ibv_wr* API
+  * Disabled Relaxed Ordering for FreeBSD
+
+ -- Dmitry Monakhov <dmtrmonakhov@yandex-team.ru>  Wed, 01 Jul 2020 13:58:24 +0300
+
 perftest (4.2-0.0) stable; urgency=low
 
   * Initial release For Ubuntu (Closes: #182805)
