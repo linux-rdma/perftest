@@ -2,7 +2,7 @@ Source: perftest
 Section: net
 Priority: extra
 Maintainer: Gil Rockah <gilr@dev.mellanox.co.il>
-Build-Depends: debhelper (>= 8.0.0), libibverbs-dev (>= 1.1.6), librdmacm-dev
+Build-Depends: debhelper (>= 8.0.0), dh-autoreconf, libibverbs-dev (>= 1.1.6), librdmacm-dev, libibumad-dev
 Standards-Version: 3.9.2
 Homepage: https://openfabrics.org/downloads/perftest/
 Vcs-Git: git://git.openfabrics.org/~shamoya/perftest.git
