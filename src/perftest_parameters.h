@@ -70,6 +70,10 @@
 #include CUDA_PATH
 #endif
 
+#ifdef HAVE_ROCM
+#include <hip/hip_runtime_api.h>
+#endif
+
 /* Connection types available. */
 #define RC  (0)
 #define UC  (1)
@@ -455,6 +459,10 @@ struct perftest_parameters {
 #ifdef HAVE_CUDA
 	int				use_cuda;
 	int				cuda_device_id;
+#endif
+#ifdef HAVE_ROCM
+	int				use_rocm;
+	int				rocm_device_id;
 #endif
 	char				*mmap_file;
 	unsigned long			mmap_offset;
