@@ -442,7 +442,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if ( tst == BW ) {
 		printf("      --report-both ");
-		printf(" Report RX & TX results separately on Bidirectinal BW tests\n");
+		printf(" Report RX & TX results separately on Bidirectional BW tests\n");
 
 		printf("      --report_gbits ");
 		printf(" Report Max/Average BW of test in Gbit/sec (instead of MiB/sec)\n");
