@@ -1649,13 +1649,15 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		return FAILURE;
 	}
 	#ifdef HAVE_IBV_WR_API
-	ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
-	#ifdef HAVE_MLX5DV
-	if (user_param->connection_type == DC)
-	{
-		ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
+	if (!user_param->use_old_post_send) {
+		ctx->qpx[i] = ibv_qp_to_qp_ex(ctx->qp[i]);
+		#ifdef HAVE_MLX5DV
+		if (user_param->connection_type == DC)
+		{
+			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
+		}
+		#endif
 	}
-	#endif
 	#endif
 
 	return SUCCESS;
