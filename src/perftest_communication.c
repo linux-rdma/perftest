@@ -1085,7 +1085,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return 1;
 	}
 
-	if (rdma_listen(ctx->cm_id_control,0)) {
+	if (rdma_listen(ctx->cm_id_control,1)) {
 		fprintf(stderr, "rdma_listen failed\n");
 		return 1;
 	}
@@ -2477,7 +2477,7 @@ int rdma_cm_server_connection(struct pingpong_context *ctx,
 		goto error;
 	}
 
-	rc = rdma_listen(listen_id, 0);
+	rc = rdma_listen(listen_id, 1);
 	if (rc) {
 		sprintf(error_message,
 			"Failed to listen on RDMA CM server listen ID.");
