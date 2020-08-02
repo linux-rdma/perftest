@@ -1557,7 +1557,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		if (create_qp_main(ctx, user_param, i, num_of_qps)) {
 			fprintf(stderr, "Failed to create QP.\n");
 			if (user_param->connection_type == DC) {
-				fprintf(stderr, "DC is not supported for the divice chosen.\n");
+				fprintf(stderr, "DC is not supported for the device chosen.\n");
 			}
 			return FAILURE;
 		}
