@@ -999,6 +999,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->post_list > 1) {
 		if (user_param->tst == BW || user_param->tst == LAT_BY_BW)
 		{
+			if (user_param->test_type == ITERATIONS && (user_param->iters % user_param->post_list) != 0) {
+				printf(RESULT_LINE);
+				fprintf(stderr, "Number of iterations must be a multiple of post list size\n");
+				exit(1);
+			}
 			if (!user_param->req_cq_mod)
 			{
 				user_param->cq_mod = user_param->post_list;
