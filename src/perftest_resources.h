@@ -204,6 +204,7 @@ struct pingpong_context {
 	int                                     credit_cnt;
 	int					cache_line_size;
 	int					cycle_buffer;
+	int					rposted;
 	#ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
 	int 					fd;

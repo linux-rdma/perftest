@@ -254,8 +254,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	if (tst == BW || tst == LAT_BY_BW) {
-		printf("  -l, --post_list=<list size>");
-		printf(" Post list of WQEs of <list size> size (instead of single post)\n");
+		printf("  -l, --post_list=<list size>\n");
+		printf(" Post list of send WQEs of <list size> size (instead of single post)\n");
+		printf("      --recv_post_list=<list size>");
+		printf(" Post list of receive WQEs of <list size> size (instead of single post)\n");
 	}
 
 	if (tst != FS_RATE) {
@@ -641,6 +643,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->iters		= (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport		= OFF;
 	user_param->post_list		= 1;
+	user_param->recv_post_list	= 1;
 	user_param->use_srq		= OFF;
 	user_param->use_xrc		= OFF;
 	user_param->use_rss		= OFF;
@@ -999,6 +1002,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->post_list > 1) {
 		if (user_param->tst == BW || user_param->tst == LAT_BY_BW)
 		{
+			if (user_param->test_type == ITERATIONS && (user_param->iters % user_param->post_list) != 0) {
+				printf(RESULT_LINE);
+				fprintf(stderr, "Number of iterations must be a multiple of post list size\n");
+				exit(1);
+			}
 			if (!user_param->req_cq_mod)
 			{
 				user_param->cq_mod = user_param->post_list;
@@ -1016,6 +1024,21 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		{
 			printf(RESULT_LINE);
 			fprintf(stderr, "Post list is supported in BW tests only\n");
+			exit(1);
+		}
+	}
+	if (user_param->recv_post_list > 1) {
+		if (user_param->tst == BW || user_param->tst == LAT_BY_BW) {
+			if (user_param->test_type == ITERATIONS && (user_param->iters % user_param->recv_post_list) != 0) {
+				printf(RESULT_LINE);
+				fprintf(stderr, "Number of iterations must be a multiple of receive post list size\n");
+				exit(1);
+			}
+		}
+		else
+		{
+			printf(RESULT_LINE);
+			fprintf(stderr, "Receive post list is supported in BW tests only\n");
 			exit(1);
 		}
 	}
@@ -1877,6 +1900,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_ooo_flag = 0;
 	static int vlan_en = 0;
 	static int vlan_pcp_flag = 0;
+	static int recv_post_list_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -1997,6 +2021,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "perform_warm_up", .has_arg = 0, .flag = &perform_warm_up_flag, .val = 1},
 			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
 			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
+			{.name = "recv_post_list", .has_arg = 1, .flag = &recv_post_list_flag, .val = 1},
 			#if defined HAVE_RO
 			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
 			#endif
@@ -2466,6 +2491,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					vlan_pcp_flag = 0;
 				}
+				if (recv_post_list_flag) {
+					user_param->recv_post_list = strtol(optarg, NULL, 0);
+					recv_post_list_flag = 0;
+				}
 				break;
 
 			default:
@@ -2838,6 +2867,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 
 	if (user_param->post_list > 1)
 		printf(" Post List       : %d\n",user_param->post_list);
+	if (user_param->recv_post_list > 1)
+		printf(" Recv Post List  : %d\n", user_param->recv_post_list);
 
 	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) {
 		printf(" RX depth        : %d\n",user_param->rx_depth);
