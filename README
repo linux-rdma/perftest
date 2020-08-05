@@ -1,7 +1,5 @@
 	     Open Fabrics Enterprise Distribution (OFED)
-                Performance Tests README for OFED 3.0
-
-			  March 2015
+                	Performance Tests README
 
 
 
@@ -25,7 +23,7 @@ The collection contains a set of bandwidth and latency benchmark such as:
 
 	* Send        - ib_send_bw and ib_send_lat
 	* RDMA Read   - ib_read_bw and ib_read_lat
-	* RDMA Write  - ib_write_bw and ib_wriet_lat
+	* RDMA Write  - ib_write_bw and ib_write_lat
 	* RDMA Atomic - ib_atomic_bw and ib_atomic_lat
 	* Native Ethernet (when working with MOFED2) - raw_ethernet_bw, raw_ethernet_lat 
 
@@ -216,6 +214,14 @@ Special feature detailed explanation in tests:
      Send tests have built in feature of testing multicast performance, in verbs level.
      You can use "-g" to specify the number of QPs to attach to this multicast group.
      "-M" flag allows you to choose the multicast group address.
+     
+  4. GPUDirect usage:
+     To utilize GPUDirect feature, perftest should be compiled as:
+     ./autogen.sh && ./configure CUDA_H_PATH=<path to cuda.h> && make -j, e.g.:
+     ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j 
+     
+     Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
+     ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
 
 
 ===============================================================================
@@ -232,7 +238,7 @@ Special feature detailed explanation in tests:
  3. Different versions of perftest may not be compatible with each other.
     Please use the same perftest version on both sides to ensure consistency of benchmark results.
 
- 4. Test version 5.3 and above won't work with previous versions of perftest.
+ 4. Test version 5.3 and above won't work with previous versions of perftest. As well as 5.70 and above.
 
  5. This perftest package won't compile on MLNX_OFED-2.1 due to API changes in MLNX_OFED-2.2
     In order to compile it properly, please do:
@@ -243,3 +249,7 @@ Special feature detailed explanation in tests:
 
  7. perftest-2.3 release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
     Currently, running dualport when port1-IB , port2-Ethernet still not working.
+    
+ 8. If GPUDirect is not working, (e.g. you see "Couldn't allocate MR" error message), consider disabling Scatter to CQE feature. Set the environmental variable MLX5_SCATTER_TO_CQE=0. E.g.:
+    MLX5_SCATTER_TO_CQE=0 ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
+    
