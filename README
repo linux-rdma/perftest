@@ -217,8 +217,8 @@ Special feature detailed explanation in tests:
      
   4. GPUDirect usage:
      To utilize GPUDirect feature, perftest should be compiled as:
-     ./autogen.sh ; ./configure --CUDA_H_PATH=<path to cuda.h>; make -j, e.g.:
-     ./autogen.sh ; ./configure --CUDA_H_PATH=/usr/local/cuda/include/cuda.h; make -j 
+     ./autogen.sh && ./configure CUDA_H_PATH=<path to cuda.h> && make -j, e.g.:
+     ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j 
      
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
      ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
