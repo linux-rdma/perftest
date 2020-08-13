@@ -126,11 +126,11 @@ AC_TRY_LINK([
 #include <infiniband/verbs.h>],
         [int x = IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;],[HAVE_IBV_WR_API=yes],[HAVE_IBV_WR_API=no])
 AM_CONDITIONAL([HAVE_IBV_WR_API],[test "x$HAVE_IBV_WR_API" = "xyes"])
-# TODO: Add appropriate check. Currently we consider that if rdma-core
-# has new post send, it also has ibv_query_gid_type
-if [test $HAVE_IBV_WR_API = yes]; then
-	AC_DEFINE([HAVE_GID_TYPE], [1], [Have a way to check gid type])
-fi
+## TODO: Add appropriate check. Currently we consider that if rdma-core
+## has new post send, it also has ibv_query_gid_type
+#if [test $HAVE_IBV_WR_API = yes]; then
+#	AC_DEFINE([HAVE_GID_TYPE], [1], [Have a way to check gid type])
+#fi
 if [test $HAVE_IBV_WR_API = yes] && [test $USE_IBV_WR_API = yes]; then
         AC_DEFINE([HAVE_IBV_WR_API], [1], [Have new post send API support])
 else
