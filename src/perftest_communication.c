@@ -531,7 +531,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 }
 
 #ifdef HAVE_GID_TYPE
-// declaration is copied from rdma-core, since it is private there.
+#ifndef HAVE_GID_TYPE_DECLARED
 enum ibv_gid_type
 {
 	IBV_GID_TYPE_IB_ROCE_V1,
@@ -541,6 +541,7 @@ enum ibv_gid_type
 int ibv_query_gid_type(struct ibv_context *context, uint8_t port_num,
 	unsigned int index, enum ibv_gid_type *type);
 
+#endif
 
 enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
 
@@ -550,10 +551,17 @@ struct roce_version_sorted_enum {
 };
 
 /* This struct defines which RoCE version is more important for default usage */
+#ifndef HAVE_GID_TYPE_DECLARED
 struct roce_version_sorted_enum roce_versions_sorted[] = {
 	{IBV_GID_TYPE_IB_ROCE_V1, 1},
 	{IBV_GID_TYPE_ROCE_V2, 2},
 };
+#else
+struct roce_version_sorted_enum roce_versions_sorted[] = {
+	{IBV_GID_TYPE_ROCE_V1, 1},
+	{IBV_GID_TYPE_ROCE_V2, 2},
+};
+#endif
 
 int find_roce_version_rate(enum ibv_gid_type roce_ver) {
 	int i;
@@ -609,6 +617,20 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			gid_index = i;
 #ifdef HAVE_GID_TYPE
 		else {
+#ifdef HAVE_GID_TYPE_DECLARED
+			struct ibv_gid_entry roce_version, roce_version_rival;
+
+			if (ibv_query_gid_ex(ctx->context, port, gid_index, &roce_version))
+				continue;
+
+			if (ibv_query_gid_ex(ctx->context, port, i, &roce_version_rival))
+				continue;
+
+			if (check_better_roce_version(roce_version.gid_type, roce_version_rival.gid_type) == RIGHT_IS_BETTER) {
+				gid_index = i;
+			}
+
+#else
 			enum ibv_gid_type roce_version, roce_version_rival;
 
 			if (ibv_query_gid_type(ctx->context, port, gid_index, &roce_version))
@@ -617,9 +639,13 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			if (ibv_query_gid_type(ctx->context, port, i, &roce_version_rival))
 				continue;
 
-			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER)
-			 	gid_index = i;
+			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER) {
+				gid_index = i;
+			}
+#endif
 		}
+
+
 #endif
 	}
 	return gid_index;
