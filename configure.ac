@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[5.93],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[5.94],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -141,6 +141,13 @@ AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;],[HAVE_MLX5DV=yes], [HAVE_MLX5DV=no])
 AM_CONDITIONAL([HAVE_MLX5DV],[test "x$HAVE_MLX5DV" = "xyes"])
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+        [int c = IBV_GID_TYPE_ROCE_V1;],[HAVE_GID_TYPE_DECLARED=yes], [HAVE_GID_TYPE_DECLARED=no])
+AM_CONDITIONAL([HAVE_GID_TYPE_DECLARED],[test "x$HAVE_GID_TYPE_DECLARED" = "xyes"])
+if [test $HAVE_GID_TYPE_DECLARED = yes]; then
+        AC_DEFINE([HAVE_GID_TYPE_DECLARED], [1], [API GID compatibility])
+fi
 
 AC_TRY_LINK([
 #include <infiniband/verbs.h>],
