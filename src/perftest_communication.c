@@ -1285,11 +1285,11 @@ int ctx_hand_shake(struct perftest_comm *comm,
 	rem_dest->gid_index = my_dest->gid_index;
 	if (comm->rdma_params->servername) {
 		if ((*write_func_ptr)(my_dest,comm)) {
-			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			fprintf(stderr," Unable to write to socket/rdma_cm\n");
 			return 1;
 		}
 		if ((*read_func_ptr)(rem_dest,comm)) {
-			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			fprintf(stderr," Unable to read from socket/rdma_cm\n");
 			return 1;
 		}
 
@@ -1297,11 +1297,11 @@ int ctx_hand_shake(struct perftest_comm *comm,
 	} else {
 
 		if ((*read_func_ptr)(rem_dest,comm)) {
-			fprintf(stderr," Unable to read to socket/rdam_cm\n");
+			fprintf(stderr," Unable to read to socket/rdma_cm\n");
 			return 1;
 		}
 		if ((*write_func_ptr)(my_dest,comm)) {
-			fprintf(stderr," Unable to write from socket/rdam_cm\n");
+			fprintf(stderr," Unable to write from socket/rdma_cm\n");
 			return 1;
 		}
 	}
@@ -1322,12 +1322,12 @@ int ctx_xchg_data_ethernet( struct perftest_comm *comm,
 {
 	if (comm->rdma_params->servername) {
 		if (ethernet_write_data(comm, (char *) my_data, size)) {
-			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			fprintf(stderr," Unable to write to socket/rdma_cm\n");
 			return 1;
 		}
 
 		if (ethernet_read_data(comm, (char *) rem_data, size)) {
-			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			fprintf(stderr," Unable to read from socket/rdma_cm\n");
 			return 1;
 		}
 
@@ -1335,12 +1335,12 @@ int ctx_xchg_data_ethernet( struct perftest_comm *comm,
 	} else {
 
 		if (ethernet_read_data(comm, (char *) rem_data, size)) {
-			fprintf(stderr," Unable to read to socket/rdam_cm\n");
+			fprintf(stderr," Unable to read to socket/rdma_cm\n");
 			return 1;
 		}
 
 		if (ethernet_write_data(comm, (char *) my_data, size)) {
-			fprintf(stderr," Unable to write from socket/rdam_cm\n");
+			fprintf(stderr," Unable to write from socket/rdma_cm\n");
 			return 1;
 		}
 	}
@@ -1356,12 +1356,12 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm,
 {
 	if (comm->rdma_params->servername) {
 		if (rdma_write_data(my_data,comm,size)) {
-			fprintf(stderr," Unable to write to socket/rdam_cm\n");
+			fprintf(stderr," Unable to write to socket/rdma_cm\n");
 			return 1;
 		}
 
 		if (rdma_read_data(rem_data,comm,size)) {
-			fprintf(stderr," Unable to read from socket/rdam_cm\n");
+			fprintf(stderr," Unable to read from socket/rdma_cm\n");
 			return 1;
 		}
 
@@ -1369,12 +1369,12 @@ int ctx_xchg_data_rdma( struct perftest_comm *comm,
 	} else {
 
 		if (rdma_read_data(rem_data,comm,size)) {
-			fprintf(stderr," Unable to read to socket/rdam_cm\n");
+			fprintf(stderr," Unable to read to socket/rdma_cm\n");
 			return 1;
 		}
 
 		if (rdma_write_data(my_data,comm,size)) {
-			fprintf(stderr," Unable to write from socket/rdam_cm\n");
+			fprintf(stderr," Unable to write from socket/rdma_cm\n");
 			return 1;
 		}
 	}
