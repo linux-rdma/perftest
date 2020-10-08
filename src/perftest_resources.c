@@ -1360,8 +1360,6 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 				return 1;
 			}
 		} else {
-			ALLOCATE(ctx->mr[i], struct ibv_mr, 1);
-			memset(ctx->mr[i], 0, sizeof(struct ibv_mr));
 			ctx->mr[i] = ctx->mr[0];
 			ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
 		}
