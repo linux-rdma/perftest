@@ -1798,6 +1798,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 				user_param->inline_size = 96;
 			else if (current_dev == EFA)
 				user_param->inline_size = 32;
+			else if (current_dev == QLOGIC_E4)
+				user_param->inline_size = 128;
 
 		} else {
 			user_param->inline_size = 0;
