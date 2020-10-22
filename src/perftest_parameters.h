@@ -299,6 +299,7 @@ enum ctx_device {
 	EFA			= 24,
 	CONNECTX6LX		= 25,
 	CONNECTX7		= 26,
+	QLOGIC_AHP		= 27,
 };
 
 /* Units for rate limiter */

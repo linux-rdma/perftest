@@ -1604,6 +1604,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 32882 : dev_fname = QLOGIC_AH; break;
 			case 32883 : dev_fname = QLOGIC_AH; break;
 			case 32912 : dev_fname = QLOGIC_AH; break;
+			case 33136 : dev_fname = QLOGIC_AHP; break;
+			case 33168 : dev_fname = QLOGIC_AHP; break;
 			case 5638  : dev_fname = NETXTREME; break;
 			case 5652  : dev_fname = NETXTREME; break;
 			case 5824  : dev_fname = NETXTREME; break;
