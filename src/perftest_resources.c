@@ -1525,6 +1525,23 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
+		if (user_param->cuda_device_bus_id) {
+			int err;
+
+			printf("initializing CUDA\n");
+			CUresult error = cuInit(0);
+			if (error != CUDA_SUCCESS) {
+				printf("cuInit(0) returned %d\n", error);
+				exit(1);
+			}
+
+			printf("Finding PCIe BUS %s\n", user_param->cuda_device_bus_id);
+			err = cuDeviceGetByPCIBusId (&user_param->cuda_device_id, user_param->cuda_device_bus_id);
+			if (err != 0) {
+				fprintf(stderr, "We have an error from cuDeviceGetByPCIBusId: %d\n", err);
+			}
+			printf("Picking GPU number %d\n", user_param->cuda_device_id);
+		}
 		if (pp_init_gpu(ctx, user_param->cuda_device_id)) {
 			fprintf(stderr, "Couldn't init GPU context\n");
 			return FAILURE;

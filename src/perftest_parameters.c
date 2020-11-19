@@ -475,6 +475,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#ifdef HAVE_CUDA
 		printf("      --use_cuda=<cuda device id>");
 		printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
+
+		printf("      --use_cuda_bus_id=<cuda full BUS id>");
+		printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
 		#endif
 
 		printf("      --use_hugepages ");
@@ -1873,6 +1876,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int dont_xchg_versions_flag = 0;
 #ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
+	static int use_cuda_bus_id_flag = 0;
 #endif
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
@@ -1999,6 +2003,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
 			#ifdef HAVE_CUDA
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
+			{ .name = "use_cuda_bus_id",		.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			#endif
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -2374,6 +2379,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					use_cuda_flag = 0;
+				}
+				if (use_cuda_bus_id_flag) {
+					user_param->use_cuda = 1;
+					user_param->cuda_device_bus_id = strdup(optarg);
+					printf("Got PCIe address of: %s\n", user_param->cuda_device_bus_id);
+					use_cuda_bus_id_flag = 0;
 				}
 #endif
 				if (flow_label_flag) {
