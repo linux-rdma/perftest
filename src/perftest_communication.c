@@ -2215,6 +2215,9 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	char *error_message = "";
 	struct cma_node *cm_node;
 	struct rdma_conn_param conn_param;
+	struct ibv_qp_attr rtr_attr = {
+		.min_rnr_timer = MIN_RNR_TIMER,
+	};
 
 	connection_index = ctx->cma_master.connection_index;
 
@@ -2264,6 +2267,11 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	if (rc) {
 		error_message = "Failed to accept RDMA CM connection.";
 		goto error_2;
+	}
+
+	if (user_param->connection_type == RC)
+	{
+		ibv_modify_qp(ctx->qp[connection_index], &rtr_attr, IBV_QP_MIN_RNR_TIMER);
 	}
 
 	rc = rdma_cm_initialize_ud_connection_parameters(ctx, user_param);

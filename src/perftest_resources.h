@@ -80,6 +80,7 @@
 #define PL			(1)
 #define ATOMIC_ADD_VALUE	(1)
 #define ATOMIC_SWAP_VALUE	(0)
+#define MIN_RNR_TIMER		(12)
 
 /* Space for GRH when we scatter the packet in UD. */
 #define PINGPONG_SEND_WRID	(60)

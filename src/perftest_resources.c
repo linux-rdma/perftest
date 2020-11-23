@@ -2010,7 +2010,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 				flags |= IBV_QP_AV | IBV_QP_PATH_MTU;
 				if (is_dc_server_side)
 				{
-					attr->min_rnr_timer = 12;
+					attr->min_rnr_timer = MIN_RNR_TIMER;
 					flags |= IBV_QP_MIN_RNR_TIMER;
 				} //DCT
 			}
@@ -2024,7 +2024,7 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 				if (user_param->connection_type == RC || user_param->connection_type == XRC) {
 
 					attr->max_dest_rd_atomic = my_dest->out_reads;
-					attr->min_rnr_timer = 12;
+					attr->min_rnr_timer = MIN_RNR_TIMER;
 					flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
 				}
 			}
