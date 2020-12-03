@@ -16,7 +16,10 @@ gen3 uverbs microbenchmarks
 %setup -q
 
 %build
-%configure
+%configure \
+%if %{?_cuda_h_path:1}0
+        CUDA_H_PATH=%{_cuda_h_path}
+%endif
 %{__make}
 chmod -x runme
 
