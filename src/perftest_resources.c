@@ -131,6 +131,53 @@ static void pp_free_gpu(struct pingpong_context *ctx)
 }
 #endif
 
+#ifdef HAVE_ROCM
+#define ASSERT(x)										\
+	do {											\
+	if (!(x)) {										\
+		fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__);	\
+	}											\
+} while (0)
+
+#define ROCM_CHECK(stmt)			\
+	do {					\
+	hipError_t result = (stmt);		\
+	ASSERT(hipSuccess == result);		\
+} while (0)
+
+/*----------------------------------------------------------------------------*/
+
+static int pp_init_rocm(struct pingpong_context *ctx, int rocm_device_id)
+{
+	int deviceCount = 0;
+	hipError_t error = hipGetDeviceCount(&deviceCount);
+	if (error != hipSuccess) {
+		printf("hipDeviceGetCount() returned %d\n", error);
+		exit(1);
+	}
+
+	if (rocm_device_id >= deviceCount) {
+		printf("Requested ROCm device %d but found only %d device(s)\n",
+               rocm_device_id, deviceCount);
+		return 1;
+	}
+
+	ROCM_CHECK(hipSetDevice(rocm_device_id));
+
+	hipDeviceProp_t prop = {0};
+	ROCM_CHECK(hipGetDeviceProperties(&prop, rocm_device_id));
+	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
+		   rocm_device_id, prop.name, prop.pciBusID, prop.gcnArch);
+
+	return 0;
+}
+
+static int pp_free_rocm(struct pingpong_context *ctx)
+{
+	return 0;
+}
+#endif
+
 static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
 			const char *fname, unsigned long offset)
 {
@@ -1071,6 +1118,19 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 	else
 	#endif
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm) {
+		for (i = 0; i < dereg_counter; i++) {
+			void *d_A = ctx->buf[i];
+
+			printf("deallocating GPU buffer %p\n", d_A);
+			hipFree(d_A);
+			d_A = 0;
+		}
+		pp_free_rocm(ctx);
+	}
+	else
+	#endif
 	if (user_param->mmap_file != NULL) {
 		pp_free_mmap(ctx);
 	} else if (ctx->is_contig_supported == FAILURE) {
@@ -1249,6 +1309,27 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		printf("allocated GPU buffer address at %016llx pointer=%p\n",
 		       d_A, (void *)d_A);
 		ctx->buf[qp_index] = (void *)d_A;
+	} else
+	#endif
+
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm) {
+		void* d_A;
+		hipError_t error;
+		const size_t gpu_page_size = 64 * 1024;
+		size_t size = (ctx->buff_size + gpu_page_size - 1) &
+			~(gpu_page_size - 1);
+
+		ctx->is_contig_supported = FAILURE;
+
+		error = hipMalloc(&d_A, size);
+		if (error != hipSuccess) {
+			printf("hipMalloc error=%d\n", error);
+			return FAILURE;
+		}
+
+		printf("allocated %zd bytes of GPU buffer at %p\n", size, d_A);
+		ctx->buf[qp_index] = d_A;
 	} else
 	#endif
 
@@ -1544,6 +1625,15 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		}
 		if (pp_init_gpu(ctx, user_param->cuda_device_id)) {
 			fprintf(stderr, "Couldn't init GPU context\n");
+			return FAILURE;
+		}
+	}
+	#endif
+
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm) {
+		if (pp_init_rocm(ctx, user_param->rocm_device_id)) {
+			fprintf(stderr, "Couldn't initialize ROCm device\n");
 			return FAILURE;
 		}
 	}

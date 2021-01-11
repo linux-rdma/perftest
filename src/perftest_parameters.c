@@ -480,6 +480,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
 		#endif
 
+		#ifdef HAVE_ROCM
+		printf("      --use_rocm=<rocm device id>");
+		printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
+		#endif
+
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
 	}
@@ -680,6 +685,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 #ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
 	user_param->cuda_device_id		= 0;
+#endif
+#ifdef HAVE_ROCM
+	user_param->use_rocm		= 0;
+	user_param->rocm_device_id	= 0;
 #endif
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
@@ -1453,6 +1462,14 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
+	#ifdef HAVE_ROCM
+	if (user_param->use_rocm && user_param->mmap_file != NULL) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"You cannot use ROCM and an mmap'd file at the same time\n");
+		exit(1);
+	}
+	#endif
+
 	if ( (user_param->connection_type == UD) && (user_param->inline_size > MAX_INLINE_UD) ) {
 		printf(RESULT_LINE);
 		fprintf(stderr, "Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
@@ -1878,6 +1895,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
 #endif
+#ifdef HAVE_ROCM
+	static int use_rocm_flag = 0;
+#endif
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -2004,6 +2024,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_CUDA
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
+			#endif
+			#ifdef HAVE_ROCM
+			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			#endif
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -2385,6 +2408,18 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->cuda_device_bus_id = strdup(optarg);
 					printf("Got PCIe address of: %s\n", user_param->cuda_device_bus_id);
 					use_cuda_bus_id_flag = 0;
+				}
+#endif
+#ifdef HAVE_ROCM
+				if (use_rocm_flag) {
+					user_param->use_rocm = 1;
+					user_param->rocm_device_id = strtol(optarg, NULL, 0);
+					if (user_param->rocm_device_id < 0)
+					{
+						fprintf(stderr, "Invalid ROCm device %d\n", user_param->rocm_device_id);
+						return FAILURE;
+					}
+					use_rocm_flag = 0;
 				}
 #endif
 				if (flow_label_flag) {
@@ -2916,6 +2951,10 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 
 	if (user_param->use_rdma_cm)
 		temp = 1;
+
+#ifdef HAVE_ROCM
+	printf(" Use ROCm memory : %s\n", user_param->use_rocm ? "ON" : "OFF");
+#endif
 
 	printf(" Data ex. method : %s",exchange_state[temp]);
 

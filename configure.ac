@@ -202,6 +202,34 @@ if [test $HAVE_EX = yes]; then
 	AC_DEFINE([HAVE_EX], [1], [Have EX support])
 fi
 
+AC_ARG_ENABLE([rocm],
+              [AS_HELP_STRING([--enable-rocm],
+                              [Enable ROCm benchmarks])
+              ],
+              [],
+              [enable_rocm=no])
+
+AC_ARG_WITH([rocm],
+            [AS_HELP_STRING([--with-rocm=@<:@ROCm installation path@:>@],
+                            [Provide path to ROCm installation])
+            ],
+            [AS_CASE([$with_rocm],
+                     [yes|no], [],
+                     [CPPFLAGS="-I$with_rocm/include $CPPFLAGS"
+                      LDFLAGS="-L$with_rocm/lib64 -Wl,-rpath=$with_rocm/lib64 -L$with_rocm/lib -Wl,-rpath=$with_rocm/lib -lamdhip64 $LDFLAGS"])
+            ])
+
+AS_IF([test "x$enable_rocm" = xyes], [
+       AC_DEFINE([__HIP_PLATFORM_HCC__], [1], [Enable ROCm])
+       AC_CHECK_HEADERS([hip/hip_runtime_api.h], [],
+                        [AC_MSG_ERROR([cannot include hip/hip_runtime_api.h])])
+       AC_SEARCH_LIBS([hipFree], [amdhip64], [],
+                      [AC_MSG_ERROR([cannot link with -lamdhip64])])
+       AC_DEFINE([HAVE_ROCM], [1], [Enable ROCm])
+       ])
+
+AM_CONDITIONAL([ROCM], [test x$enable_rocm = xyes])
+
 AC_TRY_LINK([
 #include <infiniband/verbs.h>],
         [int x = IBV_ACCESS_ON_DEMAND;],[HAVE_EX_ODP=yes], [HAVE_EX_ODP=no])
