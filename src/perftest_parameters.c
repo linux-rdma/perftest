@@ -11,6 +11,10 @@
 #include "perftest_parameters.h"
 #include "raw_ethernet_resources.h"
 #include<math.h>
+#ifdef HAVE_RO
+#include <stdbool.h>
+#include <pci/pci.h>
+#endif
 #define MAC_LEN (17)
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
@@ -163,6 +167,34 @@ static int get_cache_line_size()
 
 	return size;
 }
+#ifdef HAVE_RO
+/******************************************************************************
+  Check PCIe Relaxed Ordering
+
+  Stolen from https://github.com/pciutils/pciutils/blob/master/example.c
+ ******************************************************************************/
+static bool check_pcie_relaxed_ordering_compliant(void) {
+	struct pci_access *pacc;
+	struct pci_dev *dev;
+	bool cpu_is_RO_compliant = true;
+
+	pacc = pci_alloc();
+	pci_init(pacc);
+	pci_scan_bus(pacc);
+	for (dev = pacc->devices; dev && cpu_is_RO_compliant;
+	     dev = dev->next) {
+		pci_fill_info(dev,
+			      PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
+		/* https://lore.kernel.org/patchwork/patch/820922/ */
+		if ((dev->vendor_id == 0x8086) &&
+		    (((dev->device_id >= 0x6f01 && dev->device_id <= 0x6f0e) ||
+		      (dev->device_id >= 0x2f01 && dev->device_id <= 0x2f01))))
+			cpu_is_RO_compliant = false;
+	}
+	pci_cleanup(pacc);
+	return cpu_is_RO_compliant;
+}
+#endif
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2908,6 +2940,11 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
 	#ifdef HAVE_RO
 	printf(" PCIe relax order: %s\n", user_param->disable_pcir ? "OFF"  : "ON");
+	if ((check_pcie_relaxed_ordering_compliant() == false) &&
+	    (user_param->disable_pcir == 0)) {
+		printf(" WARNING: CPU is not PCIe relaxed ordering compliant.\n");
+		printf(" WARNING: You should disable PCIe RO with `--disable_pcie_relaxed` for both server and client.\n");
+	}
 	#else
 	printf(" PCIe relax order: %s\n", "Unsupported");
 	#endif

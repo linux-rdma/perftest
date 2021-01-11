@@ -8,6 +8,7 @@ Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz
 Url:            http://www.openfabrics.org
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  libibverbs-devel librdmacm-devel libibumad-devel
+BuildRequires:  pciutils-devel
 
 %description
 gen3 uverbs microbenchmarks
