@@ -1790,8 +1790,8 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 
 	if (user_param->connection_type == UD && user_param->size > MTU_SIZE(user_param->curr_mtu)) {
 		if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-			fprintf(stderr," Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
-			fprintf(stderr," Changing to this MTU\n");
+			printf(" Max msg size in UD is MTU %lu\n",MTU_SIZE(user_param->curr_mtu));
+			printf(" Changing to this MTU\n");
 			user_param->size = MTU_SIZE(user_param->curr_mtu);
 		}
 		else
@@ -1820,9 +1820,8 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 
 			if (user_param->size > port_attr.max_msg_sz) {
 				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-					fprintf(stderr, " Max msg size is %u\n",
-						port_attr.max_msg_sz);
-					fprintf(stderr, " Changing to this size\n");
+					printf(" Max msg size is %u\n", port_attr.max_msg_sz);
+					printf(" Changing to this size\n");
 					user_param->size = port_attr.max_msg_sz;
 				} else {
 					fprintf(stderr," Max message size in SRD cannot be greater than %u \n",
@@ -1844,9 +1843,9 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 			}
 			if (user_param->size > efa_device_attr.max_rdma_size) {
 				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
-					fprintf(stderr, " Max RDMA request size is %u\n",
+					printf(" Max RDMA request size is %u\n",
 						efa_device_attr.max_rdma_size);
-					fprintf(stderr, " Changing to this size\n");
+					printf(" Changing to this size\n");
 					user_param->size = efa_device_attr.max_rdma_size;
 				} else {
 					fprintf(stderr," Max RDMA read size in SRD cannot be greater than %u\n",
