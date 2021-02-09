@@ -717,22 +717,14 @@ void catch_alarm(int sig);
 
 void check_alive(int sig);
 
-/* catch_alarm.
- *
- * Description :
- * 	Signal catcher for run_infinitely feature.
- *  Will be triggered every 5 sec and measure BW in this time frame.
- *
- */
-void catch_alarm_infintely();
+void print_bw_infinite_mode();
 
 /* handle_signal_print_thread
 *
 * Description :
-* 	Handle thread creation for signal catching in run_infinitely mode
-*
-*/
-void *handle_signal_print_thread(void *sig_mask);
+* 	Handle thread creation for printing data in run_infinitely mode
+**/
+void *handle_signal_print_thread(void* duration);
 
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 

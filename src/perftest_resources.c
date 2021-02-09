@@ -3341,7 +3341,6 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
-	int 			single_thread_handler;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -3353,22 +3352,13 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	duration_param=user_param;
-	sigset_t set;
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	single_thread_handler = pthread_sigmask(SIG_BLOCK, &set, NULL);
-	if (single_thread_handler != 0){
-		printf("error when try to mask alram for signal to thread\n");
-		return FAILURE;
-	}
 
 	pthread_t print_thread;
-	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void *)&set) != 0){
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void*)&user_param->duration) != 0){
 		printf("Fail to create thread \n");
 		return FAILURE;
 	}
 
-	alarm(user_param->duration);
 	user_param->iters = 0;
 	user_param->last_iters = 0;
 
@@ -3456,7 +3446,6 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	uint64_t                *unused_recv_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 	int 			return_value = 0;
-	int 			single_thread_handler;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -3481,24 +3470,14 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
-	sigset_t set;
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	single_thread_handler = pthread_sigmask(SIG_BLOCK, &set, NULL);
-	if (single_thread_handler != 0)
-	{
-		printf("error when try to mask alram for signal to thread\n");
-		return FAILURE;
-	}
 	duration_param=user_param;
 	pthread_t print_thread;
-	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void *)&set) != 0)
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void *)&user_param->duration) != 0)
 	{
 		printf("Fail to create thread \n");
 		return FAILURE;
 	}
 
-	alarm(user_param->duration);
 	user_param->iters = 0;
 	user_param->last_iters = 0;
 	user_param->tposted[0] = get_cycles();
@@ -4588,34 +4567,22 @@ void check_alive(int sig)
 /******************************************************************************
  *
  ******************************************************************************/
-void catch_alarm_infintely()
+void print_bw_infinite_mode()
 {
 	print_report_bw(duration_param,NULL);
 	duration_param->last_iters = duration_param->iters;
-	alarm(duration_param->duration);
 	duration_param->tposted[0] = get_cycles();
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-void *handle_signal_print_thread(void *sigmask)
+void *handle_signal_print_thread(void* duration)
 {
-	sigset_t *set = (sigset_t*)sigmask;
-	int rc;
-	int sig_caught;
+	int* duration_p = (int*) duration;
 	while(1){
-		rc = sigwait(set, &sig_caught);
-		if (rc != 0){
-			printf("Error when try to wait for SIGALRM\n");
-			exit(EXIT_FAILURE);
-		}
-		if(sig_caught == SIGALRM)
-				catch_alarm_infintely();
-		else {
-			printf("Unsupported signal caught %d, only signal %d is supported\n", sig_caught, SIGALRM);
-			exit(EXIT_FAILURE);
-		}
+		sleep(*duration_p);
+		print_bw_infinite_mode();
 	}
 
 }
