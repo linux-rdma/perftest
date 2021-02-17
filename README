@@ -108,7 +108,8 @@ Prerequisites:
 	(kernel module) matches libibverbs
 	(kernel module) matches librdmacm
 	(kernel module) matches libibumad
-	(kernel module) matches libmath (lm).
+	(kernel module) matches libmath (lm)
+	(linux kernel module) matches pciutils (lpci).
 	
 
 Server:		./<test name> <options>

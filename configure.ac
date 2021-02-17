@@ -174,6 +174,8 @@ if [test $HAVE_SNIFFER = yes]; then
 fi
 
 if [test $IS_FREEBSD = no]; then
+	AC_CHECK_HEADERS([pci/pci.h],,[AC_MSG_ERROR([pciutils header files not found, consider installing pciutils-devel])])
+	AC_CHECK_LIB([pci], [pci_init], [LIBPCI=-lpci], AC_MSG_ERROR([libpci not found]))
 	CPU_IS_RO_COMPLIANT=yes
 	# Actually this is check for being affected by a known issue
 	# with Intel CPUs:
@@ -193,6 +195,7 @@ AC_TRY_LINK([
 AM_CONDITIONAL([HAVE_RO],[test "x$HAVE_RO" = "xyes"])
 if [test $HAVE_RO = yes] && [test "x$CPU_IS_RO_COMPLIANT" = "xyes"]; then
         AC_DEFINE([HAVE_RO], [1], [Enable Relaxed Ordering])
+	LIBS=$LIBS" -lpci"
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
