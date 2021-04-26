@@ -132,6 +132,13 @@
 
 #define MASK_IS_SET(mask, attr)      (((mask)&(attr))!=0)
 
+#define MAX(a, b) \
+	({ \
+		typeof(a) _a = (a); \
+		typeof(b) _b = (b); \
+		_a > _b ? _a : _b; \
+	})
+
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
@@ -161,7 +168,8 @@ struct pingpong_context {
 	struct rdma_cm_id			*cm_id_control;
 	struct rdma_cm_id			*cm_id;
 	struct ibv_context			*context;
-	struct ibv_comp_channel			*channel;
+	struct ibv_comp_channel			*recv_channel;
+	struct ibv_comp_channel			*send_channel;
 	struct ibv_pd				*pd;
 	struct ibv_mr				**mr;
 	struct ibv_cq				*send_cq;
@@ -680,6 +688,40 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t 
 		else
 			wr->wr.rdma.remote_addr = prim_addr;
 	}
+}
+
+/*
+ * Block until any event (send or receive) is available, and rearm the
+ * appropriate completion channel.
+ */
+static __inline int ctx_notify_send_recv_events(struct pingpong_context *ctx)
+{
+	fd_set rfds;
+
+	FD_ZERO(&rfds);
+	FD_SET(ctx->recv_channel->fd, &rfds);
+	FD_SET(ctx->send_channel->fd, &rfds);
+
+	if (select(MAX(ctx->recv_channel->fd,
+		       ctx->send_channel->fd) + 1,
+		   &rfds, NULL, NULL, NULL) == -1) {
+		fprintf(stderr, "Failed to get completion events\n");
+		return FAILURE;
+	}
+
+	if (FD_ISSET(ctx->recv_channel->fd, &rfds) &&
+	    ctx_notify_events(ctx->recv_channel)) {
+		fprintf(stderr,"Failed to notify receive events to CQ");
+		return FAILURE;
+	}
+
+	if (FD_ISSET(ctx->send_channel->fd, &rfds) &&
+	    ctx_notify_events(ctx->send_channel)) {
+		fprintf(stderr,"Failed to notify send events to CQ");
+		return FAILURE;
+	}
+
+	return SUCCESS;
 }
 
 /* increase_loc_addr.
