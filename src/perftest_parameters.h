@@ -209,19 +209,33 @@
 /* Result print format */
 #define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf"
 
+#define REPORT_FMT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.2lf,\nBW_average: %.2lf,\nMsgRate: %.6lf,\n"
+
 #define REPORT_FMT_EXT " %-7lu    %" PRIu64 "           %-7.6lf            %-7.6lf            %-7.6lf"
+
+#define REPORT_FMT_EXT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.6lf,\nBW_average: %.6lf,\nMsgRate: %.6lf,\n"
 
 #define REPORT_FMT_PER_PORT     " %-7lu    %-10" PRIu64 "     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
 
 #define REPORT_EXT	"\n"
+#define REPORT_EXT_JSON	""
 
 #define REPORT_EXT_CPU_UTIL	"	    %-3.2f\n"
+#define REPORT_EXT_CPU_UTIL_JSON "CPU_util: %.2f,\n"
 
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
+#define REPORT_FMT_QOS_JSON "MsgSize: %lu,\nsl: %d,\nn_iterations: %lu,\nBW_peak: %.2lf,\nBW_average: %.2lf,\n MsgRate: %.6lf,\n"
+
 /* Result print format for latency tests. */
 #define REPORT_FMT_LAT " %-7lu %" PRIu64 "          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
+
+#define REPORT_FMT_LAT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nt_min: %.2f,\nt_max: %.2f,\nt_typical: %.2f,\nt_avg: %.2f,\n\
+t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
+
 #define REPORT_FMT_LAT_DUR " %-7lu       %" PRIu64 "            %-7.2f        %-7.2f"
+
+#define REPORT_FMT_LAT_DUR_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nt_avg: %.2f,\ntps_average: %.2f,\n"
 
 #define REPORT_FMT_FS_RATE "%" PRIu64 "          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
 
@@ -489,6 +503,8 @@ struct perftest_parameters {
 	int				is_rate_limit_type;
 	enum verbosity_level 		output;
 	int 				cpu_util;
+	int 				out_json;
+	char				*out_json_file_name;
 	struct cpu_util_data 		cpu_util_data;
 	int 				latency_gap;
 	int 				flow_label;
