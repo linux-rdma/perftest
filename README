@@ -7,10 +7,11 @@
 Table of Contents
 ===============================================================================
 1. Overview
-2. Notes on Testing Methodology
-3. Test Descriptions
-4. Running Tests
-5. Known Issues
+2. Installation
+3. Notes on Testing Methodology
+4. Test Descriptions
+5. Running Tests
+6. Known Issues
 
 ===============================================================================
 1. Overview
@@ -25,14 +26,36 @@ The collection contains a set of bandwidth and latency benchmark such as:
 	* RDMA Read   - ib_read_bw and ib_read_lat
 	* RDMA Write  - ib_write_bw and ib_write_lat
 	* RDMA Atomic - ib_atomic_bw and ib_atomic_lat
-	* Native Ethernet (when working with MOFED2) - raw_ethernet_bw, raw_ethernet_lat 
+	* Native Ethernet (when working with MOFED2) - raw_ethernet_bw, raw_ethernet_lat
 
 Please post results/observations to the openib-general mailing list.
 See "Contact Us" at http://openib.org/mailman/listinfo/openib-general and
 http://www.openib.org.
 
 ===============================================================================
-2. Notes on Testing Methodology
+2. Installation
+===============================================================================
+-After cloning the repository a perftest directory should appear in your current
+ directory
+
+-Cloning example :
+git clone <URL>, In our situation its --> git clone https://github.com/linux-rdma/perftest.git
+
+-After cloning, Follow this commands:
+
+-cd perftest/
+
+-./autogen.sh
+
+-./configure    Note:If you want to install in a specific directory use the optional flag --prefix=<Directory path> , e.g: ./configure --prefix=<Directory path>
+
+-make
+
+-make install
+
+-All of the tests will appear in the  perftest directory and in the install directory.
+===============================================================================
+3. Notes on Testing Methodology
 ===============================================================================
 - The benchmarks use the CPU cycle counter to get time stamps without context
   switch.  Some CPU architectures (e.g., Intel's 80486 or older PPC) do not
@@ -77,7 +100,7 @@ http://www.openib.org.
 Architectures tested:	i686, x86_64, ia64
 
 ===============================================================================
-3. Benchmarks Description
+4. Benchmarks Description
 ===============================================================================
 
 The benchmarks generate a synthetic stream of operations, which is very useful
@@ -100,17 +123,16 @@ raw_ethernet_send_lat  latency test over raw Ethernet interface
 raw_ethernet_send_bw   bandwidth test over raw Ethernet interface
 
 ===============================================================================
-4. Running Tests
+5. Running Tests
 ===============================================================================
 
-Prerequisites: 
+Prerequisites:
 	kernel 2.6
 	(kernel module) matches libibverbs
 	(kernel module) matches librdmacm
 	(kernel module) matches libibumad
 	(kernel module) matches libmath (lm)
 	(linux kernel module) matches pciutils (lpci).
-	
 
 Server:		./<test name> <options>
 Client:		./<test name> <options> <server IP address>
@@ -209,24 +231,24 @@ Special feature detailed explanation in tests:
      You can add the "-R" flag to all tests to connect the QPs from each side with the rdma_cm library.
      In this case, the library will connect the QPs and will use the IPoIB interface for doing it.
      It helps when you don't have Ethernet connection between the 2 nodes.
-     You must supply the IPoIB interface as the server IP. 
+     You must supply the IPoIB interface as the server IP.
 
   3. Multicast support in ib_send_lat and in ib_send_bw
      Send tests have built in feature of testing multicast performance, in verbs level.
      You can use "-g" to specify the number of QPs to attach to this multicast group.
      "-M" flag allows you to choose the multicast group address.
-     
+
   4. GPUDirect usage:
      To utilize GPUDirect feature, perftest should be compiled as:
      ./autogen.sh && ./configure CUDA_H_PATH=<path to cuda.h> && make -j, e.g.:
-     ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j 
-     
+     ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j
+
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
      ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
 
 
 ===============================================================================
-5. Known Issues
+6. Known Issues
 ===============================================================================
 
  1. Multicast support in ib_send_lat and in ib_send_bw is not stable.
