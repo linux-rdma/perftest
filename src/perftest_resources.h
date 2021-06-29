@@ -196,6 +196,7 @@ struct pingpong_context {
 	uint64_t				*ccnt;
 	int					is_contig_supported;
 	uint32_t				*r_dctn;
+	uint32_t				*dci_stream_id;
 	uint32_t                                *ctrl_buf;
 	uint32_t                                *credit_buf;
 	struct ibv_mr                           *credit_mr;

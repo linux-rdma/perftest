@@ -382,6 +382,7 @@ struct perftest_parameters {
 	uint64_t			iters_per_port[2];
 	uint64_t			last_iters;
 	uint64_t			*port_by_qp;
+	uint16_t			log_dci_streams;
 	int				tx_depth;
 	uint8_t				qp_timeout;
 	uint8_t				sl;

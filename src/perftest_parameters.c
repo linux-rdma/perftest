@@ -239,6 +239,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			printf("  -c, --connection=<RC/XRC/DC> ");
 			printf(" Connection type RC/XRC/DC (default RC)\n");
 		}
+		#ifdef HAVE_DCS
+		printf("      --log_dci_streams=<log_num_dci_stream_channels> (default 0) ");
+		printf(" Run DC initiator as DCS instead of DCI with <log_num dci_stream_channels>\n");
+		#endif
 	}
 
 	if (tst == LAT) {
@@ -721,6 +725,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rate_units		= GIGA_BIT_PS;
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
+	user_param->log_dci_streams = 0;
 	user_param->output		= -1;
 #ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
@@ -1350,6 +1355,20 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, " DC does not support RDMA_CM\n");
 			exit(1);
 		}
+	}
+
+	if(user_param->log_dci_streams) {
+		#ifdef HAVE_DCS
+		if(user_param->connection_type != DC) {
+			printf(RESULT_LINE);
+			fprintf(stderr," log_dci_streams supported only on DC\n");
+			exit(1);
+		}
+		#else
+		printf(RESULT_LINE);
+		fprintf(stderr," log_dci_streams not supported\n");
+		exit(1);
+		#endif
 	}
 
 	if (user_param->connection_type == SRD) {
@@ -1986,6 +2005,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int vlan_en = 0;
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
+	#ifdef HAVE_DCS
+	static int log_dci_streams_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2113,6 +2135,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
 			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
 			{.name = "recv_post_list", .has_arg = 1, .flag = &recv_post_list_flag, .val = 1},
+			#if defined HAVE_DCS
+			{.name = "log_dci_streams", .has_arg = 1, .flag = &log_dci_streams_flag, .val = 1},
+			#endif
 			#if defined HAVE_RO
 			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
 			#endif
@@ -2608,6 +2633,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->recv_post_list = strtol(optarg, NULL, 0);
 					recv_post_list_flag = 0;
 				}
+				#ifdef HAVE_DCS
+				if (log_dci_streams_flag) {
+					user_param->log_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
+					log_dci_streams_flag = 0;
+				}
+				#endif
 				break;
 
 			default:
@@ -2994,6 +3025,12 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) {
 		printf(" RX depth        : %d\n",user_param->rx_depth);
 	}
+
+	#ifdef HAVE_DCS
+	if (user_param->log_dci_streams) {
+		printf(" DCS num streams : %d\n",user_param->log_dci_streams);
+	}
+	#endif
 
 	if (user_param->tst == BW) {
 		printf(" CQ Moderation   : %d\n",user_param->cq_mod);

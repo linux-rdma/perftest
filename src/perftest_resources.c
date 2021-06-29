@@ -347,11 +347,21 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		#ifdef HAVE_MLX5DV
 		if (qpt == IBV_QPT_DRIVER && connection_type == DC)
 		{
+			#ifdef HAVE_DCS
+			mlx5dv_wr_set_dc_addr_stream(
+				ctx->dv_qp[index],
+				ctx->ah[index],
+				ctx->r_dctn[index],
+				DC_KEY,
+				ctx->dci_stream_id[index]);
+			ctx->dci_stream_id[index] = (ctx->dci_stream_id[index] + 1) & (0xffffffff >> (32 - (user_param->log_dci_streams)));
+			#else
 			mlx5dv_wr_set_dc_addr(
 				ctx->dv_qp[index],
 				ctx->ah[index],
 				ctx->r_dctn[index],
 				DC_KEY);
+			#endif
 		}
 		else
 		#endif
@@ -892,6 +902,9 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(ctx->dv_qp, struct mlx5dv_qp_ex*, user_param->num_of_qps);
 	#endif
 	ALLOCATE(ctx->r_dctn, uint32_t, user_param->num_of_qps);
+	#ifdef HAVE_DCS
+	ALLOCATE(ctx->dci_stream_id, uint32_t, user_param->num_of_qps);
+	#endif
 	#endif
 	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOCATE(ctx->buf, void* , user_param->num_of_qps);
@@ -1146,6 +1159,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	#ifdef HAVE_IBV_WR_API
 	free(ctx->qpx);
 	free(ctx->r_dctn);
+	#ifdef HAVE_DCS
+	free(ctx->dci_stream_id);
+	#endif
 	#endif
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1720,6 +1736,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		if (user_param->work_rdma_cm == OFF) {
 			modify_qp_to_init(ctx, user_param, i, num_of_qps);
 		}
+		#ifdef HAVE_DCS
+		ctx->dci_stream_id[i] = 0;
+		#endif
 	}
 
 	return SUCCESS;
@@ -1943,6 +1962,12 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 					attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
 					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
 					attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+					#ifdef HAVE_DCS
+					if (user_param->log_dci_streams) {
+						attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DCI_STREAMS;
+						attr_dv.dc_init_attr.dci_streams.log_num_concurent = user_param->log_dci_streams;
+					}
+					#endif
 				}
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
