@@ -354,7 +354,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 				ctx->r_dctn[index],
 				DC_KEY,
 				ctx->dci_stream_id[index]);
-			ctx->dci_stream_id[index] = (ctx->dci_stream_id[index] + 1) & (0xffffffff >> (32 - (user_param->log_dci_streams)));
+			ctx->dci_stream_id[index] = (ctx->dci_stream_id[index] + 1) & (0xffffffff >> (32 - (user_param->log_active_dci_streams)));
 			#else
 			mlx5dv_wr_set_dc_addr(
 				ctx->dv_qp[index],

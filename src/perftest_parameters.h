@@ -383,6 +383,7 @@ struct perftest_parameters {
 	uint64_t			last_iters;
 	uint64_t			*port_by_qp;
 	uint16_t			log_dci_streams;
+	uint16_t			log_active_dci_streams;
 	int				tx_depth;
 	uint8_t				qp_timeout;
 	uint8_t				sl;

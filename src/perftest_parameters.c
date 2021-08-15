@@ -242,6 +242,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#ifdef HAVE_DCS
 		printf("      --log_dci_streams=<log_num_dci_stream_channels> (default 0) ");
 		printf(" Run DC initiator as DCS instead of DCI with <log_num dci_stream_channels>\n");
+		printf("      --log_active_dci_streams=<log_num_active_dci_stream_channels> (default log_num_dci_stream_channels)\n");
 		#endif
 	}
 
@@ -726,6 +727,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
 	user_param->log_dci_streams = 0;
+	user_param->log_active_dci_streams = 0;
 	user_param->output		= -1;
 #ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
@@ -1370,6 +1372,24 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 		#endif
 	}
+	if(user_param->log_active_dci_streams > 0){
+		#ifdef HAVE_DCS
+		if(user_param->connection_type != DC){
+			printf(RESULT_LINE);
+			fprintf(stderr," log_active_dci_streams supported only on DC\n");
+			exit(1);
+		}
+		if(user_param->log_dci_streams == 0){
+			printf(RESULT_LINE);
+			fprintf(stderr," log_dci_streams must be greater than 0\n");
+			exit(1);
+		}
+		#else
+		printf(RESULT_LINE);
+		fprintf(stderr," log_active_dci_streams not supported\n");
+		exit(1);
+		#endif
+	}
 
 	if (user_param->connection_type == SRD) {
 		if (user_param->work_rdma_cm == ON) {
@@ -2007,6 +2027,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int recv_post_list_flag = 0;
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
+	static int log_active_dci_streams_flag = 0;
 	#endif
 
 	char *server_ip = NULL;
@@ -2137,6 +2158,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "recv_post_list", .has_arg = 1, .flag = &recv_post_list_flag, .val = 1},
 			#if defined HAVE_DCS
 			{.name = "log_dci_streams", .has_arg = 1, .flag = &log_dci_streams_flag, .val = 1},
+			{.name = "log_active_dci_streams", .has_arg = 1, .flag = &log_active_dci_streams_flag, .val = 1},
 			#endif
 			#if defined HAVE_RO
 			{.name = "disable_pcie_relaxed", .has_arg = 0, .flag = &disable_pcir_flag, .val = 1 },
@@ -2638,6 +2660,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->log_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
 					log_dci_streams_flag = 0;
 				}
+				if(log_active_dci_streams_flag) {
+					user_param->log_active_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
+					log_active_dci_streams_flag = 0;
+				}
+				else
+					user_param->log_active_dci_streams = user_param->log_dci_streams;
 				#endif
 				break;
 
@@ -3029,6 +3057,9 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	#ifdef HAVE_DCS
 	if (user_param->log_dci_streams) {
 		printf(" DCS num streams : %d\n",user_param->log_dci_streams);
+	}
+	if ( user_param->log_active_dci_streams) {
+		printf(" DCS active num streams : %d\n",user_param->log_active_dci_streams);
 	}
 	#endif
 
