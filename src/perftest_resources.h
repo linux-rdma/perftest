@@ -161,6 +161,10 @@ struct pingpong_context {
 	struct rdma_cm_id			*cm_id_control;
 	struct rdma_cm_id			*cm_id;
 	struct ibv_context			*context;
+	#ifdef HAVE_AES
+	struct mlx5dv_mkey			**mkey;
+	struct mlx5dv_dek			**dek;
+	#endif
 	struct ibv_comp_channel			*channel;
 	struct ibv_pd				*pd;
 	struct ibv_mr				**mr;
@@ -197,6 +201,7 @@ struct pingpong_context {
 	int					is_contig_supported;
 	uint32_t				*r_dctn;
 	uint32_t				*dci_stream_id;
+	int 					dek_number;
 	uint32_t                                *ctrl_buf;
 	uint32_t                                *credit_buf;
 	struct ibv_mr                           *credit_mr;
@@ -259,6 +264,22 @@ int check_add_port(char **service,int port,
  * Return Value : the device or NULL in case of failure.
  */
 struct ibv_device* ctx_find_dev(char **ib_devname);
+
+/* ctx_open_device
+ *
+ * Description : Open context for the device ib_dev
+ *  and returns pointer to the context , in case
+ *  of can't open a context the functions return NULL.
+ *
+ * Parameters :
+ *
+ *  ib_dev - The device to open context for.
+ * 	user_param - the perftest parameters.
+ *
+ * Return Value : the context or NULL in case of failure.
+ */
+struct ibv_context* ctx_open_device(struct ibv_device *ib_dev,
+					struct perftest_parameters *user_param);
 
 /* create_rdma_resources
  *
@@ -337,6 +358,32 @@ int verify_params_with_device_context(struct ibv_context *ctx,
  * Return Value : SUCCESS, FAILURE.
  */
 int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* set_valid_cred
+ *
+ * Description :
+ * 		Read the credentials from a file that the user wrote them in
+ * 		and assign the credentials to the array that is given to the function.
+ *
+ * Parameters:
+ *  dst - Array to put the cred in.
+ *  user_param  - The perftest parameters.
+ * Return Value : SUCCESS, FAILURE
+ */
+int set_valid_cred(char *dst, struct perftest_parameters *user_param);
+
+/* set_valid_dek
+ *
+ * Description :
+ * 		Calls a script that generate data encryption key
+ * 		and assign the data encryption key value to dst.
+ *
+ * Parameters:
+ *  dst - Array to put the data encryption key in.
+ *  user_param  - The perftest parameters.
+ * Return Value : SUCCESS, FAILURE
+ */
+int set_valid_dek(char *dst, struct perftest_parameters *user_param);
 
 /* ctx_qp_create.
  *

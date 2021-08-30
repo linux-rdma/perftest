@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[6.01],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[6.02],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -148,6 +148,14 @@ AC_TRY_LINK([
 AM_CONDITIONAL([HAVE_DCS],[test "x$HAVE_DCS" = "xyes"])
 if [test $HAVE_DCS = yes] && [test $HAVE_MLX5DV = yes]; then
         AC_DEFINE([HAVE_DCS], [1], [Have DCS support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
+        [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES=yes], [HAVE_AES=no])
+AM_CONDITIONAL([HAVE_AES],[test "x$HAVE_AES" = "xyes"])
+if [test $HAVE_AES = yes] && [test $HAVE_MLX5DV = yes];  then
+            AC_DEFINE([HAVE_AES], [1], [Have AES support])
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],

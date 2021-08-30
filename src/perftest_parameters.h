@@ -140,6 +140,20 @@
 #define DEF_INLINE_SEND_UD (188)
 #define DEF_INLINE_DC (150)
 
+/* AES-XTS Values */
+#define AES_XTS_TWEAK_SIZE (16)
+#define AES_XTS_KEYTAG_SIZE (8)
+#define AES_XTS_INLINE (512)
+#define AES_XTS_CREDENTIALS_SIZE (48)
+#define AES_XTS_DEK_SIZE (40)
+#define AES_XTS_BLOCK_SIZE_512 (512)
+#define AES_XTS_BLOCK_SIZE_520 (520)
+#define AES_XTS_BLOCK_SIZE_4048 (4048)
+#define AES_XTS_BLOCK_SIZE_4096 (4096)
+#define AES_XTS_BLOCK_SIZE_4160 (4160)
+#define AES_XTS_DEK_FILE_NAME_SIZE (12)
+#define AES_XTS_BLOCK_ARRAY_SIZE (5)
+
 /* Max and Min allowed values for perftest parameters. */
 #define MIN_TOS		(0)
 #define MAX_TOS		(255)
@@ -384,6 +398,14 @@ struct perftest_parameters {
 	uint64_t			*port_by_qp;
 	uint16_t			log_dci_streams;
 	uint16_t			log_active_dci_streams;
+	uint16_t			aes_xts;
+	uint16_t			encrypt_on_tx;
+	uint16_t			sig_before;
+	int 				aes_block_size;
+	int 				data_enc_keys_number;
+	char				*credentials_path;
+	char				*kek_path;
+	char				*data_enc_key_app_path;
 	int				tx_depth;
 	uint8_t				qp_timeout;
 	uint8_t				sl;

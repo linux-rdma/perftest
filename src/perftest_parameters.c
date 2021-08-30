@@ -244,6 +244,16 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Run DC initiator as DCS instead of DCI with <log_num dci_stream_channels>\n");
 		printf("      --log_active_dci_streams=<log_num_active_dci_stream_channels> (default log_num_dci_stream_channels)\n");
 		#endif
+		#ifdef HAVE_AES
+		printf("	  --aes_xts Runs traffic with AES_XTS feature (encryption)\n");
+		printf("	  --encrypt_on_tx Runs traffic with encryption on tx (default decryption on tx)\n");
+		printf("	  --sig_before Puts signature on data before encrypting it (default after)\n");
+		printf("      --aes_block_size=<512,520,4048,4096,4160> (default 512)\n");
+		printf("	  --data_enc_keys_number=<number of data encryption keys> (default 1)\n");
+		printf("	  --kek_path path to the key encryption key file\n");
+		printf("	  --credentials_path path to the credentials file\n");
+		printf("	  --data_enc_key_app_path path to the data encryption key app\n");
+		#endif
 	}
 
 	if (tst == LAT) {
@@ -733,6 +743,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rate_units		= GIGA_BIT_PS;
 	user_param->rate_limit_type	= DISABLE_RATE_LIMIT;
 	user_param->is_rate_limit_type  = 0;
+	user_param->data_enc_keys_number = 1;
 	user_param->log_dci_streams = 0;
 	user_param->log_active_dci_streams = 0;
 	user_param->output		= -1;
@@ -1063,6 +1074,29 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		printf(RESULT_LINE);
 		printf(" Using SRQ depth should be greater than number of QPs.\n");
 		exit (1);
+	}
+
+	switch (user_param->aes_block_size)
+	{
+		case AES_XTS_BLOCK_SIZE_520:
+			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_520;
+			break;
+
+		case AES_XTS_BLOCK_SIZE_4048:
+			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_4048;
+			break;
+
+		case AES_XTS_BLOCK_SIZE_4096:
+			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_4096;
+			break;
+
+		case AES_XTS_BLOCK_SIZE_4160:
+			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_4160;
+			break;
+
+		default:
+			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_512;
+			 break;
 	}
 
 	if (user_param->dualport == ON) {
@@ -1398,6 +1432,81 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		fprintf(stderr," log_active_dci_streams not supported\n");
 		exit(1);
 		#endif
+	}
+	if(user_param->aes_xts) {
+		#ifdef HAVE_AES
+		if(user_param->connection_type != RC) {
+			printf(RESULT_LINE);
+			fprintf(stderr," aes_xts supported only on RC\n");
+			exit(1);
+		}
+		if(user_param->kek_path == NULL) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Please provide key encryption key file path\n");
+			exit(1);
+		}
+		if(user_param->data_enc_key_app_path == NULL) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Please provide data encryption key app path\n");
+			exit(1);
+		}
+		if(user_param->credentials_path == NULL) {
+			printf(RESULT_LINE);
+			fprintf(stderr," Please provide credentials file path\n");
+			exit(1);
+		}
+		if(user_param->use_old_post_send) {
+			printf(RESULT_LINE);
+			fprintf(stderr," aes_xts doesn't support old post send\n");
+			exit(1);
+		}
+		if(user_param->work_rdma_cm) {
+			printf(RESULT_LINE);
+			fprintf(stderr," rdma_cm doesn't support aes_xts\n");
+			exit(1);
+		}
+		if(user_param->tst == LAT && user_param->verb == WRITE) {
+			printf(RESULT_LINE);
+			fprintf(stderr," aes_xts isn't supported on write_lat\n");
+			exit(1);
+		}
+		if((int)user_param->size <= user_param->inline_size) {
+			printf(RESULT_LINE);
+			fprintf(stderr," aes_xts doesn't support Inline messages\n");
+			exit(1);
+		}
+		#else
+		printf(RESULT_LINE);
+		fprintf(stderr," aes_xts not supported\n");
+		exit(1);
+		#endif
+	}
+	else {
+		if(user_param->encrypt_on_tx) {
+			printf(RESULT_LINE);
+			fprintf(stderr," encrypt_on_tx supported only when enc/dec traffic\n");
+			exit(1);
+		}
+		if(user_param->sig_before) {
+			printf(RESULT_LINE);
+			fprintf(stderr," sig_before supported only when enc/dec traffic\n");
+			exit(1);
+		}
+		if(user_param->credentials_path){
+			printf(RESULT_LINE);
+			fprintf(stderr," giving credentials path supported only with enc/dec traffic\n");
+			exit(1);
+		}
+		if(user_param->kek_path){
+			printf(RESULT_LINE);
+			fprintf(stderr," giving kek path supported only with enc/dec traffic\n");
+			exit(1);
+		}
+		if(user_param->data_enc_key_app_path){
+			printf(RESULT_LINE);
+			fprintf(stderr," giving kek path supported only with enc/dec traffic\n");
+			exit(1);
+		}
 	}
 
 	if (user_param->connection_type == SRD) {
@@ -2039,6 +2148,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
 	#endif
+	#ifdef HAVE_AES
+	static int aes_xts_flag = 0;
+	static int encrypt_on_tx_flag = 0;
+	static int sig_before_flag = 0;
+	static int aes_block_size_flag = 0;
+	static int data_enc_keys_number_flag = 0;
+	static int kek_path_flag = 0;
+	static int credentials_path_flag = 0;
+	static int data_enc_key_app_path_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2166,6 +2285,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
 			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
 			{.name = "recv_post_list", .has_arg = 1, .flag = &recv_post_list_flag, .val = 1},
+			#if defined HAVE_AES
+			{.name = "aes_xts", .has_arg=0 , .flag = &aes_xts_flag, .val = 1},
+			{.name = "encrypt_on_tx", .has_arg=0 , .flag = &encrypt_on_tx_flag, .val = 1},
+			{.name = "sig_before", .has_arg=0 , .flag = &sig_before_flag, .val = 1},
+			{.name = "aes_block_size", .has_arg=1 , .flag = &aes_block_size_flag, .val = 1},
+			{.name = "kek_path", .has_arg=1 , .flag = &kek_path_flag, .val = 1},
+			{.name = "credentials_path", .has_arg=1 , .flag = &credentials_path_flag, .val = 1},
+			{.name = "data_enc_keys_number", .has_arg=1 , .flag = &data_enc_keys_number_flag, .val = 1},
+			{.name = "data_enc_key_app_path", .has_arg=1 , .flag = &data_enc_key_app_path_flag, .val = 1},
+			#endif
 			#if defined HAVE_DCS
 			{.name = "log_dci_streams", .has_arg = 1, .flag = &log_dci_streams_flag, .val = 1},
 			{.name = "log_active_dci_streams", .has_arg = 1, .flag = &log_active_dci_streams_flag, .val = 1},
@@ -2672,6 +2801,37 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->recv_post_list = strtol(optarg, NULL, 0);
 					recv_post_list_flag = 0;
 				}
+				#ifdef HAVE_AES
+				if(aes_xts_flag) {
+					user_param->aes_xts = 1;
+				}
+				if(encrypt_on_tx_flag) {
+					user_param->encrypt_on_tx = 1;
+				}
+				if(sig_before_flag) {
+					user_param->sig_before = 1;
+				}
+				if(aes_block_size_flag) {
+					user_param->aes_block_size = (uint16_t)strtol(optarg, NULL, 0);
+					aes_block_size_flag = 0;
+				}
+				if(data_enc_keys_number_flag) {
+					user_param->data_enc_keys_number = (uint16_t)strtol(optarg, NULL, 0);
+					data_enc_keys_number_flag = 0;
+				}
+				if(kek_path_flag) {
+					GET_STRING(user_param->kek_path, strdupa(optarg));
+					kek_path_flag = 0;
+				}
+				if(data_enc_key_app_path_flag) {
+					GET_STRING(user_param->data_enc_key_app_path, strdupa(optarg));
+					data_enc_key_app_path_flag = 0;
+				}
+				if(credentials_path_flag) {
+					GET_STRING(user_param->credentials_path, strdupa(optarg));
+					credentials_path_flag = 0;
+				}
+				#endif
 				#ifdef HAVE_DCS
 				if (log_dci_streams_flag) {
 					user_param->log_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
@@ -3077,6 +3237,14 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	}
 	if ( user_param->log_active_dci_streams) {
 		printf(" DCS active num streams : %d\n",user_param->log_active_dci_streams);
+	}
+	#endif
+	#ifdef HAVE_AES
+	if(user_param->aes_xts){
+		int aes_block_size_array [AES_XTS_BLOCK_ARRAY_SIZE] = {512, 520, 4048, 4096, 4160};
+
+		printf(" Number of data encryption keys  : %d\n", user_param->data_enc_keys_number);
+		printf(" Block Size      : %d\n", aes_block_size_array[user_param->aes_block_size]);
 	}
 	#endif
 

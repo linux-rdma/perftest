@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Getting the relevant context from the device */
-	ctx.context = ibv_open_device(ib_dev);
+	ctx.context = ctx_open_device(ib_dev, &user_param);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;

@@ -201,6 +201,106 @@ static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
 	return 0;
 }
 
+int set_valid_dek(char *dst, struct perftest_parameters *user_param)
+{
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	int index = 0;
+	char* eptr;
+	char* execute = NULL;
+
+	srand (time (NULL));
+
+	const char file_name_letters[] = "abcdefghijklmnopqrstuvwxyz1234567890";
+	char file_path[AES_XTS_DEK_FILE_NAME_SIZE];
+	int file_letters_size = sizeof(file_name_letters)-1;
+
+	sprintf(file_path, "/tmp/");
+
+	for(int i = 5; i < AES_XTS_DEK_FILE_NAME_SIZE - 1; i++) {
+		file_path[i] = file_name_letters[rand() % file_letters_size];
+	}
+
+	/* + 1 for the '\0' at the end of the char array*/
+	int size = strlen(user_param->data_enc_key_app_path) + 1
+		+ strlen(user_param->kek_path) + 1 + strlen(file_path) + 1;
+
+	ALLOCATE(execute, char, size);
+
+	if(execute == NULL){
+		fprintf(stderr, "Can not open the data_encryption_key file\n");
+	}
+
+	strcpy(execute, user_param->data_enc_key_app_path);
+	strcat(execute, " ");
+	strcat(execute, user_param->kek_path);
+	strcat(execute, " ");
+	strcat(execute, file_path);
+
+	system(execute);
+
+	free(execute);
+
+	FILE* dek_file = fopen(file_path, "r");
+
+	if(dek_file == NULL) {
+		fprintf(stderr, "Can not open the data_encryption_key file\n");
+		return FAILURE;
+	}
+
+	while((read = getline(&line, &len, dek_file)) != -1) {
+
+		if(index >= AES_XTS_DEK_SIZE) {
+			fprintf(stderr, "Invalid data_encryption_key file\n");
+			fclose(dek_file);
+			return FAILURE;
+		}
+
+		dst[index] = strtol(line, &eptr, 16);
+		index++;
+	}
+
+	fclose(dek_file);
+
+	remove(file_path);
+
+	return 0;
+}
+
+int set_valid_cred(char *dst, struct perftest_parameters *user_param)
+{
+	char valid_credential[48];
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	char* eptr;
+	int index = 0;
+
+	FILE* cred = fopen(user_param->credentials_path, "r");
+
+	if(cred == NULL) {
+		fprintf(stderr, "Can not open the credentials file\n");
+		return FAILURE;
+	}
+
+	while((read = getline(&line, &len, cred)) != -1) {
+
+		if(index >= AES_XTS_CREDENTIALS_SIZE) {
+			fprintf(stderr, "Invalid credentials file\n");
+		}
+
+		valid_credential[index] = strtol(line, &eptr, 16);
+		index++;
+	}
+
+	fclose(cred);
+
+	memcpy(dst, valid_credential, sizeof(valid_credential));
+
+	return 0;
+}
+
 static int pp_free_mmap(struct pingpong_context *ctx)
 {
 	munmap(ctx->buf[0], ctx->buff_size);
@@ -299,6 +399,56 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, int inl, int index,
 	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type)
 {
+#ifdef HAVE_AES
+	if(user_param->aes_xts) {
+		ibv_wr_start(ctx->qpx[index]);
+		int i;
+		struct ibv_sge sgl;
+		struct mlx5dv_mkey_conf_attr mkey_attr = {};
+		struct mlx5dv_crypto_attr crypto_attr = {};
+
+		ctx->qpx[index]->wr_flags = IBV_SEND_INLINE;
+		crypto_attr.crypto_standard = MLX5DV_CRYPTO_STANDARD_AES_XTS;
+		sgl.addr = (uintptr_t)ctx->mr[index]->addr;
+		sgl.lkey = ctx->mr[index]->lkey;
+		sgl.length = user_param->buff_size;
+
+		mlx5dv_wr_mkey_configure(ctx->dv_qp[index], ctx->mkey[index], 3, &mkey_attr);
+		mlx5dv_wr_set_mkey_access_flags(ctx->dv_qp[index], IBV_ACCESS_REMOTE_READ |
+                              IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+		mlx5dv_wr_set_mkey_layout_list(ctx->dv_qp[index], 1, &sgl);
+
+		if(user_param->sig_before) {
+			crypto_attr.signature_crypto_order = MLX5DV_SIGNATURE_CRYPTO_ORDER_SIGNATURE_BEFORE_CRYPTO_ON_TX;
+		}
+		else {
+			crypto_attr.signature_crypto_order = MLX5DV_SIGNATURE_CRYPTO_ORDER_SIGNATURE_AFTER_CRYPTO_ON_TX;
+		}
+
+		if(user_param->encrypt_on_tx) {
+			crypto_attr.encrypt_on_tx = true;
+		}
+		else {
+			crypto_attr.encrypt_on_tx = false;
+		}
+
+		for(i=0; i < AES_XTS_TWEAK_SIZE; i++) {
+			crypto_attr.initial_tweak[i] = i;
+		}
+
+		for(i=0; i < AES_XTS_KEYTAG_SIZE; i++) {
+			crypto_attr.keytag[i] = 0;
+		}
+
+		crypto_attr.data_unit_size = user_param->aes_block_size;
+		crypto_attr.dek = ctx->dek[(ctx->dek_number%user_param->data_enc_keys_number)];
+		ctx->dek_number++;
+
+		mlx5dv_wr_set_mkey_crypto(ctx->dv_qp[index], &crypto_attr);
+		ibv_wr_complete(ctx->qpx[index]);
+	}
+#endif
+
 	int rc;
 	int wr_index = index * user_param->post_list;
 	struct ibv_send_wr *wr = &ctx->wr[wr_index];
@@ -397,6 +547,16 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		}
 		else
 		{
+			#ifdef HAVE_AES
+			if(user_param->aes_xts) {
+				ctx->qpx[index]->wr_flags = ctx->qpx[index]->wr_flags | IBV_SEND_SIGNALED;
+				ibv_wr_set_sge(ctx->qpx[index],
+					ctx->mkey[index]->lkey,
+					(uintptr_t)0,
+					user_param->size);
+			}
+			else
+			#endif
 			ibv_wr_set_sge(
 				ctx->qpx[index],
 				wr->sg_list->lkey,
@@ -880,6 +1040,51 @@ struct ibv_device* ctx_find_dev(char **ib_devname)
 /******************************************************************************
  *
  ******************************************************************************/
+struct ibv_context* ctx_open_device(struct ibv_device *ib_dev, struct perftest_parameters *user_param)
+{
+	struct ibv_context *context;
+
+#ifdef HAVE_AES
+	if(user_param->aes_xts){
+		struct mlx5dv_crypto_login_attr login_attr = {};
+		struct mlx5dv_context_attr attr = {};
+		attr.flags = MLX5DV_CONTEXT_FLAGS_DEVX;
+
+		if(set_valid_cred(login_attr.credential, user_param)){
+			fprintf(stderr, "Couldn't set credentials\n");
+			return NULL;
+		}
+
+		context = mlx5dv_open_device(ib_dev, &attr);
+
+		if(!context){
+			fprintf(stderr, "Couldn't get context for the device\n");
+			return NULL;
+		}
+
+		int ret = mlx5dv_crypto_login(context, &login_attr);
+
+		if (ret) {
+			fprintf(stderr,"Couldn't login. err=%d.\n", ret);
+			return NULL;
+		}
+
+		return context;
+	}
+#endif
+
+	context = ibv_open_device(ib_dev);
+
+	if (!context) {
+		fprintf(stderr, " Couldn't get context for the device\n");
+		return NULL;
+	}
+
+	return context;
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
 void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
 	uint64_t tarr_size;
@@ -904,6 +1109,10 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	ALLOCATE(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#ifdef HAVE_DCS
 	ALLOCATE(ctx->dci_stream_id, uint32_t, user_param->num_of_qps);
+	#endif
+	#ifdef HAVE_AES
+	ALLOCATE(ctx->dek, struct mlx5dv_dek*, user_param->data_enc_keys_number);
+	ALLOCATE(ctx->mkey, struct mlx5dv_mkey*, user_param->num_of_qps);
 	#endif
 	#endif
 	ALLOCATE(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
@@ -1162,6 +1371,21 @@ int destroy_ctx(struct pingpong_context *ctx,
 	#ifdef HAVE_DCS
 	free(ctx->dci_stream_id);
 	#endif
+	#endif
+	#ifdef HAVE_AES
+	if(user_param->aes_xts){
+		for(int i = 0; i < user_param->data_enc_keys_number; i++){
+			free(ctx->dek[i]);
+		}
+
+		free(ctx->dek);
+
+		for(int i = 0; i < user_param->num_of_qps; i++){
+			free(ctx->mkey[i]);
+		}
+
+		free(ctx->mkey);
+	}
 	#endif
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1619,6 +1843,48 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		fprintf(stderr, "Couldn't allocate PD\n");
 		return FAILURE;
 	}
+	#ifdef HAVE_AES
+	if(user_param->aes_xts){
+		struct mlx5dv_dek_init_attr dek_attr = {};
+		struct mlx5dv_mkey_init_attr mkey_init_attr = {};
+
+		ctx->dek_number = 0;
+		dek_attr.key_size = MLX5DV_CRYPTO_KEY_SIZE_128;
+		dek_attr.has_keytag = 0;
+		dek_attr.key_purpose = MLX5DV_CRYPTO_KEY_PURPOSE_AES_XTS;
+		dek_attr.pd = ctx->pd;
+		dek_attr.opaque[0] = 0x11;
+		mkey_init_attr.pd = ctx->pd;
+		mkey_init_attr.create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT |
+		MLX5DV_MKEY_INIT_ATTR_FLAGS_CRYPTO;
+
+		mkey_init_attr.max_entries = 1;
+		for(int i = 0; i < user_param->data_enc_keys_number; i++) {
+
+			if (set_valid_dek(dek_attr.key, user_param)) {
+				fprintf(stderr, "Failed to set dek\n");
+				return FAILURE;
+			}
+
+			ctx->dek[i] = mlx5dv_dek_create(ctx->context, &dek_attr);
+
+			if(!ctx->dek[i]) {
+				fprintf(stderr, "Failed to create dek\n");
+				return FAILURE;
+			}
+
+		}
+
+		for(int i = 0; i < user_param->num_of_qps; i++) {
+			ctx->mkey[i] = mlx5dv_create_mkey(&mkey_init_attr);
+
+			if(!ctx->mkey[i]) {
+				fprintf(stderr, "Failed to create mkey\n");
+				return FAILURE;
+			}
+		}
+	}
+	#endif
 
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda) {
@@ -1783,6 +2049,11 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		{
 			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
 		}
+		#ifdef HAVE_AES
+		if (user_param->aes_xts){
+			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
+		}
+		#endif
 		#endif
 	}
 	#endif
@@ -1971,6 +2242,16 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				}
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
+			#ifdef HAVE_AES
+			else if (user_param->aes_xts) {
+				attr_ex.cap.max_send_wr = user_param->tx_depth * 2;
+				attr_ex.cap.max_inline_data = AES_XTS_INLINE;
+				attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_SEND_OPS_FLAGS;
+				attr_dv.send_ops_flags = MLX5DV_QP_EX_WITH_MKEY_CONFIGURE;
+				attr_dv.create_flags = MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+			}
+			#endif // HAVE_AES
 			else
 			#endif // HAVE_MLX5DV
 				qp = ibv_create_qp_ex(ctx->context, &attr_ex);
