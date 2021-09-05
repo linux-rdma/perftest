@@ -1239,6 +1239,9 @@ int create_comm_struct(struct perftest_comm *comm,
 		#ifdef HAVE_IBV_WR_API
 		ALLOCATE(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps);
 		#endif
+		#ifdef HAVE_DCS
+		ALLOCATE(comm->rdma_ctx->dci_stream_id,uint32_t, comm->rdma_params->num_of_qps);
+		#endif
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
