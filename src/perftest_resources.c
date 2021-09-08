@@ -4762,6 +4762,15 @@ int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 		}
 	}
 
+        if (user_param->has_source_ip) {
+                struct sockaddr_in *source_addr;
+                source_addr = calloc(1, sizeof(*source_addr));
+                source_addr->sin_family = AF_INET;
+                source_addr->sin_addr.s_addr = inet_addr(user_param->source_ip);
+                hints->ai_src_addr = (struct sockaddr *)(source_addr);
+                hints->ai_src_len = sizeof(*source_addr);
+        }
+
 	return rc;
 
 error:

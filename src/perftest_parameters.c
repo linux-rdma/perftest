@@ -451,6 +451,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use IPv6 GID. Default is IPv4\n");
 	}
 
+	// please note it is a different source_ip from raw_ethernet case
+	if (connection_type != RawEth) {
+		printf("      --source_ip ");
+		printf(" Source IP of the interface used for connection establishment. By default taken from routing table.\n");
+	}
+
+
 	if (tst == LAT) {
 		printf("      --latency_gap=<delay_time> ");
 		printf(" delay time between each post send\n");
@@ -785,15 +792,17 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
-	user_param->use_res_domain	= 0;
-	user_param->mr_per_qp		= 0;
-	user_param->dlid		= 0;
-	user_param->traffic_class	= 0;
-	user_param->flows		= DEF_FLOWS;
-	user_param->flows_burst		= 1;
-	user_param->perform_warm_up	= 0;
-	user_param->use_ooo		= 0;
-	user_param->disable_pcir	= 0;
+	user_param->use_res_domain		= 0;
+	user_param->mr_per_qp			= 0;
+	user_param->dlid			= 0;
+	user_param->traffic_class		= 0;
+	user_param->flows			= DEF_FLOWS;
+	user_param->flows_burst			= 1;
+	user_param->perform_warm_up		= 0;
+	user_param->use_ooo			= 0;
+	user_param->disable_pcir		= 0;
+	user_param->source_ip		= NULL;
+	user_param->has_source_ip	= 0;
 }
 
 static int open_file_write(const char* file_path)
@@ -2013,6 +2022,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flows_flag = 0;
 	static int flows_burst_flag = 0;
 	static int force_link_flag = 0;
+	static int source_ip_flag = 0;
 	static int local_ip_flag = 0;
 	static int remote_ip_flag = 0;
 	static int local_port_flag = 0;
@@ -2166,6 +2176,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#if defined HAVE_OOO_ATTR
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
+			{.name = "source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{0}
 		};
 		c = getopt_long(argc,argv,"w:y:p:d:i:m:s:n:t:u:S:x:c:q:I:o:M:r:Q:A:l:D:f:B:T:L:E:J:j:K:k:X:W:aFegzRvhbNVCHUOZP",long_options,NULL);
@@ -2617,6 +2628,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->is_server_ip = 1;
 					local_ip = optarg;
 					local_ip_flag = 0;
+				}
+				if (source_ip_flag)
+				{
+					user_param->has_source_ip = 1;
+					GET_STRING(user_param->source_ip, strdupa(optarg));
+					source_ip_flag = 0;
 				}
 				if (remote_port_flag) {
 					user_param->is_new_raw_eth_param = 1;

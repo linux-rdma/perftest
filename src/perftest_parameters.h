@@ -540,6 +540,8 @@ struct perftest_parameters {
 	void 				(*print_eth_func)(void*);
 	int				disable_pcir;
 	struct counter_context		*counter_ctx;
+	char				*source_ip;
+	int 				has_source_ip;
 };
 
 struct report_options {
