@@ -152,10 +152,10 @@ fi
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
-        [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES=yes], [HAVE_AES=no])
-AM_CONDITIONAL([HAVE_AES],[test "x$HAVE_AES" = "xyes"])
-if [test $HAVE_AES = yes] && [test $HAVE_MLX5DV = yes];  then
-            AC_DEFINE([HAVE_AES], [1], [Have AES support])
+        [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES_XTS=yes], [HAVE_AES_XTS=no])
+AM_CONDITIONAL([HAVE_AES_XTS],[test "x$HAVE_AES_XTS" = "xyes"])
+if [test $HAVE_AES_XTS = yes] && [test $HAVE_MLX5DV = yes];  then
+            AC_DEFINE([HAVE_AES_XTS], [1], [Have AES XTS support])
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],

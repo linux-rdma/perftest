@@ -399,7 +399,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, int inl, int index,
 	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type)
 {
-#ifdef HAVE_AES
+#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts) {
 		ibv_wr_start(ctx->qpx[index]);
 		int i;
@@ -547,7 +547,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		}
 		else
 		{
-			#ifdef HAVE_AES
+			#ifdef HAVE_AES_XTS
 			if(user_param->aes_xts) {
 				ctx->qpx[index]->wr_flags = ctx->qpx[index]->wr_flags | IBV_SEND_SIGNALED;
 				ibv_wr_set_sge(ctx->qpx[index],
@@ -1044,7 +1044,7 @@ struct ibv_context* ctx_open_device(struct ibv_device *ib_dev, struct perftest_p
 {
 	struct ibv_context *context;
 
-#ifdef HAVE_AES
+#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
 		struct mlx5dv_crypto_login_attr login_attr = {};
 		struct mlx5dv_context_attr attr = {};
@@ -1110,7 +1110,7 @@ void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_par
 	#ifdef HAVE_DCS
 	ALLOCATE(ctx->dci_stream_id, uint32_t, user_param->num_of_qps);
 	#endif
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	ALLOCATE(ctx->dek, struct mlx5dv_dek*, user_param->data_enc_keys_number);
 	ALLOCATE(ctx->mkey, struct mlx5dv_mkey*, user_param->num_of_qps);
 	#endif
@@ -1372,7 +1372,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	free(ctx->dci_stream_id);
 	#endif
 	#endif
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
 		for(int i = 0; i < user_param->data_enc_keys_number; i++){
 			free(ctx->dek[i]);
@@ -1843,7 +1843,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		fprintf(stderr, "Couldn't allocate PD\n");
 		return FAILURE;
 	}
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
 		struct mlx5dv_dek_init_attr dek_attr = {};
 		struct mlx5dv_mkey_init_attr mkey_init_attr = {};
@@ -2049,7 +2049,7 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		{
 			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
 		}
-		#ifdef HAVE_AES
+		#ifdef HAVE_AES_XTS
 		if (user_param->aes_xts){
 			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
 		}
@@ -2242,7 +2242,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				}
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
-			#ifdef HAVE_AES
+			#ifdef HAVE_AES_XTS
 			else if (user_param->aes_xts) {
 				attr_ex.cap.max_send_wr = user_param->tx_depth * 2;
 				attr_ex.cap.max_inline_data = AES_XTS_INLINE;
@@ -2251,7 +2251,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				attr_dv.create_flags = MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
-			#endif // HAVE_AES
+			#endif // HAVE_AES_XTS
 			else
 			#endif // HAVE_MLX5DV
 				qp = ibv_create_qp_ex(ctx->context, &attr_ex);

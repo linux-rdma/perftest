@@ -161,7 +161,7 @@ struct pingpong_context {
 	struct rdma_cm_id			*cm_id_control;
 	struct rdma_cm_id			*cm_id;
 	struct ibv_context			*context;
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	struct mlx5dv_mkey			**mkey;
 	struct mlx5dv_dek			**dek;
 	#endif

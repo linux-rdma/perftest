@@ -244,7 +244,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Run DC initiator as DCS instead of DCI with <log_num dci_stream_channels>\n");
 		printf("      --log_active_dci_streams=<log_num_active_dci_stream_channels> (default log_num_dci_stream_channels)\n");
 		#endif
-		#ifdef HAVE_AES
+		#ifdef HAVE_AES_XTS
 		printf("	  --aes_xts Runs traffic with AES_XTS feature (encryption)\n");
 		printf("	  --encrypt_on_tx Runs traffic with encryption on tx (default decryption on tx)\n");
 		printf("	  --sig_before Puts signature on data before encrypting it (default after)\n");
@@ -1434,7 +1434,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		#endif
 	}
 	if(user_param->aes_xts) {
-		#ifdef HAVE_AES
+		#ifdef HAVE_AES_XTS
 		if(user_param->connection_type != RC) {
 			printf(RESULT_LINE);
 			fprintf(stderr," aes_xts supported only on RC\n");
@@ -2148,7 +2148,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
 	#endif
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	static int aes_xts_flag = 0;
 	static int encrypt_on_tx_flag = 0;
 	static int sig_before_flag = 0;
@@ -2285,7 +2285,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "vlan_en", .has_arg = 0, .flag = &vlan_en, .val = 1},
 			{.name = "vlan_pcp", .has_arg = 1, .flag = &vlan_pcp_flag, .val = 1},
 			{.name = "recv_post_list", .has_arg = 1, .flag = &recv_post_list_flag, .val = 1},
-			#if defined HAVE_AES
+			#if defined HAVE_AES_XTS
 			{.name = "aes_xts", .has_arg=0 , .flag = &aes_xts_flag, .val = 1},
 			{.name = "encrypt_on_tx", .has_arg=0 , .flag = &encrypt_on_tx_flag, .val = 1},
 			{.name = "sig_before", .has_arg=0 , .flag = &sig_before_flag, .val = 1},
@@ -2801,7 +2801,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->recv_post_list = strtol(optarg, NULL, 0);
 					recv_post_list_flag = 0;
 				}
-				#ifdef HAVE_AES
+				#ifdef HAVE_AES_XTS
 				if(aes_xts_flag) {
 					user_param->aes_xts = 1;
 				}
@@ -3239,7 +3239,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 		printf(" DCS active num streams : %d\n",user_param->log_active_dci_streams);
 	}
 	#endif
-	#ifdef HAVE_AES
+	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
 		int aes_block_size_array [AES_XTS_BLOCK_ARRAY_SIZE] = {512, 520, 4048, 4096, 4160};
 
