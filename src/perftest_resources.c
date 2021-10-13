@@ -228,8 +228,9 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 
 	ALLOCATE(execute, char, size);
 
-	if(execute == NULL){
+	if(execute == NULL) {
 		fprintf(stderr, "Can not open the data_encryption_key file\n");
+		return FAILURE;
 	}
 
 	strcpy(execute, user_param->data_enc_key_app_path);
@@ -238,7 +239,11 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 	strcat(execute, " ");
 	strcat(execute, file_path);
 
-	system(execute);
+	if(system(execute)) {
+		fprintf(stderr, "Execution of %s has failed\n", execute);
+		free(execute);
+		return FAILURE;
+	}
 
 	free(execute);
 
@@ -288,6 +293,7 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 
 		if(index >= AES_XTS_CREDENTIALS_SIZE) {
 			fprintf(stderr, "Invalid credentials file\n");
+			return FAILURE;
 		}
 
 		valid_credential[index] = strtol(line, &eptr, 16);
