@@ -69,18 +69,21 @@ int main (int argc , char** argv)
 	int index = 0;
 	char* eptr;
 	int i;
+	FILE* creds_file = NULL;
+	FILE* kek_file = NULL;
+	FILE* encrypted_credentials = NULL;
 
-	FILE* creds_file = fopen(argv[1], "r");
+	creds_file = fopen(argv[1], "r");
 
 	if(creds_file == NULL) {
 		fprintf(stderr, "Couldn't open the credentials file\n");
 		exit(1);
 	}
 
-	FILE* kek_file = fopen(argv[2], "r");
+	kek_file = fopen(argv[2], "r");
 
 	if(kek_file == NULL) {
-		fprintf(stderr, "Couldn't open kek file\n");
+		fprintf(stderr, "Couldn't open key encryption key file\n");
 		fclose(creds_file);
 		exit(1);
 	}
@@ -107,7 +110,7 @@ int main (int argc , char** argv)
 	while((read = getline(&line, &len, kek_file)) != -1) {
 
 		if(index >= sizeof(kek)) {
-			fprintf(stderr, "Invalid credentials file\n");
+			fprintf(stderr, "Invalid key encryption key file\n");
 			fclose(kek_file);
 			exit(1);
 		}
@@ -121,7 +124,7 @@ int main (int argc , char** argv)
 	ciphertext_len =
 		encrypt(credentials, sizeof(credentials), kek, iv, ciphertext);
 
-	FILE* encrypted_credentials = fopen(argv[3], "w");
+	encrypted_credentials = fopen(argv[3], "w");
 
 	if(encrypted_credentials == NULL) {
 		printf("Couldn't open the encrypted credentials file");

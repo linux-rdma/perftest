@@ -72,6 +72,8 @@ int main (int argc , char** argv)
 	int index = 0;
 	char* eptr;
 	int i;
+	FILE* kek_file = NULL;
+	FILE* dek_file = NULL;
 
 	srand(time(NULL));
 
@@ -80,17 +82,17 @@ int main (int argc , char** argv)
 		dek[i]=(rand()%256);
 	}
 
-	FILE* kek_file = fopen(argv[1] , "r");
+	kek_file = fopen(argv[1] , "r");
 
 	if(kek_file == NULL){
-		fprintf(stderr, "Couldn't open kek file");
+		fprintf(stderr, "Couldn't open key encryption key file");
 		exit(1);
 	}
 
 	while((read = getline(&line, &len, kek_file)) != -1) {
 
 		if(index >= sizeof(kek)) {
-			fprintf(stderr, "Invalid credentials file\n");
+			fprintf(stderr, "Invalid key encryption key file\n");
 			fclose(kek_file);
 			exit(1);
 		}
@@ -104,10 +106,10 @@ int main (int argc , char** argv)
 	ciphertext_len =
 		encrypt(dek, sizeof(dek), kek, iv, ciphertext);
 
-	FILE* dek_file = fopen(argv[2] , "w");
+	dek_file = fopen(argv[2] , "w");
 
 	if(dek_file == NULL){
-		fprintf(stderr, "Couldn't open dek file\n");
+		fprintf(stderr, "Couldn't open data encryption key file\n");
 		exit(1);
 	}
 
