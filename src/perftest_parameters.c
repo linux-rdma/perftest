@@ -1076,6 +1076,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
+#ifdef HAVE_AES_XTS
 	switch (user_param->aes_block_size)
 	{
 		case AES_XTS_BLOCK_SIZE_520:
@@ -1096,8 +1097,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 		default:
 			user_param->aes_block_size = MLX5DV_BLOCK_SIZE_512;
-			 break;
+			break;
 	}
+#endif
 
 	if (user_param->dualport == ON) {
 
