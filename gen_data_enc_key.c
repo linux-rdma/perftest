@@ -71,11 +71,12 @@ int main (int argc , char** argv)
 	ssize_t read;
 	int index = 0;
 	char* eptr;
+	int i;
 
 	srand(time(NULL));
 
 	//random
-	for(int i = 0; i < 32; i++){
+	for(i = 0; i < 32; i++){
 		dek[i]=(rand()%256);
 	}
 
@@ -110,7 +111,7 @@ int main (int argc , char** argv)
 		exit(1);
 	}
 
-	for(int i = 0; i < ciphertext_len; i++)
+	for(i = 0; i < ciphertext_len; i++)
 		fprintf(dek_file, "0x%02x\n", ciphertext[i]);
 
 	fclose(dek_file);

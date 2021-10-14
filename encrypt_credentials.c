@@ -68,6 +68,7 @@ int main (int argc , char** argv)
 	ssize_t read;
 	int index = 0;
 	char* eptr;
+	int i;
 
 	FILE* creds_file = fopen(argv[1], "r");
 
@@ -127,7 +128,7 @@ int main (int argc , char** argv)
 		exit(1);
 	}
 
-	for(int i = 0; i < ciphertext_len; i++)
+	for(i = 0; i < ciphertext_len; i++)
 		fprintf(encrypted_credentials, "0x%02x\n", ciphertext[i]);
 
 	fclose(encrypted_credentials);

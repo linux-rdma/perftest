@@ -209,6 +209,7 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 	int index = 0;
 	char* eptr;
 	char* execute = NULL;
+	int i;
 
 	srand (time (NULL));
 
@@ -218,7 +219,7 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 
 	sprintf(file_path, "/tmp/");
 
-	for(int i = 5; i < AES_XTS_DEK_FILE_NAME_SIZE - 1; i++) {
+	for(i = 5; i < AES_XTS_DEK_FILE_NAME_SIZE - 1; i++) {
 		file_path[i] = file_name_letters[rand() % file_letters_size];
 	}
 
@@ -1380,13 +1381,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 	#endif
 	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
-		for(int i = 0; i < user_param->data_enc_keys_number; i++){
+		for(i = 0; i < user_param->data_enc_keys_number; i++){
 			free(ctx->dek[i]);
 		}
 
 		free(ctx->dek);
 
-		for(int i = 0; i < user_param->num_of_qps; i++){
+		for(i = 0; i < user_param->num_of_qps; i++){
 			free(ctx->mkey[i]);
 		}
 
@@ -1865,7 +1866,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		MLX5DV_MKEY_INIT_ATTR_FLAGS_CRYPTO;
 
 		mkey_init_attr.max_entries = 1;
-		for(int i = 0; i < user_param->data_enc_keys_number; i++) {
+		for(i = 0; i < user_param->data_enc_keys_number; i++) {
 
 			if (set_valid_dek(dek_attr.key, user_param)) {
 				fprintf(stderr, "Failed to set dek\n");
@@ -1881,7 +1882,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 		}
 
-		for(int i = 0; i < user_param->num_of_qps; i++) {
+		for(i = 0; i < user_param->num_of_qps; i++) {
 			ctx->mkey[i] = mlx5dv_create_mkey(&mkey_init_attr);
 
 			if(!ctx->mkey[i]) {
