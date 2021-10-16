@@ -201,6 +201,7 @@ static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
 	return 0;
 }
 
+#ifdef HAVE_AES_XTS
 int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 {
 	char * line = NULL;
@@ -210,21 +211,24 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 	char* eptr;
 	char* execute = NULL;
 	int i;
-
-	srand (time (NULL));
+	int size;
 
 	const char file_name_letters[] = "abcdefghijklmnopqrstuvwxyz1234567890";
 	char file_path[AES_XTS_DEK_FILE_NAME_SIZE];
 	int file_letters_size = sizeof(file_name_letters)-1;
+	FILE* dek_file = NULL;
+
+	srand (time (NULL));
 
 	sprintf(file_path, "/tmp/");
 
+	/* + 5 because we begin to randomize after folder path /tmp/ */
 	for(i = 5; i < AES_XTS_DEK_FILE_NAME_SIZE - 1; i++) {
 		file_path[i] = file_name_letters[rand() % file_letters_size];
 	}
 
 	/* + 1 for the '\0' at the end of the char array*/
-	int size = strlen(user_param->data_enc_key_app_path) + 1
+	size = strlen(user_param->data_enc_key_app_path) + 1
 		+ strlen(user_param->kek_path) + 1 + strlen(file_path) + 1;
 
 	ALLOCATE(execute, char, size);
@@ -248,7 +252,7 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 
 	free(execute);
 
-	FILE* dek_file = fopen(file_path, "r");
+	dek_file = fopen(file_path, "r");
 
 	if(dek_file == NULL) {
 		fprintf(stderr, "Can not open the data_encryption_key file\n");
@@ -282,8 +286,9 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 	ssize_t read;
 	char* eptr;
 	int index = 0;
+	FILE* cred = NULL;
 
-	FILE* cred = fopen(user_param->credentials_path, "r");
+	cred = fopen(user_param->credentials_path, "r");
 
 	if(cred == NULL) {
 		fprintf(stderr, "Can not open the credentials file\n");
@@ -307,6 +312,7 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 
 	return 0;
 }
+#endif
 
 static int pp_free_mmap(struct pingpong_context *ctx)
 {
@@ -393,6 +399,7 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
  *	qpt             - qp type.
  *	op              - RDMA operation code.
  *	connection_type - Type of the connection.
+ *	enc             - use encryption/decryption or not.
  *
  * Return Value : int.
  *
@@ -400,19 +407,24 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 #ifdef HAVE_IBV_WR_API
 static inline int _new_post_send(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, int inl, int index,
-	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type)
+	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type, int enc)
 	__attribute__((always_inline));
 static inline int _new_post_send(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, int inl, int index,
-	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type)
+	enum ibv_qp_type qpt, enum ibv_wr_opcode op, int connection_type, int enc)
 {
+	int rc;
+	int wr_index = index * user_param->post_list;
+	struct ibv_send_wr *wr = &ctx->wr[wr_index];
+
 #ifdef HAVE_AES_XTS
-	if(user_param->aes_xts) {
-		ibv_wr_start(ctx->qpx[index]);
+	if(enc) {
 		int i;
 		struct ibv_sge sgl;
 		struct mlx5dv_mkey_conf_attr mkey_attr = {};
 		struct mlx5dv_crypto_attr crypto_attr = {};
+
+		ibv_wr_start(ctx->qpx[index]);
 
 		ctx->qpx[index]->wr_flags = IBV_SEND_INLINE;
 		crypto_attr.crypto_standard = MLX5DV_CRYPTO_STANDARD_AES_XTS;
@@ -456,9 +468,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	}
 #endif
 
-	int rc;
-	int wr_index = index * user_param->post_list;
-	struct ibv_send_wr *wr = &ctx->wr[wr_index];
+
 
 	ibv_wr_start(ctx->qpx[index]);
 	while (wr)
@@ -555,7 +565,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		else
 		{
 			#ifdef HAVE_AES_XTS
-			if(user_param->aes_xts) {
+			if(enc) {
 				ctx->qpx[index]->wr_flags = ctx->qpx[index]->wr_flags | IBV_SEND_SIGNALED;
 				ibv_wr_set_sge(ctx->qpx[index],
 					ctx->mkey[index]->lkey,
@@ -598,182 +608,200 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 static int new_post_write_sge_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, DC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, DC, 0);
 }
 
 static int new_post_write_inl_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, DC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, DC, 0);
 }
 
 static int new_post_read_sge_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, DC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, DC, 0);
 }
 
 static int new_post_send_sge_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND, DC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND, DC, 0);
 }
 
 static int new_post_send_inl_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, DC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, DC, 0);
 }
 
 static int new_post_atomic_fa_sge_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_FETCH_AND_ADD, DC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_FETCH_AND_ADD, DC, 0);
 }
 
 static int new_post_atomic_cs_sge_dc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_CMP_AND_SWP, DC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_ATOMIC_CMP_AND_SWP, DC, 0);
 }
 
 static int new_post_send_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_SEND, RC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_SEND, RC, 0);
+}
+
+static int new_post_send_sge_enc_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_SEND, RC, 1);
 }
 
 static int new_post_send_inl_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_SEND, RC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_SEND, RC, 0);
 }
 
 static int new_post_write_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE, RC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE, RC, 0);
+}
+
+static int new_post_write_sge_enc_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE, RC, 1);
 }
 
 static int new_post_write_inl_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE, RC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_RC, IBV_WR_RDMA_WRITE, RC, 0);
 }
 
 static int new_post_read_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_READ, RC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_READ, RC, 0);
+}
+
+static int new_post_read_sge_enc_rc(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_RDMA_READ, RC, 1);
 }
 
 static int new_post_atomic_fa_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_FETCH_AND_ADD, RC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_FETCH_AND_ADD, RC, 0);
 }
 
 static int new_post_atomic_cs_sge_rc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_CMP_AND_SWP, RC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_RC, IBV_WR_ATOMIC_CMP_AND_SWP, RC, 0);
 }
 
 static int new_post_send_sge_ud(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UD, IBV_WR_SEND, UD);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UD, IBV_WR_SEND, UD, 0);
 }
 
 static int new_post_send_inl_ud(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UD, IBV_WR_SEND, UD);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UD, IBV_WR_SEND, UD, 0);
 }
 
 static int new_post_send_sge_uc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_SEND, UC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_SEND, UC, 0);
 }
 
 static int new_post_send_inl_uc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_SEND, UC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_SEND, UC, 0);
 }
 
 static int new_post_write_sge_uc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE, UC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE, UC, 0);
 }
 
 static int new_post_write_inl_uc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE, UC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UC, IBV_WR_RDMA_WRITE, UC, 0);
 }
 
 static int new_post_send_sge_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD, 0);
 }
 
 static int new_post_send_inl_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD, 0);
 }
 
 static int new_post_read_sge_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, SRD);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, SRD, 0);
 }
 
 #ifdef HAVE_XRCD
 static int new_post_send_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_SEND, XRC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_SEND, XRC, 0);
 }
 
 static int new_post_send_inl_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_SEND, XRC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_SEND, XRC, 0);
 }
 
 static int new_post_write_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE, XRC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE, XRC, 0);
 }
 
 static int new_post_write_inl_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE, XRC);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_WRITE, XRC, 0);
 }
 
 static int new_post_read_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_READ, XRC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_RDMA_READ, XRC, 0);
 }
 
 static int new_post_atomic_fa_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_FETCH_AND_ADD, XRC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_FETCH_AND_ADD, XRC, 0);
 }
 
 static int new_post_atomic_cs_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_CMP_AND_SWP, XRC);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_XRC_SEND, IBV_WR_ATOMIC_CMP_AND_SWP, XRC, 0);
 }
 #endif
 #endif
@@ -2619,6 +2647,7 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 		struct perftest_parameters *user_param)
 {
 	int use_inl = user_param->size <= user_param->inline_size;
+	int use_enc = user_param->aes_xts;
 	switch (user_param->connection_type) {
 	case DC:
 		switch (user_param->verb) {
@@ -2656,7 +2685,10 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 	case RC:
 		switch (user_param->verb) {
 			case SEND:
-				if (use_inl) {
+				if (use_enc) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_enc_rc;
+				}
+				else if (use_inl) {
 					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_rc;
 				}
 				else {
@@ -2664,7 +2696,10 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 				}
 				break;
 			case WRITE:
-				if (use_inl) {
+				if(use_enc) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_enc_rc;
+				}
+				else if (use_inl) {
 					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_rc;
 				}
 				else {
@@ -2672,7 +2707,12 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 				}
 				break;
 			case READ:
-				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_rc;
+				if(use_enc) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_enc_rc;
+				}
+				else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_rc;
+				}
 				break;
 			case ATOMIC:
 				if (user_param->atomicType == FETCH_AND_ADD) {

@@ -359,6 +359,7 @@ int verify_params_with_device_context(struct ibv_context *ctx,
  */
 int ctx_init(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+#ifdef HAVE_AES_XTS
 /* set_valid_cred
  *
  * Description :
@@ -384,6 +385,7 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param);
  * Return Value : SUCCESS, FAILURE
  */
 int set_valid_dek(char *dst, struct perftest_parameters *user_param);
+#endif
 
 /* ctx_qp_create.
  *
