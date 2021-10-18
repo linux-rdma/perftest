@@ -332,6 +332,7 @@ enum ctx_device {
 	CONNECTX6LX		= 25,
 	CONNECTX7		= 26,
 	QLOGIC_AHP		= 27,
+	BLUEFIELD3		= 28,
 };
 
 /* Units for rate limiter */
