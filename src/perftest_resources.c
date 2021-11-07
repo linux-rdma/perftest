@@ -1343,6 +1343,20 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->ctrl_wr);
 	}
 
+	#ifdef HAVE_AES_XTS
+	if(user_param->aes_xts){
+		for(i = 0; i < user_param->data_enc_keys_number; i++) {
+			if (mlx5dv_dek_destroy(ctx->dek[i]))
+				fprintf(stderr, "Failed to destroy data encryption key.\n");
+		}
+
+		for(i = 0; i < user_param->num_of_qps; i++) {
+			if (mlx5dv_destroy_mkey(ctx->mkey[i]))
+				fprintf(stderr, "Failed to destroy MKey.\n");
+		}
+	}
+	#endif
+
 	if (ibv_dealloc_pd(ctx->pd)) {
 		fprintf(stderr, "Failed to deallocate PD - %s\n", strerror(errno));
 		test_result = 1;
@@ -1408,17 +1422,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 	#endif
 	#endif
 	#ifdef HAVE_AES_XTS
-	if(user_param->aes_xts){
-		for(i = 0; i < user_param->data_enc_keys_number; i++){
-			free(ctx->dek[i]);
-		}
-
+	if(user_param->aes_xts) {
 		free(ctx->dek);
-
-		for(i = 0; i < user_param->num_of_qps; i++){
-			free(ctx->mkey[i]);
-		}
-
 		free(ctx->mkey);
 	}
 	#endif
