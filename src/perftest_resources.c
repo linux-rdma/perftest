@@ -1741,8 +1741,8 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 #if !defined(__FreeBSD__)
 int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
 {
-	int buf_size;
-	int alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
+	uint64_t buf_size;
+	uint64_t alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
 	buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
 
 	/* create hugepage shared region */
