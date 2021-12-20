@@ -531,12 +531,6 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 }
 
 #ifdef HAVE_GID_TYPE
-// declaration is copied from rdma-core, since it is private there.
-enum ibv_gid_type
-{
-	IBV_GID_TYPE_IB_ROCE_V1,
-	IBV_GID_TYPE_ROCE_V2,
-};
 
 int ibv_query_gid_type(struct ibv_context *context, uint8_t port_num,
 	unsigned int index, enum ibv_gid_type *type);
@@ -551,7 +545,7 @@ struct roce_version_sorted_enum {
 
 /* This struct defines which RoCE version is more important for default usage */
 struct roce_version_sorted_enum roce_versions_sorted[] = {
-	{IBV_GID_TYPE_IB_ROCE_V1, 1},
+	{IBV_GID_TYPE_ROCE_V1, 1},
 	{IBV_GID_TYPE_ROCE_V2, 2},
 };
 
