@@ -248,17 +248,17 @@ Special feature detailed explanation in tests:
 
   5. AES_XTS (encryption/decryption)
      In perftest repository there are two files as follow:
-      1) encrypt_data_enc_key.c
+      1) gen_data_enc_key.c
 
       2) encrypt_credentials.c
 
-      encrypt_data_enc_key.c file should be compiled with the following command:
-      #gcc encrypt_data_enc_key.c -o encrypt_data_enc_key -lcrypto
+      gen_data_enc_key.c file should be compiled with the following command:
+      #gcc gen_data_enc_key.c -o gen_data_enc_key -lcrypto
 
       encrypt_credentials.c file should be compiled with the following command:
       #gcc encrypt_credentials.c -o encrypt_credentials -lcrypto
 
-      You must provide the credentials and the kek in seperate files in hex format.
+      You must provide the plaintext credentials and the kek in seperate files in hex format.
 
       for example:
 
@@ -280,7 +280,7 @@ Special feature detailed explanation in tests:
 
       Notes:
         1) You should run the encrypt_credentials program and give paths as parameters
-        to the credential_file, kek_file and the path you want the encrypted
+        to the plaintext credential_file, kek_file and the path you want the encrypted
         credentials to be in (credentials_file first).
         for example:
           #./encrypt_credentials <PATH>/credential_file <PATH>/kek_file
@@ -289,10 +289,10 @@ Special feature detailed explanation in tests:
         The output of this is a text file that you must provide its path
         as a parameter to the perftest application with --credentials_path <PATH>
 
-        2)Both encrypt_credentials.c and encrypt_data_enc_key.c should be compiled
+        2)Both encrypt_credentials.c and gen_data_enc_key.c should be compiled
           before using the perftest application.
 
-        3)encrypt_data_enc_key.c compiled program path must be provided to the perftest
+        3)gen_data_enc_key.c compiled program path must be provided to the perftest
           application with --data_enc_key_app_path <PATH> and the kek file should be
           provided with --kek_path <PATH>
 
