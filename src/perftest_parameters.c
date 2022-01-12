@@ -16,6 +16,7 @@
 #include "mmap_memory.h"
 #include "cuda_memory.h"
 #include "rocm_memory.h"
+#include "neuron_memory.h"
 #include<math.h>
 #ifdef HAVE_RO
 #include <stdbool.h>
@@ -558,6 +559,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
 		}
 
+		if (neuron_memory_supported()) {
+			printf("      --use_neuron=<logical neuron core id>");
+			printf(" Use selected logical neuron core for NeuronDirect RDMA testing\n");
+		}
+
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
 	}
@@ -769,6 +775,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
 	user_param->rocm_device_id	= 0;
+	user_param->neuron_core_id	= 0;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -2152,6 +2159,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_rocm_flag = 0;
+	static int use_neuron_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -2302,6 +2310,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
+			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
@@ -2718,13 +2727,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				/* We statically define memory type options so check if requested option is actually supported. */
 				if (((use_cuda_flag || use_cuda_bus_id_flag) && !cuda_memory_supported()) ||
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
-				    (use_rocm_flag && !rocm_memory_supported())) {
+				    (use_rocm_flag && !rocm_memory_supported()) ||
+				    (use_neuron_flag && !neuron_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
-				    (mmap_file_flag || use_rocm_flag ||
+				    (mmap_file_flag || use_rocm_flag || use_neuron_flag ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
 					fprintf(stderr, " Can't use multiple memory types\n");
 					return FAILURE;
@@ -2756,6 +2766,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_type = MEMORY_ROCM;
 					user_param->memory_create = rocm_memory_create;
 					use_rocm_flag = 0;
+				}
+				if (use_neuron_flag) {
+					user_param->neuron_core_id = strtol(optarg, NULL, 0);
+					if (user_param->neuron_core_id < 0) {
+						fprintf(stderr, "Invalid Neuron Core ID %d\n", user_param->neuron_core_id);
+						return FAILURE;
+					}
+					user_param->memory_type = MEMORY_NEURON;
+					user_param->memory_create = neuron_memory_create;
+					use_neuron_flag = 0;
 				}
 				if (flow_label_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->flow_label,int,"flow label",not_int_ptr);

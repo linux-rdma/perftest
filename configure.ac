@@ -278,6 +278,33 @@ AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETER
 
 AM_CONDITIONAL([CUDA], [test "$CUDA_H_PATH"])
 
+AC_ARG_ENABLE([neuron],
+              [AS_HELP_STRING([--enable-neuron],
+                              [Enable Neuron benchmarks])
+              ],
+              [],
+              [enable_neuron=no])
+
+AC_ARG_WITH([neuron],
+            [AS_HELP_STRING([--with-neuron=@<:@NRT installation path@:>@],
+                            [Provide path to NRT installation])
+            ],
+            [AS_CASE([$with_neuron],
+                     [yes|no], [],
+                     [CPPFLAGS="-I$with_neuron/include $CPPFLAGS"
+                      LDFLAGS="-L$with_neuron/lib -Wl,-rpath=$with_neuron/lib $LDFLAGS"])
+            ])
+
+AS_IF([test "x$enable_neuron" = xyes], [
+       AC_DEFINE([HAVE_NEURON], [1], [Enable Neuron benchmarks])
+       AC_CHECK_HEADERS([nrt/nrt.h], [],
+                        [AC_MSG_ERROR([could not find nrt.h in include path])])
+       AC_SEARCH_LIBS([nrt_tensor_allocate], [nrt], [],
+                      [AC_MSG_ERROR([could not find library, nrt])])
+       ])
+
+AM_CONDITIONAL([NEURON], [test x$enable_neuron = xyes])
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
 AM_CONDITIONAL([HAVE_PACKET_PACING],[test "x$HAVE_PACKET_PACING" = "xyes"])
