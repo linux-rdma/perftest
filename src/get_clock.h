@@ -104,7 +104,38 @@ static inline cycles_t get_cycles()
 	asm volatile("mrs %0, cntvct_el0" : "=r" (cval));
 	return cval;
 }
+#elif defined(__riscv)
+#define ASM_STR(x) #x
+#define csr_read(csr)						\
+({								\
+	register unsigned long __v;				\
+	__asm__ __volatile__ ("csrr %0, " ASM_STR(csr)          \
+			      : "=r" (__v) :			\
+			      : "memory");			\
+	__v;							\
+})//read mtime csr
+#define CSR_TIME		0xc01  //read mtime from csrs rather than the mmap
+#if  __riscv_xlen == 64
+typedef unsigned long long cycles_t;
+static inline cycles_t get_cycles()
+{
+	return csr_read(CSR_TIME);
+}
+#elif __riscv_xlen == 32
+#define CSR_TIMEH		0xc81
+typedef unsigned long long cycles_t;
+static inline cycles_t get_cycles()
+{	uint32_t hi, lo;
 
+	do {
+		hi = csr_read(CSR_TIMEH);
+		lo = csr_read(CSR_TIME);
+	} while (hi != csr_read(CSR_TIMEH));
+
+	return ((uint64_t)hi << 32) | lo;
+
+}
+#endif/*__riscv*/
 #else
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
 #include <asm/timex.h>
