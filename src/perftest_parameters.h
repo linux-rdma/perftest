@@ -283,7 +283,7 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 #define CHECK_VALUE_NON_NEGATIVE(arg,type,name,not_int_ptr) {\
 	CHECK_VALUE(arg,type,name,not_int_ptr)\
 	if (arg < 0) {\
-		fprintf(stderr," %s must be non-negative\n",name);\
+		fprintf(stderr," %s must be non-negative %s\n",name,#type);\
 		return 1;\
 	}\
 }

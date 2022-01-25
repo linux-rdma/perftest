@@ -2608,7 +2608,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					GET_STRING(user_param->rate_limit_str ,strdupa(optarg));
 					user_param->rate_limit = atof(optarg);
 					if (user_param->rate_limit <= 0) {
-						fprintf(stderr, " Rate limit must be non-negative\n");
+						fprintf(stderr, " Rate limit must be non-negative floating point number\n");
 						return FAILURE;
 					}
 					/* if not specified, choose HW rate limiter as default */
