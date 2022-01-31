@@ -104,6 +104,15 @@ static inline cycles_t get_cycles()
 	asm volatile("mrs %0, cntvct_el0" : "=r" (cval));
 	return cval;
 }
+#elif defined(__riscv)
+typedef unsigned long cycles_t;
+
+cycles_t perf_get_cycles();
+
+static inline cycles_t get_cycles()
+{
+	return perf_get_cycles();
+}
 
 #else
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
