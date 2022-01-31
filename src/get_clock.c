@@ -222,6 +222,11 @@ double get_cpu_mhz(int no_cpu_freq_warn)
 	if (proc < 1)
 		proc = sample;
 	#endif
+	#ifdef __riscv
+	if (proc <= 0)
+		proc = sample;
+	#endif
+
 	if (!proc || !sample)
 		return 0;
 
