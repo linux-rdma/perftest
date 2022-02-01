@@ -2166,6 +2166,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	char *client_ip = NULL;
 	char *local_ip = NULL;
 	char *remote_ip = NULL;
+	char *not_int_ptr = NULL;
 
 	init_perftest_params(user_param);
 
@@ -2317,22 +2318,21 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			break;
 
 		switch (c) {
-
-			case 'p': user_param->port = strtol(optarg, NULL, 0); break;
+			case 'p': CHECK_VALUE(user_param->port,int,"Port",not_int_ptr); break;
 			case 'd': GET_STRING(user_param->ib_devname,strdupa(optarg)); break;
-			case 'i': user_param->ib_port = strtol(optarg, NULL, 0);
+			case 'i': CHECK_VALUE(user_param->ib_port,uint8_t,"IB Port",not_int_ptr);
 				  if (user_param->ib_port < MIN_IB_PORT) {
 					  fprintf(stderr, "IB Port can't be less than %d\n", MIN_IB_PORT);
 					  return 1;
 				  }
 				  break;
-			case 'm': user_param->mtu  = strtol(optarg, NULL, 0); break;
-			case 'n': CHECK_VALUE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num"); break;
-			case 't': CHECK_VALUE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth"); break;
-			case 'T': CHECK_VALUE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS"); break;
-			case 'L': CHECK_VALUE(user_param->hop_limit,int,MIN_HOP_LIMIT,MAX_HOP_LIMIT,"Hop Limit"); break;
-			case 'u': user_param->qp_timeout = (uint8_t)strtol(optarg, NULL, 0); break;
-			case 'S': user_param->sl = (uint8_t)strtol(optarg, NULL, 0);
+			case 'm': CHECK_VALUE(user_param->mtu,int,"MTU",not_int_ptr); break;
+			case 'n': CHECK_VALUE_IN_RANGE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num",not_int_ptr); break;
+			case 't': CHECK_VALUE_IN_RANGE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth",not_int_ptr); break;
+			case 'T': CHECK_VALUE_IN_RANGE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS",not_int_ptr); break;
+			case 'L': CHECK_VALUE_IN_RANGE(user_param->hop_limit,int,MIN_HOP_LIMIT,MAX_HOP_LIMIT,"Hop Limit",not_int_ptr); break;
+			case 'u': CHECK_VALUE(user_param->qp_timeout,uint8_t,"QP Timeout",not_int_ptr); break;
+			case 'S': CHECK_VALUE(user_param->sl,uint8_t,"Service Level",not_int_ptr);
 				  if (user_param->sl > MAX_SL) {
 					  fprintf(stderr," Only %d Service levels\n",MAX_SL);
 					  return 1;
@@ -2340,32 +2340,35 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->connection_type == RawEth)
 					  user_param->raw_qos = 1;
 				  break;
-			case 'x': CHECK_VALUE(user_param->gid_index, uint8_t, MIN_GID_IX, MAX_GID_IX, "Gid index");
+			case 'x': CHECK_VALUE_IN_RANGE_UNS(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index",not_int_ptr);
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q': if (user_param->tst != BW) {
 					fprintf(stderr," Multiple QPs only available on bw tests\n");
 					return 1;
 				  }
-				  CHECK_VALUE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps");
+				  CHECK_VALUE_IN_RANGE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps",not_int_ptr);
 				  break;
-			case 'I': CHECK_VALUE(user_param->inline_size,int,0,MAX_INLINE,"Max inline");
+			case 'I': CHECK_VALUE_IN_RANGE(user_param->inline_size,int,0,MAX_INLINE,"Max inline",not_int_ptr);
 				  if (user_param->verb == READ || user_param->verb ==ATOMIC) {
 					  fprintf(stderr," Inline feature not available on READ/Atomic verbs\n");
 					  return 1;
-				  } break;
-			case 'o': user_param->out_reads = strtol(optarg, NULL, 0);
+				  }
+				  break;
+			case 'o': CHECK_VALUE(user_param->out_reads,int,"Outstanding Reads",not_int_ptr);
 				  if (user_param->verb != READ && user_param->verb != ATOMIC) {
 					  fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
 					  return 1;
-				  } break;
+				  }
+				  break;
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
-			case 'r': CHECK_VALUE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth");
+			case 'r': CHECK_VALUE_IN_RANGE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth",not_int_ptr);
 				  if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
 					  fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					  return 1;
-				  } break;
-			case 'Q': CHECK_VALUE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation");
+				  }
+				  break;
+			case 'Q': CHECK_VALUE_IN_RANGE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation",not_int_ptr);
 				  user_param->req_cq_mod = 1;
 				  break;
 			case 'A':
@@ -2386,19 +2389,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  exit(1);
 				  }
 				  break;
-			case 'l': user_param->post_list = strtol(optarg, NULL, 0); break;
-			case 'D': user_param->duration = strtol(optarg, NULL, 0);
-				  if (user_param->duration <= 0) {
-					  fprintf(stderr," Duration period must be greater than 0\n");
-					  return 1;
-				  }
+			case 'l': CHECK_VALUE(user_param->post_list,int,"Send Post List size",not_int_ptr); break;
+			case 'D': CHECK_VALUE_POSITIVE(user_param->duration,int,"Duration period",not_int_ptr);
 				  user_param->test_type = DURATION;
 				  break;
-			case 'f': user_param->margin = strtol(optarg, NULL, 0);
-				  if (user_param->margin < 0) {
-					  fprintf(stderr," margin must be positive.\n");
-					  return 1;
-				  } break;
+			case 'f': CHECK_VALUE_NON_NEGATIVE(user_param->margin,int,"Margin",not_int_ptr); break;
 			case 'O':
 				  user_param->ib_port  = DEF_IB_PORT;
 				  user_param->ib_port2 = DEF_IB_PORT2;
@@ -2442,7 +2437,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  return 1;
 				  }
 				  user_param->use_eq_num = ON;
-				  CHECK_VALUE(user_param->eq_num, int, MIN_EQ_NUM, MAX_EQ_NUM, "EQN");
+				  CHECK_VALUE_IN_RANGE(user_param->eq_num, int, MIN_EQ_NUM, MAX_EQ_NUM, "EQN", not_int_ptr);
 				  break;
 			case 'b': user_param->duplex = ON;
 				  if (user_param->tst == LAT) {
@@ -2505,7 +2500,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'K':
 				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_server_port = ON;
-				  user_param->server_port = strtol(optarg, NULL, 0);
+				  CHECK_VALUE(user_param->server_port,int,"Server Port",not_int_ptr);
 				  if(OFF == check_if_valid_udp_port(user_param->server_port)) {
 					  fprintf(stderr," Invalid server UDP port\n");
 					  return FAILURE;
@@ -2514,7 +2509,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'k':
 				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_client_port = ON;
-				  user_param->client_port = strtol(optarg, NULL, 0);
+				  CHECK_VALUE(user_param->client_port,int,"Client Port",not_int_ptr);
 				  if(OFF == check_if_valid_udp_port(user_param->client_port)) {
 					  fprintf(stderr," Invalid client UDP port\n");
 					  return FAILURE;
@@ -2555,11 +2550,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'G': user_param->use_rss = ON; break;
 			case 0: /* required for long options to work. */
 				if (pkey_flag) {
-					user_param->pkey_index = strtol(optarg,NULL,0);
+					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
 					pkey_flag = 0;
 				}
 				if (inline_recv_flag) {
-					user_param->inline_recv_size = strtol(optarg,NULL,0);
+					CHECK_VALUE(user_param->inline_recv_size,int,"Inline Receive size",not_int_ptr);
 					inline_recv_flag = 0;
 				}
 				if (rate_limit_flag) {
@@ -2576,20 +2571,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					rate_limit_flag = 0;
 				}
 				if (burst_size_flag) {
-					user_param->burst_size = strtol(optarg,NULL,0);
-					if (user_param->burst_size < 0) {
-						fprintf(stderr, " Burst size must be non-negative\n");
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->burst_size,int,"Burst size",not_int_ptr);
 					burst_size_flag = 0;
 				}
 				if (typical_pkt_size_flag) {
-					user_param->typical_pkt_size = strtol(optarg,NULL,0);
-					if ((user_param->typical_pkt_size < 0) ||
-					    (user_param->typical_pkt_size > 0xFFFF)) {
-						fprintf(stderr, " Typical pkt size must be non-negative and less than 0xffff\n");
-						return FAILURE;
-					}
+					CHECK_VALUE_IN_RANGE(user_param->typical_pkt_size,int,0,0xFFFF,"Typical pkt size",not_int_ptr);
 					typical_pkt_size_flag = 0;
 				}
 				if (rate_units_flag) {
@@ -2633,22 +2619,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					verbosity_output_flag = 0;
 				}
 				if (latency_gap_flag) {
-					user_param->latency_gap = strtol(optarg,NULL,0);
-					if (user_param->latency_gap < 0) {
-						fprintf(stderr, " Latency gap time must be non-negative\n");
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->latency_gap,int,"Latency gap time",not_int_ptr);
 					latency_gap_flag = 0;
 				}
 #ifdef HAVE_CUDA
 				if (use_cuda_flag) {
 					user_param->use_cuda = 1;
-					user_param->cuda_device_id = strtol(optarg, NULL, 0);
-					if (user_param->cuda_device_id < 0)
-					{
-						fprintf(stderr, "Invalid CUDA device %d\n", user_param->cuda_device_id);
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->cuda_device_id,int,"CUDA device",not_int_ptr);
 					use_cuda_flag = 0;
 				}
 				if (use_cuda_bus_id_flag) {
@@ -2661,29 +2638,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 #ifdef HAVE_ROCM
 				if (use_rocm_flag) {
 					user_param->use_rocm = 1;
-					user_param->rocm_device_id = strtol(optarg, NULL, 0);
-					if (user_param->rocm_device_id < 0)
-					{
-						fprintf(stderr, "Invalid ROCm device %d\n", user_param->rocm_device_id);
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
 					use_rocm_flag = 0;
 				}
 #endif
 				if (flow_label_flag) {
-					user_param->flow_label = strtol(optarg,NULL,0);
-					if (user_param->flow_label < 0) {
-						fprintf(stderr, "flow label must be non-negative\n");
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->flow_label,int,"flow label",not_int_ptr);
 					flow_label_flag = 0;
 				}
 				if (retry_count_flag) {
-					user_param->retry_count = strtol(optarg,NULL,0);
-					if (user_param->retry_count < 0) {
-						fprintf(stderr, " Retry Count value must be positive\n");
-						return FAILURE;
-					}
+					CHECK_VALUE_NON_NEGATIVE(user_param->retry_count,int,"Retry Count",not_int_ptr);
 					retry_count_flag = 0;
 				}
 				if (mmap_file_flag) {
@@ -2695,23 +2659,23 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					out_json_file_flag = 0;
 				}
 				if (mmap_offset_flag) {
-					user_param->mmap_offset = strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->mmap_offset,unsigned long,"mmap offset",not_int_ptr);
 					mmap_offset_flag = 0;
 				}
 				if (dlid_flag) {
-					user_param->dlid = (uint16_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->dlid,uint16_t,"dlid",not_int_ptr);
 					dlid_flag = 0;
 				}
 				if (tclass_flag) {
-					user_param->traffic_class = (uint16_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->traffic_class,uint16_t,"traffic class",not_int_ptr);
 					tclass_flag = 0;
 				}
 				if (wait_destroy_flag) {
-					user_param->wait_destroy = (uint32_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->wait_destroy,uint32_t,"wait_destroy",not_int_ptr);
 					wait_destroy_flag = 0;
 				}
 				if (flows_flag) {
-					user_param->flows = (uint16_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->flows,uint16_t,"flows",not_int_ptr);
 					if (user_param->flows == 0) {
 						fprintf(stderr, "Invalid flows value. Please set a positive number\n");
 						return FAILURE;
@@ -2719,7 +2683,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					flows_flag = 0;
 				}
 				if (flows_burst_flag) {
-					user_param->flows_burst = (uint16_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->flows_burst,uint16_t,"flows burst",not_int_ptr);
 					if (user_param->flows_burst == 0) {
 						fprintf(stderr, "Invalid burst flow value. Please set a positive number\n");
 						return FAILURE;
@@ -2770,7 +2734,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (remote_port_flag) {
 					user_param->is_new_raw_eth_param = 1;
 					user_param->is_client_port = 1;
-					user_param->remote_port = strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->remote_port,int,"remote port",not_int_ptr);
 					if(OFF == check_if_valid_udp_port(user_param->remote_port)) {
 						fprintf(stderr," Invalid remote UDP port\n");
 						return FAILURE;
@@ -2780,7 +2744,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (local_port_flag) {
 					user_param->is_new_raw_eth_param = 1;
 					user_param->is_server_port = 1;
-					user_param->local_port = strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->local_port,int,"local port",not_int_ptr);
 					if(OFF == check_if_valid_udp_port(user_param->local_port)) {
 						fprintf(stderr," Invalid local UDP port\n");
 						return FAILURE;
@@ -2788,67 +2752,62 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					local_port_flag = 0;
 				}
 				if (reply_every_flag) {
-					user_param->reply_every = strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->reply_every,uint32_t,"reply_every",not_int_ptr);
 					reply_every_flag = 0;
 				}
-				if(vlan_pcp_flag) {
-					user_param->vlan_pcp = strtol(optarg, NULL, 0);
+				if (vlan_pcp_flag) {
+					CHECK_VALUE_IN_RANGE_UNS(user_param->vlan_pcp,uint32_t,0,8,"VLAN PCP",not_int_ptr);
 					user_param->vlan_en = ON;
-					if (user_param->vlan_pcp > 8) {
-						fprintf(stderr, "Invalid vlan priority value. Please set a number in 0~8\n");
-						return FAILURE;
-					}
 					vlan_pcp_flag = 0;
 				}
 				if (recv_post_list_flag) {
-					user_param->recv_post_list = strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->recv_post_list,int,"Receive Post List size",not_int_ptr);
 					recv_post_list_flag = 0;
 				}
 				#ifdef HAVE_AES_XTS
-				if(aes_xts_flag) {
+				if (aes_xts_flag) {
 					user_param->aes_xts = 1;
 				}
-				if(encrypt_on_tx_flag) {
+				if (encrypt_on_tx_flag) {
 					user_param->encrypt_on_tx = 1;
 				}
-				if(sig_before_flag) {
+				if (sig_before_flag) {
 					user_param->sig_before = 1;
 				}
-				if(aes_block_size_flag) {
-					user_param->aes_block_size = (uint16_t)strtol(optarg, NULL, 0);
+				if (aes_block_size_flag) {
+					CHECK_VALUE(user_param->aes_block_size,uint16_t,"aes_block_size",not_int_ptr);
 					aes_block_size_flag = 0;
 				}
-				if(data_enc_keys_number_flag) {
-					user_param->data_enc_keys_number = (uint16_t)strtol(optarg, NULL, 0);
+				if (data_enc_keys_number_flag) {
+					CHECK_VALUE(user_param->data_enc_keys_number,uint16_t,"data_enc_keys_number",not_int_ptr);
 					data_enc_keys_number_flag = 0;
 				}
-				if(kek_path_flag) {
+				if (kek_path_flag) {
 					GET_STRING(user_param->kek_path, strdupa(optarg));
 					kek_path_flag = 0;
 				}
-				if(data_enc_key_app_path_flag) {
+				if (data_enc_key_app_path_flag) {
 					GET_STRING(user_param->data_enc_key_app_path, strdupa(optarg));
 					data_enc_key_app_path_flag = 0;
 				}
-				if(credentials_path_flag) {
+				if (credentials_path_flag) {
 					GET_STRING(user_param->credentials_path, strdupa(optarg));
 					credentials_path_flag = 0;
 				}
 				#endif
 				#ifdef HAVE_DCS
 				if (log_dci_streams_flag) {
-					user_param->log_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
+					CHECK_VALUE(user_param->log_dci_streams,uint16_t,"log_dci_streams",not_int_ptr);
 					log_dci_streams_flag = 0;
 				}
-				if(log_active_dci_streams_flag) {
-					user_param->log_active_dci_streams = (uint16_t)strtol(optarg, NULL, 0);
+				if (log_active_dci_streams_flag) {
+					CHECK_VALUE(user_param->log_active_dci_streams,uint16_t,"log_active_dci_streams",not_int_ptr);
 					log_active_dci_streams_flag = 0;
 				}
 				else
 					user_param->log_active_dci_streams = user_param->log_dci_streams;
 				#endif
 				break;
-
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
 				  fprintf(stderr," Please check command line and run again.\n\n");

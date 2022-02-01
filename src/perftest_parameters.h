@@ -255,9 +255,45 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 
 #define REPORT_FMT_FS_RATE_DUR  "%" PRIu64 "               %-7.2f		%-7.2f"
 
-#define CHECK_VALUE(arg,type,minv,maxv,name) 						    					\
-{ arg = (type)strtol(optarg, NULL, 0); if ((arg < minv) || (arg > maxv))                \
-	{ fprintf(stderr," %s should be between %d and %d\n",name,minv,maxv); return 1; }}
+#define CHECK_VALUE(arg,type,name,not_int_ptr) {\
+        arg = (type)strtol(optarg, &not_int_ptr, 0);\
+        if (*not_int_ptr != '\0') /*not integer part is not empty*/ {\
+                fprintf(stderr," %s argument %s should be %s\n",name,optarg,#type);\
+                return 1;\
+        }\
+}
+
+#define CHECK_VALUE_IN_RANGE(arg,type,minv,maxv,name,not_int_ptr) {\
+	CHECK_VALUE(arg,type,name,not_int_ptr)\
+	if ((arg < minv) || (arg > maxv)) {\
+		fprintf(stderr," %s should be between %d and %d\n",name,minv,maxv);\
+		return 1;\
+	}\
+}
+
+#define CHECK_VALUE_POSITIVE(arg,type,name,not_int_ptr) {\
+	CHECK_VALUE(arg,type,name,not_int_ptr)\
+	if (arg <= 0) {\
+		fprintf(stderr," %s must be positive\n",name);\
+		return 1;\
+	}\
+}
+
+#define CHECK_VALUE_NON_NEGATIVE(arg,type,name,not_int_ptr) {\
+	CHECK_VALUE(arg,type,name,not_int_ptr)\
+	if (arg < 0) {\
+		fprintf(stderr," %s must be non-negative\n",name);\
+		return 1;\
+	}\
+}
+
+#define CHECK_VALUE_IN_RANGE_UNS(arg,type,minv,maxv,name,not_int_ptr) {\
+	CHECK_VALUE(arg,type,name,not_int_ptr)\
+	if ((arg < minv) || (arg > maxv)) {\
+		fprintf(stderr," %s should be between %lu and %lu\n",name,(long unsigned int)minv,(long unsigned int)maxv);\
+		return 1;\
+	}\
+}
 
 /* Macro for allocating. */
 #define ALLOCATE(var,type,size)                                     \
