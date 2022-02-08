@@ -2150,6 +2150,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
+	static int log_active_dci_streams_flag_was_ever_set = 0;
 	#endif
 	#ifdef HAVE_AES_XTS
 	static int aes_xts_flag = 0;
@@ -2803,9 +2804,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (log_active_dci_streams_flag) {
 					CHECK_VALUE(user_param->log_active_dci_streams,uint16_t,"log_active_dci_streams",not_int_ptr);
 					log_active_dci_streams_flag = 0;
+					log_active_dci_streams_flag_was_ever_set = 1;
 				}
-				else
-					user_param->log_active_dci_streams = user_param->log_dci_streams;
 				#endif
 				break;
 			default:
@@ -2819,6 +2819,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		}
 	}
 
+#ifdef HAVE_DCS
+	if (!log_active_dci_streams_flag_was_ever_set) {
+		user_param->log_active_dci_streams = user_param->log_dci_streams;
+	}
+#endif
 	if (tcp_flag) {
 		user_param->tcp = 1;
 	}
