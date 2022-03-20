@@ -554,9 +554,10 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  *
  *	ctx     - Test Context.
  *	user_param  - user_parameters struct for this test.
+ *	indentation_output - Indentation object.
  *
  */
-int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param, struct indentation_output *io_obj);
 
 /* run_iter_bw_infinitely_server
  *
@@ -568,9 +569,10 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
  *
  *	ctx     - Test Context.
  *	user_param  - user_parameters struct for this test.
+ *	indentation_output - Indentation object.
  *
  */
-int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param);
+int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param, struct indentation_output *io_obj);
 
 /* run_iter_bw_server.
  *
@@ -767,14 +769,14 @@ void catch_alarm(int sig);
 
 void check_alive(int sig);
 
-void print_bw_infinite_mode();
+void print_bw_infinite_mode(struct indentation_output *io_obj);
 
 /* handle_signal_print_thread
 *
 * Description :
 * 	Handle thread creation for printing data in run_infinitely mode
 **/
-void *handle_signal_print_thread(void* duration);
+void *handle_signal_print_thread(void* thr_arg);
 
 int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 

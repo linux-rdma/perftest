@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 	struct bw_report_data		my_bw_rep, rem_bw_rep;
 	int                      	ret_parser, i = 0, rc;
 	int                      	size_max_pow = 24;
+	struct indentation_output *io_obj = init_indentation_obj();
 
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
@@ -390,9 +391,9 @@ int main(int argc, char *argv[])
 		}
 		else {
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
 		}
-		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+		user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
 	}
 
 	if (user_param.test_method == RUN_ALL) {
@@ -443,11 +444,11 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			print_report_bw(&user_param,&my_bw_rep);
+			print_report_bw(&user_param,&my_bw_rep,io_obj);
 
 			if (user_param.duplex && user_param.test_type != DURATION) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
+				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep, io_obj);
 			}
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
@@ -493,27 +494,31 @@ int main(int argc, char *argv[])
 			return 17;
 		}
 
-		print_report_bw(&user_param,&my_bw_rep);
+		print_report_bw(&user_param,&my_bw_rep,io_obj);
 
 		if (user_param.duplex && user_param.test_type != DURATION) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
+			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep, io_obj);
 		}
+
+		clear_indentation_data(io_obj);
 
 		if (user_param.report_both && user_param.duplex) {
 			printf(RESULT_LINE);
 			printf("\n Local results: \n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-			print_full_bw_report(&user_param, &my_bw_rep, NULL);
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
+			user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
+			print_full_bw_report(&user_param, &my_bw_rep, NULL, io_obj);
 			printf(RESULT_LINE);
+
+			clear_indentation_data(io_obj);
 
 			printf("\n Remote results: \n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
+			user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
+			print_full_bw_report(&user_param, &rem_bw_rep, NULL, io_obj);
 		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
@@ -535,14 +540,14 @@ int main(int argc, char *argv[])
 
 		if (user_param.machine == CLIENT) {
 
-			if(run_iter_bw_infinitely(&ctx,&user_param)) {
+			if(run_iter_bw_infinitely(&ctx,&user_param,io_obj)) {
 				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
 				return FAILURE;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
-			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
+			if(run_iter_bw_infinitely_server(&ctx,&user_param,io_obj)) {
 				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
 				return FAILURE;
 			}
@@ -583,6 +588,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
 		return FAILURE;
 	}
+
+	destroy_indentation_obj(&io_obj);
 
 	return 0;
 }

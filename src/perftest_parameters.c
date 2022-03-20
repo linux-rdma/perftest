@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <getopt.h>
 #include <limits.h>
 #include <arpa/inet.h>
@@ -27,7 +28,6 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
-
 /******************************************************************************
  * parse_mac_from_str.
  *
@@ -3282,7 +3282,7 @@ static float calc_cpu_util (struct perftest_parameters *user_param)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep)
+void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct indentation_output *io_obj)
 {
 	double cycles_to_units,sum_of_test_cycles;
 	int location_arr;
@@ -3377,7 +3377,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION)
 			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
-		print_full_bw_report(user_param, my_bw_rep, NULL);
+		print_full_bw_report(user_param, my_bw_rep, NULL, io_obj);
 
 	if (free_my_bw_rep == 1) {
 		free(my_bw_rep);
@@ -3521,7 +3521,7 @@ static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters 
  *
  ******************************************************************************/
 
-void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
+void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep, struct indentation_output *io_obj)
 {
 
 	double bw_peak     = my_bw_rep->bw_peak;
@@ -3569,23 +3569,44 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		}
 	}
 
-	if (user_param->output == OUTPUT_BW)
-		printf("%lf\n",bw_avg);
-	else if (user_param->output == OUTPUT_MR)
-		printf("%lf\n",msgRate_avg);
-	else if (user_param->raw_qos)
-		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
-	else if (user_param->report_per_port)
-		printf(REPORT_FMT_PER_PORT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
-	else
-		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	if (io_obj) {
+		if (user_param->output == OUTPUT_BW)
+			inject_indentation_results(io_obj, "%lf\n", 1, bw_avg);
+		else if (user_param->output == OUTPUT_MR)
+			inject_indentation_results(io_obj, "%lf\n", 1, msgRate_avg);
+		else if (user_param->raw_qos)
+			inject_indentation_results(io_obj, REPORT_FMT_QOS, REPORT_FMT_QOS_COUNT, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		else if (user_param->report_per_port)
+			inject_indentation_results(io_obj, REPORT_FMT_PER_PORT, REPORT_FMT_PER_PORT_COUNT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
+		else
+			inject_indentation_results(io_obj, inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, REPORT_FMT_PARAM_COUNT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	}
+	else {
+		if (user_param->output == OUTPUT_BW)
+			printf("%lf\n",bw_avg);
+		else if (user_param->output == OUTPUT_MR)
+			printf("%lf\n",msgRate_avg);
+		else if (user_param->raw_qos)
+			printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		else if (user_param->report_per_port)
+			printf(REPORT_FMT_PER_PORT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
+		else
+			printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+	}
+
 	if (user_param->output == FULL_VERBOSITY) {
 		fflush(stdout);
-		fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
+
+		if (io_obj)
+			user_param->cpu_util_data.enable ? inject_indentation_results(io_obj, REPORT_EXT_CPU_UTIL, 1, calc_cpu_util(user_param)) : printf(REPORT_EXT);
+		else
+			fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
 	}
 	if (user_param->counter_ctx) {
 		counters_print(user_param->counter_ctx);
 	}
+
+	reset_indentation_printing(io_obj);
 }
 /******************************************************************************
  *
@@ -3912,6 +3933,267 @@ void print_report_fs_rate (struct perftest_parameters *user_param)
 	}
 
 	free(delta);
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void update_last_elem (struct indentation_output *io_obj)
+{
+	int last_index = io_obj->count_words - 1;
+	io_obj->indentations[last_index] +=  DEFAULT_INDENT;
+
+	printf("%*c", DEFAULT_INDENT, ' ');
+}
+
+void remove_redundant_chars (char *str, char garbage)
+{
+	int count = 0;
+	char *src, *dst;
+
+	for (src = dst = str; *src != '\0'; src++) {
+		*dst = *src;
+
+		if (*dst != garbage || count == 1)
+			dst++;
+
+		if (*dst == garbage)
+			count++;
+	}
+	*dst = '\0';
+}
+
+void print_formated_line (struct indentation_output *io_obj)
+{
+	int i;
+	char *ret;
+
+	for (i = io_obj->start_header_from; i < io_obj->count_words; i++) {
+		ret = strstr(io_obj->words[i], "%%");
+
+		if (ret) {
+			remove_redundant_chars(io_obj->words[i], '%');
+			io_obj->indentations[i]--;
+		}
+		printf("%-*s", io_obj->indentations[i], io_obj->words[i]);
+	}
+}
+
+char **divide_line (char *line, int *num_words)
+{
+	char *token;
+	char **words;
+	int i, j = 0, is_space = 0, double_space = 0;
+	int was_space = 0, line_len = (int)strlen(line);
+
+	ALLOCATE(words, char *, MAX_WORDS);
+	ALLOCATE(token, char, MAX_WORD_LEN);
+	memset(token, 0, sizeof(char) * MAX_WORD_LEN);
+
+	for (i = 0; i < line_len; i++) {
+		is_space = (line[i] == ' ' || line[i] == '\t');
+		double_space = (is_space && was_space);
+
+		if (!is_space) {
+			if (was_space == 1 && token[0] != 0)
+				token[j++] = ' ';
+			token[j++] = line[i];
+			was_space = 0;
+		} else if (double_space && token[0] != 0) {
+			token[j] = '\0';
+			ALLOCATE(words[*num_words], char, j);
+			strcpy(words[(*num_words)++], token);
+			j = 0;
+			was_space = 0;
+			memset(token, 0, sizeof(char) * MAX_WORD_LEN );
+		} else if (is_space)
+			was_space += 1;
+	}
+
+	token[j] = '\0';
+	ALLOCATE(words[*num_words], char, j);
+	strcpy(words[(*num_words)++], token);
+
+	if (token)
+		free(token);
+
+	return words;
+}
+
+void fill_indentation_obj (struct indentation_output *io_obj, char **words, int num_words)
+{
+	int i;
+	io_obj->start_header_from = io_obj->count_words;
+	io_obj->count_words += num_words;
+
+	for (i = 0; i < num_words; i++) {
+		ALLOCATE(io_obj->words[i + io_obj->start_header_from], char, strlen(words[i]));
+		strcpy(io_obj->words[i + io_obj->start_header_from], words[i]);
+
+		if (i + 1 == num_words)
+			io_obj->indentations[i + io_obj->start_header_from] = (int)strlen(words[i]);
+		else
+			io_obj->indentations[i + io_obj->start_header_from] = (int)strlen(words[i]) + DEFAULT_INDENT;
+	}
+}
+
+void print_header_line (struct indentation_output *io_obj, char *line)
+{
+	int i, num_words = 0;
+	char **words = divide_line(line, &num_words);
+
+	if (io_obj->count_words)
+		update_last_elem(io_obj);
+
+	fill_indentation_obj(io_obj, words, num_words);
+
+	for (i = 0; i < num_words; i++)
+		free(words[i]);
+	free(words);
+
+	print_formated_line(io_obj);
+}
+
+void print_specifier (char *format, int indentation, va_list* valist)
+{
+	if (strstr(format, "lu") != NULL)
+		printf(format, indentation, va_arg(*valist, unsigned long));
+	else if (strstr(format, "lf") != NULL)
+		printf(format, indentation, va_arg(*valist, double));
+	else if (strstr(format, "f") != NULL)
+		printf(format, indentation, va_arg(*valist, double)); // float promoted to double when passed through '...'
+	else if (strstr(format, "d") != NULL)
+		printf(format, indentation, va_arg(*valist, int));
+	else if (strstr(format, "PRIu64") != NULL)
+		printf(format, indentation, va_arg(*valist, uint64_t));
+}
+
+void inject_indentation_results (struct indentation_output *io_obj, char *line, int num, ...)
+{
+	int i, j = 0;
+	char *format;
+	va_list valist;
+	int line_len = strlen(line);
+	int is_space = 0, double_space = 0;
+	int  was_space = 0, was_dot = 0, was_char = 0;
+	int index = io_obj != NULL ? io_obj->start_indent_from : 0;
+
+	ALLOCATE(format, char, MAX_WORD_LEN);
+	/* initialize valist for num number of arguments */
+	va_start(valist, num);
+	memset(format, 0, sizeof(char) * MAX_WORD_LEN);
+
+	if (io_obj) {
+		for (i = 0; i < line_len; i++) {
+			is_space = (line[i] == ' ' || line[i] == '\t');
+			double_space = (is_space && was_space);
+
+			if(line[i] == '%' && format[0] == 0){
+				j = 3;
+				was_space = 0;
+				strcpy(format, "%-*");
+			} else if (!is_space && line[i] != '%') {
+
+				if (isalpha(line[i]))
+					was_char = 1;
+
+				if ((isdigit(line[i]) && !was_dot && !was_char) || line[i] == '*' || line[i] == '-')
+					continue;
+
+				if (line[i] == '.')
+					was_dot = 1;
+
+				if (was_space == 1 && format[0] != 0)
+					format[j++] = ' ';
+
+				format[j++] = line[i];
+				was_space = 0;
+			} else if ((double_space && format[0] != 0) || line[i] == '%') {
+				format[j] = '\0';
+				print_specifier(format, io_obj->indentations[index++], &valist);
+
+				j = 0;
+				was_dot = 0;
+				was_char = 0;
+				was_space = 0;
+				memset(format, 0, sizeof(char) * MAX_WORD_LEN);
+
+				if(line[i] == '%') {
+					j += 3;
+					strcpy(format, "%-*");
+				}
+			} else if (is_space)
+				was_space += 1;
+		}
+
+		if (strlen(format)) {
+			format[j] = '\0';
+			print_specifier(format, io_obj->indentations[index++], &valist);
+		}
+
+		io_obj->start_indent_from = index;
+	}
+
+	/* clean memory reserved for valist */
+	va_end(valist);
+	free(format);
+}
+
+void reset_indentation_printing (struct indentation_output *io_obj)
+{
+	if (io_obj)
+		io_obj->start_indent_from = 0;
+}
+
+struct indentation_output *init_indentation_obj ()
+{
+	struct indentation_output *io_obj;
+
+	ALLOCATE(io_obj, struct indentation_output, 1);
+	memset(io_obj, 0, sizeof(struct indentation_output));
+
+	io_obj->count_words = 0;
+	io_obj->start_header_from = 0;
+	io_obj->start_indent_from = 0;
+
+	ALLOCATE(io_obj->words, char *, MAX_WORDS);
+	ALLOCATE(io_obj->indentations, int, MAX_WORDS);
+
+	return io_obj;
+}
+
+void clear_indentation_data (struct indentation_output *io_obj)
+{
+	int i;
+
+	memset(io_obj->indentations, 0, io_obj->count_words * sizeof(int));
+
+	for (i = 0; i < io_obj->count_words; i++)
+		memset(io_obj->words[i], '\0', strlen(io_obj->words[i]));
+	io_obj->count_words = 0;
+	io_obj->start_header_from = 0;
+	io_obj->start_indent_from = 0;
+}
+
+void destroy_indentation_obj (struct indentation_output **io_obj)
+{
+	int i;
+
+	for (i = 0; i < (*io_obj)->count_words; i++) {
+
+		if((*io_obj)->words[i])
+			free((*io_obj)->words[i]);
+	}
+
+	if ((*io_obj)->words)
+		free((*io_obj)->words);
+
+	if ((*io_obj)->indentations)
+		free((*io_obj)->indentations);
+
+	if (*io_obj)
+		free(*io_obj);
+
+	*io_obj = NULL;
 }
 /******************************************************************************
  * End

@@ -3688,7 +3688,7 @@ cleaning:
 /******************************************************************************
  *
  ******************************************************************************/
-int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param, struct indentation_output *io_obj)
 {
 	uint64_t		totscnt = 0;
 	uint64_t		totccnt = 0;
@@ -3700,20 +3700,24 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
+	struct thr_arg_struct *thr_arg;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
+	ALLOCATE(thr_arg ,struct thr_arg_struct ,1);
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
 	duration_param=user_param;
+	thr_arg->io_obj = io_obj;
+	thr_arg->duration = user_param->duration;
 
 	pthread_t print_thread;
-	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread,(void*)&user_param->duration) != 0){
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void*)thr_arg) != 0){
 		printf("Fail to create thread \n");
 		return FAILURE;
 	}
@@ -3788,13 +3792,14 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 cleaning:
 	free(scnt_for_qp);
 	free(wc);
+	free(thr_arg);
 	return return_value;
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
-int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_parameters *user_param, struct indentation_output *io_obj)
 {
 	int 			i,ne;
 	struct ibv_wc 		*wc          = NULL;
@@ -3805,12 +3810,14 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	uint64_t                *unused_recv_for_qp = NULL;
 	int                     *scredit_for_qp = NULL;
 	int 			return_value = 0;
+	struct thr_arg_struct *thr_arg;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
+	ALLOCATE(thr_arg ,struct thr_arg_struct ,1);
 	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
@@ -3830,8 +3837,10 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
 
 	duration_param=user_param;
+	thr_arg->io_obj = io_obj;
+	thr_arg->duration = user_param->duration;
 	pthread_t print_thread;
-	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void *)&user_param->duration) != 0)
+	if (pthread_create(&print_thread, NULL, &handle_signal_print_thread, (void *)thr_arg) != 0)
 	{
 		printf("Fail to create thread \n");
 		return FAILURE;
@@ -3929,6 +3938,7 @@ cleaning:
 	free(rcnt_for_qp);
 	free(ccnt_for_qp);
 	free(scredit_for_qp);
+	free(thr_arg);
 	return return_value;
 }
 
@@ -4926,9 +4936,9 @@ void check_alive(int sig)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_bw_infinite_mode()
+void print_bw_infinite_mode(struct indentation_output *io_obj)
 {
-	print_report_bw(duration_param,NULL);
+	print_report_bw(duration_param,NULL,io_obj);
 	duration_param->last_iters = duration_param->iters;
 	duration_param->tposted[0] = get_cycles();
 }
@@ -4936,12 +4946,15 @@ void print_bw_infinite_mode()
 /******************************************************************************
  *
  ******************************************************************************/
-void *handle_signal_print_thread(void* duration)
+void *handle_signal_print_thread(void* thr_arg)
 {
-	int* duration_p = (int*) duration;
-	while(1){
-		sleep(*duration_p);
-		print_bw_infinite_mode();
+	struct thr_arg_struct *args = thr_arg;
+	int duration_p = args->duration;
+	struct indentation_output *io_obj = args->io_obj;
+
+	while(1) {
+		sleep(duration_p);
+		print_bw_infinite_mode(io_obj);
 	}
 
 }

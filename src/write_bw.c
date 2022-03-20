@@ -54,6 +54,7 @@ int main(int argc, char *argv[])
 	struct perftest_parameters	user_param;
 	struct perftest_comm		user_comm;
 	struct bw_report_data		my_bw_rep, rem_bw_rep;
+	struct indentation_output *io_obj = init_indentation_obj();
 
 	/* init default values to user's parameters */
 	memset(&user_param,0,sizeof(struct perftest_parameters));
@@ -228,10 +229,10 @@ int main(int argc, char *argv[])
 		}
 		else {
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
 		}
 
-		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+		user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
 	}
 
 	/* For half duplex tests, server just waits for client to exit */
@@ -243,7 +244,7 @@ int main(int argc, char *argv[])
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+		print_full_bw_report(&user_param, &rem_bw_rep, NULL, io_obj);
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
@@ -303,16 +304,15 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			print_report_bw(&user_param,&my_bw_rep);
+			print_report_bw(&user_param,&my_bw_rep,io_obj);
 
 			if (user_param.duplex) {
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
+				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep, io_obj);
 			}
 		}
 
 	} else if (user_param.test_method == RUN_REGULAR) {
-
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		if (user_param.verb != SEND) {
@@ -337,33 +337,36 @@ int main(int argc, char *argv[])
 			return FAILURE;
 		}
 
-		print_report_bw(&user_param,&my_bw_rep);
+		print_report_bw(&user_param,&my_bw_rep,io_obj);
 
 		if (user_param.duplex) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
+			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep, io_obj);
 		}
+
+		clear_indentation_data(io_obj);
 
 		if (user_param.report_both && user_param.duplex) {
 			printf(RESULT_LINE);
 			printf("\n Local results: \n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-			print_full_bw_report(&user_param, &my_bw_rep, NULL);
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
+			user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
+			print_full_bw_report(&user_param, &my_bw_rep, NULL, io_obj);
 			printf(RESULT_LINE);
+
+			clear_indentation_data(io_obj);
 
 			printf("\n Remote results: \n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
-			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
-			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+			user_param.report_fmt == MBS ? print_header_line(io_obj, RESULT_FMT) : print_header_line(io_obj, RESULT_FMT_G);
+			user_param.cpu_util_data.enable ? print_header_line(io_obj, RESULT_EXT_CPU_UTIL) : printf(RESULT_EXT);
+			print_full_bw_report(&user_param, &rem_bw_rep, NULL, io_obj);
 		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
-
 		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-		if(run_iter_bw_infinitely(&ctx,&user_param)) {
+		if(run_iter_bw_infinitely(&ctx,&user_param,io_obj)) {
 			fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
 			return FAILURE;
 		}
@@ -415,6 +418,8 @@ int main(int argc, char *argv[])
 		user_comm.rdma_params->work_rdma_cm = OFF;
 		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 	}
+
+	destroy_indentation_obj(&io_obj);
 
 	return destroy_ctx(&ctx,&user_param);
 }

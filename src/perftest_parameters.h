@@ -53,6 +53,7 @@
 #ifndef PERFTEST_PARAMETERS_H
 #define PERFTEST_PARAMETERS_H
 
+#include <stdarg.h>
 #include <infiniband/verbs.h>
 #include <unistd.h>
 #include <inttypes.h>
@@ -300,6 +301,11 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
 	{ fprintf(stderr," Cannot Allocate\n"); exit(1);}}
 
+/* Macro for reallocating. */
+#define REALLOCATE(var,type,size)                                   \
+{ if((var = (type*)realloc(var, size)) == NULL)                  \
+	{ fprintf(stderr," Cannot Reallocate\n"); exit(1);}}
+
 /* This is our string builder */
 #define GET_STRING(orig,temp) 						            \
 { ALLOCATE(orig,char,(strlen(temp) + 1)); strcpy(orig,temp); }
@@ -309,6 +315,14 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 #define MAX_VERSION 16	/* Reserve 15 bytes for version numbers */
 
 #define GET_ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr[0])))
+
+/* Indentations Area*/
+#define MAX_WORDS 20
+#define MAX_WORD_LEN 30
+#define DEFAULT_INDENT 6
+#define REPORT_FMT_QOS_COUNT 6
+#define REPORT_FMT_PARAM_COUNT 5
+#define REPORT_FMT_PER_PORT_COUNT 9
 
 /* The Verb of the benchmark. */
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
@@ -650,6 +664,22 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
 	{IBV_RATE_MAX, "MAX"}
 };
 
+/*
+ * indentation obj for printing headers + results
+ */
+struct indentation_output {
+       char **words;
+       int count_words;
+       int *indentations;
+	   int start_header_from;
+	   int start_indent_from;
+};
+
+struct thr_arg_struct {
+    int duration;
+    struct indentation_output *io_obj;
+};
+
 /* link_layer_str
  *
  * Description : Return a String representation of the link type.
@@ -736,9 +766,10 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  *
  *	 user_param  - the parameters parameters.
  *   my_bw_rep   - get my bw test report.
+ *	 indentation_output - Indentation object.
  *
  */
-void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep);
+void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct indentation_output *io_obj);
 
 /* print_full_bw_report
  *
@@ -750,9 +781,10 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
  *	 user_param  - the parameters parameters.
  *   my_bw_rep   - my bw test report.
  *   rem_bw_rep   - remote's bw test report.
+ *	 indentation_output - Indentation object.
  *
  */
-void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep);
+void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep, struct indentation_output *io_obj);
 
 /* print_report_lat
  *
@@ -819,5 +851,180 @@ int set_eth_mtu(struct perftest_parameters *user_param);
  *
  ******************************************************************************/
 enum ctx_device ib_dev_name(struct ibv_context *context);
+
+/******************************************************************************
+ * Indentation Area
+ ******************************************************************************/
+
+/* print_header_line
+ *
+ * Description:
+ *		Accept header line to process it and fill the indentation
+ *		obj with the following:
+ *			1. Count the number of the words in the specified line. (count_words).
+ *			2. Split line by spaces. (words).
+ *			3. Indentation size for each word in the line. (indentations).
+ *
+ * Parameter:
+ *		indentation_output - Indentation object.
+ *		char * - line.
+ *
+ * Return value:
+ *		None.
+ *
+ */
+void print_header_line (struct indentation_output *io_obj, char *line);
+
+/* print_formated_line
+ *
+ * Description:
+ *		Print the formated line that has been generated from indentation obj.
+ *
+ * Parameters:
+ * 		indentation_output - Indentation object.
+ *
+ * Return value:
+ * 		None.
+ */
+void print_formated_line (struct indentation_output *io_obj);
+
+/* update_last_elem
+ *
+ * Description:
+ *		Update last element in indentation object if there are extra fields.
+ *
+ * Parameters:
+ *		indentation_output - Indentation object.
+ *
+ * Return:
+ *		None.
+ */
+void update_last_elem (struct indentation_output *io_obj);
+
+/* divide_line
+ *
+ * Description:
+ * 		Divide header line by spaces.
+ *
+ * Parameters:
+ * 		char * - Line.
+ *		Integer - Number of words.
+ *
+ * Return:
+ *		char ** words
+ */
+char **divide_line (char *line, int *num_words);
+
+/* inject_indentation_results
+ *
+ *  Description:
+ * 		Inject indentation to the output format for each result.
+ *
+ * Parameters:
+ * 		indentation_output - Indentation object.
+ * 		String - Output line format.
+ *		Integer - Number of formats.
+ *		... - Dynamic results.
+ *
+ * Return:
+ * 		None.
+ */
+void inject_indentation_results (struct indentation_output *io_obj, char *output_format, int num, ...);
+
+/* print_specifier
+ *
+ * Description:
+ * 		Print each format with the Injected indentation.
+ *
+ * Parameters:
+ * 		String - Format.
+ * 		Integer - Size of the indentation.
+ * 		va_list - Result.
+ *
+ * Return:
+ * 		None.
+ */
+void print_specifier (char *format, int indentation, va_list *valist);
+
+/* reset_indentation_printing
+ *
+ * Description:
+ *		Reset start_from attribute after full results printing.
+ *
+ * Parameters:
+ *		indentation_output - Indentation object.
+ *
+ * Return:
+ *		None.
+ */
+void reset_indentation_printing (struct indentation_output *io_obj);
+
+/* init_indentation_obj
+ *
+ * Description:
+ * 		Create and initiate new indentation object.
+ *
+ * Parameters:
+ * 		None.
+ *
+ * Return:
+ * 		indentation_output - Indentation object.
+ */
+struct indentation_output * init_indentation_obj ();
+
+/* fill_indentation_obj
+ *
+ * Description:
+ *		Fill the indentation object with specified values.
+ *
+ * Parameters:
+ *		indentation_output - Indentation object.
+ *		char ** - Array of words.
+ *		Integer - Number of words.
+ *
+ * Return:
+ *		None.
+ */
+void fill_indentation_obj (struct indentation_output *obj, char **words, int num_words);
+
+/* clear_indentation_data
+ *
+ * Description:
+ *		Reset indentation values.
+ *
+ * Parameters:
+ *		indentation_output - Indentation object.
+ *
+ * Return:
+ *		None.
+ */
+void clear_indentation_data(struct indentation_output *obj);
+
+/* destroy_indentation_obj
+ *
+ * Description:
+ * 		Destroy indentation obj with all the inner resources.
+ *
+ * Parameters:
+ * 		indentation_output * - Pointer to the Indentation object.
+ *
+ * Return:
+ * 		None.
+ */
+void destroy_indentation_obj (struct indentation_output **io_obj);
+
+/* remove_redundant_chars
+ *
+ * Description:
+ *		Remove redundant char from
+ *
+ * Parmeters:
+ *		char * - string
+ *		char - redundant char
+ *
+ * Return:
+ *		None.
+ */
+void remove_redundant_chars (char *str, char garbage);
 
 #endif /* PERFTEST_RESOURCES_H */
