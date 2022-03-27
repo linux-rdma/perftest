@@ -267,6 +267,12 @@ if [test $HAVE_OOO_ATTR = yes]; then
 	AC_DEFINE([HAVE_OOO_ATTR], [1], [Have Out of order data placement support])
 fi
 
+AC_TRY_LINK([#include <rdma/rdma_cma.h>],
+	[rdma_get_remote_ece(NULL, NULL);], [HAVE_RDMACM_ECE=yes], [HAVE_RDMACM_ECE=no])
+if [test $HAVE_RDMACM_ECE = yes]; then
+	AC_DEFINE([HAVE_RDMACM_ECE], [1], [Enable ECE negotiation through rdamcm])
+fi
+
 if [test $HAVE_IBV_WR_API = yes]; then
 	AC_CHECK_LIB([efa], [efadv_create_qp_ex], [HAVE_SRD=yes], [HAVE_SRD=no])
 	AC_TRY_LINK([#include <infiniband/efadv.h>],
