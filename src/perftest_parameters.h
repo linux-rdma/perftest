@@ -478,6 +478,7 @@ struct perftest_parameters {
 	int				is_ethertype;
 	int				cpu_freq_f;
 	int				connection_type;
+	int				use_ece;
 	int				num_of_qps;
 	int				use_event;
 	int				eq_num;

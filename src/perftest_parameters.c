@@ -256,6 +256,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		#endif
 	}
 
+#ifdef HAVE_RDMACM_ECE
+	printf("	  --use_ece use ECE for RC & DC if it's supported\n");
+#endif
+
 	if (tst == LAT) {
 		printf("  -C, --report-cycles ");
 		printf(" report times in cpu cycle units (default microseconds)\n");
@@ -693,6 +697,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->test_method		= RUN_REGULAR;
 	user_param->cpu_freq_f		= OFF;
 	user_param->connection_type	= (user_param->connection_type == RawEth) ? RawEth : RC;
+	user_param->use_ece	        = OFF;
 	user_param->use_event		= OFF;
 	user_param->eq_num		= 0;
 	user_param->use_eq_num		= OFF;
@@ -2107,6 +2112,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
+#ifdef HAVE_RDMACM_ECE
+	static int use_ece_flag = 0;
+#endif
 #ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
@@ -2256,6 +2264,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
+			#ifdef HAVE_RDMACM_ECE
+			{ .name = "use_ece",		.has_arg = 1, .flag = &use_ece_flag, .val = 1},
+			#endif
 			#ifdef HAVE_CUDA
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
@@ -2623,6 +2634,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					CHECK_VALUE_NON_NEGATIVE(user_param->latency_gap,int,"Latency gap time",not_int_ptr);
 					latency_gap_flag = 0;
 				}
+#ifdef HAVE_RDMACM_ECE
+				if (use_ece_flag) {
+					user_param->use_ece = 1;
+				}
+#endif
 #ifdef HAVE_CUDA
 				if (use_cuda_flag) {
 					user_param->use_cuda = 1;
