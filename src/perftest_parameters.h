@@ -717,6 +717,20 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
  */
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param);
 
+/* check ECE capability if using it
+ *
+ * Description: check Device ECE capability.
+ *
+ * Parameters :
+ *
+
+ *	 context    - Context of the device.
+ *	 user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int check_ece(struct ibv_context *context, struct perftest_parameters *user_param);
+
 /* ctx_print_test_info
  *
  * Description : Prints all the parameters selected for this run.

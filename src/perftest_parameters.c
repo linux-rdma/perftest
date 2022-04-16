@@ -3140,6 +3140,74 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 /******************************************************************************
  *
  ******************************************************************************/
+int check_ece(struct ibv_context *context,struct perftest_parameters *user_param)
+{
+	int rst = SUCCESS;
+	if (user_param->use_ece == 0) {
+		goto out;
+	}
+#ifdef HAVE_RDMACM_ECE
+	struct ibv_ece dummy_ece = {};
+	struct ibv_qp_init_attr dummy_qp_init_attr = {};
+	struct ibv_pd *dummy_pd = NULL;
+	struct ibv_qp *dummy_qp = NULL;
+	struct ibv_cq *dummy_cq = NULL;
+
+	dummy_pd = ibv_alloc_pd(context);
+	if (dummy_pd != NULL) {
+		fprintf(stderr, " failed to create PD\n");
+		rst = FAILURE;
+		goto out;
+		return FAILURE;
+	}
+
+	dummy_cq = ibv_create_cq(context, 1, NULL, NULL, 0);
+	if (dummy_cq == NULL) {
+		fprintf(stderr, " failed to create CQ\n");
+		rst = FAILURE;
+		goto free_pd;
+	}
+
+	dummy_qp_init_attr.send_cq = dummy_cq;
+	dummy_qp_init_attr.recv_cq = dummy_cq;
+	dummy_qp_init_attr.qp_type = IBV_QPT_RC;
+
+	dummy_qp_init_attr.cap.max_send_wr  = 1;
+	dummy_qp_init_attr.cap.max_recv_wr  = 1;
+	dummy_qp_init_attr.cap.max_send_sge = 1;
+	dummy_qp_init_attr.cap.max_recv_sge = 1;
+
+	dummy_qp = ibv_create_qp(dummy_pd, &dummy_qp_init_attr);
+	if (dummy_qp  == NULL) {
+		fprintf(stderr, " failed to create RC QP\n");
+		rst = FAILURE;
+		goto free_cq;
+	}
+
+	/* ibv_set_ece() check whether ECE is supported */
+	if ((ibv_query_ece(dummy_qp, &dummy_ece) != 0) ||
+	    (ibv_set_ece(dummy_qp, &dummy_ece) != 0)) {
+		fprintf(stderr, " device not support ECE\n");
+		rst = FAILURE;
+	}
+
+	ibv_destroy_qp(dummy_qp);
+free_cq:
+	ibv_destroy_cq(dummy_cq);
+free_pd:
+	ibv_dealloc_pd(dummy_pd);
+#else
+	fprintf(stderr, " No support ECE operation\n");
+	rst = FAILURE;
+#endif
+
+out:
+	return rst;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 void ctx_print_test_info(struct perftest_parameters *user_param)
 {
 	int temp = 0;
