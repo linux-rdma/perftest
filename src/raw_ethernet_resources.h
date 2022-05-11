@@ -132,6 +132,11 @@ struct IP_V4_header{
 	uint32_t	daddr;
 }__attribute__((packed));
 
+union IP_V4_header_raw {
+	struct		IP_V4_header ip_header;
+	uint16_t	raw[sizeof(struct IP_V4_header) / 2];
+};
+
 struct UDP_header {
 	u_short	uh_sport;		/* source port */
 	u_short	uh_dport;		/* destination port */
