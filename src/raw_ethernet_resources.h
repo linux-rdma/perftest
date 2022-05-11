@@ -134,7 +134,7 @@ struct IP_V4_header{
 
 union IP_V4_header_raw {
 	struct		IP_V4_header ip_header;
-	uint16_t	raw[sizeof(struct IP_V4_header) / 2];
+	uint32_t	raw[sizeof(struct IP_V4_header) / 4];
 };
 
 struct UDP_header {

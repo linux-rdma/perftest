@@ -102,14 +102,11 @@ static void mac_from_user(uint8_t   *mac, uint8_t *gid,int size )
  ******************************************************************************/
 static uint16_t ip_checksum(union IP_V4_header_raw *iph, size_t hdr_len)
 {
-	size_t idx = hdr_len / 2;
-	unsigned long sum = 0;
+	size_t idx = hdr_len / 4;
+	unsigned long long sum = 0;
 
-	while (idx) {
+	while (idx)
 		sum += iph->raw[--idx];
-		if (sum & 0x80000000)
-			sum = (sum & 0xFFFF) + (sum >> 16);
-	}
 	while (sum >> 16)
 		sum = (sum & 0xFFFF) + (sum >> 16);
 
