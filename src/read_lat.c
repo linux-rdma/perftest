@@ -53,7 +53,7 @@
  ******************************************************************************/
 int main(int argc, char *argv[])
 {
-	int                         ret_parser, i = 0, rc;
+	int                         ret_parser, i = 0, rc , error = 1;
 	struct report_options       report;
 	struct pingpong_context     ctx;
 	struct ibv_device           *ib_dev;
@@ -125,6 +125,7 @@ int main(int argc, char *argv[])
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
+		dealloc_comm_struct(&user_comm,&user_param);
 		return FAILURE;
 	}
 
@@ -135,16 +136,21 @@ int main(int argc, char *argv[])
 	/* See if MTU and link type are valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
+		dealloc_comm_struct(&user_comm,&user_param);
 		return FAILURE;
 	}
 
-	ALLOCATE(my_dest , struct pingpong_dest , user_param.num_of_qps);
+	MAIN_ALLOC(my_dest , struct pingpong_dest , user_param.num_of_qps , return_error);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
-	ALLOCATE(rem_dest , struct pingpong_dest , user_param.num_of_qps);
+	MAIN_ALLOC(rem_dest , struct pingpong_dest , user_param.num_of_qps , free_my_dest);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	/* Allocate arrays */
-	alloc_ctx(&ctx,&user_param);
+	if (alloc_ctx(&ctx,&user_param)){
+		fprintf(stderr, "Couldn't allocate context\n");
+		dealloc_comm_struct(&user_comm,&user_param);
+		goto free_mem;
+	}
 
 	/* Create RDMA CM resources and connect through CM. */
 	if (user_param.work_rdma_cm == ON) {
@@ -153,20 +159,24 @@ int main(int argc, char *argv[])
 		if (rc) {
 			fprintf(stderr,
 				"Failed to create RDMA CM connection with resources.\n");
-			return FAILURE;
+			dealloc_comm_struct(&user_comm,&user_param);
+			dealloc_ctx(&ctx, &user_param);
+			goto free_mem;
 		}
 	} else {
 		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 		if (ctx_init(&ctx,&user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
-			return FAILURE;
+			dealloc_comm_struct(&user_comm,&user_param);
+			dealloc_ctx(&ctx, &user_param);
+			goto free_mem;
 		}
 	}
 
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
-		return FAILURE;
+		goto destroy_context;
 	}
 
 	/* Print basic test information. */
@@ -175,7 +185,7 @@ int main(int argc, char *argv[])
 	/*  shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return FAILURE;
+		goto destroy_context;
 	}
 
 	for (i=0; i < user_param.num_of_qps; i++) {
@@ -183,7 +193,7 @@ int main(int argc, char *argv[])
 		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -191,7 +201,7 @@ int main(int argc, char *argv[])
 		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
 			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
 			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -199,7 +209,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -208,7 +218,7 @@ int main(int argc, char *argv[])
 		/* Set up connection one more time to send qpn properly for DC */
 		if (set_up_connection(&ctx,&user_param,my_dest)) {
 			fprintf(stderr," Unable to set up socket connection\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 	/* Print this machine QP information */
@@ -221,7 +231,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -230,7 +240,7 @@ int main(int argc, char *argv[])
 	/* An additional handshake is required after moving qp to RTR. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return FAILURE;
+		goto destroy_context;
 	}
 
 	/* Only Client post read request. */
@@ -238,19 +248,33 @@ int main(int argc, char *argv[])
 
 		if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
-			return FAILURE;
+			goto free_mem;
 		}
+
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
 		}
-		return 0;
 
+		if (user_param.work_rdma_cm == ON) {
+			if (destroy_ctx(&ctx,&user_param)) {
+				fprintf(stderr, "Failed to destroy resources\n");
+				goto destroy_cm_context;
+			}
+			user_comm.rdma_params->work_rdma_cm = OFF;
+			free(rem_dest);
+			free(my_dest);
+			return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+		}
+
+		free(rem_dest);
+		free(my_dest);
+		return destroy_ctx(&ctx,&user_param);
 	}
 
 	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
-			return FAILURE;
+			goto free_mem;
 		}
 	}
 
@@ -265,25 +289,58 @@ int main(int argc, char *argv[])
 	if (user_param.test_method == RUN_ALL) {
 		for (i = 1; i < 24 ; ++i) {
 			user_param.size = (uint64_t)1 << i;
-			if(run_iter_lat(&ctx,&user_param))
-				return 17;
+			if(run_iter_lat(&ctx,&user_param)) {
+				error = 17;
+				goto free_mem;
+			}
 
 			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 		}
 	} else {
-		if(run_iter_lat(&ctx,&user_param))
-			return 18;
+		if(run_iter_lat(&ctx,&user_param)){
+			error = 17;
+			goto free_mem;
+		}
 
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
 	if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
-		return FAILURE;
+		goto free_mem;
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 	}
-	return 0;
+
+	if (user_param.work_rdma_cm == ON) {
+		if (destroy_ctx(&ctx,&user_param)) {
+			fprintf(stderr, "Failed to destroy resources\n");
+			goto destroy_cm_context;
+		}
+
+		user_comm.rdma_params->work_rdma_cm = OFF;
+		free(rem_dest);
+		free(my_dest);
+		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+	}
+
+	return destroy_ctx(&ctx,&user_param);
+
+
+destroy_context:
+	if (destroy_ctx(&ctx,&user_param))
+		fprintf(stderr, "Failed to destroy resources\n");
+destroy_cm_context:
+	if (user_param.work_rdma_cm == ON) {
+		user_comm.rdma_params->work_rdma_cm = OFF;
+		destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+	}
+free_mem:
+	free(rem_dest);
+free_my_dest:
+	free(my_dest);
+return_error:
+	return error;
 }
