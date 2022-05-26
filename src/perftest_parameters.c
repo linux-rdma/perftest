@@ -164,6 +164,7 @@ static int get_cache_line_size()
 		}
 	}
 #endif
+	// cppcheck-suppress knownConditionTrueFalse
 	if (size <= 0)
 		size = DEF_CACHE_LINE_SIZE;
 
@@ -350,9 +351,6 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (tst == BW ) {
 		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n", DEF_NUM_QPS);
-	}
-
-	if (tst == BW) {
 		printf("  -Q, --cq-mod ");
 		printf(" Generate Cqe only after <--cq-mod> completion\n");
 	}
@@ -964,14 +962,13 @@ void  get_gbps_str_by_ibv_rate(char *rate_input_value, int *rate)
  ******************************************************************************/
 void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 {
-	int min_iter_req  = 0;
 	if (user_param->flows != DEF_FLOWS) {
 		if (user_param->is_server_port == OFF) {
 			fprintf(stderr, " Flows feature works with UDP/TCP packets only for now\n");
 			exit(1);
 		}
 		if (user_param->test_type == ITERATIONS) {
-			min_iter_req = user_param->flows * user_param->flows_burst;
+			int min_iter_req = user_param->flows * user_param->flows_burst;
 			if (user_param->iters / min_iter_req < 1) {
 				fprintf(stderr, " Current iteration number will not complete full cycle on all flows, it need to be multiple of the product between flows and flows_burst\n");
 				fprintf(stderr, " Set  N*%d Iterations \n", user_param->flows * user_param->flows_burst);
@@ -2027,7 +2024,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
 				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
-					    ((user_param->connection_type == XRC) ? DEF_INLINE_SEND_XRC : DEF_INLINE_SEND_RC_UC) ; break;
+					    DEF_INLINE_SEND_RC_UC_XRC ; break;
 				default   : user_param->inline_size = 0;
 			}
 			if (current_dev == NETXTREME)
@@ -2049,7 +2046,6 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
  ******************************************************************************/
 void set_raw_eth_parameters(struct perftest_parameters *user_param)
 {
-	int i;
 
 	if (user_param->is_new_raw_eth_param == 1 && user_param->is_old_raw_eth_param == 1) {
 		printf(RESULT_LINE);
@@ -2060,6 +2056,7 @@ void set_raw_eth_parameters(struct perftest_parameters *user_param)
 		exit(1);
 	}
 	if (user_param->is_new_raw_eth_param) {
+		int i;
 		for (i = 0; i < MAC_ARR_LEN; i++)
 		{
 			user_param->source_mac[i] = user_param->local_mac[i];
@@ -2757,6 +2754,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					reply_every_flag = 0;
 				}
 				if (vlan_pcp_flag) {
+					// cppcheck-suppress unsignedLessThanZero
 					CHECK_VALUE_IN_RANGE_UNS(user_param->vlan_pcp,uint32_t,0,8,"VLAN PCP",not_int_ptr);
 					user_param->vlan_en = ON;
 					vlan_pcp_flag = 0;
@@ -3288,7 +3286,6 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	int location_arr;
 	int opt_completed = 0;
 	int opt_posted = 0;
-	int i,j;
 	int run_inf_bi_factor;
 	int num_of_qps = user_param->num_of_qps;
 	long format_factor;
@@ -3304,7 +3301,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 		num_of_calculated_iters = (uint64_t)(user_param->iters - user_param->last_iters);
 	}
 
-	cycles_t t,opt_delta, peak_up, peak_down,tsize;
+	cycles_t opt_delta, peak_up, peak_down,tsize;
 
 	opt_delta = user_param->tcompleted[opt_posted] - user_param->tposted[opt_completed];
 
@@ -3312,6 +3309,8 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 		num_of_qps /= 2;
 
 	if (user_param->noPeak == OFF) {
+		int i, j;
+		cycles_t t;
 		/* Find the peak bandwidth unless asked not to in command line */
 		for (i = 0; i < num_of_calculated_iters * num_of_qps; i += user_param->post_list) {
 			for (j = ROUND_UP(i + 1, user_param->cq_mod) - 1; j < num_of_calculated_iters * num_of_qps;
@@ -3532,7 +3531,6 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 	double msgRate_avg_p1 = my_bw_rep->msgRate_avg_p1;
 	double msgRate_avg_p2 = my_bw_rep->msgRate_avg_p2;
 	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
-	int out_json_fd = -1;
 
 	if (rem_bw_rep != NULL) {
 		bw_peak     += rem_bw_rep->bw_peak;
@@ -3558,7 +3556,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 	}
 
 	if(user_param->out_json) {
-		out_json_fd = open_file_write(user_param->out_json_file_name);
+		int out_json_fd = open_file_write(user_param->out_json_file_name);
 		if(out_json_fd > 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
@@ -3590,6 +3588,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 /******************************************************************************
  *
  ******************************************************************************/
+// cppcheck-suppress constParameter
 static inline cycles_t get_median(int n, cycles_t delta[])
 {
 	if ((n - 1) % 2)
@@ -3611,9 +3610,11 @@ static int cycles_compare(const void *aptr, const void *bptr)
 	return 0;
 }
 
+
 void write_report_lat_to_file(int out_json_fd, struct perftest_parameters *user_param,
 		double latency, double stdev, double average_sum, double average, double stdev_sum,
-		int iters_99, int iters_99_9, double cycles_rtt_quotient, cycles_t *delta, int measure_cnt) {
+		int iters_99, int iters_99_9, double cycles_rtt_quotient, cycles_t *delta, int measure_cnt) // cppcheck-suppress constParameter
+		{
 
 	dprintf(out_json_fd, "results: {\n");
 
@@ -3646,14 +3647,13 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	int i;
 	int rtt_factor;
-	double cycles_to_units, cycles_rtt_quotient, temp_var, pow_var;
+	double cycles_to_units, cycles_rtt_quotient;
 	cycles_t median ;
 	cycles_t *delta = NULL;
 	const char* units;
 	double latency, stdev, average_sum = 0 , average, stdev_sum = 0;
 	int iters_99, iters_99_9;
 	int measure_cnt;
-	int out_json_fd = -1;
 
 	measure_cnt = (user_param->tst == LAT) ? user_param->iters - 1 : (user_param->iters) / user_param->reply_every;
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
@@ -3700,8 +3700,8 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	/* Calculate stdev by variance*/
 	for (i = 0; i < measure_cnt; ++i) {
-		temp_var = average - (delta[i] / cycles_rtt_quotient);
-		pow_var = pow(temp_var, 2 );
+		int temp_var = average - (delta[i] / cycles_rtt_quotient);
+		int pow_var = pow(temp_var, 2 );
 		stdev_sum += pow_var;
 	}
 
@@ -3725,7 +3725,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 	iters_99_9 = ceil((measure_cnt) * 0.999);
 
 	if(user_param->out_json) {
-		out_json_fd = open_file_write(user_param->out_json_file_name);
+		int out_json_fd = open_file_write(user_param->out_json_file_name);
 		if(out_json_fd > 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
@@ -3787,7 +3787,6 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	double cycles_to_units;
 	cycles_t test_sample_time;
 	double latency, tps;
-	int out_json_fd = -1;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
@@ -3798,7 +3797,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 
 
 	if(user_param->out_json) {
-		out_json_fd = open_file_write(user_param->out_json_file_name);
+		int out_json_fd = open_file_write(user_param->out_json_file_name);
 		if(out_json_fd > 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
@@ -3827,14 +3826,12 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 void print_report_fs_rate (struct perftest_parameters *user_param)
 {
 
-	int i;
 	double cycles_to_units, units_to_sec;
-	cycles_t median, average_sum = 0;
+	cycles_t average_sum = 0;
 	cycles_t *delta = NULL;
 	const char* units;
 	double latency = 0, average = 0, fps = 0;
 	int measure_cnt = 1;
-	cycles_t test_sample_time;
 
 	if (user_param->r_flag->cycles) {
 		cycles_to_units = 1;
@@ -3847,6 +3844,8 @@ void print_report_fs_rate (struct perftest_parameters *user_param)
 	}
 
 	if (user_param->test_type == ITERATIONS) {
+		int i;
+		cycles_t median;
 		measure_cnt = user_param->flows;
 		ALLOCATE(delta, cycles_t, measure_cnt);
 
@@ -3878,7 +3877,7 @@ void print_report_fs_rate (struct perftest_parameters *user_param)
 		latency = median / cycles_to_units;
 	}
 	else {
-		test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
+		cycles_t test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
 		latency = test_sample_time  / user_param->iters / cycles_to_units;
 		average = latency;
 		fps = user_param->iters / (test_sample_time / (cycles_to_units * units_to_sec));

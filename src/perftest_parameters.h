@@ -139,6 +139,7 @@
 #define DEF_INLINE_SEND_XRC (236)
 #define DEF_INLINE_SEND_UD (188)
 #define DEF_INLINE_DC (150)
+#define DEF_INLINE_SEND_RC_UC_XRC (236)
 
 /* AES-XTS Values */
 #define AES_XTS_TWEAK_SIZE (16)
@@ -299,6 +300,16 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 #define ALLOCATE(var,type,size)                                     \
 { if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
 	{ fprintf(stderr," Cannot Allocate\n"); exit(1);}}
+
+/* Macro for allocating in alloc_ctx function */
+#define ALLOC(var,type,size)									\
+{ if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
+	{ fprintf(stderr," Cannot Allocate\n"); dealloc_ctx(ctx, user_param); return 1;}}
+
+/* Macro for allocating and jump to destroy labels in case of failures */
+#define MAIN_ALLOC(var,type,size,label)									\
+{ if((var = (type*)malloc(sizeof(type)*(size))) == NULL)        \
+	{ fprintf(stderr," Cannot Allocate\n"); goto label;}}
 
 /* This is our string builder */
 #define GET_STRING(orig,temp) 						            \
@@ -601,6 +612,7 @@ struct perftest_parameters {
 	struct counter_context		*counter_ctx;
 	char				*source_ip;
 	int 				has_source_ip;
+	int 			ah_allocated;
 };
 
 struct report_options {
