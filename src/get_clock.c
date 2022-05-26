@@ -65,9 +65,7 @@ http://en.wikipedia.org/wiki/Linear_regression#Parameter_estimation
 static double sample_get_cpu_mhz(void)
 {
 	struct timeval tv1, tv2;
-	cycles_t start;
 	double sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
-	double tx, ty;
 	int i;
 
 	/* Regression: y = a + b x */
@@ -78,7 +76,7 @@ static double sample_get_cpu_mhz(void)
 	double r_2;
 
 	for (i = 0; i < MEASUREMENTS; ++i) {
-		start = get_cycles();
+		cycles_t start = get_cycles();
 
 		if (gettimeofday(&tv1, NULL)) {
 			fprintf(stderr, "gettimeofday failed.\n");
@@ -101,8 +99,8 @@ static double sample_get_cpu_mhz(void)
 	}
 
 	for (i = 0; i < MEASUREMENTS; ++i) {
-		tx = x[i];
-		ty = y[i];
+		double tx = x[i];
+		double ty = y[i];
 		sx += tx;
 		sy += ty;
 		sxx += tx * tx;
