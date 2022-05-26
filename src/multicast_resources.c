@@ -141,10 +141,10 @@ void set_multicast_gid(struct mcast_parameters *params,uint32_t qp_num,int is_cl
 	uint8_t mcg_gid[16] = MCG_GID;
 	const char *pstr = params->user_mgid;
 	char *term = NULL;
-	char tmp[20];
-	int i;
 
 	if (params->user_mgid) {
+		int i;
+		char tmp[20];
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr+1);
 		tmp[term - pstr] = 0;
