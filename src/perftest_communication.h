@@ -133,6 +133,18 @@ int create_comm_struct (struct perftest_comm *comm,
 		struct perftest_parameters *user_param);
 
 
+/* dealloc_comm_struct .
+ *
+ * Description : deallocating the already allocated structs in perftest_comm.
+ *
+ * Parameters :
+ *  comm - A Communication struct.
+ *  user_param -  Perftest parameters.
+ */
+void dealloc_comm_struct(struct perftest_comm *comm,
+		struct perftest_parameters *user_param);
+
+
 /* set_up_connection .
  *
  * Description : Fills the my_dest with all of the machine proporties.
