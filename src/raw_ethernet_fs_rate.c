@@ -87,9 +87,9 @@ int main(int argc, char *argv[])
 	user_param.machine = SERVER;
 
 	/* Allocate user input dependable structs */
-	ALLOCATE(my_dest_info, struct raw_ethernet_info, user_param.num_of_qps);
+	MAIN_ALLOC(my_dest_info, struct raw_ethernet_info, user_param.num_of_qps, return_error);
 	memset(my_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param.num_of_qps);
-	ALLOCATE(rem_dest_info, struct raw_ethernet_info, user_param.num_of_qps);
+	MAIN_ALLOC(rem_dest_info, struct raw_ethernet_info, user_param.num_of_qps, free_my_dest);
 	memset(rem_dest_info, 0, sizeof(struct raw_ethernet_info) * user_param.num_of_qps);
 
 	/* Finding the IB device selected (or default if no selected). */
@@ -97,11 +97,11 @@ int main(int argc, char *argv[])
 	if (!ib_dev) {
 		fprintf(stderr, "Unable to find the Infiniband/RoCE device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return FAILURE;
+		goto free_mem;
 	}
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
-		return FAILURE;
+		goto free_mem;
 	}
 
 	/* Getting the relevant context from the device */
@@ -109,23 +109,27 @@ int main(int argc, char *argv[])
 	if (!ctx.context) {
 		fprintf(stderr, "Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return FAILURE;
+		goto free_mem;
 	}
 
 	/* See if MTU and link type are valid and supported. */
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, "Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return FAILURE;
+		goto free_mem;
 	}
 
 	/* Allocating arrays needed for the test. */
-	alloc_ctx(&ctx, &user_param);
+	if(alloc_ctx(&ctx,&user_param)){
+		fprintf(stderr, "Couldn't allocate context\n");
+		goto free_mem;
+	}
 
 	/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 	if (ctx_init(&ctx, &user_param)) {
 		fprintf(stderr, "Couldn't create IB resources\n");
-		return FAILURE;
+		dealloc_ctx(&ctx, &user_param);
+		goto free_mem;
 	}
 
 	/* Print basic test information. */
@@ -133,7 +137,7 @@ int main(int argc, char *argv[])
 
 	if(run_iter_fs(&ctx, &user_param)){
 		fprintf(stderr, "Unable to run iter fs rate\n");
-		return FAILURE;
+		goto destroy_ctx;
 	}
 
 	print_report_fs_rate(&user_param);
@@ -141,12 +145,23 @@ int main(int argc, char *argv[])
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr, "Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		return FAILURE;
+		goto free_mem;
 	}
 
 	if (user_param.output == FULL_VERBOSITY)
 		printf(RESULT_LINE);
 
 	DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
+	free(my_dest_info);
+	free(rem_dest_info);
 	return SUCCESS;
+
+destroy_ctx:
+	destroy_ctx(&ctx, &user_param);
+free_mem:
+	free(rem_dest_info);
+free_my_dest:
+	free(my_dest_info);
+return_error:
+	return FAILURE;
 }
