@@ -2627,7 +2627,7 @@ int rdma_cm_server_connection(struct pingpong_context *ctx,
 	rc = rdma_destroy_id(listen_id);
 	if (rc) {
 		sprintf(error_message, "Failed to destroy RDMA CM server listen ID.");
-		goto destroy_id;
+		goto error;
 	}
 
 	return rc;
