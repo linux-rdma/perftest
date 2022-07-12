@@ -60,7 +60,6 @@ extern struct perftest_parameters* duration_param;
 int check_flow_steering_support(char *dev_name)
 {
 	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
-	char* openibd_path = "/etc/init.d/openibd";
 	FILE *fp;
 	char line[4];
 	int is_flow_steering_supported = 0;
@@ -71,11 +70,14 @@ int check_flow_steering_support(char *dev_name)
 	fp = fopen(file_name, "r");
 	if (fp == NULL)
 		return 0;
-	if (fgets(line, 4, fp) == NULL)
+	if (fgets(line, 4, fp) == NULL){
+		fclose(fp);
 		return 0;
+	}
 
 	int val = atoi(line);
 	if (val >= 0) {
+		char* openibd_path = "/etc/init.d/openibd";
 		fprintf(stderr,"flow steering is not supported.\n");
 		fprintf(stderr," please run: echo options mlx4_core log_num_mgm_entry_size=-1 >> /etc/modprobe.d/mlnx.conf\n");
 		if (access(openibd_path, F_OK) != -1)
@@ -144,6 +146,7 @@ void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
 /******************************************************************************
  *
  ******************************************************************************/
+// cppcheck-suppress constParameter
 void gen_ipv4_header(void* ip_header_buffer, uint32_t* saddr, uint32_t* daddr,
 		     uint8_t protocol, int pkt_size, int ttl, int tos, int flows_offset)
 {
@@ -247,7 +250,7 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			return;
 		}
 
-
+		// cppcheck-suppress arithOperationsOnVoidPointer
 		header_buff = header_buff + sizeof(struct ibv_flow_attr);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 
@@ -266,6 +269,7 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 			char str_ip6_s[INET6_ADDRSTRLEN] = {0};
 			char str_ip6_d[INET6_ADDRSTRLEN] = {0};
 			#endif
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 			spec_info = (struct ibv_flow_spec*)header_buff;
 			#ifdef HAVE_IPV6
@@ -290,8 +294,8 @@ void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* use
 				#endif
 			}
 		}
-
 		if (user_param->is_server_port && user_param->is_client_port) {
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			header_buff = header_buff + ip_size;
 			spec_info = header_buff;
 			printf("spec_info - dst_port : %d\n",ntohs(spec_info->tcp_udp.val.dst_port));
@@ -503,6 +507,7 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 
 	user_param->print_eth_func((struct ETH_header*)pkt);
 	if(user_param->is_client_ip || user_param->is_server_ip) {
+		// cppcheck-suppress arithOperationsOnVoidPointer
 		pkt = (void*)pkt + sizeof(struct ETH_header);
 		if (user_param->raw_ipv6)
 			print_ip6_header((struct IP_V6_header*)pkt);
@@ -511,10 +516,14 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 	}
 
 	if(user_param->is_client_port && user_param->is_server_port) {
-		if (user_param->raw_ipv6)
+		if (user_param->raw_ipv6) {
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			pkt = pkt + sizeof(struct IP_V6_header);
-		else
+		}
+		else {
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			pkt = pkt + sizeof(struct IP_V4_header);
+		}
 		if (user_param->tcp)
 			print_tcp_header((struct TCP_header*)pkt);
 		else
@@ -548,6 +557,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	if(user_param->vlan_en) {
 		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
 		p_eth_vlan->eth_type = eth_header->eth_type;
+		// cppcheck-suppress integerOverflow
 		p_eth_vlan->vlan_header = htonl(VLAN_TPID << 16 |
 								((vlan_pcp & 0x7) << 13) | VLAN_VID | VLAN_CFI << 12);
 		eth_header_size = sizeof(struct ETH_vlan_header);
@@ -556,7 +566,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 
 	if(have_ip_header) {
 		int offset = is_udp_or_tcp ? 0 : flows_offset;
-
+		// cppcheck-suppress arithOperationsOnVoidPointer
 		header_buff = (void*)eth_header + eth_header_size;
 		if (user_param->raw_ipv6)
 			gen_ipv6_header(header_buff, my_dest_info->ip6,
@@ -569,10 +579,14 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	}
 
 	if(is_udp_or_tcp) {
-		if (user_param->raw_ipv6)
+		if (user_param->raw_ipv6) {
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			header_buff = header_buff + sizeof(struct IP_V6_header);
-		else
+		}
+		else {
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			header_buff = header_buff + sizeof(struct IP_V4_header);
+		}
 		if (user_param->tcp)
 			gen_tcp_header(header_buff, my_dest_info->port + flows_offset,
 				       rem_dest_info->port + flows_offset);
@@ -600,10 +614,8 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		struct raw_ethernet_info	*my_dest_info,
 		struct raw_ethernet_info	*rem_dest_info)
 {
-	int pkt_offset = 0;
-	int flow_limit = 0;
-	int i = 0;
-	int print_flag = (user_param->vlan_pcp==VLAN_PCP_VARIOUS) ? PRINT_ON:PRINT_OFF;
+	int pkt_offset;
+	int i;
 	struct ETH_header* eth_header;
 	uint16_t vlan_tag_size = user_param->vlan_en ? 4 : 0;
 	uint16_t ip_next_protocol = 0;
@@ -616,14 +628,14 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 
 	DEBUG_LOG(TRACE,">>>>>>%s",__FUNCTION__);
 
-	eth_header = buf;
-
 	if (user_param->tst == BW || user_param->tst == LAT_BY_BW) {
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
-			print_flag = PRINT_ON;
+			int flow_limit;
+			int print_flag = PRINT_ON;
 			pkt_offset = ctx->flow_buff_size * i; /* update the offset to next flow */
 			flow_limit = ctx->flow_buff_size * (i + 1);
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			eth_header = (void*)buf + pkt_offset;/* update the eth_header to next flow */
 			/* fill ctx buffer with same packets */
 			while ((flow_limit - INC(ctx->size, ctx->cache_line_size)) >= pkt_offset) {
@@ -632,6 +644,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 						    print_flag, ctx->size - RAWETH_ADDITION, i);
 				print_flag = PRINT_OFF;
 				pkt_offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
+				// cppcheck-suppress arithOperationsOnVoidPointer
 				eth_header = (void*)buf + pkt_offset;/* update the eth_header to next packet in same flow */
 			}
 		}
@@ -639,6 +652,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 		/* fill ctx buffer with different packets according to flows_offset */
 		for (i = 0; i < user_param->flows; i++) {
 			pkt_offset = ctx->flow_buff_size * i;
+			// cppcheck-suppress arithOperationsOnVoidPointer
 			eth_header = (void*)buf + pkt_offset;
 			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
 					    user_param, eth_type, ip_next_protocol,
@@ -767,6 +781,7 @@ int set_up_flow_rules(
 	attr_info->flags = 0;
 
 	attr_info->type = IBV_FLOW_ATTR_NORMAL;
+	// cppcheck-suppress arithOperationsOnVoidPointer
 	header_buff = header_buff + sizeof(struct ibv_flow_attr);
 	spec_info = (struct ibv_flow_spec*)header_buff;
 	spec_info->eth.type = IBV_FLOW_SPEC_ETH;
@@ -778,12 +793,14 @@ int set_up_flow_rules(
 
 	memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
 	if(user_param->is_server_ip || user_param->is_client_ip) {
+		// cppcheck-suppress arithOperationsOnVoidPointer
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 		fill_ip_spec(spec_info, user_param);
 	}
 
 	if(user_param->is_server_port && user_param->is_client_port) {
+		// cppcheck-suppress arithOperationsOnVoidPointer
 		header_buff = header_buff + get_ip_size(user_param->raw_ipv6);
 		spec_info = (struct ibv_flow_spec*)header_buff;
 		spec_info->tcp_udp.type = (user_param->tcp) ? IBV_FLOW_SPEC_TCP : IBV_FLOW_SPEC_UDP;
@@ -821,7 +838,7 @@ int set_up_fs_rules(
 	int				local_port = 0;
 	int				remote_port = 0;
 	int				last_local_index = 0;
-	int 				flow_index = 0;
+	int 			flow_index;
 	int				qp_index = 0;
 	int				allowed_server_ports = MAX_FS_PORT - user_param->server_port;
 
@@ -856,9 +873,8 @@ int send_set_up_connection(
 		struct raw_ethernet_info *rem_dest_info)
 {
 
-	int flow_index;
-
 	if (user_param->machine == SERVER || user_param->duplex) {
+		int flow_index;
 		for (flow_index = 0; flow_index < user_param->flows; flow_index++)
 			set_up_flow_rules(&flow_rules[flow_index], ctx,
 					  user_param, user_param->server_port + flow_index, user_param->client_port + flow_index);
@@ -925,7 +941,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t		totccnt    = 0;
 	uint64_t		totrcnt    = 0;
 	int			i;
-	int			index      = 0;
+	int			index;
 	int			ne = 0;
 	int			err = 0;
 	uint64_t		*rcnt_for_qp = NULL;

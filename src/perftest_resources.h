@@ -314,8 +314,20 @@ int destroy_rdma_resources(struct pingpong_context *ctx,
  * Parameters :
  *	ctx - Resources sructure.
  * 	user_param - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
  */
-void alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* dealloc_ctx
+ *
+ * Description : Deallocate the perftest allocated arrays only.
+ *
+ * Parameters :
+ *	ctx - Resources sructure.
+ * 	user_param - the perftest parameters.
+ */
+void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
 /* destroy_ctx
  *

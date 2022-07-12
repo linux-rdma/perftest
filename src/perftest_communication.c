@@ -39,9 +39,8 @@
 /* Compare S1 and S2 as strings holding indices/version numbers,
    returning less than, equal to or greater than zero if S1 is less than,
    equal to or greater than S2 (for more info, see the Glibc texinfo doc).  */
-
-int
-strverscmp (const char *s1, const char *s2)
+// cppcheck-suppress unusedFunction
+int strverscmp (const char *s1, const char *s2)
 {
   const unsigned char *p1 = (const unsigned char *) s1;
   const unsigned char *p2 = (const unsigned char *) s2;
@@ -136,7 +135,7 @@ static inline int ipv6_addr_v4mapped(const struct in6_addr *a)
 /******************************************************************************
  *
  ******************************************************************************/
-
+// cppcheck-suppress unusedFunction
 double bswap_double(double x)
 {
 	union {
@@ -274,6 +273,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 	}
 
 	ctx->ah[0] = ibv_create_ah_from_wc(ctx->pd, &wc, (struct ibv_grh*)ctx->buf[0], ctx->cm_id->port_num);
+	user_param->ah_allocated = 1;
 	user_param->rem_ud_qpn = ntohl(wc.imm_data);
 	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
 	user_param->rem_ud_qkey = attr.qkey;
@@ -343,8 +343,8 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		}
 
 		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
-				&rem_dest->out_reads,&rem_dest->qpn,
-				&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,&rem_dest->srqn);
+				(unsigned int*)&rem_dest->out_reads,(unsigned int*)&rem_dest->qpn,
+				(unsigned int*)&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,&rem_dest->srqn);
 
 		if (parsed != 7) {
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
@@ -1063,6 +1063,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 			printf(" Unable to create address handler for UD QP\n");
 			return FAILURE;
 		}
+		user_param->ah_allocated = 1;
 
 		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
 
@@ -1080,6 +1081,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 /******************************************************************************
  *
  ******************************************************************************/
+// cppcheck-suppress unusedFunction
 int retry_rdma_connect(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
@@ -1228,7 +1230,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 int create_comm_struct(struct perftest_comm *comm,
 		struct perftest_parameters *user_param)
 {
-	ALLOCATE(comm->rdma_params, struct perftest_parameters, 1);
+	MAIN_ALLOC(comm->rdma_params, struct perftest_parameters, 1, return_error);
 	memset(comm->rdma_params, 0, sizeof(struct perftest_parameters));
 
 	comm->rdma_params->port		   	= user_param->port;
@@ -1257,7 +1259,7 @@ int create_comm_struct(struct perftest_comm *comm,
 
 	if (user_param->use_rdma_cm) {
 
-		ALLOCATE(comm->rdma_ctx, struct pingpong_context, 1);
+		MAIN_ALLOC(comm->rdma_ctx, struct pingpong_context, 1, free_rdma_params);
 		memset(comm->rdma_ctx, 0, sizeof(struct pingpong_context));
 
 		comm->rdma_params->tx_depth = 1;
@@ -1268,30 +1270,78 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_params->size = sizeof(struct pingpong_dest);
 		comm->rdma_ctx->context = NULL;
 
-		ALLOCATE(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps);
-		ALLOCATE(comm->rdma_ctx->buf, void* , user_param->num_of_qps);
-		ALLOCATE(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps);
+		MAIN_ALLOC(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps, free_rdma_ctx);
+		MAIN_ALLOC(comm->rdma_ctx->buf, void* , user_param->num_of_qps, free_mr);
+		MAIN_ALLOC(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps, free_buf);
 		#ifdef HAVE_IBV_WR_API
-		ALLOCATE(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps);
+		MAIN_ALLOC(comm->rdma_ctx->qpx,struct ibv_qp_ex*,comm->rdma_params->num_of_qps, free_qp);
 		#endif
 		#ifdef HAVE_DCS
-		ALLOCATE(comm->rdma_ctx->dci_stream_id,uint32_t, comm->rdma_params->num_of_qps);
+		MAIN_ALLOC(comm->rdma_ctx->dci_stream_id,uint32_t, comm->rdma_params->num_of_qps, free_qpx);
 		#endif
 		comm->rdma_ctx->buff_size = user_param->cycle_buffer;
 
 		if (create_rdma_resources(comm->rdma_ctx,comm->rdma_params)) {
 			fprintf(stderr," Unable to create the resources needed by comm struct\n");
-			return FAILURE;
+			goto free_mem;
 		}
 	}
 
 	if ((user_param->counter_ctx) && (counters_open(user_param->counter_ctx,
 		user_param->ib_devname, user_param->ib_port))) {
 		fprintf(stderr," Unable to access performance counters\n");
-		return FAILURE;
+		if (user_param->use_rdma_cm)
+			goto free_mem;
+		else
+			goto free_rdma_params;
 	}
 
 	return SUCCESS;
+
+free_mem: __attribute__((unused))
+	#ifdef HAVE_DCS
+	free(comm->rdma_ctx->dci_stream_id);
+	#endif
+// cppcheck-suppress unusedLabelConfiguration
+free_qpx: __attribute__((unused))
+	#ifdef HAVE_IBV_WR_API
+	free(comm->rdma_ctx->qpx);
+	#endif
+// cppcheck-suppress unusedLabelConfiguration
+free_qp:
+	free(comm->rdma_ctx->qp);
+free_buf:
+	free(comm->rdma_ctx->buf);
+free_mr:
+	free(comm->rdma_ctx->mr);
+free_rdma_ctx:
+	free(comm->rdma_ctx);
+free_rdma_params:
+	free(comm->rdma_params);
+return_error:
+	return FAILURE;
+}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void dealloc_comm_struct(struct perftest_comm *comm,
+		struct perftest_parameters *user_param)
+{
+
+	if (user_param->use_rdma_cm) {
+		free(comm->rdma_ctx->mr);
+		free(comm->rdma_ctx->buf);
+		free(comm->rdma_ctx->qp);
+		#ifdef HAVE_IBV_WR_API
+		free(comm->rdma_ctx->qpx);
+		#endif
+		#ifdef HAVE_DCS
+		free(comm->rdma_ctx->dci_stream_id);
+		#endif
+		free(comm->rdma_ctx);
+	}
+
+	free(comm->rdma_params);
 }
 
 /******************************************************************************
@@ -1299,7 +1349,6 @@ int create_comm_struct(struct perftest_comm *comm,
  ******************************************************************************/
 int establish_connection(struct perftest_comm *comm)
 {
-	int (*ptr)(struct perftest_comm*);
 
 	if (comm->rdma_params->use_rdma_cm) {
 		if (comm->rdma_params->machine == CLIENT) {
@@ -1314,6 +1363,7 @@ int establish_connection(struct perftest_comm *comm)
 			}
 		}
 	} else {
+		int (*ptr)(struct perftest_comm*);
 		ptr = comm->rdma_params->servername ? &ethernet_client_connect : &ethernet_server_connect;
 
 		if ((*ptr)(comm)) {
@@ -1627,20 +1677,29 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 			exit(1);
 		}
 	}
-
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->size = hton_long(rem_bw_rep->size);
 
-	if ( remote_version >= 5.33 )
+	if ( remote_version >= 5.33 ) {
+		// cppcheck-suppress selfAssignment
 		rem_bw_rep->iters = hton_long(rem_bw_rep->iters);
-	else
+	}
+	else {
 		rem_bw_rep->iters = hton_int(rem_bw_rep->iters);
-
+	}
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->bw_peak = hton_double(rem_bw_rep->bw_peak);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->bw_avg = hton_double(rem_bw_rep->bw_avg);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->bw_avg_p1 = hton_double(rem_bw_rep->bw_avg_p1);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->bw_avg_p2 = hton_double(rem_bw_rep->bw_avg_p2);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->msgRate_avg = hton_double(rem_bw_rep->msgRate_avg);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->msgRate_avg_p1 = hton_double(rem_bw_rep->msgRate_avg_p1);
+	// cppcheck-suppress selfAssignment
 	rem_bw_rep->msgRate_avg_p2 = hton_double(rem_bw_rep->msgRate_avg_p2);
 
 }
@@ -1791,7 +1850,7 @@ void check_sys_data(struct perftest_comm *user_comm, struct perftest_parameters 
  *
  ******************************************************************************/
 int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param, struct perftest_comm *user_comm) {
-	int curr_mtu=0, rem_mtu=0;
+	int curr_mtu, rem_mtu;
 	char cur[sizeof(int)];
 	char rem[sizeof(int)];
 	int size_of_cur;
@@ -2041,6 +2100,7 @@ int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
 
 	ctx->ah[connection_index] = ibv_create_ah_from_wc(ctx->pd, &wc,
 		ctx->buf[connection_index], cm_node->cma_id->port_num);
+	user_param->ah_allocated = 1;
 	ibv_query_qp(cm_node->cma_id->qp, &attr, IBV_QP_QKEY, &init_attr);
 	cm_node->remote_qpn = ntohl(wc.imm_data);
 	cm_node->remote_qkey = attr.qkey;
@@ -2115,7 +2175,7 @@ int rdma_cm_establish_ud_connection(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, struct rdma_cm_event *event)
 {
 	int rc = SUCCESS, connection_index, needed;
-	char *error_message = "";
+	char *error_message;
 	struct cma_node *cm_node;
 
 	needed = user_param->connection_type == UD;
@@ -2135,6 +2195,7 @@ int rdma_cm_establish_ud_connection(struct pingpong_context *ctx,
 		error_message = "Failed to create AH for RDMA CM connection.";
 		goto error;
 	}
+	user_param->ah_allocated = 1;
 
 	if ((user_param->tst == BW && user_param->duplex)
 		|| (user_param->tst == LAT)) {
@@ -2168,7 +2229,7 @@ int rdma_cm_address_handler(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
 {
 	int rc;
-	char *error_message = "";
+	char *error_message;
 
 	if (user_param->tos != DEF_TOS) {
 		rc = rdma_set_option(cma_id, RDMA_OPTION_ID,
@@ -2201,7 +2262,7 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
 {
 	int rc, connection_index;
-	char *error_message = "";
+	char *error_message;
 	struct rdma_conn_param conn_param;
 
 	ctx->context = cma_id->verbs;
@@ -2347,7 +2408,7 @@ int rdma_cm_connection_established_handler(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct rdma_cm_event *event)
 {
 	int rc = SUCCESS;
-	char *error_message = "";
+	char *error_message;
 
 	rc = rdma_cm_establish_ud_connection(ctx, user_param, event);
 	if (rc) {
@@ -2438,7 +2499,7 @@ int rdma_cm_connect_events(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
 	int rc = SUCCESS;
-	char *error_message = "";
+	char *error_message;
 	struct rdma_cm_event *event;
 
 	while (ctx->cma_master.connects_left) {
@@ -2475,7 +2536,7 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
 	int rc = SUCCESS, i;
-	char *error_message = "";
+	char *error_message;
 	struct rdma_cm_event *event;
 
 	if (!ctx->cma_master.disconnects_left
@@ -2494,20 +2555,17 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 			goto error;
 		}
 	}
-
 	while (ctx->cma_master.disconnects_left) {
 		rc = rdma_get_cm_event(ctx->cma_master.channel, &event);
 		if (rc) {
 			error_message = "Failed to get RDMA CM event.";
 			goto error;
 		}
-
 		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
 		if (rc) {
 			error_message = "Failed to handle RDMA CM event.";
 			goto ack;
 		}
-
 		rc = rdma_ack_cm_event(event);
 		if (rc) {
 			error_message = "Failed to ACK RDMA CM event after handling.";
@@ -2544,35 +2602,38 @@ int rdma_cm_server_connection(struct pingpong_context *ctx,
 	if (rc) {
 		sprintf(error_message,
 			"Failed to get RDMA CM address - Error: %s.", gai_strerror(rc));
-		goto error;
+		goto destroy_id;
 	}
 
 	rc = rdma_bind_addr(listen_id, ctx->cma_master.rai->ai_src_addr);
 	if (rc) {
 		sprintf(error_message,
 			"Failed to bind RDMA CM address on the server.");
-		goto error;
+		goto destroy_id;
 	}
 
 	rc = rdma_listen(listen_id, user_param->num_of_qps);
 	if (rc) {
 		sprintf(error_message,
 			"Failed to listen on RDMA CM server listen ID.");
-		goto error;
+		goto destroy_id;
 	}
 
 	rc = rdma_cm_connect_events(ctx, user_param);
 	if (rc) {
-		goto error;
+		goto destroy_id;
 	}
 
 	rc = rdma_destroy_id(listen_id);
 	if (rc) {
 		sprintf(error_message, "Failed to destroy RDMA CM server listen ID.");
-		goto error;
+		goto destroy_id;
 	}
 
 	return rc;
+
+destroy_id:
+	rdma_destroy_id(listen_id);
 
 error:
 	return error_handler(error_message);
@@ -2654,10 +2715,10 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct perftest_comm *comm,
 		struct pingpong_dest *my_dest, struct pingpong_dest *rem_dest)
 {
+	int i;
 	int rc;
-	char *error_message = "";
+	char *error_message;
 	struct rdma_addrinfo hints;
-
 	memset(&hints, 0, sizeof(hints));
 	ctx->cma_master.connects_left = user_param->num_of_qps;
 
@@ -2670,14 +2731,14 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 	rc = rdma_cm_allocate_nodes(ctx, user_param, &hints);
 	if (rc) {
 		error_message = "Failed to allocate RDMA CM nodes.";
-		goto error;
+		goto destroy_event_channel;
 	}
 
 	rc = ctx_hand_shake(comm, &my_dest[0], &rem_dest[0]);
 	if (rc) {
 		error_message = "Failed to sync between client and server "
 			"before creating RDMA CM connection.";
-		goto error;
+		goto destroy_rdma_id;
 	}
 
 	if (user_param->machine == CLIENT) {
@@ -2688,17 +2749,28 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 
 	if (rc) {
 		error_message = "Failed to create RDMA CM connection.";
-		goto error;
+		goto destroy_event_channel;
 	}
 
 	rc = ctx_hand_shake(comm, &my_dest[0], &rem_dest[0]);
 	if (rc) {
 		error_message = "Failed to sync between client and server "
 			"after creating RDMA CM connection.";
-		goto error;
+		goto destroy_rdma_id;
 	}
 
 	return rc;
+
+
+destroy_rdma_id:
+	if (user_param->machine == CLIENT) {
+		for (i = 0; i < user_param->num_of_qps; i++)
+			rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
+	}
+	free(ctx->cma_master.nodes);
+
+destroy_event_channel:
+	rdma_destroy_event_channel(ctx->cma_master.channel);
 
 error:
 	return error_handler(error_message);

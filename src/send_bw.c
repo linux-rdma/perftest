@@ -88,7 +88,6 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 		struct mcast_parameters *mcg_params,
 		struct perftest_comm *comm)
 {
-	int i;
 
 	if (set_up_connection(ctx,user_param,my_dest)) {
 		fprintf(stderr," Unable to set up my IB connection parameters\n");
@@ -96,7 +95,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 	}
 
 	if (user_param->use_mcg && (user_param->duplex || user_param->machine == SERVER)) {
-
+		int i;
 		mcg_params->user_mgid = user_param->user_mgid;
 		set_multicast_gid(mcg_params,ctx->qp[0]->qp_num,(int)user_param->machine);
 		if (set_mcast_group(ctx,user_param,mcg_params)) {
@@ -126,10 +125,10 @@ static int send_destroy_ctx(
 		struct perftest_parameters *user_param,
 		struct mcast_parameters *mcg_params)
 {
-	int i;
 	if (user_param->use_mcg) {
 
 		if (user_param->duplex || user_param->machine == SERVER) {
+			int i;
 			for (i=0; i < user_param->num_of_qps; i++) {
 				if (ibv_detach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
 					fprintf(stderr, "Couldn't attach QP to MultiCast group");
@@ -164,6 +163,7 @@ int main(int argc, char *argv[])
 	struct bw_report_data		my_bw_rep, rem_bw_rep;
 	int                      	ret_parser, i = 0, rc;
 	int                      	size_max_pow = 24;
+	int 						error = 1;
 
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
@@ -233,6 +233,7 @@ int main(int argc, char *argv[])
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
+		dealloc_comm_struct(&user_comm,&user_param);
 		return FAILURE;
 	}
 
@@ -243,19 +244,24 @@ int main(int argc, char *argv[])
 	/* See if MTU and link type are valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
+		dealloc_comm_struct(&user_comm,&user_param);
 		return FAILURE;
 	}
 
-	ALLOCATE(my_dest, struct pingpong_dest, user_param.num_of_qps);
+	MAIN_ALLOC(my_dest, struct pingpong_dest, user_param.num_of_qps, return_error);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
-	ALLOCATE(rem_dest, struct pingpong_dest, user_param.num_of_qps);
+	MAIN_ALLOC(rem_dest, struct pingpong_dest, user_param.num_of_qps, free_my_dest);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
 		ctx.send_rcredit = 1;
 
 	/* Allocating arrays needed for the test. */
-	alloc_ctx(&ctx,&user_param);
+	if (alloc_ctx(&ctx,&user_param)){
+		fprintf(stderr, "Couldn't allocate context\n");
+		dealloc_comm_struct(&user_comm,&user_param);
+		goto free_mem;
+	}
 
 	/* Create RDMA CM resources and connect through CM. */
 	if (user_param.work_rdma_cm == ON) {
@@ -264,20 +270,25 @@ int main(int argc, char *argv[])
 		if (rc) {
 			fprintf(stderr,
 				"Failed to create RDMA CM connection with resources.\n");
-			return FAILURE;
+			dealloc_comm_struct(&user_comm,&user_param);
+			dealloc_ctx(&ctx, &user_param);
+			goto free_mem;
 		}
 	} else {
 		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 		if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
-			return FAILURE;
+			dealloc_comm_struct(&user_comm,&user_param);
+			dealloc_ctx(&ctx, &user_param);
+			goto free_mem;
 		}
 	}
+
 
 	/* Set up the Connection. */
 	if (send_set_up_connection(&ctx,&user_param,my_dest,&mcg_params,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
-		return FAILURE;
+		goto destroy_context;
 	}
 
 	/* Print basic test information. */
@@ -291,7 +302,7 @@ int main(int argc, char *argv[])
 		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -299,7 +310,7 @@ int main(int argc, char *argv[])
 		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
 			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
 			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -316,7 +327,7 @@ int main(int argc, char *argv[])
 		memcpy(mcg_params.mgid.raw, rem_dest[0].gid.raw, 16);
 		if (set_mcast_group(&ctx,&user_param,&mcg_params)) {
 			fprintf(stderr," Unable to Join Sender to Mcast gid\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 		/*
 		 * The next stall in code (50 ms sleep) is a work around for fixing the
@@ -335,14 +346,14 @@ int main(int argc, char *argv[])
 		/* Prepare IB resources for rtr/rts. */
 		if (ctx_connect(&ctx,rem_dest,&user_param,my_dest)) {
 			fprintf(stderr," Unable to Connect the HCA's through the link\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		return FAILURE;
+		goto destroy_context;
 	}
 
 	if (user_param.connection_type == DC)
@@ -350,7 +361,7 @@ int main(int argc, char *argv[])
 		/* Set up connection one more time to send qpn properly for DC */
 		if (set_up_connection(&ctx,&user_param,my_dest)) {
 			fprintf(stderr," Unable to set up socket connection\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -364,7 +375,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
@@ -374,12 +385,12 @@ int main(int argc, char *argv[])
 
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 
 		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
-			return FAILURE;
+			goto destroy_context;
 		}
 	}
 
@@ -411,13 +422,13 @@ int main(int argc, char *argv[])
 			if (user_param.machine == SERVER || user_param.duplex) {
 				if (ctx_set_recv_wqes(&ctx,&user_param)) {
 					fprintf(stderr," Failed to post receive recv_wqes\n");
-					return FAILURE;
+					goto free_mem;
 				}
 			}
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				return FAILURE;
+				goto free_mem;
 			}
 
 			if (ctx.send_rcredit) {
@@ -427,19 +438,23 @@ int main(int argc, char *argv[])
 			}
 
 			if (user_param.duplex) {
-				if(run_iter_bi(&ctx,&user_param))
-					return 17;
+				if(run_iter_bi(&ctx,&user_param)){
+					error = 17;
+					goto free_mem;
+				}
 
 			} else if (user_param.machine == CLIENT) {
 
 				if(run_iter_bw(&ctx,&user_param)) {
-					return 17;
+					error = 17;
+					goto free_mem;
 				}
 
 			} else	{
 
 				if(run_iter_bw_server(&ctx,&user_param)) {
-					return 17;
+					error = 17;
+					goto free_mem;
 				}
 			}
 
@@ -451,7 +466,7 @@ int main(int argc, char *argv[])
 			}
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				return FAILURE;
+				goto free_mem;
 			}
 
 			/* Check if last iteration ended well in UC/UD */
@@ -468,29 +483,31 @@ int main(int argc, char *argv[])
 		if (user_param.machine == SERVER || user_param.duplex) {
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				return FAILURE;
+				goto free_mem;
 			}
 		}
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto free_mem;
 		}
 
 		if (user_param.duplex) {
 
-			if(run_iter_bi(&ctx,&user_param))
-				return 17;
-
+			if(run_iter_bi(&ctx,&user_param)){
+				error = 17;
+				goto free_mem;
+			}
 		} else if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw(&ctx,&user_param)) {
-				return 17;
+				error = 17;
+				goto free_mem;
 			}
 
 		} else if(run_iter_bw_server(&ctx,&user_param)) {
-
-			return 17;
+			error = 17;
+			goto free_mem;
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -524,27 +541,27 @@ int main(int argc, char *argv[])
 
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				return FAILURE;
+				goto free_mem;
 			}
 		}
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			return FAILURE;
+			goto free_mem;
 		}
 
 		if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw_infinitely(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
-				return FAILURE;
+				goto free_mem;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
-				return FAILURE;
+				goto free_mem;
 			}
 		}
 	}
@@ -563,16 +580,20 @@ int main(int argc, char *argv[])
 	/* Destroy all test resources, including Mcast if exists */
 	if (send_destroy_ctx(&ctx,&user_param,&mcg_params)) {
 		fprintf(stderr,"Couldn't destroy all SEND resources\n");
-		return FAILURE;
+		goto destroy_cm_context;
 	}
+
 	if (user_param.work_rdma_cm == ON) {
 		user_comm.rdma_params->work_rdma_cm = OFF;
 
 		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
 			fprintf(stderr,"Failed to destroy resources\n");
-			return FAILURE;
+			goto free_mem;
 		}
 	}
+
+	free(my_dest);
+	free(rem_dest);
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
 		fprintf(stderr,"Error: BW result is below bw limit\n");
@@ -584,5 +605,20 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	return 0;
+	return SUCCESS;
+
+destroy_context:
+	if (destroy_ctx(&ctx,&user_param))
+		fprintf(stderr, "Failed to destroy resources\n");
+destroy_cm_context:
+	if (user_param.work_rdma_cm == ON) {
+		user_comm.rdma_params->work_rdma_cm = OFF;
+		destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+	}
+free_mem:
+	free(rem_dest);
+free_my_dest:
+	free(my_dest);
+return_error:
+	return error;
 }
