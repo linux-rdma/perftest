@@ -144,6 +144,14 @@ AM_CONDITIONAL([HAVE_MLX5DV],[test "x$HAVE_MLX5DV" = "xyes"])
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
+        [int x = __devx_dw_off(32);],[HAVE_MLX5_DEVX=yes], [HAVE_MLX5_DEVX=no])
+AM_CONDITIONAL([HAVE_MLX5_DEVX],[test "x$HAVE_MLX5_DEVX" = "xyes"])
+if [test $HAVE_MLX5_DEVX = yes] && [test $HAVE_MLX5DV = yes];  then
+            AC_DEFINE([HAVE_MLX5_DEVX], [1], [Have MLX5 DEVX support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_QP_INIT_ATTR_MASK_DCI_STREAMS;],[HAVE_DCS=yes], [HAVE_DCS=no])
 AM_CONDITIONAL([HAVE_DCS],[test "x$HAVE_DCS" = "xyes"])
 if [test $HAVE_DCS = yes] && [test $HAVE_MLX5DV = yes]; then

@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #endif
 #include "perftest_parameters.h"
+#include "mlx5_devx.h"
 #include "raw_ethernet_resources.h"
 #include<math.h>
 #ifdef HAVE_RO
@@ -1974,17 +1975,49 @@ static int set_link_layer(struct ibv_context *context, struct perftest_parameter
 	return SUCCESS;
 }
 
+static int get_device_max_reads_dc(struct ibv_context *context)
+{
+#ifdef HAVE_MLX5_DEVX
+	uint32_t in[DEVX_ST_SZ_DW(query_hca_cap_in)] = {};
+	uint32_t out[DEVX_ST_SZ_DW(query_hca_cap_out)] = {};
+	uint16_t opmod = HCA_CAP_OPMOD_GET_CUR;
+	int ret;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod, opmod);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (!ret)
+		return (1 << DEVX_GET(query_hca_cap_out, out,
+				      cmd_hca_cap.log_max_ra_req_dc));
+#endif
+	return 0;
+}
+
+static int get_device_max_reads(struct ibv_context *context,
+				struct perftest_parameters *user_param)
+{
+	struct ibv_device_attr attr;
+	int max_reads = 0;
+
+	if (user_param->connection_type == DC)
+		max_reads = get_device_max_reads_dc(context);
+	if (!max_reads && !ibv_query_device(context,&attr))
+		max_reads = attr.max_qp_rd_atom;
+	return max_reads;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
-static int ctx_set_out_reads(struct ibv_context *context,int num_user_reads)
+static int ctx_set_out_reads(struct ibv_context *context,
+			     struct perftest_parameters *user_param)
 {
 	int max_reads = 0;
-	struct ibv_device_attr attr;
+	int num_user_reads = user_param->out_reads;
 
-	if (!ibv_query_device(context,&attr)) {
-		max_reads = attr.max_qp_rd_atom;
-	}
+	max_reads = get_device_max_reads(context, user_param);
 
 	if (num_user_reads > max_reads) {
 		printf(RESULT_LINE);
@@ -3043,7 +3076,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	ctx_set_max_inline(context,user_param);
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
-		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
+		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;
 
@@ -3109,7 +3142,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 	ctx_set_max_inline(context,user_param);
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC)
-		user_param->out_reads = ctx_set_out_reads(context,user_param->out_reads);
+		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;
 
