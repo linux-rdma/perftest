@@ -1334,6 +1334,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 	int i, first, dereg_counter, rc;
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
+	int dct_only = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
 
 	if (user_param->wait_destroy) {
 		printf(" Waiting %u seconds before releasing resources...\n",
@@ -1429,13 +1430,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
-	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel)) ) {
-		if (!(user_param->connection_type == DC && user_param->machine == SERVER)) {
-			if (ibv_destroy_cq(ctx->recv_cq)) {
+	if ((user_param->verb == SEND) || (user_param->connection_type == DC && !dct_only)){
+		if (ibv_destroy_cq(ctx->recv_cq)) {
 				fprintf(stderr, "Failed to destroy CQ - %s\n", strerror(errno));
 				test_result = 1;
 			}
-		}
 	}
 
 	for (i = 0; i < dereg_counter; i++) {
@@ -2124,6 +2123,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 {
 	int i;
 	int num_of_qps = user_param->num_of_qps / 2;
+	int dct_only = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
 	int qp_index = 0, dereg_counter;
 	#ifdef HAVE_AES_XTS
 	int mkey_index = 0, dek_index = 0;
@@ -2358,10 +2358,8 @@ xrc_srq:
 cqs:
 	ibv_destroy_cq(ctx->send_cq);
 
-	if (user_param->verb == SEND && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex || (ctx->channel)) ) {
-		if (!(user_param->connection_type == DC && user_param->machine == SERVER)) {
-			ibv_destroy_cq(ctx->recv_cq);
-		}
+	if ((user_param->verb == SEND) || (user_param->connection_type == DC && !dct_only)){
+		ibv_destroy_cq(ctx->recv_cq);
 	}
 
 mr:
