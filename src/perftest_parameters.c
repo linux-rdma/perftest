@@ -415,7 +415,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	if (connection_type != RawEth) {
-		printf("  -z, --com_rdma_cm ");
+		printf("  -z, --comm_rdma_cm ");
 		printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
 	}
 
