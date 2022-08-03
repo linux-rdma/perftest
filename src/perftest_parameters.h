@@ -701,9 +701,9 @@ const int str_link_layer(const char *str);
  */
 int parser(struct perftest_parameters *user_param,char *argv[], int argc);
 
-/* check_link_and_mtu
+/* check_link
  *
- * Description : Configures test MTU,inline and link layer of the test.
+ * Description : Configures test inline and link layer of the test.
  *
  * Parameters :
  *
