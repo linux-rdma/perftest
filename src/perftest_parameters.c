@@ -1319,12 +1319,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
-	if(user_param->connection_type == UC && user_param->use_odp) {
-		printf(RESULT_LINE);
-		fprintf(stderr," ODP does not support UC\n");
-		exit(1);
-	}
-
 	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
 
