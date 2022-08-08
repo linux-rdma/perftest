@@ -1569,17 +1569,23 @@ int destroy_ctx(struct pingpong_context *ctx,
 static int check_odp_support(struct pingpong_context *ctx)
 {
 	struct ibv_device_attr_ex dattr;
-	int odp_support_send = IBV_ODP_SUPPORT_SEND;
-	int odp_support_recv = IBV_ODP_SUPPORT_RECV;
 	int ret = ibv_query_device_ex(ctx->context, NULL, &dattr);
 
 	if (ret) {
 		fprintf(stderr, " Couldn't query device for on-demand paging capabilities.\n");
 		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_send)) {
+	}
+
+	/* These capabilities must be set by device drivers. */
+	if (!(dattr.odp_caps.general_caps & IBV_ODP_SUPPORT)) {
+		fprintf(stderr, " The device does not support On-Demand Paging.\n");
+                return 0;
+        }
+
+	if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & IBV_ODP_SUPPORT_SEND)) {
 		fprintf(stderr, " Send is not supported for RC transport.\n");
 		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_recv)) {
+	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & IBV_ODP_SUPPORT_RECV)) {
 		fprintf(stderr, " Receive is not supported for RC transport.\n");
 		return 0;
 	}
