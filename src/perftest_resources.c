@@ -1566,23 +1566,102 @@ int destroy_ctx(struct pingpong_context *ctx,
  *
  ******************************************************************************/
 #ifdef HAVE_EX_ODP
-static int check_odp_support(struct pingpong_context *ctx)
+static int check_odp_transport_caps(struct perftest_parameters *user_param, uint32_t caps)
+{
+	static char conn_str[][7] = {"RC", "UC", "UD", "RawEth", "XRC", "DC", "SRD"};
+	int conn = user_param->connection_type;
+	VerbType verb = user_param->verb;
+	MachineType machine = user_param->machine;
+	int duplex = user_param->duplex;
+
+	if (verb == SEND && duplex == OFF && machine == CLIENT) {
+		if (!(caps & IBV_ODP_SUPPORT_SEND)) {
+			fprintf(stderr, " ODP Send is not supported for %s transport.\n", conn_str[conn]);
+			return 0;
+		}
+	} else if (verb == SEND && duplex == OFF && machine == SERVER) {
+		if (!(caps & (IBV_ODP_SUPPORT_RECV | IBV_ODP_SUPPORT_SRQ_RECV))) {
+			fprintf(stderr, " ODP Recv is not supported for %s transport.\n", conn_str[conn]);
+			return 0;
+		}
+	} else if (verb == SEND && duplex == ON) {
+		if (!(caps & IBV_ODP_SUPPORT_SEND &&
+		      caps & (IBV_ODP_SUPPORT_RECV | IBV_ODP_SUPPORT_SRQ_RECV))) {
+			fprintf(stderr, " ODP bidirectional Send is not supported for %s transport.\n", conn_str[conn]);
+			return 0;
+		}
+	} else if (verb == WRITE && !(caps & IBV_ODP_SUPPORT_WRITE)) {
+		fprintf(stderr, " ODP Write is not supported for %s transport.\n", conn_str[conn]);
+		return 0;
+	} else if (verb == READ && !(caps & IBV_ODP_SUPPORT_READ)) {
+		fprintf(stderr, " ODP Read is not supported for %s transport.\n", conn_str[conn]);
+		return 0;
+	} else if (verb == ATOMIC && !(caps & IBV_ODP_SUPPORT_ATOMIC)) {
+		fprintf(stderr, " ODP Atomics are not supported for %s transport.\n", conn_str[conn]);
+		return 0;
+	}
+
+	return 1;
+}
+
+static int check_odp_support(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	struct ibv_device_attr_ex dattr;
-	int odp_support_send = IBV_ODP_SUPPORT_SEND;
-	int odp_support_recv = IBV_ODP_SUPPORT_RECV;
+	int conn = user_param->connection_type;
 	int ret = ibv_query_device_ex(ctx->context, NULL, &dattr);
 
 	if (ret) {
-		fprintf(stderr, " Couldn't query device for on-demand paging capabilities.\n");
-		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_send)) {
-		fprintf(stderr, " Send is not supported for RC transport.\n");
-		return 0;
-	} else if (!(dattr.odp_caps.per_transport_caps.rc_odp_caps & odp_support_recv)) {
-		fprintf(stderr, " Receive is not supported for RC transport.\n");
+		fprintf(stderr, " Couldn't query device for On-Demand Paging capabilities.\n");
 		return 0;
 	}
+
+	/* These capabilities must be set by device drivers. */
+	if (!(dattr.odp_caps.general_caps & IBV_ODP_SUPPORT)) {
+		fprintf(stderr, " The device does not support On-Demand Paging.\n");
+		return 0;
+	}
+
+	switch (conn) {
+	case RC:
+		if ( !check_odp_transport_caps(user_param,
+					       dattr.odp_caps.per_transport_caps.rc_odp_caps) )
+			return 0;
+		break;
+
+	case UC:
+		fprintf(stderr," ODP is not available on UC transport.\n");
+		return 0;
+
+	case UD:
+		if ( !check_odp_transport_caps(user_param,
+					       dattr.odp_caps.per_transport_caps.ud_odp_caps) )
+			return 0;
+		break;
+
+	case XRC:
+		if ( !check_odp_transport_caps(user_param, dattr.xrc_odp_caps) )
+			return 0;
+		break;
+
+	case DC:
+		/* A Dynamically Connected transport service is specific to mlx5 devices.
+		 * ODP is available, but the device driver does not register the capabilities,
+		 * so we cannot get them with ibv_query_device_ex(). They are configured in
+		 * libmlx5 and can be gained with an experimental API ibv_exp_query_device(),
+		 * but we should stick to generic functions, so let's skip checking them. */
+		break;
+
+	case SRD:
+		/* Scalable Reliable Datagram is Ethernet-based transport protocol specific to
+		 * AWS Elastic Fabric Adapter. ODP is not implemented. */
+		fprintf(stderr, " ODP is not available on SRD transport.\n");
+		return 0;
+
+	default:
+		fprintf(stderr, " Unsupported connection type.\n");
+		return 0;
+	}
+
 	return 1;
 }
 #endif
@@ -1653,7 +1732,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	/* ODP */
 	#ifdef HAVE_EX_ODP
 	if (user_param->use_odp) {
-		if ( !check_odp_support(ctx) )
+		if ( !check_odp_support(ctx, user_param) )
 			return FAILURE;
 
 		/* ODP does not support contig pages */
