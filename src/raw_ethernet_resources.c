@@ -102,17 +102,13 @@ static void mac_from_user(uint8_t   *mac, uint8_t *gid,int size )
 /******************************************************************************
  *
  ******************************************************************************/
-static uint16_t ip_checksum	(void * buf,size_t 	  hdr_len)
+static uint16_t ip_checksum(union IP_V4_header_raw *iph, size_t hdr_len)
 {
-	unsigned long sum = 0;
-	const uint16_t *ip1;
-	ip1 = buf;
-	while (hdr_len > 1) {
-		sum += *ip1++;
-		if (sum & 0x80000000)
-			sum = (sum & 0xFFFF) + (sum >> 16);
-		hdr_len -= 2;
-	}
+	size_t idx = hdr_len / 4;
+	unsigned long long sum = 0;
+
+	while (idx)
+		sum += iph->raw[--idx];
 	while (sum >> 16)
 		sum = (sum & 0xFFFF) + (sum >> 16);
 
@@ -150,23 +146,23 @@ void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
 void gen_ipv4_header(void* ip_header_buffer, uint32_t* saddr, uint32_t* daddr,
 		     uint8_t protocol, int pkt_size, int ttl, int tos, int flows_offset)
 {
-	struct IP_V4_header ip_header;
+	union IP_V4_header_raw raw;
 
-	memset(&ip_header,0,sizeof(struct IP_V4_header));
+	memset(&raw.ip_header, 0, sizeof(struct IP_V4_header));
 
-	ip_header.version = 4;
-	ip_header.ihl = 5;
-	ip_header.tos = (tos == DEF_TOS)? 0 : tos;
-	ip_header.tot_len = htons(pkt_size);
-	ip_header.id = htons(0);
-	ip_header.frag_off = htons(0);
-	ip_header.ttl = ttl;
-	ip_header.protocol = protocol;
-	ip_header.saddr = *saddr;
-	ip_header.daddr = *daddr;
-	ip_header.check = ip_checksum((void*)&ip_header,sizeof(struct IP_V4_header));
+	raw.ip_header.version = 4;
+	raw.ip_header.ihl = 5;
+	raw.ip_header.tos = (tos == DEF_TOS)? 0 : tos;
+	raw.ip_header.tot_len = htons(pkt_size);
+	raw.ip_header.id = htons(0);
+	raw.ip_header.frag_off = htons(0);
+	raw.ip_header.ttl = ttl;
+	raw.ip_header.protocol = protocol;
+	raw.ip_header.saddr = *saddr;
+	raw.ip_header.daddr = *daddr;
+	raw.ip_header.check = ip_checksum(&raw, sizeof(struct IP_V4_header));
 
-	memcpy(ip_header_buffer, &ip_header, sizeof(struct IP_V4_header));
+	memcpy(ip_header_buffer, &raw.ip_header, sizeof(struct IP_V4_header));
 }
 
 /******************************************************************************
