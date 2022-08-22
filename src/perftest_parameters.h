@@ -67,7 +67,7 @@
 #endif
 
 #ifdef HAVE_CUDA
-#include CUDA_PATH
+#include <cuda.h>
 #endif
 
 #ifdef HAVE_ROCM
