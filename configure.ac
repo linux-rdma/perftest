@@ -305,6 +305,37 @@ AS_IF([test "x$enable_neuron" = xyes], [
 
 AM_CONDITIONAL([NEURON], [test x$enable_neuron = xyes])
 
+AC_ARG_ENABLE([hl],
+	[AS_HELP_STRING([--enable-hl],
+		[Enable Habana Labs benchmarks])
+	],
+	[],
+	[enable_hl=no])
+
+AC_ARG_WITH([hl],
+	[AS_HELP_STRING([--with-hl=@<:@habanalabs installation prefix@:>@],
+		[Provide Habana Labs installation prefix])
+	],
+	[AS_CASE([$with_hl],
+		[yes|no], [],
+		[CPPFLAGS="-I$with_hl/include/habanalabs $CPPFLAGS"
+		LDFLAGS="-L$with_hl/lib/habanalabs -Wl,-rpath=$with_hl/lib/habanalabs $LDFLAGS"])
+	])
+
+AS_IF([test "x$enable_hl" = xyes], [
+	AC_DEFINE([HAVE_HL], [1], [Enable Habana Labs benchmarks])
+	AS_IF([test "x$HAVE_REG_DMABUF_MR" = "xno"],
+		[AC_MSG_ERROR([rdma-core doesn't support dmabuf mr registration])])
+	AC_CHECK_HEADERS([misc/habanalabs.h hlthunk.h synapse_api.h], [],
+		[AC_MSG_ERROR([could not find hl headers in include path])])
+	AC_SEARCH_LIBS([hlthunk_device_memory_export_dmabuf_fd], [hl-thunk], [],
+		[AC_MSG_ERROR([could not find library, hl-thunk])])
+	AC_SEARCH_LIBS([synDeviceMalloc], [Synapse], [],
+		[AC_MSG_ERROR([could not find library, Synapse])])
+	])
+
+AM_CONDITIONAL([HABANALABS], [test x$enable_hl = xyes])
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
 AM_CONDITIONAL([HAVE_PACKET_PACING],[test "x$HAVE_PACKET_PACING" = "xyes"])
