@@ -539,6 +539,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --use_cuda_bus_id=<cuda full BUS id>");
 		printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
+
+		#ifdef HAVE_CUDA_DMABUF
+		printf("      --use_cuda_dmabuf");
+		printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
+		#endif
+
 		#endif
 
 		#ifdef HAVE_ROCM
@@ -749,6 +755,9 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 #ifdef HAVE_CUDA
 	user_param->use_cuda		= 0;
 	user_param->cuda_device_id		= 0;
+#ifdef HAVE_CUDA_DMABUF
+	user_param->use_cuda_dmabuf		= 0;
+#endif
 #endif
 #ifdef HAVE_ROCM
 	user_param->use_rocm		= 0;
@@ -2128,6 +2137,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 #ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
+#ifdef HAVE_CUDA_DMABUF
+	static int use_cuda_dmabuf_flag = 0;
+#endif
 #endif
 #ifdef HAVE_ROCM
 	static int use_rocm_flag = 0;
@@ -2277,6 +2289,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_CUDA
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
+			#ifdef HAVE_CUDA_DMABUF
+			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
+			#endif
 			#endif
 			#ifdef HAVE_ROCM
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
@@ -2653,6 +2668,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					printf("Got PCIe address of: %s\n", user_param->cuda_device_bus_id);
 					use_cuda_bus_id_flag = 0;
 				}
+#ifdef HAVE_CUDA_DMABUF
+				if (use_cuda_dmabuf_flag) {
+					user_param->use_cuda_dmabuf = 1;
+					if (!user_param->use_cuda) {
+						fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
+						return FAILURE;
+					}
+					use_cuda_dmabuf_flag = 0;
+				}
+#endif
 #endif
 #ifdef HAVE_ROCM
 				if (use_rocm_flag) {

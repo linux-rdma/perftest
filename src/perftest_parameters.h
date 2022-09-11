@@ -547,6 +547,9 @@ struct perftest_parameters {
 	int				use_cuda;
 	int				cuda_device_id;
 	char				*cuda_device_bus_id;
+#ifdef HAVE_CUDA_DMABUF
+	int				use_cuda_dmabuf;
+#endif
 #endif
 #ifdef HAVE_ROCM
 	int				use_rocm;
