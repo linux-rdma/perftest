@@ -1153,7 +1153,14 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	#endif
 	#endif
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
-	ALLOC(ctx->buf, void* , user_param->num_of_qps);
+	ALLOC(ctx->buf, void*, user_param->num_of_qps);
+	#ifdef HAVE_CUDA_DMABUF
+	if (user_param->use_cuda_dmabuf) {
+		ALLOC(ctx->cuda_buf_dmabuf_fd, int, user_param->num_of_qps);
+		ALLOC(ctx->cuda_buf_dmabuf_offset, uint64_t, user_param->num_of_qps);
+	}
+	#endif
+
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 
@@ -1261,6 +1268,13 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	#endif
 	if (ctx->mr != NULL)
 		free(ctx->mr);
+	#ifdef HAVE_CUDA_DMABUF
+	if (user_param->use_cuda_dmabuf) {
+		free(ctx->cuda_buf_dmabuf_fd);
+		free(ctx->cuda_buf_dmabuf_offset);
+	}
+	#endif
+
 	if (ctx->buf != NULL)
 		free(ctx->buf);
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1763,6 +1777,30 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		printf("allocated GPU buffer address at %016llx pointer=%p\n",
 		       d_A, (void *)d_A);
 		ctx->buf[qp_index] = (void *)d_A;
+		#ifdef HAVE_CUDA_DMABUF
+		if (user_param->use_cuda_dmabuf) {
+			CUdeviceptr aligned_ptr;
+			const size_t host_page_size = sysconf(_SC_PAGESIZE);
+			int dmabuf_fd;
+			uint64_t offset;
+			size_t aligned_size;
+
+			// Round down to host page size
+			aligned_ptr = d_A & ~(host_page_size - 1);
+			offset = d_A - aligned_ptr;
+			aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
+
+			printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
+			error = cuMemGetHandleForAddressRange((void *)&dmabuf_fd, aligned_ptr, aligned_size, CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+			if (error != CUDA_SUCCESS) {
+				printf("cuMemGetHandleForAddressRange error=%d\n", error);
+				return FAILURE;
+			}
+
+			ctx->cuda_buf_dmabuf_fd[qp_index] = dmabuf_fd;
+			ctx->cuda_buf_dmabuf_offset[qp_index] = offset;
+		}
+		#endif
 	} else
 	#endif
 
@@ -1845,11 +1883,36 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 #endif
 
 	/* Allocating Memory region and assigning our buffer to it. */
-	ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
-
-	if (!ctx->mr[qp_index]) {
-		fprintf(stderr, "Couldn't allocate MR\n");
-		return FAILURE;
+#ifdef HAVE_CUDA_DMABUF
+	if (user_param->use_cuda && user_param->use_cuda_dmabuf) {
+		printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+			ctx->cuda_buf_dmabuf_offset[qp_index], ctx->buff_size, ctx->buf[qp_index],
+			ctx->cuda_buf_dmabuf_fd[qp_index], qp_index);
+		ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
+			ctx->pd, ctx->cuda_buf_dmabuf_offset[qp_index],
+			ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+			ctx->cuda_buf_dmabuf_fd[qp_index],
+			flags
+		);
+		if (!ctx->mr[qp_index]) {
+			int error = errno;
+			fprintf(stderr, "Couldn't allocate MR with error=%d\n", error);
+			if (error == EOPNOTSUPP)
+				fprintf(stderr, "OFED stack does not support DMA-BUF\n");
+			return FAILURE;
+		}
+		// MPI immediately closes the fd.
+		// We emulate the behavior here.
+		close(ctx->cuda_buf_dmabuf_fd[qp_index]);
+	}
+	else
+#endif
+	{
+		ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
+		if (!ctx->mr[qp_index]) {
+			fprintf(stderr, "Couldn't allocate MR\n");
+			return FAILURE;
+		}
 	}
 
 	if (ctx->is_contig_supported == SUCCESS)
@@ -2140,6 +2203,16 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			fprintf(stderr, "Couldn't init GPU context\n");
 			goto mkey;
 		}
+		#ifdef HAVE_CUDA_DMABUF
+		if (user_param->use_cuda_dmabuf) {
+			int is_supported = 0;
+			CUCHECK(cuDeviceGetAttribute(&is_supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, cuDevice));
+			if (!is_supported) {
+				fprintf(stderr, "DMA-BUF is not supported on this GPU\n");
+				goto mkey;
+			}
+		}
+		#endif
 	}
 	#endif
 
