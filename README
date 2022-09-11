@@ -246,6 +246,18 @@ Special feature detailed explanation in tests:
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
      ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
 
+    CUDA DMA-BUF requierments:
+        1) CUDA Toolkit 11.7 or later.
+        2) NVIDIA Open-Source GPU Kernel Modules version 515 or later.
+           installation instructions: http://us.download.nvidia.com/XFree86/Linux-x86_64/515.43.04/README/kernel_open.html
+        3) Configuration / Usage:
+          export the following environment variables:
+            1- export LD_LIBRARY_PATH.
+              e.g: export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+            2- export LIBRARY_PATH.
+              e.g: export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
+          perform compilation as decribe in the begining of section 4 (GPUDirect usage).
+
   5. AES_XTS (encryption/decryption)
      In perftest repository there are two files as follow:
       1) gen_data_enc_key.c
