@@ -318,10 +318,23 @@ Special feature detailed explanation in tests:
           ,credential[6]=0x10000000,credential[7]=0x10000000,credential[8]=0x10000000
           ,credential[9]=0x10000000,kek[0]=0x00001122,kek[1]=0x55556633,kek[2]=0x33447777,kek[3]=0x22337777"
 
+  6. Payload modification
+        Using the --payload_file_path you can pass a text file, which contains a pattern,
+        as a parameter to perftest, and use the pattern as the payload of the RDMA verb.
+
+        You must provide the pattern in DWORD's seperated by comma and in hex format.
+
+        for example:
+        0xddccbbaa,0xff56f00d,0xffffffff,0x21ab025b, etc...
+
+        Notes:
+          1) Perftest parse the pattern and save it in LE format.
+          2) The feature available for ib_write_bw, ib_read_bw, ib_send_bw, ib_read_lat and ib_send_lat.
+          3) 0 size pattern is not allow.
 
 
 ===============================================================================
-6. Known Issues
+7. Known Issues
 ===============================================================================
 
  1. Multicast support in ib_send_lat and in ib_send_bw is not stable.

@@ -487,6 +487,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
+
+	if (connection_type != RawEth && !(verb == WRITE && tst == LAT)) {
+		printf("      --payload_file_path=<payload_txt_file_path>");
+		printf(" Set the payload by passing a txt file containing a pattern in the next form(little endian): '0xaaaaaaaa, 0xbbbbbbbb, ...' .\n");
+	}
+
 	printf(" Latency measurement is Average calculation \n");
 
 	printf("      --use_old_post_send");
@@ -2187,6 +2193,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int vlan_en = 0;
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
+	static int payload_flag = 0;
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
@@ -2295,6 +2302,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
+			{ .name = "payload_file_path", .has_arg = 1, .flag = &payload_flag, .val = 1},
 			#ifdef HAVE_CUDA
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
@@ -2779,6 +2787,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->has_source_ip = 1;
 					GET_STRING(user_param->source_ip, strdupa(optarg));
 					source_ip_flag = 0;
+				}
+				if (payload_flag){
+					user_param->has_payload_modification = 1;
+					GET_STRING(user_param->payload_file_path, strdupa(optarg));
+					payload_flag = 0;
 				}
 				if (remote_port_flag) {
 					user_param->is_new_raw_eth_param = 1;

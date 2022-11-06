@@ -1948,12 +1948,100 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
-			random_data(ctx->buf[qp_index], ctx->buff_size);
+			if (user_param->has_payload_modification) {
+				int i;
+				int payload_len = strlen(user_param->payload_content);
+				for (i = 0; i < ctx->buff_size; i++) {
+					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % payload_len];
+				}
+			} else {
+				random_data(ctx->buf[qp_index], ctx->buff_size);
+			}
 		}
 #ifdef HAVE_CUDA
 	}
 #endif
 	return SUCCESS;
+}
+
+
+static int create_payload(struct perftest_parameters *user_param)
+{
+	char* file_content;
+	char* token;
+	int payload_file_size;
+	int counter = 0;
+	FILE* fptr;
+
+	/* read payload text file */
+	fptr = fopen(user_param->payload_file_path, "r");
+	if (!fptr)
+	{
+		fprintf(stderr, "Failed to open '%s'\n", user_param->payload_file_path);
+		return 1;
+	}
+
+	/* get payload file size*/
+	fseek(fptr, 0, SEEK_END);
+	payload_file_size = ftell(fptr);
+	fseek(fptr, 0, SEEK_SET);
+
+	if (!payload_file_size) {
+		fprintf(stderr, "Payload size should be greater than 0\n");
+		fclose(fptr);
+		return 1;
+	}
+
+	/* read payload file content*/
+	ALLOCATE(file_content, char, payload_file_size + 1);
+	if (payload_file_size != fread(file_content, 1, payload_file_size, fptr)) {
+		fprintf(stderr, "Failed to read payload file\n");
+		free(file_content);
+		fclose(fptr);
+		return 1;
+	}
+
+	file_content[payload_file_size] = '\0';
+	/* allocate buffer for the payload*/
+	ALLOCATE(user_param->payload_content, char, user_param->size + 1);
+
+	/* get token in DWORD form: '0xaaaaaaaa' */
+	token = strtok(file_content, ",");
+
+	do {
+			int i;
+			char current_byte_chars[2];
+			if (strlen(token) != 10) {
+				fprintf(stderr, "Failed to parse DWORD number: %d\n", counter/4);
+				free(user_param->payload_content);
+				free(file_content);
+				fclose(fptr);
+				return 1;
+			}
+			for(i = 0; i < 8; i += 2){
+				current_byte_chars[0] = token[8-i];
+				current_byte_chars[1] = token[9-i];
+				if (!isxdigit(current_byte_chars[0]) || !isxdigit(current_byte_chars[1])) {
+					fprintf(stderr, "Invalid hex char in DWORD number: %d\n", counter/4);
+					free(user_param->payload_content);
+					free(file_content);
+					fclose(fptr);
+					return 1;
+				}
+				user_param->payload_content[counter] = (char) strtol(current_byte_chars, NULL, 16);
+				counter++;
+				if (counter == user_param->size)
+					break;
+			}
+		token = strtok(NULL, ",\n");
+	} while (token != NULL && counter < user_param->size);
+
+	user_param->payload_content[counter] = '\0';
+
+	free(file_content);
+	fclose(fptr);
+
+	return 0;
 }
 
 /******************************************************************************
@@ -1963,6 +2051,13 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 {
 	int i;
 	int mr_index = 0;
+
+	if (user_param->has_payload_modification){
+		if (create_payload(user_param)){
+			return 1;
+		}
+	}
+
 	/* create first MR */
 	if (create_single_mr(ctx, user_param, 0)) {
 		fprintf(stderr, "failed to create mr\n");
