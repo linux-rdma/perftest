@@ -178,8 +178,8 @@
 #define UC_MAX_RX     (16000)
 #define MIN_CQ_MOD    (1)
 #define MAX_CQ_MOD    (1024)
-#define MAX_INLINE    (912)
-#define MAX_INLINE_UD (884)
+#define MAX_INLINE    (1024)
+#define MAX_INLINE_UD (1024)
 #define MIN_EQ_NUM    (0)
 #define MAX_EQ_NUM    (2048)
 
@@ -380,6 +380,7 @@ enum ctx_device {
 	CONNECTX7		= 26,
 	QLOGIC_AHP		= 27,
 	BLUEFIELD3		= 28,
+	HNS			= 29,
 };
 
 /* Units for rate limiter */

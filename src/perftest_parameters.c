@@ -1860,6 +1860,13 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 55300 : dev_fname = NETXTREME; break;
 			case 61344 : dev_fname = EFA; break;
 			case 61345 : dev_fname = EFA; break;
+			case 41506 : dev_fname = HNS; break;
+			case 41507 : dev_fname = HNS; break;
+			case 41508 : dev_fname = HNS; break;
+			case 41509 : dev_fname = HNS; break;
+			case 41510 : dev_fname = HNS; break;
+			case 41512 : dev_fname = HNS; break;
+			case 41519 : dev_fname = HNS; break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
@@ -2063,6 +2070,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 				user_param->inline_size = 32;
 			else if (current_dev == QLOGIC_E4)
 				user_param->inline_size = 128;
+			else if (current_dev == HNS)
+				user_param->inline_size = 1024;
 
 		} else {
 			user_param->inline_size = 0;
