@@ -2042,7 +2042,8 @@ int verify_params_with_device_context(struct ibv_context *context,
 		current_dev != BLUEFIELD &&
 		current_dev != BLUEFIELD2 &&
 		current_dev != BLUEFIELD3 &&
-		current_dev != EFA)
+		current_dev != EFA &&
+		current_dev != HNS)
 	{
 		if (!user_param->use_old_post_send)
 		{
