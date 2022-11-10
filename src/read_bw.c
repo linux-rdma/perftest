@@ -99,6 +99,11 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
+	/* See if ECE capability is supported if using it. */
+	if (check_ece(ctx.context, &user_param)) {
+		return FAILURE;
+	}
+
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");

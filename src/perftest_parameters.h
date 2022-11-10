@@ -490,6 +490,7 @@ struct perftest_parameters {
 	int				is_ethertype;
 	int				cpu_freq_f;
 	int				connection_type;
+	int				use_ece;
 	int				num_of_qps;
 	int				use_event;
 	int				eq_num;
@@ -731,6 +732,20 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
  * Return Value : SUCCESS, FAILURE.
  */
 int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *user_param);
+
+/* check ECE capability if using it
+ *
+ * Description: check Device ECE capability.
+ *
+ * Parameters :
+ *
+
+ *	 context    - Context of the device.
+ *	 user_param - Perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int check_ece(struct ibv_context *context, struct perftest_parameters *user_param);
 
 /* ctx_print_test_info
  *
