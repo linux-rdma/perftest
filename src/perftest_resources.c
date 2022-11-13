@@ -22,6 +22,9 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+#ifdef HAVE_SYS_RANDOM_H
+#include <sys/random.h>
+#endif
 #ifdef HAVE_SRD
 #include <infiniband/efadv.h>
 #endif
@@ -1730,12 +1733,33 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 	return ret;
 }
 
+static void random_data(char *buf, int buff_size)
+{
+	int i;
+#ifdef HAVE_SYS_RANDOM_H
+	char *tmp = buf;
+	int ret;
+
+	for(i = buff_size; i > 0;) {
+		ret = getrandom(tmp, i, 0);
+		if(ret < 0)
+			goto fall_back;
+		tmp += ret;
+		i -= ret;
+	}
+	return;
+fall_back:
+#endif
+	srand(time(NULL));
+	for (i = 0; i < buff_size; i++)
+		buf[i] = (char)rand();
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
 int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
 {
-	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 
 
@@ -1923,13 +1947,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 #ifdef HAVE_CUDA
 	if (!user_param->use_cuda) {
 #endif
-		srand(time(NULL));
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
-			for (i = 0; i < ctx->buff_size; i++) {
-				((char*)ctx->buf[qp_index])[i] = (char)rand();
-			}
+			random_data(ctx->buf[qp_index], ctx->buff_size);
 		}
 #ifdef HAVE_CUDA
 	}
