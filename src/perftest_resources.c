@@ -2458,22 +2458,21 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	int dc_num_of_qps = user_param->num_of_qps / 2;
 
 	int is_dc_server_side = 0;
+	struct ibv_qp_init_attr attr;
+	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
+	struct ibv_qp_cap *qp_cap = &attr.cap;
+
 	#ifdef HAVE_IBV_WR_API
 	enum ibv_wr_opcode opcode;
-	struct ibv_qp_init_attr attr;
 	struct ibv_qp_init_attr_ex attr_ex;
+	memset(&attr_ex, 0, sizeof(struct ibv_qp_init_attr_ex));
 	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_init_attr attr_dv;
 	memset(&attr_dv, 0, sizeof(attr_dv));
 	#endif
-	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
-	memset(&attr_ex, 0, sizeof(struct ibv_qp_init_attr_ex));
 	#ifdef HAVE_SRD
 	struct efadv_qp_init_attr efa_attr = {};
 	#endif
-	#else
-	struct ibv_qp_init_attr attr;
-	memset(&attr, 0, sizeof(struct ibv_qp_init_attr));
 	#endif
 
 	attr.send_cq = ctx->send_cq;
@@ -2648,10 +2647,15 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		fprintf(stderr, "Current TX depth is %d and inline size is %d .\n", user_param->tx_depth, user_param->inline_size);
 	}
 
-	if (user_param->inline_size > attr.cap.max_inline_data) {
-		user_param->inline_size = attr.cap.max_inline_data;
-		printf("  Actual inline-size(%d) > requested inline-size(%d)\n",
-			attr.cap.max_inline_data, user_param->inline_size);
+	#ifdef HAVE_IBV_WR_API
+	if (!user_param->use_old_post_send)
+		qp_cap = &attr_ex.cap;
+	#endif
+
+	if (user_param->inline_size > qp_cap->max_inline_data) {
+		printf("  Actual inline-size(%d) < requested inline-size(%d)\n",
+			qp_cap->max_inline_data, user_param->inline_size);
+		user_param->inline_size = qp_cap->max_inline_data;
 	}
 
 	return qp;
