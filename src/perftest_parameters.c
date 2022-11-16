@@ -1858,8 +1858,9 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 55296 : dev_fname = NETXTREME; break;
 			case 55298 : dev_fname = NETXTREME; break;
 			case 55300 : dev_fname = NETXTREME; break;
-			case 61344 : dev_fname = EFA; break;
-			case 61345 : dev_fname = EFA; break;
+			case 61344 : dev_fname = EFA; break; /* efa0 */
+			case 61345 : dev_fname = EFA; break; /* efa1 */
+			case 61346 : dev_fname = EFA; break; /* efa2 */
 			case 4223  : dev_fname = ERDMA; break;
 			default	   : dev_fname = UNKNOWN;
 		}
