@@ -1649,9 +1649,8 @@ static int check_odp_support(struct pingpong_context *ctx, struct perftest_param
 		return 0;
 
 	case UD:
-		if ( !check_odp_transport_caps(user_param,
-					       dattr.odp_caps.per_transport_caps.ud_odp_caps) )
-			return 0;
+		/* Checking UD caps is problematic for some devices because UD recive supports ODP from NIC
+		* perspective but capabilaties are registered as off, so let's skip checking them. */
 		break;
 
 	case XRC:
