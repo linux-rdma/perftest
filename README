@@ -345,7 +345,7 @@ Special feature detailed explanation in tests:
 
  7. perftest-2.3 release includes support for dualport VPI test - port1-Ethernet , port2-IB. (in addition to Eth:Eth, IB:IB)
     Currently, running dualport when port1-IB , port2-Ethernet still not working.
-    
+
  8. If GPUDirect is not working, (e.g. you see "Couldn't allocate MR" error message), consider disabling Scatter to CQE feature. Set the environmental variable MLX5_SCATTER_TO_CQE=0. E.g.:
     MLX5_SCATTER_TO_CQE=0 ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
-    
+
