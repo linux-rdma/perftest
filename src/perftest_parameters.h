@@ -496,7 +496,6 @@ struct perftest_parameters {
 	int				eq_num;
 	int				use_eq_num;
 	int 				inline_size;
-	int				inline_recv_size;
 	int				out_reads;
 	int				rx_depth;
 	int				duplex;

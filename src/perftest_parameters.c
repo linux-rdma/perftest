@@ -446,10 +446,6 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Force the link(s) to a specific type: IB or Ethernet.\n");
 	}
 
-	if (verb != WRITE) {
-		printf("      --inline_recv=<size> ");
-		printf(" Max size of message to be sent in inline receive\n");
-	}
 	if (verb == SEND) {
 		printf("      --use-srq ");
 		printf(" Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ \n");
@@ -739,7 +735,6 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->limit_msgrate	= 0;
 	user_param->pkey_index		= 0;
 	user_param->raw_qos		= 0;
-	user_param->inline_recv_size	= 0;
 	user_param->tcp			= 0;
 	user_param->burst_size		= 0;
 	user_param->typical_pkt_size	= 0;
@@ -2132,7 +2127,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int report_both_flag = 0;
 	static int is_reversed_flag = 0;
 	static int pkey_flag = 0;
-	static int inline_recv_flag = 0;
 	static int tcp_flag = 0;
 	static int burst_size_flag = 0;
 	static int typical_pkt_size_flag = 0;
@@ -2284,7 +2278,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
 			{ .name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",		.has_arg = 1, .flag = &pkey_flag, .val = 1},
-			{ .name = "inline_recv",	.has_arg = 1, .flag = &inline_recv_flag, .val = 1},
 			{ .name = "tcp",		.has_arg = 0, .flag = &tcp_flag, .val = 1},
 			{ .name = "burst_size",		.has_arg = 1, .flag = &burst_size_flag, .val = 1},
 			{ .name = "typical_pkt_size",	.has_arg = 1, .flag = &typical_pkt_size_flag, .val = 1},
@@ -2599,10 +2592,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
 					pkey_flag = 0;
-				}
-				if (inline_recv_flag) {
-					CHECK_VALUE(user_param->inline_recv_size,int,"Inline Receive size",not_int_ptr);
-					inline_recv_flag = 0;
 				}
 				if (rate_limit_flag) {
 					GET_STRING(user_param->rate_limit_str ,strdupa(optarg));
