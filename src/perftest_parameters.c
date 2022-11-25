@@ -1008,7 +1008,7 @@ void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 static void force_dependecies(struct perftest_parameters *user_param)
 {
 	/*Additional configuration and assignments.*/
-	if (user_param->test_type == ITERATIONS) {
+	if (user_param->test_method != RUN_INFINITELY && user_param->test_type == ITERATIONS) {
 		if (user_param->tx_depth > user_param->iters) {
 			user_param->tx_depth = user_param->iters;
 		}
