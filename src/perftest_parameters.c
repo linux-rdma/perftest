@@ -1650,12 +1650,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		if (user_param->tst != BW) {
-			printf(RESULT_LINE);
-			fprintf(stderr," Perftest supports CUDA only in BW tests\n");
-			exit(1);
-		}
+	if (user_param->use_cuda && user_param->tst == LAT && user_param->verb == WRITE) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Perftest supports CUDA latency tests with read/send verbs only\n");
+		exit(1);
 	}
 
 	if (user_param->use_cuda && user_param->mmap_file != NULL) {
@@ -2050,12 +2048,17 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 		return;
 	}
 
+	#ifdef HAVE_CUDA
+	if (user_param->use_cuda && user_param->verb == SEND && user_param->tst ==LAT){
+		user_param->inline_size = 0;
+		printf("On CUDA send latency test the message size must be greater than inline_size: inline size set to 0\n");
+		return;
+	}
+	#endif
+
 	if (user_param->inline_size == DEF_INLINE) {
-
 		if (user_param->tst ==LAT) {
-
 			switch(user_param->verb) {
-
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
 				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
 					    DEF_INLINE_SEND_RC_UC_XRC ; break;
