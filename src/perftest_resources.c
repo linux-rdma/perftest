@@ -3582,7 +3582,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	double 			gap_time = 0;	/* in usec */
 	cycles_t 		gap_cycles = 0;	/* in cycles */
 	cycles_t 		gap_deadline = 0;
-	unsigned int 		number_of_bursts = 0;
+	double 		number_of_bursts = 0;
 	int 			burst_iter = 0;
 	int 			is_sending_burst = 0;
 	int 			cpu_mhz = 0;
@@ -3649,7 +3649,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		if (cpu_mhz <= 0) {
 			fprintf(stderr, "Failed: couldn't acquire cpu frequency for rate limiter.\n");
 		}
-		number_of_bursts = rate_limit_pps / user_param->burst_size;
+		number_of_bursts = (double)rate_limit_pps / (double)user_param->burst_size;
 		gap_time = 1000000 * (1.0 / number_of_bursts);
 		gap_cycles = cpu_mhz * gap_time;
 	}
