@@ -2073,6 +2073,7 @@ int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
 	struct ibv_qp_init_attr init_attr;
 	struct ibv_wc wc;
 	struct cma_node *cm_node;
+	void* grh_buffer;
 
 	needed = ((user_param->connection_type == UD)
 				&& ((user_param->tst == BW && user_param->duplex)
@@ -2097,9 +2098,26 @@ int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
 	}
 
 	cm_node = &ctx->cma_master.nodes[connection_index];
+	grh_buffer = ctx->buf[connection_index];
+
+	#ifdef HAVE_CUDA
+	if(user_param->use_cuda){
+		struct pingpong_dest *temp_buffer;
+		ALLOCATE(temp_buffer, struct pingpong_dest, sizeof(struct pingpong_dest));
+		cuMemcpy((CUdeviceptr)temp_buffer, (CUdeviceptr)ctx->buf[connection_index], sizeof(struct pingpong_dest));
+		grh_buffer = temp_buffer;
+	}
+	#endif
 
 	ctx->ah[connection_index] = ibv_create_ah_from_wc(ctx->pd, &wc,
-		ctx->buf[connection_index], cm_node->cma_id->port_num);
+		grh_buffer, cm_node->cma_id->port_num);
+
+	#ifdef HAVE_CUDA
+	if(user_param->use_cuda){
+		free(grh_buffer);
+	}
+	#endif
+
 	user_param->ah_allocated = 1;
 	ibv_query_qp(cm_node->cma_id->qp, &attr, IBV_QP_QKEY, &init_attr);
 	cm_node->remote_qpn = ntohl(wc.imm_data);
