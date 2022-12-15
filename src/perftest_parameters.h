@@ -415,6 +415,7 @@ struct check_alive_data {
  *	 	src_mac - source MAC address of the packet
  *	 	dst_mac - destination MAC address of the packet
  *	 	eth_type - IP/or size of ptk
+ *		user_param - the parameters element.
  *
  *
 struct ETH_header {
@@ -614,7 +615,7 @@ struct perftest_parameters {
 	int				use_ooo;
 	int				vlan_en;
 	uint32_t			vlan_pcp;
-	void 				(*print_eth_func)(void*);
+	void 				(*print_eth_func)(void*, struct perftest_parameters *);
 	int				disable_pcir;
 	struct counter_context		*counter_ctx;
 	char				*source_ip;

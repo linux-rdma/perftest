@@ -63,6 +63,7 @@ struct raw_ethernet_info {
  *	 	src_mac - source MAC address of the packet
  *	 	dst_mac - destination MAC address of the packet
  *	 	eth_type - IP/or size of ptk
+ *		user_param - the parameters element.
  *
  */
 struct ETH_header {
@@ -157,12 +158,12 @@ struct TCP_header {
 	uint16_t        th_urgptr;
 }__attribute__((packed));
 
-void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type);
+void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type, struct perftest_parameters* user_param);
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param);
 //void print_ethernet_header(struct ETH_header* p_ethernet_header);
-void print_ethernet_header(void* p_ethernet_header);
+void print_ethernet_header(void* p_ethernet_header, struct perftest_parameters* user_param);
 //void print_ethernet_vlan_header(struct ETH_vlan_header* p_ethernet_header);
-void print_ethernet_vlan_header(void* p_ethernet_header);
+void print_ethernet_vlan_header(void* p_ethernet_header, struct perftest_parameters* user_param);
 void print_ip_header(struct IP_V4_header* ip_header);
 void print_udp_header(struct UDP_header* udp_header);
 void print_pkt(void* pkt,struct perftest_parameters *user_param);
