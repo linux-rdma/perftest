@@ -35,6 +35,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %defattr(-, root, root)
 %doc README COPYING runme
 %_bindir/*
+%_mandir/man1/*.1*
 
 %changelog
 * Wed Jan 09 2013 - idos@mellanox.com

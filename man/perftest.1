@@ -1,0 +1,483 @@
+.TH perftest 1
+.SH NAME:
+.TP
+        ib_write_bw, ib_read_bw, ib_send_bw, ib_atomic_bw
+ ib_write_lat, ib_read_lat, ib_send_lat, ib_atomic_lat
+ raw_ethernet_bw, raw_ethernet_lat, raw_ethernet_burst_lat
+ raw_ethernet_fs_rate
+.SH DESCRIPTION:
+.SH
+.TP
+.B Perftest:
+This is a set of benchmarks that measures different metrics & verbs performance which include
+many different options and modes.
+.SS RUNNING TESTS:
+.SS
+.TP
+.B Server:
+ ./<test name> <options>
+.TP
+.B Client:
+ ./<test name> <options> <server IP address>
+.TP
+.B Examples:
+ 1- Running bidirectional bandwidth test using Write verb for 5 seconds with 8388608 as a message size and 3 qps:
+    Server: ./ib_write_bw -s 8388608 -b -D 5 -q 3
+    Client: ./ib_write_bw -s 8388608 -b -D 5 -q 3 1.1.1.2
+
+ 2- Running latency test using Read verb for 5000 iterations with 32 as a message size:
+    Server: ./ib_read_lat -s 32 -n 5000
+    Client: ./ib_read_lat -s 32 -n 5000 192.168.0.1
+
+.SS IMPORTANT NOTES:
+.TP
+        1- The options that specific to modes in perftest must be the same for both server and client.
+ 2- Perftest applications may need to be ran with sudo when running from non root.
+ 3- Perftest applications usually installed to the /usr/bin/.
+ 4- Perftest may print some failures with syndroms to the stderr, perftest get those errors from rdma-core.
+.SH OPTIONS:
+.SH
+.TP
+.B -h, --help
+ Lists the available options to the screen.
+.TP
+.B -a, --all
+ Run sizes from 2 till 2^23.
+ Not relevant for Atomic and RawEth.
+.TP
+.B -A, --atomic_type=<type>
+ Type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD} (default FETCH_AND_ADD).
+ Relevant only for Atomic.
+.TP
+.B -b, --bidirectional
+ Measure bidirectional bandwidth (default unidirectional).
+ Relevant only for BW.
+.TP
+.B -c, --connection=<RC/XRC/UC/UD/DC/SRD>
+ Connection type RC/XRC/UC/UD/DC/SRD (default RC).
+ SRD/UD relevant only for Send verb.
+ UC relevant only for Write and Send verbs.
+ Not relevant for RawEth.
+.TP
+.B --log_dci_streams=<log_num_dci_stream_channels> (default 0)
+ Run DC initiator as DCS instead of DCI with <log_num dci_stream_channels>.
+ Not relevant for RawEth.
+ System support required.
+.TP
+.B --log_active_dci_streams=<log_num_active_dci_stream_channels> (default log_num_dci_stream_channels)
+ Not relevant for RawEth.
+ System support required.
+.TP
+.B --aes_xts
+ Runs traffic with AES_XTS feature (encryption).
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --encrypt_on_tx
+ Runs traffic with encryption on tx (default decryption on tx).
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --sig_before
+ Puts signature on data before encrypting it (default after).
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B  --aes_block_size=<512,520,4048,4096,4160> (default 512)
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --data_enc_keys_number=<number of data encryption keys> (default 1)
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --kek_path <path to the key encryption key file>
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --credentials_path <path to the credentials file>
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B --data_enc_key_app_path <path to the data encryption key app>
+ Not relevant for RawEth and Write latency.
+ System support required.
+.TP
+.B -C, --report-cycles
+ Report times in cpu cycle units (default microseconds).
+ Relevant only for latency.
+.TP
+.B -d, --ib-dev=<dev>
+ Use IB device <dev> (default first device found).
+.TP
+.B -D, --duration
+ Run test for a customized period of seconds.
+.TP
+.B -e, --events
+ Sleep on CQ events (default poll).
+ Not relevant for Write and RawEth.
+.TP
+.B -X, --vector=<completion vector>
+ Set <completion vector> used for events.
+ Not relevant for Write and RawEth.
+.TP
+.B -f, --margin
+ measure results within margins. (default=2sec).
+.TP
+.B -F, --CPU-freq
+ Do not show a warning even if cpufreq_ondemand module is loaded, and cpu-freq is not on max.
+.TP
+.B -g, --mcg
+ Send messages to multicast group with 1 QP attached to it.
+ When there is no multicast gid specified, a default IPv6 typed gid '255:1:0:0:0:2:201:133:0:0:0:0:0:0:0:0' will be used.
+ Relevant only for send non fsRate.
+.TP
+.B -H, --report-histogram
+ Print out all results (default print summary only).
+ Relevant only for latency and raw_ethernet_fs_rate.
+.TP
+.B -i, --ib-port=<port>
+ Use port <port> of IB device (default 1).
+.TP
+.B -I, --inline_size=<size>
+ Max size of message to be sent in inline.
+ Not relevant for Read and Atomic.
+.TP
+.B -l, --post_list=<list size>
+ Post list of send WQEs of <list size> size (instead of single post).
+ Relevant only for BW and raw_ethernet_burst_lat.
+.TP
+.B --recv_post_list=<list size>
+ Post list of receive WQEs of <list size> size (instead of single post).
+ Relevant only for BW and raw_ethernet_burst_lat.
+.TP
+.B -L, --hop_limit=<hop_limit>
+ Set hop limit value (ttl for IPv4 RawEth QP). Values 0-255 (default 64).
+ Relevant only for RawEth
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B -m, --mtu=<mtu>
+ MTU size : 64 - 9600  (default port mtu) for RawEth else 256 - 4096.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B -M, --MGID=<multicast_gid>
+ In multicast, uses <multicast_gid> as the group MGID.
+ <multicast_gid> can be either decimal or hexadecimal, e.g. regarding the IPv4 224.0.0.30 :
+ Decimal: 0:0:0:0:0:0:0:0:0:0:255:255:224:0:0:30 , Hexadecimal: 0:0:0:0:0:0:0:0:0:0:0xff:0xff:0xe0:0:0:0x1e
+ Relevant only for send non fsRate.
+.TP
+.B -n, --iters=<iters>
+ Number of exchanges (at least 5, default for write 5000 else 1000 ).
+.TP
+.B -N, --noPeak
+ Cancel peak-bw calculation (default with peak up to iters=20000).
+ Relevant only for bandwidth.
+.TP
+.B -o, --outs=<num>
+ Relevant only for Read and Atomic.
+.TP
+.B -O, --dualport
+ Run test in dual-port mode.
+ Not relevant for RawEth.
+ Relevant only for bandwidth.
+ System support required.
+.TP
+.B -p, --port=<port>
+ Listen on/connect to port <port> (default 18515).
+.TP
+.B -q, --qp=<num of qp's>
+ Num of qp's(default 1).
+ Relevant only for bandwidth.
+.TP
+.B -Q, --cq-mod
+ Generate Cqe only after <--cq-mod> completion.
+ Relevant only for bandwidth.
+.TP
+.B -r, --rx-depth=<dep>
+ Rx queue size (default 512), if using srq, rx-depth controls max-wr size of the srq.
+ Relevant only for send non fsRate.
+.TP
+.B -R, --rdma_cm
+ Connect QPs with rdma_cm and run test on those QPs.
+ Not relevant for RawEth.
+.TP
+.B -s, --size=<size>
+ Size of message to exchange (default 65536 for bw, for lat 2).
+ Not relevant for Atomic.
+.TP
+.B -S, --sl=<sl>
+ SL (default 0).
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B -t, --tx-depth=<dep>
+ Size of tx queue (default 128 for bw else 1).
+ Relevant only for bw and raw_ethernet_burst_lat.
+.TP
+.B -T, --tos=<tos value>
+ Set <tos_value> to RDMA-CM QPs. available only with -R flag. values 0-256 (default off).
+ Not relevant for RawEth
+.TP
+.B -u, --qp-timeout=<timeout>
+ QP timeout, timeout value is 4 usec * 2 ^(timeout), default 14.
+.TP
+.B -U, --report-unsorted
+ (implies -H) print out unsorted results (default sorted).
+ Relevant only for latency and raw_ethernet_burst_lat and raw_ethernet_fs_rate.
+.TP
+.B -V, --version
+ Display perftest version number.
+.TP
+.B -W, --report-counters=<list of counter names>
+ Report performance counter change (example: counters/port_xmit_data,hw_counters/out_of_buffer).
+.TP
+.B -x, --gid-index=<index>
+ Test uses GID with GID index (Default : IB - no gid . ETH - 0).
+ Not relevant for RawEth.
+.TP
+.B -z, --comm_rdma_cm
+ Communicate with rdma_cm module to exchange data - use regular QPs.
+ Not relevant for RawEth.
+.TP
+.B --out_json
+ Save the report in a json file.
+.TP
+.B --out_json_file=<file>
+ Name of the report json file. (Default: "perftest_out.json" in the working directory).
+.TP
+.B --cpu_util
+ Show CPU Utilization in report, valid only in Duration mode.
+.TP
+.B --dlid
+ Set a Destination LID instead of getting it from the other side.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --dont_xchg_versions
+ Do not exchange versions and MTU with other side.
+ Not relevant for RawEth.
+.TP
+.B --force-link=<value>
+ Force the link(s) to a specific type: IB or Ethernet.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --use-srq
+ Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ.
+ Relevant only for Send.
+.TP
+.B --ipv6
+ Use IPv6 GID. Default is IPv4.
+ Not relevant for RawEth.
+.TP
+.B --source_ip
+ Source IP of the interface used for connection establishment. By default taken from routing table.
+ Not relevant for RawEth.
+.TP
+.B --latency_gap=<delay_time>
+ delay time between each post send.
+ Relevant only for latency.
+.TP
+.B --mmap=file
+ Use an mmap'd file as the buffer for testing P2P transfers.
+ Not relevant for RawEth.
+.TP
+.B --mmap-offset=<offset>
+ The mmap offset.
+ Not relevant for RawEth.
+.TP
+.B --mr_per_qp
+ Create memory region for each qp.
+ Relevant only for bandwidth.
+.TP
+.B --odp
+ Use On Demand Paging instead of Memory Registration.
+ System support required.
+.TP
+.B --output=<units>
+ Set verbosity output level: bandwidth , message_rate, latency.
+ Latency measurement is Average calculation.
+ bw (bandwidth / message_rate), latency (latency).
+.TP
+.B --payload_file_path=<payload_txt_file_path>
+ Set the payload by passing a txt file containing a pattern in the next form(little endian): '0xaaaaaaaa, 0xbbbbbbbb, ...
+ Not relevant for RawEth and Write latency.
+.TP
+.B --use_old_post_send
+ Use old post send flow (ibv_post_send).
+.TP
+.B --perform_warm_up
+ Perform some iterations before start measuring in order to warming-up memory cache.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --pkey_index=<pkey index>
+ PKey index to use for QP.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --report-both
+ Report RX & TX results separately on Bidirectional BW tests.
+ Relevant only for bidirectional bandwidth.
+.TP
+.B --report_gbits
+ Report Max/Average BW of test in Gbit/sec (instead of MiB/sec).
+ Relevant only for bandwidth.
+.TP
+.B --report-per-port
+ Report BW data on both ports when running Dualport and Duration mode.
+ Not relevant for RawEth.
+ System support required.
+.TP
+.B --reversed
+ Reverse traffic direction - Server send to client.
+.TP
+.B --run_infinitely
+ Run test forever, print results every <duration> seconds.
+.TP
+.B --retry_count=<value>
+ Set retry count value in rdma_cm mode.
+ Relevant only for rdma_cm mode.
+ Not relevant for RawEth.
+.TP
+.B --tclass=<value>
+ Set the Traffic Class in GRH (if GRH is in use).
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --use_cuda=<cuda device id>
+ Use CUDA specific device for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_cuda_bus_id=<cuda full BUS id>
+ Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_cuda_dmabuf
+ Use CUDA DMA-BUF for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_rocm=<rocm device id>
+ Use selected ROCm device for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_hugepages
+ Use Hugepages instead of contig, memalign allocations.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --wait_destroy=<seconds>
+ Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..).
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --disable_pcie_relaxed
+ Disable PCIe relaxed ordering.
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+ System support required.
+.TP
+.B --burst_size=<size>
+ Set the amount of messages to send in a burst when using rate limiter.
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --typical_pkt_size=<bytes>
+ Set the size of packet to send in a burst. Only supports PP rate limiter.
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --rate_limit=<rate>
+ Set the maximum rate of sent packages. default unit is [Gbps]. use --rate_units to change that.
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --rate_units=<units>
+ [Mgp] Set the units for rate limit to MiBps (M), Gbps (g) or pps (p). default is Gbps (g).
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --rate_limit_type=<type>
+ [HW/SW/PP] Limit the QP's by HW, PP or by SW. Disabled by default. When rate_limit is not specified HW limit is Default.
+ Relevant only for bandwidth and raw_ethernet_burst_lat.
+.TP
+.B --use_ooo
+ Use out of order data placement.
+ System support required.
+.SS RawEth only options:
+.SS
+.TP
+.B -B, --source_mac
+ Source MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered.
+.TP
+.B -E, --dest_mac
+ Destination MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered.
+.TP
+.B -G, --use_rss
+ Use RSS on server side. need to open 2^x qps (using -q flag. default is -q 2). open 2^x clients that transmit to this server.
+.TP
+.B -J, --dest_ip
+ Destination ip address by this format X.X.X.X for IPv4 or X:X:X:X:X:X for IPv6 (using to send packets with IP header).
+ System support required for IPv6.
+.TP
+.B -j, --source_ip
+ Source ip address by this format X.X.X.X for IPv4 or X:X:X:X:X:X for IPv6 (using to send packets with IP header).
+ System support required for IPv6.
+.TP
+.B -K, --dest_port
+ Destination port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header).
+.TP
+.B -k, --source_port
+ Source port number (using to send packets with UDP header as default, or you can use --tcp flag to send TCP Header).
+.TP
+.B -Y, --ethertype
+ Ethertype value in the ethernet frame by this format 0xXXXX.
+.TP
+.B -Z, --server
+ Choose server side for the current machine (--server/--client must be selected ).
+.TP
+.B --vlan_en
+ Insert vlan tag in ethernet header.
+.TP
+.B --vlan_pcp
+ Specify vlan_pcp value for vlan tag, 0~7. 8 means different vlan_pcp for each packet.
+.TP
+.B -P, --client
+ Choose client side for the current machine (--server/--client must be selected).
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B -v, --mac_fwd
+ Run mac forwarding test.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --flows
+ Set number of TCP/UDP flows, starting from <src_port, dst_port>.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --flows_burst
+ Set number of burst size per TCP/UDP flow.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --promiscuous
+ Run promiscuous mode.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --reply_every
+ In latency test, receiver pong after number of received pings.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --sniffer
+ Run sniffer mode.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --flow_label
+ IPv6 flow label.
+ Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --tcp
+ Send TCP Packets. must include IP and Ports information.
+.TP
+.B --raw_ipv6
+ Send IPv6 Packets.
+ System support required.
+.TP
+.B --raw_mcast.
+ Relevant only for bandwidth.
+.SH AUTHORS:
+.SH
+.TP
+.B  Hassan Khadour <hkhadour@nvidia.com>
+.TP
+.B  Talat Batheesh <talatb@nvidia.com>
