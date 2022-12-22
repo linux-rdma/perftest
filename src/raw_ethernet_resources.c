@@ -202,22 +202,13 @@ void gen_tcp_header(void* TCP_header_buffer,int src_port ,int dst_port)
 /*****************************************************************************
  * generates a new ethernet header
  *****************************************************************************/
-void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,
-		uint8_t* dst_mac, uint16_t eth_type, struct perftest_parameters* user_param)
+void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac, uint8_t* dst_mac, uint16_t eth_type,
+		    struct perftest_parameters* user_param, struct memory_ctx *memory)
 {
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		uint16_t eth_type_temp = htons(eth_type);
-		cuMemcpy((CUdeviceptr)eth_header->src_mac, (CUdeviceptr)src_mac, 6);
-		cuMemcpy((CUdeviceptr)eth_header->dst_mac, (CUdeviceptr)dst_mac, 6);
-		cuMemcpy((CUdeviceptr)&(eth_header->eth_type), (CUdeviceptr)&eth_type_temp, sizeof(uint16_t));
-	} else
-	#endif
-	{
-		memcpy(eth_header->src_mac, src_mac, 6);
-		memcpy(eth_header->dst_mac, dst_mac, 6);
-		eth_header->eth_type = htons(eth_type);
-	}
+	uint16_t eth_type_temp = htons(eth_type);
+	memory->copy_host_to_buffer(eth_header->src_mac, src_mac, 6);
+	memory->copy_host_to_buffer(eth_header->dst_mac, dst_mac, 6);
+	memory->copy_host_to_buffer(&(eth_header->eth_type), &eth_type_temp, sizeof(uint16_t));
 }
 
 static int get_ip_size(int is_ipv6)
@@ -321,7 +312,7 @@ static char *etype_str(uint16_t etype)
 /******************************************************************************
  *
  ******************************************************************************/
-void print_ethernet_header(void* in_ethernet_header, struct perftest_parameters* user_param)
+void print_ethernet_header(void* in_ethernet_header, struct perftest_parameters* user_param, struct memory_ctx* memory)
 {
 	struct ETH_header* p_ethernet_header = in_ethernet_header;
 	uint8_t* p_src_mac;
@@ -332,20 +323,11 @@ void print_ethernet_header(void* in_ethernet_header, struct perftest_parameters*
 		return;
 	}
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		ALLOCATE(p_src_mac, uint8_t, 6);
-		ALLOCATE(p_dst_mac, uint8_t, 6);
-		cuMemcpy((CUdeviceptr)p_src_mac, (CUdeviceptr)p_ethernet_header->src_mac, 6);
-		cuMemcpy((CUdeviceptr)p_dst_mac, (CUdeviceptr)p_ethernet_header->dst_mac, 6);
-		cuMemcpy((CUdeviceptr)&p_eth_type, (CUdeviceptr)&p_ethernet_header->eth_type, sizeof(uint16_t));
-	} else
-	#endif
-	{
-		p_src_mac = p_ethernet_header->src_mac;
-		p_dst_mac = p_ethernet_header->dst_mac;
-		p_eth_type = p_ethernet_header->eth_type;
-	}
+	ALLOCATE(p_src_mac, uint8_t, 6);
+	ALLOCATE(p_dst_mac, uint8_t, 6);
+	memory->copy_buffer_to_host(p_src_mac, p_ethernet_header->src_mac, 6);
+	memory->copy_buffer_to_host(p_dst_mac, p_ethernet_header->dst_mac, 6);
+	memory->copy_buffer_to_host(&p_eth_type, &p_ethernet_header->eth_type, sizeof(uint16_t));
 
 	printf("**raw ethernet header****************************************\n\n");
 	printf("--------------------------------------------------------------\n");
@@ -372,17 +354,13 @@ void print_ethernet_header(void* in_ethernet_header, struct perftest_parameters*
 	printf("%-22s|\n",eth_type);
 	printf("|------------------------------------------------------------|\n\n");
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		free(p_src_mac);
-		free(p_dst_mac);
-	}
-	#endif
+	free(p_src_mac);
+	free(p_dst_mac);
 }
 /******************************************************************************
 *
 ******************************************************************************/
-void print_ethernet_vlan_header(void* in_ethernet_header, struct perftest_parameters* user_param)
+void print_ethernet_vlan_header(void* in_ethernet_header, struct perftest_parameters* user_param, struct memory_ctx* memory)
 {
 	struct ETH_vlan_header* p_ethernet_header = in_ethernet_header;
 	uint8_t* p_src_mac;
@@ -393,22 +371,14 @@ void print_ethernet_vlan_header(void* in_ethernet_header, struct perftest_parame
 			fprintf(stderr, "ETH_header pointer is Null\n");
 			return;
 	}
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		ALLOCATE(p_src_mac, uint8_t, 6);
-		ALLOCATE(p_dst_mac, uint8_t, 6);
-		cuMemcpy((CUdeviceptr)p_src_mac, (CUdeviceptr)p_ethernet_header->src_mac, 6);
-		cuMemcpy((CUdeviceptr)p_dst_mac, (CUdeviceptr)p_ethernet_header->dst_mac, 6);
-		cuMemcpy((CUdeviceptr)&p_eth_type, (CUdeviceptr)&p_ethernet_header->eth_type, sizeof(uint16_t));
-		cuMemcpy((CUdeviceptr)&p_vlan_header, (CUdeviceptr)&p_ethernet_header->vlan_header, sizeof(uint32_t));
-	} else
-	#endif
-	{
-		p_src_mac = p_ethernet_header->src_mac;
-		p_dst_mac = p_ethernet_header->dst_mac;
-		p_eth_type = p_ethernet_header->eth_type;
-		p_vlan_header = p_ethernet_header->vlan_header;
-	}
+
+	ALLOCATE(p_src_mac, uint8_t, 6);
+	ALLOCATE(p_dst_mac, uint8_t, 6);
+	memory->copy_buffer_to_host(p_src_mac, p_ethernet_header->src_mac, 6);
+	memory->copy_buffer_to_host(p_dst_mac, p_ethernet_header->dst_mac, 6);
+	memory->copy_buffer_to_host(&p_eth_type, &p_ethernet_header->eth_type, sizeof(uint16_t));
+	memory->copy_buffer_to_host(&p_vlan_header, &p_ethernet_header->vlan_header, sizeof(uint32_t));
+
 	printf("**raw ethernet header****************************************\n\n");
 	printf("----------------------------------------------------------------------------\n");
 	printf("| Dest MAC         | Src MAC          |    vlan tag    |   Packet Type     |\n");
@@ -436,12 +406,9 @@ void print_ethernet_vlan_header(void* in_ethernet_header, struct perftest_parame
 	char* eth_type = (ntohs(p_eth_type) ==  IP_ETHER_TYPE ? "IP" : "DEFAULT");
 	printf("%-19s|\n",eth_type);
 	printf("|--------------------------------------------------------------------------|\n\n");
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		free(p_src_mac);
-		free(p_dst_mac);
-	}
-	#endif
+
+	free(p_src_mac);
+	free(p_dst_mac);
 }
 /******************************************************************************
  *
@@ -547,7 +514,7 @@ void print_tcp_header(struct TCP_header* tcp_header)
  *
  ******************************************************************************/
 
-void print_pkt(void* pkt,struct perftest_parameters *user_param)
+void print_pkt(void* pkt,struct perftest_parameters *user_param, struct memory_ctx *memory)
 {
 
 	if (user_param->output != FULL_VERBOSITY)
@@ -558,7 +525,7 @@ void print_pkt(void* pkt,struct perftest_parameters *user_param)
 		return;
 	}
 
-	user_param->print_eth_func((struct ETH_header*)pkt, user_param);
+	user_param->print_eth_func((struct ETH_header*)pkt, user_param, memory);
 	if(user_param->is_client_ip || user_param->is_server_ip) {
 		// cppcheck-suppress arithOperationsOnVoidPointer
 		pkt = (void*)pkt + sizeof(struct ETH_header);
@@ -590,6 +557,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 			 struct raw_ethernet_info *my_dest_info,
 			 struct raw_ethernet_info *rem_dest_info,
 			 struct perftest_parameters *user_param,
+			 struct memory_ctx *memory,
 			 uint16_t eth_type, uint16_t ip_next_protocol,
 			 int print_flag, int pkt_size, int flows_offset)
 {
@@ -605,23 +573,16 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 		vlan_pcp = user_param->vlan_pcp;
 	}
 
-	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, user_param);
+	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, user_param, memory);
 
 	if(user_param->vlan_en) {
 		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
 		// cppcheck-suppress integerOverflow
 		uint32_t vlan_header = htonl(VLAN_TPID << 16 |
 								((vlan_pcp & 0x7) << 13) | VLAN_VID | VLAN_CFI << 12);;
-		#ifdef HAVE_CUDA
-		if (user_param->use_cuda) {
-			cuMemcpyDtoD((CUdeviceptr)&p_eth_vlan->eth_type, (CUdeviceptr)&eth_header->eth_type, sizeof(uint16_t));
-			cuMemcpy((CUdeviceptr)&(p_eth_vlan->vlan_header), (CUdeviceptr)&vlan_header, sizeof(uint32_t));
-		} else
-		#endif
-		{
-			p_eth_vlan->eth_type = eth_header->eth_type;
-			p_eth_vlan->vlan_header = vlan_header;
-		}
+
+		memory->copy_buffer_to_buffer(&p_eth_vlan->eth_type, &eth_header->eth_type, sizeof(uint16_t));
+		memory->copy_host_to_buffer(&p_eth_vlan->vlan_header, &vlan_header, sizeof(uint32_t));
 
 		eth_header_size = sizeof(struct ETH_vlan_header);
 		pkt_size -=4;
@@ -660,7 +621,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 	}
 
 	if(print_flag == PRINT_ON) {
-		print_pkt((void*)eth_header, user_param);
+		print_pkt((void*)eth_header, user_param, memory);
 	}
 }
 
@@ -703,7 +664,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 			/* fill ctx buffer with same packets */
 			while ((flow_limit - INC(ctx->size, ctx->cache_line_size)) >= pkt_offset) {
 				build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
-						    user_param, eth_type, ip_next_protocol,
+						    user_param, ctx->memory, eth_type, ip_next_protocol,
 						    print_flag, ctx->size - RAWETH_ADDITION, i);
 				print_flag = PRINT_OFF;
 				pkt_offset += INC(ctx->size, ctx->cache_line_size);/* update the offset to next packet in same flow */
@@ -718,7 +679,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 			// cppcheck-suppress arithOperationsOnVoidPointer
 			eth_header = (void*)buf + pkt_offset;
 			build_pkt_on_buffer(eth_header, my_dest_info, rem_dest_info,
-					    user_param, eth_type, ip_next_protocol,
+					    user_param, ctx->memory, eth_type, ip_next_protocol,
 					    PRINT_ON, ctx->size - RAWETH_ADDITION, i);
 
 		}

@@ -61,18 +61,12 @@
 #endif
 #include "get_clock.h"
 #include "perftest_counters.h"
+#include "memory.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
 
-#ifdef HAVE_CUDA
-#include CUDA_PATH
-#endif
-
-#ifdef HAVE_ROCM
-#include <hip/hip_runtime_api.h>
-#endif
 
 /* Connection types available. */
 #define RC  (0)
@@ -321,6 +315,13 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 
 #define GET_ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr[0])))
 
+#define ASSERT(x) \
+	do { \
+	if (!(x)) { \
+		fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+	} \
+} while (0)
+
 /* The Verb of the benchmark. */
 typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
 
@@ -431,6 +432,13 @@ struct ETH_vlan_header {
         uint32_t vlan_header;
         uint16_t eth_type;
 }__attribute__((packed));*/
+
+enum memory_type {
+	MEMORY_HOST,
+	MEMORY_MMAP,
+	MEMORY_CUDA,
+	MEMORY_ROCM
+};
 
 struct perftest_parameters {
 
@@ -551,18 +559,12 @@ struct perftest_parameters {
 	char*				payload_file_path;
 	char*				payload_content;
 	int				payload_length;
-#ifdef HAVE_CUDA
-	int				use_cuda;
+	enum memory_type		memory_type;
+	struct memory_ctx		*(*memory_create)(struct perftest_parameters *params);
 	int				cuda_device_id;
 	char				*cuda_device_bus_id;
-#ifdef HAVE_CUDA_DMABUF
 	int				use_cuda_dmabuf;
-#endif
-#endif
-#ifdef HAVE_ROCM
-	int				use_rocm;
 	int				rocm_device_id;
-#endif
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
@@ -617,7 +619,7 @@ struct perftest_parameters {
 	int				use_ooo;
 	int				vlan_en;
 	uint32_t			vlan_pcp;
-	void 				(*print_eth_func)(void*, struct perftest_parameters *);
+	void 				(*print_eth_func)(void*, struct perftest_parameters*, struct memory_ctx*);
 	int				disable_pcir;
 	struct counter_context		*counter_ctx;
 	char				*source_ip;

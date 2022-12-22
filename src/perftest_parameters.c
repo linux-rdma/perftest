@@ -12,6 +12,10 @@
 #include "perftest_parameters.h"
 #include "mlx5_devx.h"
 #include "raw_ethernet_resources.h"
+#include "host_memory.h"
+#include "mmap_memory.h"
+#include "cuda_memory.h"
+#include "rocm_memory.h"
 #include<math.h>
 #ifdef HAVE_RO
 #include <stdbool.h>
@@ -536,24 +540,23 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --tclass=<value> ");
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
-		#ifdef HAVE_CUDA
-		printf("      --use_cuda=<cuda device id>");
-		printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
+		if (cuda_memory_supported()) {
+			printf("      --use_cuda=<cuda device id>");
+			printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
 
-		printf("      --use_cuda_bus_id=<cuda full BUS id>");
-		printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
+			printf("      --use_cuda_bus_id=<cuda full BUS id>");
+			printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
 
-		#ifdef HAVE_CUDA_DMABUF
-		printf("      --use_cuda_dmabuf");
-		printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
-		#endif
+			if (cuda_memory_dmabuf_supported()) {
+				printf("      --use_cuda_dmabuf");
+				printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
+			}
+		}
 
-		#endif
-
-		#ifdef HAVE_ROCM
-		printf("      --use_rocm=<rocm device id>");
-		printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
-		#endif
+		if (rocm_memory_supported()) {
+			printf("      --use_rocm=<rocm device id>");
+			printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
+		}
 
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
@@ -760,17 +763,12 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->log_dci_streams = 0;
 	user_param->log_active_dci_streams = 0;
 	user_param->output		= -1;
-#ifdef HAVE_CUDA
-	user_param->use_cuda		= 0;
-	user_param->cuda_device_id		= 0;
-#ifdef HAVE_CUDA_DMABUF
-	user_param->use_cuda_dmabuf		= 0;
-#endif
-#endif
-#ifdef HAVE_ROCM
-	user_param->use_rocm		= 0;
+	user_param->memory_type		= MEMORY_HOST;
+	user_param->memory_create	= host_memory_create;
+	user_param->cuda_device_id	= 0;
+	user_param->cuda_device_bus_id	= NULL;
+	user_param->use_cuda_dmabuf	= 0;
 	user_param->rocm_device_id	= 0;
-#endif
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -1223,7 +1221,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->mmap_file != NULL || user_param->mmap_offset) {
+		if (user_param->memory_type == MEMORY_MMAP) {
 			fprintf(stderr," mmaped files aren't supported for Raw Ethernet tests\n");
 			exit(1);
 		}
@@ -1660,33 +1658,17 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda && user_param->tst == LAT && user_param->verb == WRITE) {
+	if (user_param->memory_type == MEMORY_CUDA && user_param->tst == LAT && user_param->verb == WRITE) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"Perftest supports CUDA latency tests with read/send verbs only\n");
 		exit(1);
 	}
 
-	if(user_param->use_cuda && (int)user_param->size <= user_param->inline_size) {
+	if (user_param->memory_type == MEMORY_CUDA && (int)user_param->size <= user_param->inline_size) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"Perftest doesn't supports CUDA tests with inline messages\n");
 		exit(1);
 	}
-
-	if (user_param->use_cuda && user_param->mmap_file != NULL) {
-		printf(RESULT_LINE);
-		fprintf(stderr,"You cannot use CUDA and an mmap'd file at the same time\n");
-		exit(1);
-	}
-	#endif
-
-	#ifdef HAVE_ROCM
-	if (user_param->use_rocm && user_param->mmap_file != NULL) {
-		printf(RESULT_LINE);
-		fprintf(stderr,"You cannot use ROCM and an mmap'd file at the same time\n");
-		exit(1);
-	}
-	#endif
 
 	if ( (user_param->connection_type == UD) && (user_param->inline_size > MAX_INLINE_UD) ) {
 		printf(RESULT_LINE);
@@ -2073,13 +2055,11 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 	}
 
 	if (user_param->inline_size == DEF_INLINE) {
-		#ifdef HAVE_CUDA
-		if (user_param->use_cuda){
+		if (user_param->memory_type == MEMORY_CUDA){
 			user_param->inline_size = 0;
 			printf("Perftest doesn't supports CUDA tests with inline messages: inline size set to 0\n");
 			return;
 		}
-		#endif
 		if (user_param->tst ==LAT) {
 			switch(user_param->verb) {
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
@@ -2168,16 +2148,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
-#ifdef HAVE_CUDA
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
-#ifdef HAVE_CUDA_DMABUF
 	static int use_cuda_dmabuf_flag = 0;
-#endif
-#endif
-#ifdef HAVE_ROCM
 	static int use_rocm_flag = 0;
-#endif
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -2323,17 +2297,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "flow_label",		.has_arg = 1, .flag = &flow_label_flag, .val = 1},
 			{ .name = "retry_count",	.has_arg = 1, .flag = &retry_count_flag, .val = 1},
 			{ .name = "dont_xchg_versions",	.has_arg = 0, .flag = &dont_xchg_versions_flag, .val = 1},
-			{ .name = "payload_file_path", .has_arg = 1, .flag = &payload_flag, .val = 1},
-			#ifdef HAVE_CUDA
+			{ .name = "payload_file_path",	.has_arg = 1, .flag = &payload_flag, .val = 1},
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
-			#ifdef HAVE_CUDA_DMABUF
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
-			#endif
-			#endif
-			#ifdef HAVE_ROCM
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
-			#endif
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
@@ -2747,37 +2715,48 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					CHECK_VALUE_NON_NEGATIVE(user_param->latency_gap,int,"Latency gap time",not_int_ptr);
 					latency_gap_flag = 0;
 				}
-#ifdef HAVE_CUDA
+				/* We statically define memory type options so check if requested option is actually supported. */
+				if (((use_cuda_flag || use_cuda_bus_id_flag) && !cuda_memory_supported()) ||
+				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
+				    (use_rocm_flag && !rocm_memory_supported())) {
+					printf(" Unsupported memory type\n");
+					return FAILURE;
+				}
+				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
+				if (user_param->memory_type != MEMORY_HOST &&
+				    (mmap_file_flag || use_rocm_flag ||
+				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
+					fprintf(stderr, " Can't use multiple memory types\n");
+					return FAILURE;
+				}
 				if (use_cuda_flag) {
-					user_param->use_cuda = 1;
 					CHECK_VALUE_NON_NEGATIVE(user_param->cuda_device_id,int,"CUDA device",not_int_ptr);
+					user_param->memory_type = MEMORY_CUDA;
+					user_param->memory_create = cuda_memory_create;
 					use_cuda_flag = 0;
 				}
 				if (use_cuda_bus_id_flag) {
-					user_param->use_cuda = 1;
 					user_param->cuda_device_bus_id = strdup(optarg);
 					printf("Got PCIe address of: %s\n", user_param->cuda_device_bus_id);
+					user_param->memory_type = MEMORY_CUDA;
+					user_param->memory_create = cuda_memory_create;
 					use_cuda_bus_id_flag = 0;
 				}
-#ifdef HAVE_CUDA_DMABUF
 				if (use_cuda_dmabuf_flag) {
 					user_param->use_cuda_dmabuf = 1;
-					if (!user_param->use_cuda) {
+					if (user_param->memory_type != MEMORY_CUDA) {
 						fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
 						free(duplicates_checker);
 						return FAILURE;
 					}
 					use_cuda_dmabuf_flag = 0;
 				}
-#endif
-#endif
-#ifdef HAVE_ROCM
 				if (use_rocm_flag) {
-					user_param->use_rocm = 1;
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
+					user_param->memory_type = MEMORY_ROCM;
+					user_param->memory_create = rocm_memory_create;
 					use_rocm_flag = 0;
 				}
-#endif
 				if (flow_label_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->flow_label,int,"flow label",not_int_ptr);
 					flow_label_flag = 0;
@@ -2788,6 +2767,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (mmap_file_flag) {
 					user_param->mmap_file = strdup(optarg);
+					user_param->memory_type = MEMORY_MMAP;
+					user_param->memory_create = mmap_memory_create;
 					mmap_file_flag = 0;
 				}
 				if (out_json_file_flag) {
@@ -3395,9 +3376,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	if (user_param->use_rdma_cm)
 		temp = 1;
 
-#ifdef HAVE_ROCM
-	printf(" Use ROCm memory : %s\n", user_param->use_rocm ? "ON" : "OFF");
-#endif
+	if (rocm_memory_supported())
+		printf(" Use ROCm memory : %s\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
 
 	printf(" Data ex. method : %s",exchange_state[temp]);
 
@@ -3633,9 +3613,7 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 	if (user_param->use_rdma_cm)
 		temp = 1;
 
-	#ifdef HAVE_ROCM
-		dprintf(out_json_fds, "Use_ROCm_memory: %s,\n", user_param->use_rocm ? "ON" : "OFF");
-	#endif
+	dprintf(out_json_fds, "Use_ROCm_memory: %s,\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
 
 	dprintf(out_json_fds, "Data_ex_method: %s,\n",exchange_state[temp]);
 
