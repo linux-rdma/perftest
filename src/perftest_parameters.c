@@ -286,6 +286,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (verb == SEND && tst != FS_RATE) {
 		printf("  -g, --mcg ");
 		printf(" Send messages to multicast group with 1 QP attached to it.\n");
+		printf("         When there is no multicast gid specified, a default IPv6 typed gid will be used.\n");
 	}
 
 	printf("  -h, --help ");
