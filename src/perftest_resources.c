@@ -2063,15 +2063,16 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 		fprintf(stderr, "failed to create mr\n");
 		return 1;
 	}
+	mr_index++;
 
 	/* create the rest if needed, or copy the first one */
 	for (i = 1; i < user_param->num_of_qps; i++) {
-		mr_index++;
 		if (user_param->mr_per_qp) {
 			if (create_single_mr(ctx, user_param, i)) {
 				fprintf(stderr, "failed to create mr\n");
 				goto destroy_mr;
 			}
+			mr_index++;
 		} else {
 			ALLOCATE(ctx->mr[i], struct ibv_mr, 1);
 			memset(ctx->mr[i], 0, sizeof(struct ibv_mr));
