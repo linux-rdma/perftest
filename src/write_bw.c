@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	/* See if MTU and link type are valid and supported. */
+	/* See if link type is valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		return FAILURE;
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
 	check_version_compatibility(&user_param);
 	check_sys_data(&user_comm, &user_param);
 
-	/* See if MTU and link type are valid and supported. */
+	/* See if MTU is valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		dealloc_comm_struct(&user_comm,&user_param);
