@@ -1331,7 +1331,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 int destroy_ctx(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param)
 {
-	int i, first, dereg_counter, rc;
+	int i, dereg_counter, rc;
 	int test_result = 0;
 	int num_of_qps = user_param->num_of_qps;
 	int dct_only = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
@@ -1363,12 +1363,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		num_of_qps /= 2;
 	}
 
-	/* RSS parent should be last */
-	if (user_param->use_rss)
-		first = 1;
-	else
-		first = 0;
-	for (i = first; i < user_param->num_of_qps; i++) {
+	for (i = 0; i < user_param->num_of_qps; i++) {
 
 		if ((((user_param->connection_type == DC && !((!(user_param->duplex || user_param->tst == LAT) && user_param->machine == SERVER)
 							|| ((user_param->duplex || user_param->tst == LAT) && i >= num_of_qps))) ||
@@ -1389,19 +1384,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->use_rss) {
-		if (user_param->connection_type == UD && (user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) {
-			if (user_param->ah_allocated == 1 && ibv_destroy_ah(ctx->ah[0])) {
-				fprintf(stderr, "Failed to destroy AH\n");
-				test_result = 1;
-			}
-		}
-
-		if (ibv_destroy_qp(ctx->qp[0])) {
-			fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
-			test_result = 1;
-		}
-	}
 	if (user_param->srq_exists) {
 		if (ibv_destroy_srq(ctx->srq)) {
 			fprintf(stderr, "Couldn't destroy SRQ\n");
@@ -3433,10 +3415,6 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		size_per_qp /= user_param->num_of_qps;
 	ctx->rposted = size_per_qp * user_param->recv_post_list;
 
-	if (user_param->use_rss) {
-		i = 1;
-		num_of_qps = 1;
-	}
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 		if (!user_param->mr_per_qp) {
 			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[0] +
@@ -3958,10 +3936,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	for (i = 0; i < user_param->num_of_qps; i++)
 		posted_per_qp[i] = ctx->rposted;
 
-	if (user_param->use_rss)
-		tot_iters = (uint64_t)user_param->iters*(user_param->num_of_qps-1);
-	else
-		tot_iters = (uint64_t)user_param->iters*user_param->num_of_qps;
+	tot_iters = (uint64_t)user_param->iters*user_param->num_of_qps;
 
 	if (user_param->test_type == ITERATIONS) {
 		check_alive_data.is_events = user_param->use_event;

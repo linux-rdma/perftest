@@ -125,15 +125,6 @@ int main(int argc, char *argv[])
 
 	}
 
-	if (user_param.use_rss) {
-		/* if num_of_qps is not even, set it to 2. */
-		if (user_param.num_of_qps % 2)
-			user_param.num_of_qps = 2;
-
-		/* add another one for rss parent QP */
-		user_param.num_of_qps += 1;
-	}
-
 	/* Finding the IB device selected (or default if no selected). */
 	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {
