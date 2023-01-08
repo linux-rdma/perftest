@@ -2296,7 +2296,7 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 	}
 
 	ctx->cm_id = cma_id;
-	rc = create_qp_main(ctx, user_param, connection_index, 0);
+	rc = create_qp_main(ctx, user_param, connection_index);
 	if (rc) {
 		error_message = "Failed to create QP.";
 		goto error;
@@ -2363,7 +2363,7 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	}
 
 	ctx->cm_id = cm_node->cma_id;
-	rc = create_qp_main(ctx, user_param, connection_index, 0);
+	rc = create_qp_main(ctx, user_param, connection_index);
 	if (rc) {
 		error_message = "Failed to create QP.";
 		goto error_2;
