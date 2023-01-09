@@ -1712,8 +1712,8 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	printf(BASIC_ADDR_FMT, sideArray[comm->rdma_params->side], dlid, element->qpn, element->psn);
 
 	switch (comm->rdma_params->verb) {
-		case 2  : printf(READ_FMT,element->out_reads);
-		case 1  : printf(RDMA_FMT,element->rkey,element->vaddr);
+		case READ  : printf(READ_FMT,element->out_reads);
+		case WRITE : printf(RDMA_FMT,element->rkey,element->vaddr);
 		default : ;
 	}
 
