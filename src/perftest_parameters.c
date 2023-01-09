@@ -813,7 +813,6 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	if (user_param->cycle_buffer <= 0) {
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
-	user_param->use_res_domain		= 0;
 	user_param->mr_per_qp			= 0;
 	user_param->dlid			= 0;
 	user_param->traffic_class		= 0;
@@ -2173,7 +2172,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_promiscuous_flag = 0;
 	static int use_sniffer_flag = 0;
 	static int raw_mcast_flag = 0;
-	static int use_res_domain_flag = 0;
 	static int mr_per_qp_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
@@ -2904,10 +2902,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (dont_xchg_versions_flag) {
 		user_param->dont_xchg_versions = 1;
-	}
-
-	if (use_res_domain_flag) {
-		user_param->use_res_domain = 1;
 	}
 
 	if (disable_pcir_flag) {

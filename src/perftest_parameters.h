@@ -603,7 +603,6 @@ struct perftest_parameters {
 	int				masked_atomics;
 	int				cycle_buffer;
 	int				cache_line_size;
-	int				use_res_domain;
 	int				mr_per_qp;
 	uint16_t			dlid;
 	uint8_t				traffic_class;
