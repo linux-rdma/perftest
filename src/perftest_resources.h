@@ -801,13 +801,13 @@ int check_packet_pacing_support(struct pingpong_context *ctx);
 #endif
 
 int create_reg_qp_main(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, int i, int num_of_qps);
+		struct perftest_parameters *user_param, int i);
 
 int create_qp_main(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, int i, int num_of_qps);
+		struct perftest_parameters *user_param, int i);
 
 int modify_qp_to_init(struct pingpong_context *ctx,
-                struct perftest_parameters *user_param, int qp_index, int num_of_qps);
+        struct perftest_parameters *user_param, int qp_index);
 
 
 /* create_single_mr
