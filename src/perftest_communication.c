@@ -833,8 +833,8 @@ int set_up_connection(struct pingpong_context *ctx,
 				my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port2);
 				my_dest[i].gid_index = user_param->gid_index2;
 			}
-			/*single-port case*/
 		} else {
+			/*single-port case*/
 			my_dest[i].lid   = ctx_get_local_lid(ctx->context,user_param->ib_port);
 			my_dest[i].gid_index = user_param->gid_index;
 		}
@@ -860,16 +860,6 @@ int set_up_connection(struct pingpong_context *ctx,
 		} else {
 			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 		}
-
-		/*
-		We do not fail test upon lid above RoCE.
-		if ( (user_param->gid_index < 0) ||  ((user_param->gid_index2 < 0) && (user_param->dualport == ON))  ){
-			if (!my_dest[i].lid) {
-				fprintf(stderr," Local lid 0x0 detected. Is an SM running? \n");
-				return -1;
-			}
-		}
-		*/
 	}
 
 	#ifdef HAVE_XRCD
