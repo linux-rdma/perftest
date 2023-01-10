@@ -310,6 +310,7 @@ if [test $HAVE_MLX5DV_LIB = yes] && [test $HAVE_MLX5DV = yes]; then
 fi
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
+LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
