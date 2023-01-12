@@ -1654,6 +1654,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if(user_param->use_cuda && (int)user_param->size <= user_param->inline_size) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Perftest doesn't supports CUDA tests with inline messages\n");
+		exit(1);
+	}
+
 	if (user_param->use_cuda && user_param->mmap_file != NULL) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"You cannot use CUDA and an mmap'd file at the same time\n");
@@ -2046,15 +2052,14 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 		return;
 	}
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda && user_param->verb == SEND && user_param->tst ==LAT){
-		user_param->inline_size = 0;
-		printf("On CUDA send latency test the message size must be greater than inline_size: inline size set to 0\n");
-		return;
-	}
-	#endif
-
 	if (user_param->inline_size == DEF_INLINE) {
+		#ifdef HAVE_CUDA
+		if (user_param->use_cuda){
+			user_param->inline_size = 0;
+			printf("Perftest doesn't supports CUDA tests with inline messages: inline size set to 0\n");
+			return;
+		}
+		#endif
 		if (user_param->tst ==LAT) {
 			switch(user_param->verb) {
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
