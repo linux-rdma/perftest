@@ -3751,7 +3751,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0)
 					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
 
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
@@ -3800,7 +3800,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
-						(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
+						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
 							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 				}
@@ -4155,7 +4155,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 						break;
 				}
 
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)) {
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0)) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
 
@@ -4171,7 +4171,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
-						(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
+						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
 							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 				}
@@ -4447,7 +4447,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0)
 					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
@@ -4474,7 +4474,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				totscnt += user_param->post_list;
 
 				if (user_param->post_list == 1 &&
-					(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
+					((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
 						(user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1))) {
 
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
