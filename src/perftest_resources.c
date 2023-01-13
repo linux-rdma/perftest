@@ -3665,6 +3665,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
+	int			is_last_iteration = 0;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -3751,9 +3752,9 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0)
-					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
 
+				is_last_iteration = user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1;
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0) && !is_last_iteration) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
 
@@ -3798,10 +3799,10 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
 
+				is_last_iteration = user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1;
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
-						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
-							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
+						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 || is_last_iteration)) {
 						ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 				}
 
@@ -4114,6 +4115,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
+	int			is_last_iteration = 0;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -4170,9 +4172,9 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				totscnt += user_param->post_list;
 
 				/* ask for completion on this wr */
+				is_last_iteration = user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1;
 				if (user_param->post_list == 1 &&
-						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
-							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
+						((ctx->scnt[index] + 1) % user_param->cq_mod == 0 || is_last_iteration)) {
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 				}
 			}
@@ -4375,6 +4377,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int 			num_of_qps = user_param->num_of_qps;
 	/* This is to ensure SERVER will not start to send packets before CLIENT start the test. */
 	int 			before_first_rx = ON;
+	int 			is_last_iteration = 0;
 	int 			return_value = 0;
 
 	#ifdef HAVE_IBV_WR_API
@@ -4447,8 +4450,9 @@ int run_iter_bi(struct pingpong_context *ctx,
 					if (swindow >= user_param->rx_depth)
 						break;
 				}
-				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0)
-					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
+
+				is_last_iteration = user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1;
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0) && !is_last_iteration) {
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
 				if (user_param->noPeak == OFF)
@@ -4473,10 +4477,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				ctx->scnt[index] += user_param->post_list;
 				totscnt += user_param->post_list;
 
-				if (user_param->post_list == 1 &&
-					((ctx->scnt[index] + 1) % user_param->cq_mod == 0 ||
-						(user_param->test_type == ITERATIONS && ctx->scnt[index] == iters-1))) {
-
+				is_last_iteration = user_param->test_type == ITERATIONS && ctx->scnt[index] == iters - 1;
+				if (user_param->post_list == 1 && ((ctx->scnt[index] + 1) % user_param->cq_mod == 0 || is_last_iteration)) {
 					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
 				}
 			}
