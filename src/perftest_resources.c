@@ -2905,13 +2905,12 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
  *
  ******************************************************************************/
 static int ctx_modify_qp_to_rts(struct ibv_qp *qp,
-		void *_attr,
+		struct ibv_qp_attr *attr,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *dest,
 		struct pingpong_dest *my_dest)
 {
 	int flags = IBV_QP_STATE;
-	struct ibv_qp_attr *attr = (struct ibv_qp_attr*)_attr;
 
 	attr->qp_state = IBV_QPS_RTS;
 
