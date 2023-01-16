@@ -1521,14 +1521,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->cq_mod = 1;
 	}
 
-	#ifndef HAVE_RSS_EXP
-	if (user_param->use_rss) {
-		printf(RESULT_LINE);
-		fprintf(stderr," RSS feature is not available in libibverbs\n");
-		exit(1);
-	}
-	#endif
-
 	if ((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
 
@@ -2597,7 +2589,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'P': user_param->machine = CLIENT; break;
 			case 'Z': user_param->machine = SERVER; break;
 			case 'v': user_param->mac_fwd = ON; break;
-			case 'G': user_param->use_rss = ON; break;
+			case 'G':
+				fprintf(stderr, "RSS isn't supported\n");
+				return FAILURE;
 			case 0: /* required for long options to work. */
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
