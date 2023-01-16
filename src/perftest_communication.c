@@ -1703,7 +1703,7 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 	int is_there_mgid,local_mgid,remote_mgid;
 
 	/* use dlid value from user (if user specified and only on the remote side) */
-	uint16_t dlid = (comm->rdma_params->dlid && comm->rdma_params->side) ?
+	uint16_t dlid = (comm->rdma_params->dlid && comm->rdma_params->side == REMOTE) ?
 				comm->rdma_params->dlid : element->lid;
 
 	if (comm->rdma_params->output != FULL_VERBOSITY)
@@ -1725,8 +1725,8 @@ void ctx_print_pingpong_data(struct pingpong_dest *element,
 
 	putchar('\n');
 
-	local_mgid    = (comm->rdma_params->side == 0)  && (comm->rdma_params->machine == 0);
-	remote_mgid   = (comm->rdma_params->side == 1)  && (comm->rdma_params->machine == 1);
+	local_mgid    = (comm->rdma_params->side == LOCAL)  && (comm->rdma_params->machine == SERVER);
+	remote_mgid   = (comm->rdma_params->side == REMOTE)  && (comm->rdma_params->machine == CLIENT);
 	is_there_mgid =  comm->rdma_params->duplex || remote_mgid || local_mgid;
 
 	if ((comm->rdma_params->gid_index > -1 || (comm->rdma_params->use_mcg && is_there_mgid)) && comm->rdma_params->connection_type != RawEth) {
