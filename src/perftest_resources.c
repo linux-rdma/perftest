@@ -1214,9 +1214,10 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	num_of_qps_factor = (user_param->mr_per_qp) ? 1 : user_param->num_of_qps;
 
 	/* holds the size of maximum between msg size and cycle buffer,
-	* aligned to cache line,
-	* it is multiply by 2 for send and receive
-	* with reference to number of flows and number of QPs */
+	 * aligned to cache line, it is multiplied by 2 to be used as
+	 * send buffer(first half) and receive buffer(second half)
+	 * with reference to number of flows and number of QPs
+	 */
 	ctx->buff_size = INC(BUFF_SIZE(ctx->size, ctx->cycle_buffer),
 				 ctx->cache_line_size) * 2 * num_of_qps_factor * user_param->flows;
 	ctx->send_qp_buff_size = ctx->buff_size / num_of_qps_factor / 2;
