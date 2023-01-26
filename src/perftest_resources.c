@@ -297,6 +297,7 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 
 		if(index >= AES_XTS_CREDENTIALS_SIZE) {
 			fprintf(stderr, "Invalid credentials file\n");
+			fclose(cred);
 			return FAILURE;
 		}
 
@@ -306,6 +307,7 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 
 	fclose(cred);
 
+	//coverity[uninit_use_in_call]
 	memcpy(dst, valid_credential, sizeof(valid_credential));
 
 	return 0;
@@ -376,8 +378,8 @@ static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_in
 			get_n_word_string(line,tmp,index,3); /* skip 2 stats */
 			duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
 
-			fclose(fp);
 		}
+		fclose(fp);
 	}
 }
 
@@ -982,6 +984,8 @@ int check_add_port(char **service,int port,
 
 	number = getaddrinfo(servername,*service,hints,res);
 
+	free(*service);
+
 	if (number < 0) {
 		fprintf(stderr, "%s for %s:%d\n", gai_strerror(number), servername, port);
 		return FAILURE;
@@ -1046,6 +1050,7 @@ struct ibv_device* ctx_find_dev(char **ib_devname)
 
 	dev_list = ibv_get_device_list(&num_of_device);
 
+	//coverity[uninit_use]
 	if (num_of_device <= 0) {
 		fprintf(stderr," Did not detect devices \n");
 		fprintf(stderr," If device exists, check if driver is up\n");
@@ -3617,6 +3622,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 			ne = ibv_poll_cq(ctx->send_cq,1,&wc);
 			if (ne > 0) {
 
+				//coverity[uninit_use]
 				if (wc.status != IBV_WC_SUCCESS) {
 					return_value = FAILURE;
 					goto cleaning;
@@ -3987,6 +3993,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						}
 						user_param->iters++;
 					}
+					//coverity[uninit_use]
 					if ((user_param->test_type==DURATION || posted_per_qp[wc_id] + user_param->recv_post_list <= user_param->iters) &&
 							unused_recv_for_qp[wc_id] >= user_param->recv_post_list) {
 						if (user_param->use_srq) {
@@ -4096,6 +4103,8 @@ cleaning:
 	free(rcnt_for_qp);
 	free(swc);
 	free(scredit_for_qp);
+	free(unused_recv_for_qp);
+	free(posted_per_qp);
 
 	return return_value;
 }
@@ -4544,6 +4553,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 						}
 					}
 					unused_recv_for_qp[wc[i].wr_id] -= user_param->recv_post_list;
+					//coverity[uninit_use]
 					posted_per_qp[wc[i].wr_id] += user_param->recv_post_list;
 
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2) &&
@@ -4575,6 +4585,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 									goto cleaning;
 								}
 
+								//coverity[uninit_use]
 								if (credit_wc.opcode == IBV_WC_RDMA_WRITE) {
 									scredit_for_qp[credit_wc.wr_id]--;
 									tot_scredit--;
@@ -4684,6 +4695,8 @@ cleaning:
 	free(scredit_for_qp);
 	free(wc);
 	free(wc_tx);
+	free(posted_per_qp);
+	free(unused_recv_for_qp);
 	return return_value;
 }
 
@@ -4780,6 +4793,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 			if(ne > 0) {
 
 				if (wc.status != IBV_WC_SUCCESS) {
+					//coverity[uninit_use_in_call]
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt);
 					return 1;
 				}
@@ -4861,6 +4875,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			ne = ibv_poll_cq(ctx->send_cq, 1, &wc);
 			if(ne > 0) {
 				if (wc.status != IBV_WC_SUCCESS) {
+					//coverity[uninit_use_in_call]
 					NOTIFY_COMP_ERROR_SEND(wc,scnt,scnt);
 					return 1;
 				}
@@ -4941,6 +4956,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 					}
 
 					if (wc.status != IBV_WC_SUCCESS) {
+						//coverity[uninit_use_in_call]
 						NOTIFY_COMP_ERROR_RECV(wc,rcnt);
 						return 1;
 					}
@@ -5045,6 +5061,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 
 				if (s_wc.status != IBV_WC_SUCCESS) {
+					//coverity[uninit_use_in_call]
 					NOTIFY_COMP_ERROR_SEND(s_wc,scnt,scnt)
 						return 1;
 				}
@@ -5088,6 +5105,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 				wc_id = (int)wc[i].wr_id;
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_RECV(wc[i], rcnt);
+					free(wc);
 					return FAILURE;
 				}
 				rcnt++;
@@ -5095,6 +5113,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 					err = ibv_post_send(ctx->qp[0], &ctx->wr[0], &bad_wr);
 					if (err) {
 						fprintf(stderr, "Couldn't post send: scnt=%lu\n", scnt);
+						free(wc);
 						return FAILURE;
 					}
 					scnt++;
@@ -5102,6 +5121,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 
 				if (ibv_post_recv(ctx->qp[wc_id], &ctx->rwr[wc_id], &bad_wr_recv)) {
 					fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n", wc_id, rcnt);
+					free(wc);
 					return FAILURE;
 				}
 			}
@@ -5114,6 +5134,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 			for (i = 0; i < ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc[i], scnt, ccnt);
+					free(wc);
 					return FAILURE;
 				}
 				ccnt++;
@@ -5121,6 +5142,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
+			free(wc);
 			return FAILURE;
 		}
 	}
@@ -5244,7 +5266,8 @@ polling:
 					}
 					if (ibv_post_recv(ctx->qp[wc_id], &ctx->rwr[wc_id], &bad_wr_recv)) {
 						fprintf(stderr, "Couldn't post recv Qp=%d rcnt=%lu\n", wc_id, totrcnt);
-						return FAILURE;
+						return_value = FAILURE;
+						goto cleaning;
 					}
 				}
 			} else if (ne < 0) {
@@ -5286,6 +5309,7 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int port)
 	if (ibv_query_port(context,port,&attr))
 		return 0;
 
+	//coverity[uninit_use]
 	return attr.lid;
 }
 

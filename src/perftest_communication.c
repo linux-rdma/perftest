@@ -243,6 +243,7 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
 		ne = ibv_poll_cq(ctx->send_cq, 1,&wc);
 	} while (ne == 0);
 
+	//coverity[uninit_use]
 	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != 0) {
 		fprintf(stderr, " Couldn't post send my QP number %d\n",(int)wc.status);
 		return 1;
@@ -267,6 +268,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 		ne = ibv_poll_cq(ctx->recv_cq,1,&wc);
 	} while (ne == 0);
 
+	//coverity[uninit_use]
 	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != 0) {
 		fprintf(stderr, "Bad wc status when trying to create AH -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
 		return 1;
@@ -276,6 +278,7 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 	user_param->ah_allocated = 1;
 	user_param->rem_ud_qpn = ntohl(wc.imm_data);
 	ibv_query_qp(ctx->qp[0],&attr, IBV_QP_QKEY,&init_attr);
+	//coverity[uninit_use]
 	user_param->rem_ud_qkey = attr.qkey;
 
 	return 0;
@@ -479,6 +482,7 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 		ne = ibv_poll_cq(comm->rdma_ctx->send_cq, 1,&wc);
 	} while (ne == 0);
 
+	//coverity[uninit_use]
 	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != SYNC_SPEC_ID) {
 		fprintf(stderr, " Bad wc status %d\n",(int)wc.status);
 		return 1;
@@ -504,6 +508,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	} while (ne == 0);
 
 	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
+		//coverity[uninit_use_in_call]
 		fprintf(stderr, "Bad wc status -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
 		return 1;
 	}
@@ -626,6 +631,7 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 			if (ibv_query_gid_ex(ctx->context, port, i, &roce_version_rival, 0))
 				continue;
 
+			//coverity[uninit_use_in_call]
 			if (check_better_roce_version(roce_version.gid_type, roce_version_rival.gid_type) == RIGHT_IS_BETTER) {
 				gid_index = i;
 			}
@@ -682,6 +688,7 @@ static int ethernet_client_connect(struct perftest_comm *comm)
 				if (bind(sockfd, (struct sockaddr *)&source, sizeof(source)) < 0)
 				{
 					fprintf(stderr, "Failed to bind socket\n");
+					close(sockfd);
 					return 1;
 				}
 			}
@@ -792,6 +799,7 @@ int set_up_connection(struct pingpong_context *ctx,
 			if (ibv_query_gid(ctx->context, user_param->ib_port, user_param->gid_index, &temp_gid))
 				return -1;
 		} else {
+			//coverity[uninit_use_in_call]
 			user_param->gid_index = get_best_gid_index(ctx, user_param, &attr, user_param->ib_port);
 			if (user_param->gid_index < 0)
 				return -1;
@@ -855,9 +863,12 @@ int set_up_connection(struct pingpong_context *ctx,
 			if (i % num_of_qps < num_of_qps_per_port)
 				memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 
-			else
+			else {
+				//coverity[uninit_use_in_call]
 				memcpy(my_dest[i].gid.raw,temp_gid2.raw ,16);
+			}
 		} else {
+			//coverity[uninit_use_in_call]
 			memcpy(my_dest[i].gid.raw,temp_gid.raw ,16);
 		}
 	}
@@ -910,9 +921,11 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (res->ai_family != PF_INET) {
+		freeaddrinfo(res);
 		return FAILURE;
 	}
 	memcpy(&sin, res->ai_addr, sizeof(sin));
+	freeaddrinfo(res);
 	sin.sin_port = htons((unsigned short)user_param->port);
 
 	if (user_param->has_source_ip) {
@@ -924,8 +937,8 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		memset(&source_sin, 0x0, sizeof(source_sin));
 		memcpy(&source_sin, res->ai_addr, sizeof(source_sin));
 		source_ptr = (struct sockaddr *)&source_sin;
+		freeaddrinfo(res);
 	}
-
 	while (1)
 	{
 
@@ -944,6 +957,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 			return FAILURE;
 		}
 
+		//coverity[uninit_use]
 		if (event->event == RDMA_CM_EVENT_ADDR_ERROR) {
 			num_of_retry--;
 			rdma_ack_cm_event(event);
@@ -1124,10 +1138,12 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	if (res->ai_family != PF_INET) {
+		freeaddrinfo(res);
 		return FAILURE;
 	}
 	memcpy(&sin, res->ai_addr, sizeof(sin));
 	sin.sin_port = htons((unsigned short)user_param->port);
+	freeaddrinfo(res);
 
 	if (rdma_bind_addr(ctx->cm_id_control,(struct sockaddr *)&sin)) {
 		fprintf(stderr," rdma_bind_addr failed\n");
@@ -1144,6 +1160,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 		return 1;
 	}
 
+	//coverity[uninit_use]
 	if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
 		fprintf(stderr, "bad event waiting for connect request %d\n",event->event);
 		return 1;
@@ -1210,7 +1227,6 @@ int rdma_server_connect(struct pingpong_context *ctx,
 
 	rdma_ack_cm_event(event);
 	rdma_destroy_id(ctx->cm_id_control);
-	freeaddrinfo(res);
 	return 0;
 }
 
@@ -1498,6 +1514,7 @@ int rdma_read_data(void *data,
 	} while (ne == 0);
 
 	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
+		//coverity[uninit_use_in_call]
 		fprintf(stderr, "Bad wc status -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
 		return 1;
 	}
@@ -1545,6 +1562,7 @@ int rdma_write_data(void *data,
 		ne = ibv_poll_cq(comm->rdma_ctx->send_cq, 1,&wc);
 	} while (ne == 0);
 
+	//coverity[uninit_use]
 	if (wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != SYNC_SPEC_ID) {
 		fprintf(stderr, " Bad wc status %d\n",(int)wc.status);
 		return 1;
@@ -1905,6 +1923,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 				exit(1);
 			}
 
+			//coverity[uninit_use]
 			if (user_param->size > port_attr.max_msg_sz) {
 				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
 					fprintf(stderr, " Max msg size is %u\n",
@@ -2110,7 +2129,9 @@ int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
 
 	user_param->ah_allocated = 1;
 	ibv_query_qp(cm_node->cma_id->qp, &attr, IBV_QP_QKEY, &init_attr);
+	//coverity[uninit_use_in_call]
 	cm_node->remote_qpn = ntohl(wc.imm_data);
+	//coverity[uninit_use]
 	cm_node->remote_qkey = attr.qkey;
 	return rc;
 
@@ -2161,6 +2182,7 @@ int rdma_cm_send_ud_connection_parameters(struct pingpong_context *ctx,
 		cqes = ibv_poll_cq(ctx->send_cq, 1, &wc);
 	} while (cqes == 0);
 
+	//coverity[uninit_use]
 	rc = wc.status || wc.opcode != IBV_WC_SEND || wc.wr_id != 0;
 	if (rc) {
 		sprintf(error_message,
@@ -2517,6 +2539,7 @@ int rdma_cm_connect_events(struct pingpong_context *ctx,
 			goto error;
 		}
 
+		//coverity[uninit_use]
 		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
 		if (rc) {
 			error_message = "Failed to handle RDMA CM event.";
@@ -2569,6 +2592,7 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 			error_message = "Failed to get RDMA CM event.";
 			goto error;
 		}
+		//coverity[uninit_use]
 		rc = rdma_cm_events_dispatcher(ctx, user_param, event->id, event);
 		if (rc) {
 			error_message = "Failed to handle RDMA CM event.";
@@ -2641,6 +2665,7 @@ int rdma_cm_server_connection(struct pingpong_context *ctx,
 	return rc;
 
 destroy_id:
+	//coverity[uninit_use_in_call]
 	rdma_destroy_id(listen_id);
 
 error:
@@ -2767,6 +2792,8 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 		goto destroy_rdma_id;
 	}
 
+	free(hints.ai_src_addr);
+
 	return rc;
 
 
@@ -2776,6 +2803,7 @@ destroy_rdma_id:
 			rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
 	}
 	free(ctx->cma_master.nodes);
+	free(hints.ai_src_addr);
 
 destroy_event_channel:
 	rdma_destroy_event_channel(ctx->cma_master.channel);

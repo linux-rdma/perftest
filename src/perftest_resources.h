@@ -722,6 +722,7 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel)
 		return 1;
 	}
 
+	//coverity[uninit_use]
 	ibv_ack_cq_events(ev_cq,1);
 
 	if (ibv_req_notify_cq(ev_cq, 0)) {

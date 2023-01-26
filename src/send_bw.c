@@ -63,7 +63,9 @@ static int set_mcast_group(struct pingpong_context *ctx,
 	if (ibv_query_port(ctx->context,user_param->ib_port,&port_attr)) {
 		return FAILURE;
 	}
+	//coverity[uninit_use]
 	mcg_params->sm_lid  = port_attr.sm_lid;
+	//coverity[uninit_use]
 	mcg_params->sm_sl   = port_attr.sm_sl;
 	mcg_params->ib_port = user_param->ib_port;
 	mcg_params->ib_ctx  = ctx->context;

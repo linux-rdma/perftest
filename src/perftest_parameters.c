@@ -161,8 +161,8 @@ static int get_cache_line_size()
 		}
 		if(fgets(line,10,fp) != NULL) {
 			size = atoi(line);
-			fclose(fp);
 		}
+		fclose(fp);
 	}
 #endif
 	// cppcheck-suppress knownConditionTrueFalse
@@ -846,6 +846,7 @@ static int ctx_chk_pkey_index(struct ibv_context *context,int pkey_idx)
 	struct ibv_device_attr attr;
 
 	if (!ibv_query_device(context,&attr)) {
+		//coverity[uninit_use]
 		if (pkey_idx > attr.max_pkeys - 1) {
 			printf(RESULT_LINE);
 			fprintf(stderr," Specified PKey Index, %i, greater than allowed max, %i\n",pkey_idx,attr.max_pkeys - 1);
@@ -1784,6 +1785,7 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 		dev_fname = INTEL_ALL;
 	} else {
 
+		//coverity[uninit_use]
 		switch (attr.vendor_part_id) {
 			case 4099  : dev_fname = CONNECTX3; break;
 			case 4100  : dev_fname = CONNECTX3; break;
@@ -1905,6 +1907,7 @@ enum ibv_mtu set_mtu(struct ibv_context *context,uint8_t ib_port,int user_mtu)
 			default   :
 					fprintf(stderr," Invalid MTU - %d \n",user_mtu);
 					fprintf(stderr," Please choose mtu from {256,512,1024,2048,4096}\n");
+					//coverity[uninit_use_in_call]
 					fprintf(stderr," Will run with the port active mtu - %d\n",port_attr.active_mtu);
 					curr_mtu = port_attr.active_mtu;
 		}
@@ -1937,8 +1940,10 @@ static int set_link_layer(struct ibv_context *context, struct perftest_parameter
 		return FAILURE;
 	}
 
-	if (curr_link == LINK_UNSPEC)
+	if (curr_link == LINK_UNSPEC) {
+		//coverity[uninit_use]
 		params->link_type = port_attr.link_layer;
+	}
 
 	if (port_attr.state != IBV_PORT_ACTIVE) {
 		fprintf(stderr, " Port number %d state is %s\n"
@@ -2006,8 +2011,10 @@ static int get_device_max_reads(struct ibv_context *context,
 
 	if (user_param->connection_type == DC)
 		max_reads = get_device_max_reads_dc(context);
-	if (!max_reads && !ibv_query_device(context,&attr))
+	if (!max_reads && !ibv_query_device(context,&attr)) {
+		//coverity[uninit_use]
 		max_reads = attr.max_qp_rd_atom;
+	}
 	return max_reads;
 }
 
@@ -3615,7 +3622,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 
 	if(user_param->out_json) {
 		int out_json_fd = open_file_write(user_param->out_json_file_name);
-		if(out_json_fd > 0){
+		if(out_json_fd >= 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
 			write_bw_report_to_file(out_json_fd, user_param, inc_accuracy,
@@ -3784,7 +3791,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 	if(user_param->out_json) {
 		int out_json_fd = open_file_write(user_param->out_json_file_name);
-		if(out_json_fd > 0){
+		if(out_json_fd >= 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
 			write_report_lat_to_file(out_json_fd, user_param, latency, stdev, average_sum, average, stdev_sum,
@@ -3856,7 +3863,7 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 
 	if(user_param->out_json) {
 		int out_json_fd = open_file_write(user_param->out_json_file_name);
-		if(out_json_fd > 0){
+		if(out_json_fd >= 0){
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
 			write_report_lat_duration_to_file(out_json_fd, user_param, latency, tps);

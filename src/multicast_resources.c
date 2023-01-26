@@ -188,12 +188,14 @@ static int set_pkey(void *umad_buff, struct ibv_context *ctx, int port_num)
 	if (ret)
 		return ret;
 
+	//coverity[uninit_use]
 	pkey_tbl = device_attr.max_pkeys;
 	for (i = 0; i < pkey_tbl; ++i) {
 		ret = ibv_query_pkey(ctx, port_num, i, &tmp_pkey);
 		if (ret)
 			continue;
 
+		//coverity[uninit_use_in_call]
 		tmp_pkey = ntohs(tmp_pkey);
 		if ((pkey & 0x7fff) == (tmp_pkey & 0x7fff)) {
 			/* if there is full-member pkey take it.*/
