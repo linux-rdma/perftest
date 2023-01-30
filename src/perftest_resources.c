@@ -5127,6 +5127,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 			}
 		} else if (ne < 0) {
 			fprintf(stderr, "poll CQ failed %d\n", ne);
+			free(wc);
 			return FAILURE;
 		}
 		ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc);
@@ -5293,7 +5294,7 @@ polling:
 			}
 		} while (ne != 0);
 	}
-
+	free(wc);
 	return SUCCESS;
 cleaning:
 	free(wc);

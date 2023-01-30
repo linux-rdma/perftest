@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Getting the relevant context from the device */
@@ -109,27 +109,27 @@ int main(int argc, char *argv[])
 	if (!ctx.context) {
 		fprintf(stderr, "Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* See if MTU and link type are valid and supported. */
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, "Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Allocating arrays needed for the test. */
 	if(alloc_ctx(&ctx,&user_param)){
 		fprintf(stderr, "Couldn't allocate context\n");
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 	if (ctx_init(&ctx, &user_param)) {
 		fprintf(stderr, "Couldn't create IB resources\n");
 		dealloc_ctx(&ctx, &user_param);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Print basic test information. */
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr, "Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	if (user_param.output == FULL_VERBOSITY)
@@ -154,10 +154,13 @@ int main(int argc, char *argv[])
 	DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
 	free(my_dest_info);
 	free(rem_dest_info);
+	free(user_param.ib_devname);
 	return SUCCESS;
 
 destroy_ctx:
 	destroy_ctx(&ctx, &user_param);
+free_devname:
+	free(user_param.ib_devname);
 free_mem:
 	free(rem_dest_info);
 free_my_dest:

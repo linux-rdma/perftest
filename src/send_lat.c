@@ -174,6 +174,7 @@ int main(int argc, char *argv[])
 	struct ibv_device          *ib_dev = NULL;
 	struct perftest_parameters user_param;
 	struct perftest_comm	   user_comm;
+	int rdma_cm_flow_destroyed = 0;
 
 	/* init default values to user's parameters */
 	memset(&ctx,		0, sizeof(struct pingpong_context));
@@ -191,7 +192,7 @@ int main(int argc, char *argv[])
 	if (ret_val) {
 		if (ret_val != VERSION_EXIT && ret_val != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		return FAILURE;
+		goto return_error;
 	}
 
 	if(user_param.use_xrc || user_param.connection_type == DC) {
@@ -201,39 +202,39 @@ int main(int argc, char *argv[])
 	/* Checking that the user did not run with RawEth. for this we have raw_etherent_bw test. */
 	if (user_param.connection_type == RawEth) {
 		fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
-		return FAILURE;
+		goto return_error;
 	}
 
 	/* Finding the IB device selected (or defalut if no selected). */
 	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
-		return FAILURE;
+		goto return_error;
 	}
 
 	/* Getting the relevant context from the device */
 	ctx.context = ctx_open_device(ib_dev, &user_param);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	/* Verify user parameters that require the device context,
 	 * the function will print the relevent error info. */
 	if (verify_params_with_device_context(ctx.context, &user_param)) {
-		return FAILURE;
+		goto free_devname;
 	}
 
 	/* See if link type is valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
@@ -246,7 +247,7 @@ int main(int argc, char *argv[])
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		dealloc_comm_struct(&user_comm,&user_param);
-		return FAILURE;
+		goto free_devname;
 	}
 
 	exchange_versions(&user_comm, &user_param);
@@ -260,7 +261,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	MAIN_ALLOC(my_dest , struct pingpong_dest , user_param.num_of_qps , return_error);
+	MAIN_ALLOC(my_dest , struct pingpong_dest , user_param.num_of_qps , free_rdma_params);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 	MAIN_ALLOC(rem_dest , struct pingpong_dest , user_param.num_of_qps , free_my_dest);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
@@ -268,7 +269,6 @@ int main(int argc, char *argv[])
 	/* Allocating arrays needed for the test. */
 	if(alloc_ctx(&ctx,&user_param)){
 		fprintf(stderr, "Couldn't allocate context\n");
-		dealloc_comm_struct(&user_comm,&user_param);
 		goto free_mem;
 	}
 
@@ -279,7 +279,6 @@ int main(int argc, char *argv[])
 		if (rc) {
 			fprintf(stderr,
 				"Failed to create RDMA CM connection with resources.\n");
-			dealloc_comm_struct(&user_comm,&user_param);
 			dealloc_ctx(&ctx, &user_param);
 			goto free_mem;
 		}
@@ -287,7 +286,6 @@ int main(int argc, char *argv[])
 		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 		if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
-			dealloc_comm_struct(&user_comm,&user_param);
 			dealloc_ctx(&ctx, &user_param);
 			goto free_mem;
 		}
@@ -376,7 +374,6 @@ int main(int argc, char *argv[])
 	user_comm.rdma_params->side = REMOTE;
 
 	for (i=0; i < user_param.num_of_qps; i++) {
-
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto destroy_ctx;
@@ -480,11 +477,20 @@ int main(int argc, char *argv[])
 		user_comm.rdma_params->work_rdma_cm = OFF;
 		free(rem_dest);
 		free(my_dest);
-		return destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
+		free(user_param.ib_devname);
+		if(destroy_ctx(user_comm.rdma_ctx, user_comm.rdma_params)) {
+			free(user_comm.rdma_params);
+			free(user_comm.rdma_ctx);
+			return FAILURE;
+		}
+		free(user_comm.rdma_params);
+		free(user_comm.rdma_ctx);
+		return SUCCESS;
 	}
 
 	free(rem_dest);
 	free(my_dest);
+	free(user_param.ib_devname);
 
 	return send_destroy_ctx(&ctx,&user_param,&mcg_params);
 
@@ -494,6 +500,7 @@ destroy_ctx:
 
 destroy_cm_context:
 	if (user_param.work_rdma_cm == ON) {
+		rdma_cm_flow_destroyed = 1;
 		user_comm.rdma_params->work_rdma_cm = OFF;
 		destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 	}
@@ -502,6 +509,16 @@ free_mem:
 	free(rem_dest);
 free_my_dest:
 	free(my_dest);
+free_rdma_params:
+	if (user_param.use_rdma_cm == ON && rdma_cm_flow_destroyed == 0)
+		dealloc_comm_struct(&user_comm, &user_param);
+	else {
+		if(user_param.use_rdma_cm == ON)
+			free(user_comm.rdma_ctx);
+		free(user_comm.rdma_params);
+	}
+free_devname:
+	free(user_param.ib_devname);
 return_error:
 	return error;
 }

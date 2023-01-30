@@ -2782,6 +2782,7 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 
 	if (rc) {
 		error_message = "Failed to create RDMA CM connection.";
+		free(hints.ai_src_addr);
 		goto destroy_event_channel;
 	}
 

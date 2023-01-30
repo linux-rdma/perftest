@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		return FAILURE;
+		goto return_error;
 	}
 	MAIN_ALLOC(flow_create_result, struct ibv_flow*, user_param.flows, return_error);
 	MAIN_ALLOC(flow_rules, struct ibv_flow_attr*, user_param.flows, free_flow_results);
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Getting the relevant context from the device */
@@ -123,26 +123,26 @@ int main(int argc, char *argv[])
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Verify user parameters that require the device context,
 	 * the function will print the relevent error info. */
 	if (verify_params_with_device_context(ctx.context, &user_param)) {
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* See if MTU and link type are valid and supported. */
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Allocating arrays needed for the test. */
 	if (alloc_ctx(&ctx,&user_param)){
 		fprintf(stderr, "Couldn't allocate context\n");
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/*set up the connection, return the required flow rules (notice that user_param->duplex == TRUE)
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
 	if (send_set_up_connection(flow_rules, &ctx, &user_param, &my_dest_info, &rem_dest_info)) {
 		fprintf(stderr," Unable to set up socket connection\n");
 		dealloc_ctx(&ctx, &user_param);
-			goto free_mem;
+			goto free_devname;
 	}
 
 	/* Print basic test information. */
@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
 	if (ctx_init(&ctx, &user_param)) {
 		fprintf(stderr, " Couldn't create IB resources\n");
 		dealloc_ctx(&ctx, &user_param);
-			goto free_mem;
+			goto free_devname;
 	}
 
 
@@ -214,17 +214,17 @@ int main(int argc, char *argv[])
 
 	if (ctx_set_recv_wqes(&ctx,&user_param)) {
 		fprintf(stderr," Failed to post receive recv_wqes\n");
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* latency test function for SEND verb latency test. */
 	if (user_param.machine == CLIENT) {
 		if (run_iter_lat_burst(&ctx, &user_param))
-			goto free_mem;
+			goto free_devname;
 	}
 	else {
 		if (run_iter_lat_burst_server(&ctx, &user_param))
-			goto free_mem;
+			goto free_devname;
 	}
 
 	/* print report (like print_report_bw) in the correct format
@@ -257,11 +257,12 @@ int main(int argc, char *argv[])
 	if (destroy_ctx(&ctx, &user_param)) {
 		fprintf(stderr,"Failed to destroy_ctx\n");
 		DEBUG_LOG(TRACE,"<<<<<<%s",__FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	free(flow_create_result);
 	free(flow_rules);
+	free(user_param.ib_devname);
 
 	if (user_param.output == FULL_VERBOSITY)
 		printf(RESULT_LINE);
@@ -285,6 +286,8 @@ result_flow_destroy:
 	}
 destroy_ctx:
 	destroy_ctx(&ctx, &user_param);
+free_devname:
+	free(user_param.ib_devname);
 free_mem:
 	free(flow_rules);
 free_flow_results:

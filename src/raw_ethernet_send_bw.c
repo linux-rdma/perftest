@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, " Parser function exited with Error\n");
 		}
 		DEBUG_LOG(TRACE,"<<<<<<%s", __FUNCTION__);
-		return FAILURE;
+		goto return_error;
 	}
 
 	/* Allocate user input dependable structs */
@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (check_flow_steering_support(user_param.ib_devname)) {
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Getting the relevant context from the device */
@@ -142,26 +142,26 @@ int main(int argc, char *argv[])
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Verify user parameters that require the device context,
 	 * the function will print the relevent error info. */
 	if (verify_params_with_device_context(ctx.context, &user_param)) {
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* See if MTU and link type are valid and supported. */
 	if (check_link_and_mtu(ctx.context, &user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
 		DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* Allocating arrays needed for the test. */
 	if (alloc_ctx(&ctx,&user_param)){
 		fprintf(stderr, "Couldn't allocate context\n");
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* set mac address by user choose */
@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
 						&ctx, &user_param, &my_dest_info[qp_index], &rem_dest_info[qp_index])) {
 			fprintf(stderr, " Unable to set up socket connection\n");
 			dealloc_ctx(&ctx, &user_param);
-			goto free_mem;
+			goto free_devname;
 		}
 	}
 
@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 	if (ctx_init(&ctx, &user_param)) {
 		fprintf(stderr, " Couldn't create IB resources\n");
 		dealloc_ctx(&ctx, &user_param);
-		goto free_mem;
+		goto free_devname;
 	}
 
 	/* build raw Ethernet packets on ctx buffer */
@@ -291,7 +291,7 @@ int main(int argc, char *argv[])
 			if (ctx_set_recv_wqes(&ctx, &user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				goto free_mem;
+				goto free_devname;
 			}
 		}
 
@@ -299,28 +299,28 @@ int main(int argc, char *argv[])
 
 			if(run_iter_fw(&ctx, &user_param)) {
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				goto free_mem;
+				goto free_devname;
 			}
 
 		} else if (user_param.duplex) {
 
 			if(run_iter_bi(&ctx, &user_param)) {
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				goto free_mem;
+				goto free_devname;
 			}
 
 		} else if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw(&ctx, &user_param)) {
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				goto free_mem;
+				goto free_devname;
 			}
 
 		} else {
 
 			if(run_iter_bw_server(&ctx, &user_param)) {
 				DEBUG_LOG(TRACE, "<<<<<<%s", __FUNCTION__);
-				goto free_mem;
+				goto free_devname;
 			}
 		}
 
@@ -334,21 +334,21 @@ int main(int argc, char *argv[])
 
 			if (ctx_set_recv_wqes(&ctx, &user_param)) {
 				fprintf(stderr, "Failed to post receive recv_wqes\n");
-				goto free_mem;
+				goto free_devname;
 			}
 		}
 		if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw_infinitely(&ctx, &user_param)) {
 				fprintf(stderr, " Error occurred while running infinitely! aborting ...\n");
-				goto free_mem;
+				goto free_devname;
 			}
 
 		} else if (user_param.machine == SERVER) {
 
 			if(run_iter_bw_infinitely_server(&ctx, &user_param)) {
 				fprintf(stderr, " Error occurred while running infinitely on server! aborting ...\n");
-				goto free_mem;
+				goto free_devname;
 			}
 		}
 	}
@@ -410,6 +410,7 @@ int main(int argc, char *argv[])
 	#if defined HAVE_SNIFFER
 	free(flow_sniffer);
 	#endif
+	free(user_param.ib_devname);
 
 	/* limit verifier */
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
@@ -446,6 +447,8 @@ sniffer_flow_destroy: __attribute__((unused))
 	#endif
 destroy_ctx:  __attribute__((unused))
 	destroy_ctx(&ctx, &user_param);
+free_devname:
+	free(user_param.ib_devname);
 free_mem:
 	free(flow_promisc);
 free_flow_sniffer: __attribute__((unused))

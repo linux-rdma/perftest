@@ -166,6 +166,7 @@ int main(int argc, char *argv[])
 	int                      	ret_parser, i = 0, rc;
 	int                      	size_max_pow = 24;
 	int 						error = 1;
+	int rdma_cm_flow_destroyed = 0;
 
 	/* init default values to user's parameters */
 	memset(&ctx, 0,sizeof(struct pingpong_context));
@@ -182,7 +183,7 @@ int main(int argc, char *argv[])
 	if (ret_parser) {
 		if (ret_parser != VERSION_EXIT && ret_parser != HELP_EXIT)
 			fprintf(stderr," Parser function exited with Error\n");
-		return FAILURE;
+		goto return_error;
 	}
 	if((user_param.connection_type == DC || user_param.use_xrc) && user_param.duplex) {
 		user_param.num_of_qps *= 2;
@@ -191,39 +192,40 @@ int main(int argc, char *argv[])
 	if (user_param.connection_type == RawEth) {
 		fprintf(stderr," This test cannot run Raw Ethernet QPs (you have chosen RawEth as connection type\n");
 		fprintf(stderr," For this we have raw_ethernet_bw test in this package.\n");
-		return FAILURE;
+		goto return_error;
 	}
 
 	/* Finding the IB device selected (or defalut if no selected). */
 	ib_dev = ctx_find_dev(&user_param.ib_devname);
 	if (!ib_dev) {
 		fprintf(stderr," Unable to find the Infiniband/RoCE device\n");
-		return FAILURE;
+		goto return_error;
 	}
 
 	/* Getting the relevant context from the device */
 	ctx.context = ctx_open_device(ib_dev, &user_param);
 	if (!ctx.context) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	/* Verify user parameters that require the device context,
 	 * the function will print the relevent error info. */
 	if (verify_params_with_device_context(ctx.context, &user_param)) {
-		return FAILURE;
+		fprintf(stderr, " Couldn't get context for the device\n");
+		goto free_devname;
 	}
 
 	/* See if link type is valid and supported. */
 	if (check_link(ctx.context,&user_param)) {
 		fprintf(stderr, " Couldn't get context for the device\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	/* copy the relevant user parameters to the comm struct + creating rdma_cm resources. */
 	if (create_comm_struct(&user_comm,&user_param)) {
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
-		return FAILURE;
+		goto free_devname;
 	}
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
@@ -236,7 +238,7 @@ int main(int argc, char *argv[])
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
 		dealloc_comm_struct(&user_comm,&user_param);
-		return FAILURE;
+		goto free_devname;
 	}
 
 	exchange_versions(&user_comm, &user_param);
@@ -250,7 +252,7 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 
-	MAIN_ALLOC(my_dest, struct pingpong_dest, user_param.num_of_qps, return_error);
+	MAIN_ALLOC(my_dest, struct pingpong_dest, user_param.num_of_qps, free_rdma_params);
 	memset(my_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 	MAIN_ALLOC(rem_dest, struct pingpong_dest, user_param.num_of_qps, free_my_dest);
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
@@ -261,7 +263,6 @@ int main(int argc, char *argv[])
 	/* Allocating arrays needed for the test. */
 	if (alloc_ctx(&ctx,&user_param)){
 		fprintf(stderr, "Couldn't allocate context\n");
-		dealloc_comm_struct(&user_comm,&user_param);
 		goto free_mem;
 	}
 
@@ -272,7 +273,6 @@ int main(int argc, char *argv[])
 		if (rc) {
 			fprintf(stderr,
 				"Failed to create RDMA CM connection with resources.\n");
-			dealloc_comm_struct(&user_comm,&user_param);
 			dealloc_ctx(&ctx, &user_param);
 			goto free_mem;
 		}
@@ -280,7 +280,6 @@ int main(int argc, char *argv[])
 		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
 		if (ctx_init(&ctx, &user_param)) {
 			fprintf(stderr, " Couldn't create IB resources\n");
-			dealloc_comm_struct(&user_comm,&user_param);
 			dealloc_ctx(&ctx, &user_param);
 			goto free_mem;
 		}
@@ -300,7 +299,6 @@ int main(int argc, char *argv[])
 		ctx_alloc_credit(&ctx,&user_param,my_dest);
 
 	for (i=0; i < user_param.num_of_qps; i++) {
-
 		/* shaking hands and gather the other side info. */
 		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
@@ -384,12 +382,10 @@ int main(int argc, char *argv[])
 	}
 
 	if (user_param.use_event) {
-
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
 			goto destroy_context;
 		}
-
 		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
 			fprintf(stderr, " Couldn't request CQ notification\n");
 			goto destroy_context;
@@ -446,14 +442,12 @@ int main(int argc, char *argv[])
 				}
 
 			} else if (user_param.machine == CLIENT) {
-
 				if(run_iter_bw(&ctx,&user_param)) {
 					error = 17;
 					goto free_mem;
 				}
 
 			} else	{
-
 				if(run_iter_bw_server(&ctx,&user_param)) {
 					error = 17;
 					goto free_mem;
@@ -466,6 +460,7 @@ int main(int argc, char *argv[])
 				xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 				print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
 			}
+
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
 				goto free_mem;
@@ -481,7 +476,6 @@ int main(int argc, char *argv[])
 
 		if (user_param.machine == CLIENT || user_param.duplex)
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
-
 		if (user_param.machine == SERVER || user_param.duplex) {
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
@@ -540,7 +534,6 @@ int main(int argc, char *argv[])
 			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 		else if (user_param.machine == SERVER) {
-
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
 				goto free_mem;
@@ -553,14 +546,12 @@ int main(int argc, char *argv[])
 		}
 
 		if (user_param.machine == CLIENT) {
-
 			if(run_iter_bw_infinitely(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
 				goto free_mem;
 			}
 
 		} else if (user_param.machine == SERVER) {
-
 			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
 				goto free_mem;
@@ -584,18 +575,29 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"Couldn't destroy all SEND resources\n");
 		goto destroy_cm_context;
 	}
-
 	if (user_param.work_rdma_cm == ON) {
 		user_comm.rdma_params->work_rdma_cm = OFF;
 
-		if (destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params)) {
-			fprintf(stderr,"Failed to destroy resources\n");
-			goto free_mem;
+		if(destroy_ctx(user_comm.rdma_ctx, user_comm.rdma_params)) {
+			free(my_dest);
+			free(rem_dest);
+			free(user_param.ib_devname);
+			free(user_comm.rdma_ctx);
+			free(user_comm.rdma_params);
+			return FAILURE;
 		}
+		free(my_dest);
+		free(rem_dest);
+		free(user_param.ib_devname);
+		free(user_comm.rdma_ctx);
+		free(user_comm.rdma_params);
+		return SUCCESS;
 	}
 
 	free(my_dest);
 	free(rem_dest);
+	free(user_param.ib_devname);
+	free(user_comm.rdma_params);
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {
 		fprintf(stderr,"Error: BW result is below bw limit\n");
@@ -614,6 +616,7 @@ destroy_context:
 		fprintf(stderr, "Failed to destroy resources\n");
 destroy_cm_context:
 	if (user_param.work_rdma_cm == ON) {
+		rdma_cm_flow_destroyed = 1;
 		user_comm.rdma_params->work_rdma_cm = OFF;
 		destroy_ctx(user_comm.rdma_ctx,user_comm.rdma_params);
 	}
@@ -621,6 +624,16 @@ free_mem:
 	free(rem_dest);
 free_my_dest:
 	free(my_dest);
+free_rdma_params:
+	if (user_param.use_rdma_cm == ON && rdma_cm_flow_destroyed == 0)
+		dealloc_comm_struct(&user_comm, &user_param);
+	else {
+		if(user_param.use_rdma_cm == ON)
+			free(user_comm.rdma_ctx);
+		free(user_comm.rdma_params);
+	}
+free_devname:
+	free(user_param.ib_devname);
 return_error:
 	return error;
 }

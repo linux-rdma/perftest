@@ -73,12 +73,13 @@ int counters_open(struct counter_context *ctx,
 		}
 
 		real_path = realpath(given_path, NULL);
+		free(given_path);
+
 		if (!real_path) {
 			free(real_path);
 			goto counter_cleanup;
 		}
 
-		free(given_path);
 		if (strstr(real_path, COUNTER_PATH) != 0) {
 			free(real_path);
 			goto counter_cleanup;
