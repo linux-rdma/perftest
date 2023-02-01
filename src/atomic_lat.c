@@ -252,7 +252,32 @@ int main(int argc, char *argv[])
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
 		}
-		return 0;
+		if (user_param.work_rdma_cm == ON) {
+			if (destroy_ctx(&ctx, &user_param)) {
+				fprintf(stderr, "Failed to destroy resources.\n");
+				goto destroy_cm_context;
+			}
+			free(my_dest);
+			free(rem_dest);
+			free(user_param.ib_devname);
+			user_comm.rdma_params->work_rdma_cm = OFF;
+			if(destroy_ctx(user_comm.rdma_ctx, user_comm.rdma_params)) {
+				free(user_comm.rdma_params);
+				free(user_comm.rdma_ctx);
+				return FAILURE;
+			}
+			free(user_comm.rdma_params);
+			return SUCCESS;
+		}
+		free(my_dest);
+		free(rem_dest);
+		free(user_param.ib_devname);
+		if(destroy_ctx(&ctx, &user_param)) {
+			free(user_comm.rdma_params);
+			return FAILURE;
+		}
+		free(user_comm.rdma_params);
+		return SUCCESS;
 	}
 
 	if (user_param.use_event) {

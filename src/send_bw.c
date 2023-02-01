@@ -635,5 +635,6 @@ free_rdma_params:
 free_devname:
 	free(user_param.ib_devname);
 return_error:
+	//coverity[leaked_storage]
 	return error;
 }

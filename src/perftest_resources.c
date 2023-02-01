@@ -1974,7 +1974,7 @@ static int create_payload(struct perftest_parameters *user_param)
 	payload_file_size = ftell(fptr);
 	fseek(fptr, 0, SEEK_SET);
 
-	if (!payload_file_size) {
+	if (payload_file_size <= 0) {
 		fprintf(stderr, "Payload size should be greater than 0\n");
 		fclose(fptr);
 		return 1;
@@ -5237,7 +5237,8 @@ int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters 
 
 			if (err) {
 				fprintf(stderr, "Couldn't post send: scnt=%lu\n", totscnt);
-				return 1;
+				free(wc);
+				return FAILURE;
 			}
 			if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
 				increase_loc_addr(ctx->wr[0].sg_list, user_param->size, totscnt,

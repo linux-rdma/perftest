@@ -873,12 +873,13 @@ int set_up_flow_rules(
 			spec_info->tcp_udp.val.dst_port = htons(local_port);
 			spec_info->tcp_udp.val.src_port = htons(remote_port);
 		} else {
+			//coverity[overrun-local]
 			spec_info->tcp_udp.val.src_port = htons(local_port);
 			spec_info->tcp_udp.val.dst_port = htons(remote_port);
 		}
 
-		memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF,sizeof(spec_info->ipv4.mask.dst_ip));
-		memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF,sizeof(spec_info->ipv4.mask.src_ip));
+		memset((void*)&spec_info->tcp_udp.mask.dst_port, 0xFF, sizeof(spec_info->tcp_udp.mask.dst_port));
+		memset((void*)&spec_info->tcp_udp.mask.src_port, 0xFF, sizeof(spec_info->tcp_udp.mask.src_port));
 	}
 
 	if (user_param->is_ethertype) {

@@ -350,6 +350,7 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 				(unsigned int*)&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,&rem_dest->srqn);
 
 		if (parsed != 7) {
+			//coverity[string_null]
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
 		}
@@ -935,6 +936,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 			return FAILURE;
 		}
 		memset(&source_sin, 0x0, sizeof(source_sin));
+		//coverity[deref_after_free]
 		memcpy(&source_sin, res->ai_addr, sizeof(source_sin));
 		source_ptr = (struct sockaddr *)&source_sin;
 		freeaddrinfo(res);
