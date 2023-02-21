@@ -407,7 +407,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (connection_type != RawEth) {
 		printf("  -x, --gid-index=<index> ");
-		printf(" Test uses GID with GID index (Default : IB - no gid . ETH - 0)\n");
+		printf(" Test uses GID with GID index\n");
 	}
 
 	if (tst == BW) {
