@@ -598,6 +598,18 @@ static int new_post_read_sge_srd(struct pingpong_context *ctx, int index,
 	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_READ, SRD, 0);
 }
 
+static int new_post_write_sge_srd(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, SRD, 0);
+}
+
+static int new_post_write_inl_srd(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+       return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_RDMA_WRITE, SRD, 0);
+}
+
 #ifdef HAVE_XRCD
 static int new_post_send_sge_xrc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
@@ -1028,7 +1040,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 				user_param->connection_type == DC || user_param->connection_type == SRD) {
 			ALLOC(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 		}
-	} else if (user_param->verb == READ && user_param->connection_type == SRD) {
+	} else if ((user_param->verb == READ || user_param->verb == WRITE) && user_param->connection_type == SRD) {
 		ALLOC(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 	}
 
@@ -1138,7 +1150,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		if (ctx->ah != NULL)
 			free(ctx->ah);
 		}
-	} else if (user_param->verb == READ && user_param->connection_type == SRD) {
+	} else if ((user_param->verb == READ || user_param->verb == WRITE) && user_param->connection_type == SRD) {
 		if (ctx->ah != NULL)
 			free(ctx->ah);
 	}
@@ -1202,7 +1214,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 							|| ((user_param->duplex || user_param->tst == LAT) && i >= num_of_qps))) ||
 					user_param->connection_type == UD || user_param->connection_type == SRD) &&
 				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
-				(user_param->connection_type == SRD && user_param->verb == READ)) {
+				(user_param->connection_type == SRD && (user_param->verb == READ || user_param->verb == WRITE))) {
 
 			if (user_param->ah_allocated == 1 && ibv_destroy_ah(ctx->ah[i])) {
 				fprintf(stderr, "Failed to destroy AH\n");
@@ -2638,7 +2650,7 @@ int ctx_connect(struct pingpong_context *ctx,
 
 		if (((user_param->connection_type == UD || user_param->connection_type == DC || user_param->connection_type == SRD) &&
 				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
-				(user_param->connection_type == SRD && user_param->verb == READ)) {
+				(user_param->connection_type == SRD && (user_param->verb == READ || user_param->verb == WRITE))) {
 
 			ctx->ah[i] = ibv_create_ah(ctx->pd,&(attr.ah_attr));
 
@@ -2874,6 +2886,13 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 				break;
 			case READ:
 				ctx->new_post_send_work_request_func_pointer = &new_post_read_sge_srd;
+				break;
+			case WRITE:
+				if (use_inl) {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_inl_srd;
+				} else {
+					ctx->new_post_send_work_request_func_pointer = &new_post_write_sge_srd;
+				}
 				break;
 			default:
 				fprintf(stderr, "The post send properties are not supported on SRD.\n");

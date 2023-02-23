@@ -357,6 +357,11 @@ if [test $HAVE_IBV_WR_API = yes]; then
 	if [test $HAVE_RDMA_READ_SRD = yes]; then
 		AC_DEFINE([HAVE_SRD_WITH_RDMA_READ], [1], [Have SRD with RDMA read support])
 	fi
+	AC_TRY_LINK([#include <infiniband/efadv.h>],
+		    [int x = EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;], [HAVE_RDMA_WRITE_SRD=yes], [HAVE_RDMA_WRITE_SRD=no])
+	if [test $HAVE_RDMA_WRITE_SRD = yes]; then
+		AC_DEFINE([HAVE_SRD_WITH_RDMA_WRITE], [1], [Have SRD with RDMA write support])
+	fi
 else
 	AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes], [HAVE_SRD=no])
 fi
