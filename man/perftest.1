@@ -339,6 +339,9 @@ many different options and modes.
  Set the Traffic Class in GRH (if GRH is in use).
  Not relevant for raw_ethernet_fs_rate.
 .TP
+.B --use-null-mr
+ Allocate a null memory region for the client with \fBibv_alloc_null_mr\fR(3)
+.TP
 .B --use_cuda=<cuda device id>
  Use CUDA specific device for GPUDirect RDMA testing.
  Not relevant for raw_ethernet_fs_rate.

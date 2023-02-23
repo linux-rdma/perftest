@@ -1925,6 +1925,14 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 	}
 
+	if (user_param->use_null_mr) {
+		ctx->null_mr = ibv_alloc_null_mr(ctx->pd);
+		if (!ctx->null_mr) {
+			fprintf(stderr, "Couldn't create null MR\n");
+			return FAILURE;
+		}
+	}
+
 	if (ctx->is_contig_supported == SUCCESS)
 		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
 
@@ -3304,6 +3312,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 				(user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 
 			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr[i]->lkey;
+			if (user_param->use_null_mr) {
+				ctx->sge_list[i*user_param->post_list + j].lkey = ctx->null_mr->lkey;
+			}
 
 			if (j > 0) {
 
