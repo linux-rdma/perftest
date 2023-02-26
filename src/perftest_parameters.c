@@ -559,6 +559,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
 	}
 
+	if (verb == WRITE || verb == READ) {
+		printf("      --use-null-mr ");
+		printf(" Allocate a null memory region for the client with ibv_alloc_null_mr.\n");
+	}
+
 	if (tst == BW || tst == LAT_BY_BW) {
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
@@ -701,6 +706,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->test_method		= RUN_REGULAR;
 	user_param->cpu_freq_f		= OFF;
 	user_param->connection_type	= (user_param->connection_type == RawEth) ? RawEth : RC;
+	user_param->use_null_mr		= 0;
 	user_param->use_event		= OFF;
 	user_param->eq_num		= 0;
 	user_param->use_eq_num		= OFF;
@@ -1648,6 +1654,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->margin = user_param->duration / 4;
 	}
 
+	if (user_param->use_null_mr && !(user_param->verb == WRITE || user_param->verb == READ)) {
+		printf(RESULT_LINE);
+		fprintf(stderr, "Perftest supports using a null memory region with write/read verbs only\n");
+		exit(1);
+	}
+
 	#ifdef HAVE_CUDA
 	if (user_param->use_cuda && user_param->tst == LAT && user_param->verb == WRITE) {
 		printf(RESULT_LINE);
@@ -2137,6 +2149,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int run_inf_flag = 0;
 	static int report_fmt_flag = 0;
 	static int srq_flag = 0;
+	static int use_null_mr_flag = 0;
 	static int report_both_flag = 0;
 	static int is_reversed_flag = 0;
 	static int pkey_flag = 0;
@@ -2288,6 +2301,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
+			{ .name = "use-null-mr",	.has_arg = 0, .flag = &use_null_mr_flag, .val = 1},
 			{ .name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
 			{ .name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
 			{ .name = "pkey_index",		.has_arg = 1, .flag = &pkey_flag, .val = 1},
@@ -2900,6 +2914,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (srq_flag) {
 		user_param->use_srq = 1;
+	}
+
+	if (use_null_mr_flag) {
+		user_param->use_null_mr = 1;
 	}
 
 	if (report_fmt_flag) {
