@@ -2422,6 +2422,7 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	ctx->cma_master.nodes[connection_index].connected = 1;
 	ctx->cma_master.connection_index++;
 	ctx->cma_master.connects_left--;
+	ctx->cma_master.disconnects_left++;
 	return rc;
 
 error_2:
