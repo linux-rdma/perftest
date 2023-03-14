@@ -2347,7 +2347,8 @@ error:
 *
 ******************************************************************************/
 int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
+				       struct perftest_parameters *user_param,
+				       struct rdma_cm_event *event, struct rdma_cm_id *cma_id)
 {
 	int rc, connection_index;
 	char *error_message = "";
@@ -2386,8 +2387,15 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	memset(&conn_param, 0, sizeof(conn_param));
 
 	if (user_param->verb == READ || user_param->verb == ATOMIC) {
-		conn_param.responder_resources = user_param->out_reads;
-		conn_param.initiator_depth = user_param->out_reads;
+		/* Clamp responder depth based on initiator resources on the peer */
+		conn_param.responder_resources =
+			(user_param->out_reads > event->param.conn.initiator_depth)
+			? event->param.conn.initiator_depth : user_param->out_reads;
+
+		/* Clamp initiator depth based on responder resources on the peer */
+		conn_param.initiator_depth =
+			(user_param->out_reads > event->param.conn.responder_resources)
+			? event->param.conn.responder_resources : user_param->out_reads;
 	}
 
 	conn_param.retry_count = user_param->retry_count;
@@ -2499,7 +2507,7 @@ int rdma_cm_events_dispatcher(struct pingpong_context *ctx,
 		rc = rdma_cm_route_handler(ctx, user_param, cma_id);
 		break;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
-		rc = rdma_cm_connection_request_handler(ctx, user_param, cma_id);
+		rc = rdma_cm_connection_request_handler(ctx, user_param, event, cma_id);
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
 		rc = rdma_cm_connection_established_handler(ctx, user_param, event);

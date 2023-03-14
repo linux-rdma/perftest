@@ -616,6 +616,7 @@ int rdma_cm_address_handler(struct pingpong_context *ctx,
 *
 *    ctx - Application contexts.
 *    user_param - User parameters from the parser.
+*    event - rdma_cm_event based on CM_REQ from peer
 *    cma_id - RDMA CM ID.
 *
 * Return value:
@@ -644,7 +645,8 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 *
 */
 int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
-		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id);
+				       struct perftest_parameters *user_param,
+				       struct rdma_cm_event *event, struct rdma_cm_id *cma_id);
 
 /* rdma_cm_connection_established_handler:
 *
