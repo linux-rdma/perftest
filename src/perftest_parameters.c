@@ -2393,7 +2393,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		/* c == 0: the argumenet is a long option (example: --report_gbits) */
 		/* c > 0: the argument is a short option (example: -s/--size) */
 		if (c == 0) {
-			if (duplicates_checker[long_option_index] && c != '?') {
+			if (duplicates_checker[long_option_index]) {
 				fprintf(stderr," Duplicated argument: %s \n", long_options[long_option_index].name);
 				free(duplicates_checker);
 				return FAILURE;
