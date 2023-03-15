@@ -1946,9 +1946,8 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		} else {
 			if (user_param->has_payload_modification) {
 				int i;
-				int payload_len = strlen(user_param->payload_content);
 				for (i = 0; i < ctx->buff_size; i++) {
-					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % payload_len];
+					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
 				}
 			} else {
 				random_data(ctx->buf[qp_index], ctx->buff_size);
@@ -2025,6 +2024,7 @@ static int create_payload(struct perftest_parameters *user_param)
 					return 1;
 				}
 				user_param->payload_content[counter] = (char) strtol(current_byte_chars, NULL, 16);
+
 				counter++;
 				if (counter == user_param->size)
 					break;
@@ -2033,7 +2033,7 @@ static int create_payload(struct perftest_parameters *user_param)
 	} while (token != NULL && counter < user_param->size);
 
 	user_param->payload_content[counter] = '\0';
-
+	user_param->payload_length = counter;
 	free(file_content);
 	fclose(fptr);
 
