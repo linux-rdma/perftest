@@ -2149,6 +2149,7 @@ int verify_params_with_device_context(struct ibv_context *context,
 		current_dev != CONNECTX6DX &&
 		current_dev != CONNECTX6LX &&
 		current_dev != CONNECTX7 &&
+		current_dev != CONNECTX8 &&
 		current_dev != MLX5GENVF &&
 		current_dev != BLUEFIELD &&
 		current_dev != BLUEFIELD2 &&

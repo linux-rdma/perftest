@@ -382,6 +382,7 @@ enum ctx_device {
 	BLUEFIELD3		= 28,
 	ERDMA			= 29,
 	HNS			= 30,
+	CONNECTX8		= 31,
 };
 
 /* Units for rate limiter */
