@@ -1794,7 +1794,11 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 		If you want Inline support in other vendor devices, please send patch to gilr@dev.mellanox.co.il
 		*/
 	} else if (attr.vendor_id == 0x8086) {
-		dev_fname = INTEL_ALL;
+		switch (attr.vendor_part_id) {
+			case 14289 : dev_fname = INTEL_GEN1; break;
+			case 5522  : dev_fname = INTEL_GEN2; break;
+			default    : dev_fname = INTEL_GEN2; break;
+		}
 	} else {
 
 		//coverity[uninit_use]
@@ -2080,7 +2084,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 			return;
 		}
 		#endif
-		if (user_param->tst ==LAT) {
+		if (user_param->tst == LAT) {
 			switch(user_param->verb) {
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
 				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
@@ -2097,6 +2101,10 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 				user_param->inline_size = 96;
 			else if (current_dev == HNS)
 				user_param->inline_size = 32;
+			else if (current_dev == INTEL_GEN1)
+				user_param->inline_size = 48;
+			else if (current_dev == INTEL_GEN2)
+				user_param->inline_size = 101;
 
 		} else {
 			user_param->inline_size = 0;

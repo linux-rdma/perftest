@@ -373,7 +373,7 @@ enum ctx_device {
 	MLX5GENVF		= 19,
 	BLUEFIELD		= 20,
 	BLUEFIELD2		= 21,
-	INTEL_ALL		= 22,
+	INTEL_GEN1		= 22,
 	NETXTREME		= 23,
 	EFA			= 24,
 	CONNECTX6LX		= 25,
@@ -383,6 +383,7 @@ enum ctx_device {
 	ERDMA			= 29,
 	HNS			= 30,
 	CONNECTX8		= 31,
+  INTEL_GEN2		= 32,
 };
 
 /* Units for rate limiter */
