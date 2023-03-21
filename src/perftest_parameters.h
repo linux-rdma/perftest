@@ -382,7 +382,8 @@ enum ctx_device {
 	BLUEFIELD3		= 28,
 	ERDMA			= 29,
 	HNS			= 30,
-	INTEL_GEN2		= 31,
+	CONNECTX8		= 31,
+  INTEL_GEN2		= 32,
 };
 
 /* Units for rate limiter */
@@ -493,6 +494,7 @@ struct perftest_parameters {
 	int				is_ethertype;
 	int				cpu_freq_f;
 	int				connection_type;
+	int				use_null_mr;
 	int				num_of_qps;
 	int				use_event;
 	int				eq_num;
@@ -549,6 +551,7 @@ struct perftest_parameters {
 	int				has_payload_modification;
 	char*				payload_file_path;
 	char*				payload_content;
+	int				payload_length;
 #ifdef HAVE_CUDA
 	int				use_cuda;
 	int				cuda_device_id;

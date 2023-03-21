@@ -1925,6 +1925,14 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 	}
 
+	if (user_param->use_null_mr) {
+		ctx->null_mr = ibv_alloc_null_mr(ctx->pd);
+		if (!ctx->null_mr) {
+			fprintf(stderr, "Couldn't create null MR\n");
+			return FAILURE;
+		}
+	}
+
 	if (ctx->is_contig_supported == SUCCESS)
 		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
 
@@ -1938,9 +1946,8 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		} else {
 			if (user_param->has_payload_modification) {
 				int i;
-				int payload_len = strlen(user_param->payload_content);
 				for (i = 0; i < ctx->buff_size; i++) {
-					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % payload_len];
+					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
 				}
 			} else {
 				random_data(ctx->buf[qp_index], ctx->buff_size);
@@ -2017,6 +2024,7 @@ static int create_payload(struct perftest_parameters *user_param)
 					return 1;
 				}
 				user_param->payload_content[counter] = (char) strtol(current_byte_chars, NULL, 16);
+
 				counter++;
 				if (counter == user_param->size)
 					break;
@@ -2025,7 +2033,7 @@ static int create_payload(struct perftest_parameters *user_param)
 	} while (token != NULL && counter < user_param->size);
 
 	user_param->payload_content[counter] = '\0';
-
+	user_param->payload_length = counter;
 	free(file_content);
 	fclose(fptr);
 
@@ -2141,6 +2149,7 @@ int verify_params_with_device_context(struct ibv_context *context,
 		current_dev != CONNECTX6DX &&
 		current_dev != CONNECTX6LX &&
 		current_dev != CONNECTX7 &&
+		current_dev != CONNECTX8 &&
 		current_dev != MLX5GENVF &&
 		current_dev != BLUEFIELD &&
 		current_dev != BLUEFIELD2 &&
@@ -3304,6 +3313,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 				(user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 
 			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr[i]->lkey;
+			if (user_param->use_null_mr) {
+				ctx->sge_list[i*user_param->post_list + j].lkey = ctx->null_mr->lkey;
+			}
 
 			if (j > 0) {
 
@@ -3651,7 +3663,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t           	totscnt = 0;
 	uint64_t       	   	totccnt = 0;
 	int                	i = 0;
-	int                	index,ne;
+	int			index;
+	int			ne = 0;
 	uint64_t	   	tot_iters;
 	int			err = 0;
 	struct ibv_wc 	   	*wc = NULL;
@@ -3821,7 +3834,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 		}
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
-				if (user_param->use_event) {
+				/* Make sure all completions from previous event were polled before waiting for another */
+				if (user_param->use_event && ne == 0) {
 					if (ctx_notify_events(ctx->channel)) {
 						fprintf(stderr, "Couldn't request CQ notification\n");
 						return_value = FAILURE;
@@ -4369,7 +4383,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	uint64_t 		totccnt    = 0;
 	uint64_t 		totrcnt    = 0;
 	int 			i,index      = 0;
-	int 			ne = 0;
+	int			send_ne = 0;
+	int			recv_ne = 0;
 	int 			err = 0;
 	uint64_t 		*rcnt_for_qp = NULL;
 	uint64_t 		*unused_recv_for_qp = NULL;
@@ -4490,7 +4505,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 		}
-		if (user_param->use_event) {
+		/* Make sure all completions from previous event were polled before waiting for another */
+		if (user_param->use_event && recv_ne == 0 && send_ne == 0) {
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
@@ -4499,8 +4515,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth,wc);
-		if (ne > 0) {
+		recv_ne = ibv_poll_cq(ctx->recv_cq, user_param->rx_depth, wc);
+		if (recv_ne > 0) {
 
 			if (user_param->machine == SERVER && before_first_rx == ON) {
 				before_first_rx = OFF;
@@ -4516,7 +4532,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-			for (i = 0; i < ne; i++) {
+			for (i = 0; i < recv_ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
 					return_value = FAILURE;
@@ -4619,8 +4635,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-		} else if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n", ne);
+		} else if (recv_ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", recv_ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}
@@ -4632,10 +4648,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
+		send_ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
 
-		if (ne > 0) {
-			for (i = 0; i < ne; i++) {
+		if (send_ne > 0) {
+			for (i = 0; i < send_ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
 					return_value = FAILURE;
@@ -4671,8 +4687,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-		} else if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n", ne);
+		} else if (send_ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", send_ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}

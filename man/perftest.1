@@ -231,7 +231,7 @@ many different options and modes.
  Report performance counter change (example: counters/port_xmit_data,hw_counters/out_of_buffer).
 .TP
 .B -x, --gid-index=<index>
- Test uses GID with GID index (Default : IB - no gid . ETH - 0).
+ Test uses GID with GID index.
  Not relevant for RawEth.
 .TP
 .B -z, --comm_rdma_cm
@@ -338,6 +338,9 @@ many different options and modes.
 .B --tclass=<value>
  Set the Traffic Class in GRH (if GRH is in use).
  Not relevant for raw_ethernet_fs_rate.
+.TP
+.B --use-null-mr
+ Allocate a null memory region for the client with \fBibv_alloc_null_mr\fR(3)
 .TP
 .B --use_cuda=<cuda device id>
  Use CUDA specific device for GPUDirect RDMA testing.
