@@ -2433,7 +2433,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  }
 				  break;
 			case 'm': CHECK_VALUE(user_param->mtu,int,"MTU",not_int_ptr); break;
-			case 'n': CHECK_VALUE_IN_RANGE(user_param->iters,int,MIN_ITER,MAX_ITER,"Iteration num",not_int_ptr); break;
+			case 'n': CHECK_VALUE_IN_RANGE_UNS(user_param->iters,uint64_t,MIN_ITER,MAX_ITER,"Iteration num",not_int_ptr); break;
 			case 't': CHECK_VALUE_IN_RANGE(user_param->tx_depth,int,MIN_TX,MAX_TX,"Tx depth",not_int_ptr); break;
 			case 'T': CHECK_VALUE_IN_RANGE(user_param->tos,int,MIN_TOS,MAX_TOS,"TOS",not_int_ptr); break;
 			case 'L': CHECK_VALUE_IN_RANGE(user_param->hop_limit,int,MIN_HOP_LIMIT,MAX_HOP_LIMIT,"Hop Limit",not_int_ptr); break;
