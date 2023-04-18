@@ -156,7 +156,7 @@
 #define MAX_HOP_LIMIT	(255)
 #define MIN_IB_PORT   (1)
 #define MIN_ITER      (5)
-#define MAX_ITER      (100000000)
+#define MAX_ITER      (4294967296)
 #define MIN_TX 	      (1)
 #define MAX_TX	      (15000)
 #define MIN_SL	      (0)
@@ -374,7 +374,7 @@ enum ctx_device {
 	MLX5GENVF		= 19,
 	BLUEFIELD		= 20,
 	BLUEFIELD2		= 21,
-	INTEL_ALL		= 22,
+	INTEL_GEN1		= 22,
 	NETXTREME		= 23,
 	EFA			= 24,
 	CONNECTX6LX		= 25,
@@ -384,6 +384,7 @@ enum ctx_device {
 	ERDMA			= 29,
 	HNS			= 30,
 	CONNECTX8		= 31,
+  INTEL_GEN2		= 32,
 };
 
 /* Units for rate limiter */

@@ -3290,7 +3290,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uint64_t           	totscnt = 0;
 	uint64_t       	   	totccnt = 0;
 	int                	i = 0;
-	int                	index,ne;
+	int			index;
+	int			ne = 0;
 	uint64_t	   	tot_iters;
 	int			err = 0;
 	struct ibv_wc 	   	*wc = NULL;
@@ -3460,7 +3461,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			}
 		}
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
-				if (user_param->use_event) {
+				/* Make sure all completions from previous event were polled before waiting for another */
+				if (user_param->use_event && ne == 0) {
 					if (ctx_notify_events(ctx->channel)) {
 						fprintf(stderr, "Couldn't request CQ notification\n");
 						return_value = FAILURE;
@@ -4008,7 +4010,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	uint64_t 		totccnt    = 0;
 	uint64_t 		totrcnt    = 0;
 	int 			i,index      = 0;
-	int 			ne = 0;
+	int			send_ne = 0;
+	int			recv_ne = 0;
 	int 			err = 0;
 	uint64_t 		*rcnt_for_qp = NULL;
 	uint64_t 		*unused_recv_for_qp = NULL;
@@ -4129,7 +4132,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 		}
-		if (user_param->use_event) {
+		/* Make sure all completions from previous event were polled before waiting for another */
+		if (user_param->use_event && recv_ne == 0 && send_ne == 0) {
 
 			if (ctx_notify_events(ctx->channel)) {
 				fprintf(stderr,"Failed to notify events to CQ");
@@ -4138,8 +4142,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		ne = ibv_poll_cq(ctx->recv_cq,user_param->rx_depth,wc);
-		if (ne > 0) {
+		recv_ne = ibv_poll_cq(ctx->recv_cq, user_param->rx_depth, wc);
+		if (recv_ne > 0) {
 
 			if (user_param->machine == SERVER && before_first_rx == ON) {
 				before_first_rx = OFF;
@@ -4155,7 +4159,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-			for (i = 0; i < ne; i++) {
+			for (i = 0; i < recv_ne; i++) {
 				if (wc[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_RECV(wc[i],totrcnt);
 					return_value = FAILURE;
@@ -4258,8 +4262,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-		} else if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n", ne);
+		} else if (recv_ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", recv_ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}
@@ -4271,10 +4275,10 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc_tx);
+		send_ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
 
-		if (ne > 0) {
-			for (i = 0; i < ne; i++) {
+		if (send_ne > 0) {
+			for (i = 0; i < send_ne; i++) {
 				if (wc_tx[i].status != IBV_WC_SUCCESS) {
 					NOTIFY_COMP_ERROR_SEND(wc_tx[i],totscnt,totccnt);
 					return_value = FAILURE;
@@ -4310,8 +4314,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 			}
 
-		} else if (ne < 0) {
-			fprintf(stderr, "poll CQ failed %d\n", ne);
+		} else if (send_ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", send_ne);
 			return_value = FAILURE;
 			goto cleaning;
 		}
