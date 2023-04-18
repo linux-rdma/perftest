@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include "perftest_communication.h"
+#include "host_memory.h"
 #ifdef HAVE_SRD
 #include <infiniband/efadv.h>
 #endif
@@ -1264,6 +1265,8 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->use_old_post_send	= user_param->use_old_post_send;
 	comm->rdma_params->source_ip		= user_param->source_ip;
 	comm->rdma_params->has_source_ip	= user_param->has_source_ip;
+	comm->rdma_params->memory_type		= MEMORY_HOST;
+	comm->rdma_params->memory_create	= host_memory_create;
 
 	if (user_param->use_rdma_cm) {
 
@@ -1278,7 +1281,11 @@ int create_comm_struct(struct perftest_comm *comm,
 		comm->rdma_params->size = sizeof(struct pingpong_dest);
 		comm->rdma_ctx->context = NULL;
 
-		MAIN_ALLOC(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps, free_rdma_ctx);
+		comm->rdma_ctx->memory = comm->rdma_params->memory_create(comm->rdma_params);
+		if (comm->rdma_ctx->memory == NULL)
+			goto free_rdma_ctx;
+
+		MAIN_ALLOC(comm->rdma_ctx->mr, struct ibv_mr*, user_param->num_of_qps, free_memory_ctx);
 		MAIN_ALLOC(comm->rdma_ctx->buf, void* , user_param->num_of_qps, free_mr);
 		MAIN_ALLOC(comm->rdma_ctx->qp,struct ibv_qp*,comm->rdma_params->num_of_qps, free_buf);
 		#ifdef HAVE_IBV_WR_API
@@ -1322,6 +1329,8 @@ free_buf:
 	free(comm->rdma_ctx->buf);
 free_mr:
 	free(comm->rdma_ctx->mr);
+free_memory_ctx:
+	comm->rdma_ctx->memory->destroy(comm->rdma_ctx->memory);
 free_rdma_ctx:
 	free(comm->rdma_ctx);
 free_rdma_params:
@@ -1346,6 +1355,11 @@ void dealloc_comm_struct(struct perftest_comm *comm,
 		#ifdef HAVE_DCS
 		free(comm->rdma_ctx->dci_stream_id);
 		#endif
+		if (comm->rdma_ctx->memory != NULL)
+		{
+			comm->rdma_ctx->memory->destroy(comm->rdma_ctx->memory);
+			comm->rdma_ctx->memory = NULL;
+		}
 		free(comm->rdma_ctx);
 	}
 
@@ -2111,23 +2125,19 @@ int rdma_cm_initialize_ud_connection_parameters(struct pingpong_context *ctx,
 	cm_node = &ctx->cma_master.nodes[connection_index];
 	grh_buffer = ctx->buf[connection_index];
 
-	#ifdef HAVE_CUDA
-	if(user_param->use_cuda){
+	if (user_param->memory_type != MEMORY_HOST){
 		struct pingpong_dest *temp_buffer;
 		ALLOCATE(temp_buffer, struct pingpong_dest, sizeof(struct pingpong_dest));
-		cuMemcpy((CUdeviceptr)temp_buffer, (CUdeviceptr)ctx->buf[connection_index], sizeof(struct pingpong_dest));
+		ctx->memory->copy_buffer_to_host(temp_buffer, ctx->buf[connection_index], sizeof(struct pingpong_dest));
 		grh_buffer = temp_buffer;
 	}
-	#endif
 
 	ctx->ah[connection_index] = ibv_create_ah_from_wc(ctx->pd, &wc,
 		grh_buffer, cm_node->cma_id->port_num);
 
-	#ifdef HAVE_CUDA
-	if(user_param->use_cuda){
+	if (user_param->memory_type != MEMORY_HOST){
 		free(grh_buffer);
 	}
-	#endif
 
 	user_param->ah_allocated = 1;
 	ibv_query_qp(cm_node->cma_id->qp, &attr, IBV_QP_QKEY, &init_attr);

@@ -44,165 +44,6 @@ struct check_alive_data check_alive_data;
 /******************************************************************************
  * Beginning
  ******************************************************************************/
-#ifdef HAVE_CUDA
-#define ASSERT(x)										\
-	do {											\
-	if (!(x)) {										\
-		fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__);	\
-	}											\
-} while (0)
-
-#define CUCHECK(stmt)				\
-	do {					\
-	CUresult result = (stmt);		\
-	ASSERT(CUDA_SUCCESS == result);		\
-} while (0)
-
-/*----------------------------------------------------------------------------*/
-
-static CUdevice cuDevice;
-static CUcontext cuContext;
-
-static int pp_init_gpu(struct pingpong_context *ctx, int cuda_device_id)
-{
-	int cuda_pci_bus_id;
-	int cuda_pci_device_id;
-	int index;
-	CUdevice cu_device;
-
-	printf("initializing CUDA\n");
-	CUresult error = cuInit(0);
-	if (error != CUDA_SUCCESS) {
-		printf("cuInit(0) returned %d\n", error);
-		exit(1);
-	}
-
-	int deviceCount = 0;
-	error = cuDeviceGetCount(&deviceCount);
-	if (error != CUDA_SUCCESS) {
-		printf("cuDeviceGetCount() returned %d\n", error);
-		exit(1);
-	}
-	/* This function call returns 0 if there are no CUDA capable devices. */
-	if (deviceCount == 0) {
-		printf("There are no available device(s) that support CUDA\n");
-		return 1;
-	}
-	if (cuda_device_id >= deviceCount) {
-		fprintf(stderr, "No such device ID (%d) exists in system\n", cuda_device_id);
-		return 1;
-	}
-
-	printf("Listing all CUDA devices in system:\n");
-	for (index = 0; index < deviceCount; index++) {
-		CUCHECK(cuDeviceGet(&cu_device, index));
-		cuDeviceGetAttribute(&cuda_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID , cu_device);
-		cuDeviceGetAttribute(&cuda_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID , cu_device);
-		printf("CUDA device %d: PCIe address is %02X:%02X\n", index, (unsigned int)cuda_pci_bus_id, (unsigned int)cuda_pci_device_id);
-  }
-
- 	printf("\nPicking device No. %d\n", cuda_device_id);
-
-	CUCHECK(cuDeviceGet(&cuDevice, cuda_device_id));
-
-	char name[128];
-	CUCHECK(cuDeviceGetName(name, sizeof(name), cuda_device_id));
-	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), cuDevice, name);
-	printf("creating CUDA Ctx\n");
-
-	/* Create context */
-	error = cuCtxCreate(&cuContext, CU_CTX_MAP_HOST, cuDevice);
-	if (error != CUDA_SUCCESS) {
-		printf("cuCtxCreate() error=%d\n", error);
-		return 1;
-	}
-
-	printf("making it the current CUDA Ctx\n");
-	error = cuCtxSetCurrent(cuContext);
-	if (error != CUDA_SUCCESS) {
-		printf("cuCtxSetCurrent() error=%d\n", error);
-		return 1;
-	}
-
-	return 0;
-}
-
-static void pp_free_gpu(struct pingpong_context *ctx)
-{
-	printf("destroying current CUDA Ctx\n");
-	CUCHECK(cuCtxDestroy(cuContext));
-}
-#endif
-
-#ifdef HAVE_ROCM
-#define ASSERT(x)										\
-	do {											\
-	if (!(x)) {										\
-		fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__);	\
-	}											\
-} while (0)
-
-#define ROCM_CHECK(stmt)			\
-	do {					\
-	hipError_t result = (stmt);		\
-	ASSERT(hipSuccess == result);		\
-} while (0)
-
-/*----------------------------------------------------------------------------*/
-
-static int pp_init_rocm(struct pingpong_context *ctx, int rocm_device_id)
-{
-	int deviceCount = 0;
-	hipError_t error = hipGetDeviceCount(&deviceCount);
-	if (error != hipSuccess) {
-		printf("hipDeviceGetCount() returned %d\n", error);
-		exit(1);
-	}
-
-	if (rocm_device_id >= deviceCount) {
-		printf("Requested ROCm device %d but found only %d device(s)\n",
-               rocm_device_id, deviceCount);
-		return 1;
-	}
-
-	ROCM_CHECK(hipSetDevice(rocm_device_id));
-
-	hipDeviceProp_t prop = {0};
-	ROCM_CHECK(hipGetDeviceProperties(&prop, rocm_device_id));
-	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
-		   rocm_device_id, prop.name, prop.pciBusID, prop.gcnArch);
-
-	return 0;
-}
-
-static int pp_free_rocm(struct pingpong_context *ctx)
-{
-	return 0;
-}
-#endif
-
-static int pp_init_mmap(struct pingpong_context *ctx, size_t size,
-			const char *fname, unsigned long offset)
-{
-	int fd = open(fname, O_RDWR);
-	if (fd < 0) {
-		printf("Unable to open '%s': %s\n", fname, strerror(errno));
-		return 1;
-	}
-
-	ctx->buf[0] = mmap(NULL, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd,
-			offset);
-	close(fd);
-
-	if (ctx->buf[0] == MAP_FAILED) {
-		printf("Unable to mmap '%s': %s\n", fname, strerror(errno));
-		return 1;
-	}
-
-	printf("allocated mmap buffer of size %zu at %p\n", size, ctx->buf[0]);
-
-	return 0;
-}
 
 #ifdef HAVE_AES_XTS
 int set_valid_dek(char *dst, struct perftest_parameters *user_param)
@@ -313,12 +154,6 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 	return 0;
 }
 #endif
-
-static int pp_free_mmap(struct pingpong_context *ctx)
-{
-	munmap(ctx->buf[0], ctx->buff_size);
-	return 0;
-}
 
 // cppcheck-suppress constParameter
 static int next_word_string(char* input, char* output, int from_index)
@@ -1162,13 +997,6 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	#endif
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOC(ctx->buf, void*, user_param->num_of_qps);
-	#ifdef HAVE_CUDA_DMABUF
-	if (user_param->use_cuda_dmabuf) {
-		ALLOC(ctx->cuda_buf_dmabuf_fd, int, user_param->num_of_qps);
-		ALLOC(ctx->cuda_buf_dmabuf_offset, uint64_t, user_param->num_of_qps);
-	}
-	#endif
-
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 
@@ -1231,6 +1059,8 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	if (user_param->connection_type == UD)
 		ctx->buff_size += ctx->cache_line_size;
 
+	ctx->memory = user_param->memory_create(user_param);
+
 	return SUCCESS;
 }
 /******************************************************************************
@@ -1277,13 +1107,6 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	#endif
 	if (ctx->mr != NULL)
 		free(ctx->mr);
-	#ifdef HAVE_CUDA_DMABUF
-	if (user_param->use_cuda_dmabuf) {
-		free(ctx->cuda_buf_dmabuf_fd);
-		free(ctx->cuda_buf_dmabuf_offset);
-	}
-	#endif
-
 	if (ctx->buf != NULL)
 		free(ctx->buf);
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
@@ -1329,6 +1152,10 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			free(ctx->rx_buffer_addr);
 	}
 
+	if (ctx->memory != NULL) {
+		ctx->memory->destroy(ctx->memory);
+		ctx->memory = NULL;
+	}
 }
 
 /******************************************************************************
@@ -1475,43 +1302,10 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		for (i = 0; i < dereg_counter; i++) {
-			CUdeviceptr d_A = (CUdeviceptr)ctx->buf[i];
+	for (i = 0; i < dereg_counter; i++) {
+		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
+	}
 
-			printf("deallocating RX GPU buffer %016llx\n", d_A);
-			cuMemFree(d_A);
-			d_A = 0;
-		}
-		pp_free_gpu(ctx);
-	}
-	else
-	#endif
-	#ifdef HAVE_ROCM
-	if (user_param->use_rocm) {
-		for (i = 0; i < dereg_counter; i++) {
-			void *d_A = ctx->buf[i];
-
-			printf("deallocating GPU buffer %p\n", d_A);
-			hipFree(d_A);
-			d_A = 0;
-		}
-		pp_free_rocm(ctx);
-	}
-	else
-	#endif
-	if (user_param->mmap_file != NULL) {
-		pp_free_mmap(ctx);
-	} else if (ctx->is_contig_supported == FAILURE) {
-		for (i = 0; i < dereg_counter; i++) {
-			if (user_param->use_hugepages) {
-				shmdt(ctx->buf[i]);
-			} else {
-				free(ctx->buf[i]);
-			}
-		}
-	}
 	free(ctx->qp);
 	#ifdef HAVE_IBV_WR_API
 	free(ctx->qpx);
@@ -1561,6 +1355,11 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	if (user_param->counter_ctx) {
 		counters_close(user_param->counter_ctx);
+	}
+
+	if (ctx->memory != NULL) {
+		ctx->memory->destroy(ctx->memory);
+		ctx->memory = NULL;
 	}
 
 	return test_result;
@@ -1747,7 +1546,9 @@ fall_back:
 int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
 {
 	int flags = IBV_ACCESS_LOCAL_WRITE;
-
+	bool can_init_mem = true;
+	int dmabuf_fd = 0;
+	uint64_t dmabuf_offset;
 
 	#if defined(__FreeBSD__)
 	ctx->is_contig_supported = FAILURE;
@@ -1765,115 +1566,22 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 	#endif
 
-
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		CUdeviceptr d_A;
-		int error;
-		const size_t gpu_page_size = 64 * 1024;
-		size_t size = (ctx->buff_size + gpu_page_size - 1) &
-			~(gpu_page_size - 1);
-
-		ctx->is_contig_supported = FAILURE;
-
-		printf("cuMemAlloc() of a %lu bytes GPU buffer\n",
-		       ctx->buff_size);
-		error = cuMemAlloc(&d_A, size);
-		if (error != CUDA_SUCCESS) {
-			printf("cuMemAlloc error=%d\n", error);
-			return FAILURE;
-		}
-
-		printf("allocated GPU buffer address at %016llx pointer=%p\n",
-		       d_A, (void *)d_A);
-		ctx->buf[qp_index] = (void *)d_A;
-		#ifdef HAVE_CUDA_DMABUF
-		if (user_param->use_cuda_dmabuf) {
-			CUdeviceptr aligned_ptr;
-			const size_t host_page_size = sysconf(_SC_PAGESIZE);
-			int dmabuf_fd;
-			uint64_t offset;
-			size_t aligned_size;
-
-			// Round down to host page size
-			aligned_ptr = d_A & ~(host_page_size - 1);
-			offset = d_A - aligned_ptr;
-			aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
-
-			printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
-			error = cuMemGetHandleForAddressRange((void *)&dmabuf_fd, aligned_ptr, aligned_size, CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
-			if (error != CUDA_SUCCESS) {
-				printf("cuMemGetHandleForAddressRange error=%d\n", error);
-				return FAILURE;
-			}
-
-			ctx->cuda_buf_dmabuf_fd[qp_index] = dmabuf_fd;
-			ctx->cuda_buf_dmabuf_offset[qp_index] = offset;
-		}
-		#endif
-	} else
-	#endif
-
-	#ifdef HAVE_ROCM
-	if (user_param->use_rocm) {
-		void* d_A;
-		hipError_t error;
-		const size_t gpu_page_size = 64 * 1024;
-		size_t size = (ctx->buff_size + gpu_page_size - 1) &
-			~(gpu_page_size - 1);
-
-		ctx->is_contig_supported = FAILURE;
-
-		error = hipMalloc(&d_A, size);
-		if (error != hipSuccess) {
-			printf("hipMalloc error=%d\n", error);
-			return FAILURE;
-		}
-
-		printf("allocated %zu bytes of GPU buffer at %p\n", size, d_A);
-		ctx->buf[qp_index] = d_A;
-	} else
-	#endif
-
-	if (user_param->mmap_file != NULL) {
+	if (user_param->memory_type == MEMORY_MMAP) {
 		#if defined(__FreeBSD__)
 		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
 		#else
 		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
 		#endif
-		if (pp_init_mmap(ctx, ctx->buff_size, user_param->mmap_file,
-				 user_param->mmap_offset))
-		{
-			fprintf(stderr, "Couldn't allocate work buf.\n");
-			return FAILURE;
-		}
+	}
 
-	} else {
-		/* Allocating buffer for data, in case driver not support contig pages. */
-		if (ctx->is_contig_supported == FAILURE) {
-			#if defined(__FreeBSD__)
-			posix_memalign(&ctx->buf[qp_index], user_param->cycle_buffer, ctx->buff_size);
-			#else
-			if (user_param->use_hugepages) {
-				if (alloc_hugepage_region(ctx, qp_index) != SUCCESS){
-					fprintf(stderr, "Failed to allocate hugepage region.\n");
-					return FAILURE;
-				}
-				memset(ctx->buf[qp_index], 0, ctx->buff_size);
-			} else if  (ctx->is_contig_supported == FAILURE) {
-				ctx->buf[qp_index] = memalign(user_param->cycle_buffer, ctx->buff_size);
-			}
-			#endif
-			if (!ctx->buf[qp_index]) {
-				fprintf(stderr, "Couldn't allocate work buf.\n");
-				return FAILURE;
-			}
-
-			memset(ctx->buf[qp_index], 0, ctx->buff_size);
-		} else {
-			ctx->buf[qp_index] = NULL;
-			flags |= (1 << 5);
-		}
+	if (ctx->is_contig_supported == SUCCESS)
+	{
+		ctx->buf[qp_index] = NULL;
+		flags |= (1 << 5);
+	} else if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
+						&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
+						&can_init_mem)) {
+		return FAILURE;
 	}
 
 	if (user_param->verb == WRITE) {
@@ -1892,16 +1600,15 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 #endif
 
+#ifdef HAVE_REG_DMABUF_MR
 	/* Allocating Memory region and assigning our buffer to it. */
-#ifdef HAVE_CUDA_DMABUF
-	if (user_param->use_cuda && user_param->use_cuda_dmabuf) {
+	if (dmabuf_fd) {
 		printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-			ctx->cuda_buf_dmabuf_offset[qp_index], ctx->buff_size, ctx->buf[qp_index],
-			ctx->cuda_buf_dmabuf_fd[qp_index], qp_index);
+			dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
 		ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
-			ctx->pd, ctx->cuda_buf_dmabuf_offset[qp_index],
+			ctx->pd, dmabuf_offset,
 			ctx->buff_size, (uint64_t)ctx->buf[qp_index],
-			ctx->cuda_buf_dmabuf_fd[qp_index],
+			dmabuf_fd,
 			flags
 		);
 		if (!ctx->mr[qp_index]) {
@@ -1913,7 +1620,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 		// MPI immediately closes the fd.
 		// We emulate the behavior here.
-		close(ctx->cuda_buf_dmabuf_fd[qp_index]);
+		close(dmabuf_fd);
 	}
 	else
 #endif
@@ -1938,9 +1645,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 
 	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
-#ifdef HAVE_CUDA
-	if (!user_param->use_cuda) {
-#endif
+	if (can_init_mem) {
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
@@ -1953,9 +1658,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 				random_data(ctx->buf[qp_index], ctx->buff_size);
 			}
 		}
-#ifdef HAVE_CUDA
 	}
-#endif
 	return SUCCESS;
 }
 
@@ -2090,42 +1793,6 @@ destroy_mr:
 /******************************************************************************
  *
  ******************************************************************************/
-#define HUGEPAGE_ALIGN  (2*1024*1024)
-#define SHMAT_ADDR (void *)(0x0UL)
-#define SHMAT_FLAGS (0)
-
-#if !defined(__FreeBSD__)
-int alloc_hugepage_region (struct pingpong_context *ctx, int qp_index)
-{
-	uint64_t buf_size;
-	uint64_t alignment = (((ctx->cycle_buffer + HUGEPAGE_ALIGN -1) / HUGEPAGE_ALIGN) * HUGEPAGE_ALIGN);
-	buf_size = (((ctx->buff_size + alignment -1 ) / alignment ) * alignment);
-
-	/* create hugepage shared region */
-	ctx->huge_shmid = shmget(IPC_PRIVATE, buf_size,
-				 SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-	if (ctx->huge_shmid < 0) {
-		fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
-		return FAILURE;
-	}
-
-	/* attach shared memory */
-	ctx->buf[qp_index] = (void *) shmat(ctx->huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
-	if (ctx->buf == (void *) -1) {
-		fprintf(stderr, "Failed to attach shared memory region\n");
-		return FAILURE;
-	}
-
-	/* Mark shmem for removal */
-	if (shmctl(ctx->huge_shmid, IPC_RMID, 0) != 0) {
-		fprintf(stderr, "Failed to mark shm for removal\n");
-		return FAILURE;
-	}
-
-	return SUCCESS;
-}
-#endif
-
 int verify_params_with_device_context(struct ibv_context *context,
 				      struct perftest_parameters *user_param)
 {
@@ -2293,50 +1960,10 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	}
 	#endif
 
-	#ifdef HAVE_CUDA
-	if (user_param->use_cuda) {
-		if (user_param->cuda_device_bus_id) {
-			int err;
-
-			printf("initializing CUDA\n");
-			CUresult error = cuInit(0);
-			if (error != CUDA_SUCCESS) {
-				printf("cuInit(0) returned %d\n", error);
-				exit(1);
-			}
-
-			printf("Finding PCIe BUS %s\n", user_param->cuda_device_bus_id);
-			err = cuDeviceGetByPCIBusId (&user_param->cuda_device_id, user_param->cuda_device_bus_id);
-			if (err != 0) {
-				fprintf(stderr, "We have an error from cuDeviceGetByPCIBusId: %d\n", err);
-			}
-			printf("Picking GPU number %d\n", user_param->cuda_device_id);
-		}
-		if (pp_init_gpu(ctx, user_param->cuda_device_id)) {
-			fprintf(stderr, "Couldn't init GPU context\n");
-			goto mkey;
-		}
-		#ifdef HAVE_CUDA_DMABUF
-		if (user_param->use_cuda_dmabuf) {
-			int is_supported = 0;
-			CUCHECK(cuDeviceGetAttribute(&is_supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, cuDevice));
-			if (!is_supported) {
-				fprintf(stderr, "DMA-BUF is not supported on this GPU\n");
-				goto mkey;
-			}
-		}
-		#endif
+	if (ctx->memory->init(ctx->memory)) {
+		fprintf(stderr, "Failed to init memory\n");
+		goto mkey;
 	}
-	#endif
-
-	#ifdef HAVE_ROCM
-	if (user_param->use_rocm) {
-		if (pp_init_rocm(ctx, user_param->rocm_device_id)) {
-			fprintf(stderr, "Couldn't initialize ROCm device\n");
-			goto mkey;
-		}
-	}
-	#endif
 
 	if (create_mr(ctx, user_param)) {
 		fprintf(stderr, "Failed to create MR\n");

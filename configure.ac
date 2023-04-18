@@ -66,6 +66,11 @@ AC_CHECK_LIB([rdmacm], [rdma_create_event_channel], [], AC_MSG_ERROR([librdmacm-
 AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad not found]))
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
 
+AC_CHECK_LIB([ibverbs], [ibv_reg_dmabuf_mr], [HAVE_REG_DMABUF_MR=yes], [HAVE_REG_DMABUF_MR=no])
+if test $HAVE_REG_DMABUF_MR = yes; then
+	AC_DEFINE([HAVE_REG_DMABUF_MR], [1], [Enable HAVE_REG_DMABUF_MR])
+fi
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_flow *t = ibv_create_flow(NULL,NULL);],[HAVE_RAW_ETH_REG=yes], [HAVE_RAW_ETH_REG=no])
 
@@ -259,18 +264,77 @@ fi
 if [test "$CUDA_H_PATH" ]; then
 	AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA feature])
 	AC_DEFINE_UNQUOTED([CUDA_PATH], "$CUDA_H_PATH" , [Enable CUDA feature])
-        LIBS=$LIBS" -lcuda"
-    AC_CHECK_LIB([ibverbs], [ibv_reg_dmabuf_mr], [HAVE_REG_DMABUF_MR=yes], [HAVE_REG_DMABUF_MR=no])
-    AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
+	LIBS=$LIBS" -lcuda"
+	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
 	AC_TRY_LINK([
 	#include <$CUDA_H_PATH>],
-        [int x = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
-		[CUDA_DMA_BUF_PARAMETERS_SUPPORT=yes], [CUDA_DMA_BUF_PARAMETERS_SUPPORT=no])
-    if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
-        AC_DEFINE([HAVE_CUDA_DMABUF], [1], [Enable CUDA DMABUF feature])
-    fi
+	[int x = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
+	[CUDA_DMA_BUF_PARAMETERS_SUPPORT=yes], [CUDA_DMA_BUF_PARAMETERS_SUPPORT=no])
+	if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
+		AC_DEFINE([HAVE_CUDA_DMABUF], [1], [Enable CUDA DMABUF feature])
+	fi
 fi
 AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
+
+AM_CONDITIONAL([CUDA], [test "$CUDA_H_PATH"])
+
+AC_ARG_ENABLE([neuron],
+              [AS_HELP_STRING([--enable-neuron],
+                              [Enable Neuron benchmarks])
+              ],
+              [],
+              [enable_neuron=no])
+
+AC_ARG_WITH([neuron],
+            [AS_HELP_STRING([--with-neuron=@<:@NRT installation path@:>@],
+                            [Provide path to NRT installation])
+            ],
+            [AS_CASE([$with_neuron],
+                     [yes|no], [],
+                     [CPPFLAGS="-I$with_neuron/include $CPPFLAGS"
+                      LDFLAGS="-L$with_neuron/lib -Wl,-rpath=$with_neuron/lib $LDFLAGS"])
+            ])
+
+AS_IF([test "x$enable_neuron" = xyes], [
+       AC_DEFINE([HAVE_NEURON], [1], [Enable Neuron benchmarks])
+       AC_CHECK_HEADERS([nrt/nrt.h], [],
+                        [AC_MSG_ERROR([could not find nrt.h in include path])])
+       AC_SEARCH_LIBS([nrt_tensor_allocate], [nrt], [],
+                      [AC_MSG_ERROR([could not find library, nrt])])
+       ])
+
+AM_CONDITIONAL([NEURON], [test x$enable_neuron = xyes])
+
+AC_ARG_ENABLE([hl],
+	[AS_HELP_STRING([--enable-hl],
+		[Enable Habana Labs benchmarks])
+	],
+	[],
+	[enable_hl=no])
+
+AC_ARG_WITH([hl],
+	[AS_HELP_STRING([--with-hl=@<:@habanalabs installation prefix@:>@],
+		[Provide Habana Labs installation prefix])
+	],
+	[AS_CASE([$with_hl],
+		[yes|no], [],
+		[CPPFLAGS="-I$with_hl/include/habanalabs $CPPFLAGS"
+		LDFLAGS="-L$with_hl/lib/habanalabs -Wl,-rpath=$with_hl/lib/habanalabs $LDFLAGS"])
+	])
+
+AS_IF([test "x$enable_hl" = xyes], [
+	AC_DEFINE([HAVE_HL], [1], [Enable Habana Labs benchmarks])
+	AS_IF([test "x$HAVE_REG_DMABUF_MR" = "xno"],
+		[AC_MSG_ERROR([rdma-core doesn't support dmabuf mr registration])])
+	AC_CHECK_HEADERS([misc/habanalabs.h hlthunk.h synapse_api.h], [],
+		[AC_MSG_ERROR([could not find hl headers in include path])])
+	AC_SEARCH_LIBS([hlthunk_device_memory_export_dmabuf_fd], [hl-thunk], [],
+		[AC_MSG_ERROR([could not find library, hl-thunk])])
+	AC_SEARCH_LIBS([synDeviceMalloc], [Synapse], [],
+		[AC_MSG_ERROR([could not find library, Synapse])])
+	])
+
+AM_CONDITIONAL([HABANALABS], [test x$enable_hl = xyes])
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
