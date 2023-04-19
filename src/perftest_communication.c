@@ -851,7 +851,11 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		my_dest[i].qpn   = ctx->qp[i]->qp_num;
 		my_dest[i].psn   = lrand48() & 0xffffff;
-		my_dest[i].rkey  = ctx->mr[i]->rkey;
+		if (user_param->use_null_mr) {
+			my_dest[i].rkey  = ctx->null_mr->lkey;
+		} else {
+			my_dest[i].rkey  = ctx->mr[i]->rkey;
+		}
 
 		/* Each qp gives his receive buffer address.*/
 		my_dest[i].out_reads = user_param->out_reads;
