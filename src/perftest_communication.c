@@ -1952,18 +1952,37 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 					return FAILURE;
 				}
 			}
-		} else if (user_param->verb == READ) {
-#ifdef HAVE_SRD_WITH_RDMA_READ
-			struct efadv_device_attr efa_device_attr = {};
+		} else if (user_param->verb == READ || user_param->verb == WRITE) {
+#ifdef HAVE_SRD
+			struct efadv_device_attr efa_device_attr = {0};
 
 			if (efadv_query_device(context, &efa_device_attr, sizeof(efa_device_attr))) {
 				fprintf(stderr, " Error when trying to query EFA device\n");
 				exit(1);
 			}
-			if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
-				fprintf(stderr, "Read verb is not supported with this EFA device\n");
+
+			if (user_param->verb == READ) {
+#ifdef HAVE_SRD_WITH_RDMA_READ
+				if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
+					fprintf(stderr, "Read verb is not supported with this EFA device\n");
+					exit(1);
+				}
+#else
+				fprintf(stderr, "SRD connection not possible in READ verb\n");
 				exit(1);
+#endif
+			} else if (user_param->verb == WRITE) {
+#ifdef HAVE_SRD_WITH_RDMA_WRITE
+				if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE)) {
+					fprintf(stderr, "Write verb is not supported with this EFA device\n");
+					exit(1);
+				}
+#else
+				fprintf(stderr, "SRD connection not possible in WRITE verb\n");
+				exit(1);
+#endif
 			}
+
 			if (user_param->size > efa_device_attr.max_rdma_size) {
 				if (user_param->test_method == RUN_ALL || !user_param->req_size) {
 					fprintf(stderr, " Max RDMA request size is %u\n",
@@ -1971,13 +1990,13 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 					fprintf(stderr, " Changing to this size\n");
 					user_param->size = efa_device_attr.max_rdma_size;
 				} else {
-					fprintf(stderr," Max RDMA read size in SRD cannot be greater than %u\n",
+					fprintf(stderr, " Max RDMA request size in SRD cannot be greater than %u\n",
 						efa_device_attr.max_rdma_size);
 					return FAILURE;
 				}
 			}
 #else
-			fprintf(stderr, "SRD connection not possible in READ verb\n");
+			fprintf(stderr, "SRD connection was not found\n");
 			exit(1);
 #endif
 		}
