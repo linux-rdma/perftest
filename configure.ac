@@ -301,6 +301,9 @@ AS_IF([test "x$enable_neuron" = xyes], [
                         [AC_MSG_ERROR([could not find nrt.h in include path])])
        AC_SEARCH_LIBS([nrt_tensor_allocate], [nrt], [],
                       [AC_MSG_ERROR([could not find library, nrt])])
+       AC_SEARCH_LIBS([nrt_get_dmabuf_fd], [nrt],
+       		      [AC_DEFINE([HAVE_NEURON_DMABUF], [1], [Enable Neuron DMA buffers])],
+		      [])
        ])
 
 AM_CONDITIONAL([NEURON], [test x$enable_neuron = xyes])
