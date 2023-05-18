@@ -2387,6 +2387,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 		/* c == 0: the argumenet is a long option (example: --report_gbits) */
 		/* c > 0: the argument is a short option (example: -s/--size) */
+		printf("line %d: c = %d\n", __LINE__, c);
 		if (c == 0) {
 			if (duplicates_checker[long_option_index]) {
 				fprintf(stderr," Duplicated argument: %s \n", long_options[long_option_index].name);
@@ -2404,6 +2405,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			}
 			duplicates_checker[char_index]++;
 		}
+		printf("line %d: c = %d\n", __LINE__, c);
 
 		if (c == -1)
 			break;
@@ -2668,6 +2670,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				free(duplicates_checker);
 				return FAILURE;
 			case 0: /* required for long options to work. */
+				printf("enter long options\n");
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
 					pkey_flag = 0;
@@ -2893,8 +2896,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					local_ip = optarg;
 					local_ip_flag = 0;
 				}
-				if (source_ip_flag)
-				{
+				if (source_ip_flag) {
 					user_param->has_source_ip = 1;
 					GET_STRING(user_param->source_ip, strdupa(optarg));
 					source_ip_flag = 0;
