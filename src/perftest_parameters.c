@@ -465,7 +465,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	// please note it is a different source_ip from raw_ethernet case
 	if (connection_type != RawEth) {
-		printf("      --source_ip ");
+		printf("      --bind_source_ip ");
 		printf(" Source IP of the interface used for connection establishment. By default taken from routing table.\n");
 	}
 
@@ -2375,7 +2375,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#if defined HAVE_OOO_ATTR
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
-			{.name = "source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
+			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -2387,7 +2387,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 		/* c == 0: the argumenet is a long option (example: --report_gbits) */
 		/* c > 0: the argument is a short option (example: -s/--size) */
-		printf("line %d: c = %d\n", __LINE__, c);
 		if (c == 0) {
 			if (duplicates_checker[long_option_index]) {
 				fprintf(stderr," Duplicated argument: %s \n", long_options[long_option_index].name);
@@ -2405,7 +2404,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			}
 			duplicates_checker[char_index]++;
 		}
-		printf("line %d: c = %d\n", __LINE__, c);
 
 		if (c == -1)
 			break;
@@ -2670,7 +2668,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				free(duplicates_checker);
 				return FAILURE;
 			case 0: /* required for long options to work. */
-				printf("enter long options\n");
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
 					pkey_flag = 0;
