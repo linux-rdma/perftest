@@ -1531,11 +1531,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, " SRD does not support RDMA_CM\n");
 			exit(1);
 		}
-		if (user_param->use_event == ON) {
-			printf(RESULT_LINE);
-			fprintf(stderr, " SRD does not support events\n");
-			exit(1);
-		}
 		user_param->cq_mod = 1;
 	}
 

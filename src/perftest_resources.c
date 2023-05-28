@@ -1300,12 +1300,20 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
-	if (ctx->channel) {
-		if (ibv_destroy_comp_channel(ctx->channel)) {
-			fprintf(stderr, "Failed to close event channel\n");
+	if (ctx->send_channel) {
+		if (ibv_destroy_comp_channel(ctx->send_channel)) {
+			fprintf(stderr, "Failed to close send event channel\n");
 			test_result = 1;
 		}
 	}
+
+	if (ctx->recv_channel) {
+		if (ibv_destroy_comp_channel(ctx->recv_channel)) {
+			fprintf(stderr, "Failed to close receive event channel\n");
+			test_result = 1;
+		}
+	}
+
 	if (user_param->use_rdma_cm == OFF) {
 
 		if (ibv_close_device(ctx->context)) {
@@ -1488,7 +1496,7 @@ int create_reg_cqs(struct pingpong_context *ctx,
 		   int tx_buffer_depth, int need_recv_cq)
 {
 	ctx->send_cq = ibv_create_cq(ctx->context,tx_buffer_depth *
-					user_param->num_of_qps, NULL, ctx->channel, user_param->eq_num);
+					user_param->num_of_qps, NULL, ctx->send_channel, user_param->eq_num);
 	if (!ctx->send_cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
@@ -1496,7 +1504,7 @@ int create_reg_cqs(struct pingpong_context *ctx,
 
 	if (need_recv_cq) {
 		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth *
-						user_param->num_of_qps, NULL, ctx->channel, user_param->eq_num);
+						user_param->num_of_qps, NULL, ctx->recv_channel, user_param->eq_num);
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
 			return FAILURE;
@@ -1910,11 +1918,17 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	#endif
 	ctx->is_contig_supported = FAILURE;
 
-	/* Allocating an event channel if requested. */
+	/* Allocating event channels if requested. */
 	if (user_param->use_event) {
-		ctx->channel = ibv_create_comp_channel(ctx->context);
-		if (!ctx->channel) {
-			fprintf(stderr, "Couldn't create completion channel\n");
+		ctx->send_channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->send_channel) {
+			fprintf(stderr, "Couldn't create send completion channel\n");
+			return FAILURE;
+		}
+
+		ctx->recv_channel = ibv_create_comp_channel(ctx->context);
+		if (!ctx->recv_channel) {
+			fprintf(stderr, "Couldn't create receive completion channel\n");
 			return FAILURE;
 		}
 	}
@@ -2115,7 +2129,8 @@ dek:
 
 comp_channel:
 	if (user_param->use_event) {
-		ibv_destroy_comp_channel(ctx->channel);
+		ibv_destroy_comp_channel(ctx->send_channel);
+		ibv_destroy_comp_channel(ctx->recv_channel);
 	}
 
 	return FAILURE;
@@ -3482,7 +3497,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
 				/* Make sure all completions from previous event were polled before waiting for another */
 				if (user_param->use_event && ne == 0) {
-					if (ctx_notify_events(ctx->channel)) {
+					if (ctx_notify_events(ctx->send_channel)) {
 						fprintf(stderr, "Couldn't request CQ notification\n");
 						return_value = FAILURE;
 						goto cleaning;
@@ -3615,7 +3630,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	while (rcnt < tot_iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 
 		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->channel)) {
+			if (ctx_notify_events(ctx->recv_channel)) {
 				fprintf(stderr ," Failed to notify events to CQ");
 				return_value = FAILURE;
 				goto cleaning;
@@ -4153,9 +4168,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 		/* Make sure all completions from previous event were polled before waiting for another */
 		if (user_param->use_event && recv_ne == 0 && send_ne == 0) {
-
-			if (ctx_notify_events(ctx->channel)) {
-				fprintf(stderr,"Failed to notify events to CQ");
+			if (ctx_notify_send_recv_events(ctx)) {
 				return_value = FAILURE;
 				goto cleaning;
 			}
@@ -4527,7 +4540,7 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			break;
 
 		if (user_param->use_event) {
-			if (ctx_notify_events(ctx->channel)) {
+			if (ctx_notify_events(ctx->send_channel)) {
 				fprintf(stderr, "Couldn't request CQ notification\n");
 				return 1;
 			}
@@ -4601,7 +4614,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		 */
 		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == CLIENT)) {
 			if (user_param->use_event) {
-				if (ctx_notify_events(ctx->channel)) {
+				if (ctx_notify_events(ctx->recv_channel)) {
 					fprintf(stderr , " Failed to notify events to CQ");
 					return 1;
 				}
@@ -4706,7 +4719,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 				int s_ne;
 
 				if (user_param->use_event) {
-					if (ctx_notify_events(ctx->channel)) {
+					if (ctx_notify_events(ctx->send_channel)) {
 						fprintf(stderr , " Failed to notify events to CQ");
 						return FAILURE;
 					}
