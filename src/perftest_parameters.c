@@ -531,6 +531,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds\n");
+
+		printf("      --report-min-bw=<sample iterations>\n");
+		printf(" Sample minimum bandwidth over X iterations\n");
 	}
 
 	if (connection_type != RawEth) {
@@ -793,6 +796,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->vlan_en             = OFF;
 	user_param->vlan_pcp		= 1;
 	user_param->print_eth_func 	= &print_ethernet_header;
+	user_param->report_min_bw   = 0;
 
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
@@ -2204,6 +2208,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
 	static int payload_flag = 0;
+	static int report_min_bw_flag = 0;
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
@@ -2330,6 +2335,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
 			#endif
 			{.name = "report-per-port", .has_arg = 0, .flag = &report_per_port_flag, .val = 1},
+			{.name = "report-min-bw", .has_arg = 1, .flag = &report_min_bw_flag, .val = 1},
 			{.name = "odp", .has_arg = 0, .flag = &odp_flag, .val = 1},
 			{.name = "use_hugepages", .has_arg = 0, .flag = &hugepages_flag, .val = 1},
 			{.name = "use_old_post_send", .has_arg = 0, .flag = &old_post_send_flag, .val = 1},
@@ -2935,6 +2941,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					CHECK_VALUE(user_param->recv_post_list,int,"Receive Post List size",not_int_ptr);
 					recv_post_list_flag = 0;
 				}
+				if (report_min_bw_flag) {
+					CHECK_VALUE(user_param->report_min_bw,int,"report min bandwidth interval",not_int_ptr);
+					report_min_bw_flag = 0;
+				}
 				#ifdef HAVE_AES_XTS
 				if (aes_xts_flag) {
 					user_param->aes_xts = 1;
@@ -3510,6 +3520,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 		exit(1);
 	}
 
+
 	run_inf_bi_factor = (user_param->duplex && user_param->test_method == RUN_INFINITELY) ? (user_param->verb == SEND ? 1 : 2) : 1 ;
 	tsize = run_inf_bi_factor * user_param->size;
 	num_of_calculated_iters *= (user_param->test_type == DURATION) ? 1 : num_of_qps;
@@ -3547,6 +3558,13 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->bw_avg_p2 = bw_avg_p2;
 	my_bw_rep->msgRate_avg_p2 = msgRate_avg_p2;
 	my_bw_rep->sl = user_param->sl;
+
+	if(user_param->report_min_bw) {
+		my_bw_rep->bw_min = ((double)tsize*user_param->report_min_bw*cycles_to_units) / (user_param->report_min_bw_cycles * format_factor);
+	} else {
+		my_bw_rep->bw_min = 0;
+	}
+
 
 	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION)
 			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
@@ -3664,11 +3682,15 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 
 	}
 
+	if (user_param->report_min_bw) {
+		dprintf(out_json_fds, "report_min_bw: %d\n",user_param->report_min_bw);
+	}
+
 	dprintf(out_json_fds, "},\n");
 }
 
 static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters *user_param, int inc_accuracy,
-		double bw_avg, double msgRate_avg, unsigned long size, int sl, uint64_t iters, double bw_peak) {
+		double bw_avg, double msgRate_avg, unsigned long size, int sl, uint64_t iters, double bw_peak, double bw_min) {
 
 	dprintf(out_json_fd, "results: {\n");
 
@@ -3677,10 +3699,10 @@ static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters 
 	else if (user_param->output == OUTPUT_MR)
 		dprintf(out_json_fd, "msgRate_avg: %lf,\n", msgRate_avg);
 	else if (user_param->raw_qos)
-		dprintf(out_json_fd, REPORT_FMT_QOS_JSON, size, sl, iters, bw_peak, bw_avg, msgRate_avg);
+		dprintf(out_json_fd, REPORT_FMT_QOS_JSON, size, sl, iters, bw_peak, bw_avg, msgRate_avg, bw_min);
 	else
 		dprintf(out_json_fd, inc_accuracy ? REPORT_FMT_EXT_JSON : REPORT_FMT_JSON,
-								   size, iters, bw_peak, bw_avg, msgRate_avg);
+								   size, iters, bw_peak, bw_avg, msgRate_avg, bw_min);
 
 	dprintf(out_json_fd, user_param->cpu_util_data.enable ?
 							REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON, calc_cpu_util(user_param));
@@ -3702,6 +3724,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 	double msgRate_avg = my_bw_rep->msgRate_avg;
 	double msgRate_avg_p1 = my_bw_rep->msgRate_avg_p1;
 	double msgRate_avg_p2 = my_bw_rep->msgRate_avg_p2;
+	double bw_min      = my_bw_rep->bw_min;
 	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
 
 	if (rem_bw_rep != NULL) {
@@ -3712,6 +3735,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		msgRate_avg += rem_bw_rep->msgRate_avg;
 		msgRate_avg_p1 += rem_bw_rep->msgRate_avg_p1;
 		msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
+		bw_min         += rem_bw_rep->bw_min;
 	}
 
 	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {
@@ -3733,7 +3757,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 			dprintf(out_json_fd,"{\n");
 			write_test_info_to_file(out_json_fd, user_param);
 			write_bw_report_to_file(out_json_fd, user_param, inc_accuracy,
-					bw_avg, msgRate_avg, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak);
+					bw_avg, msgRate_avg, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_min);
 			dprintf(out_json_fd,"}\n");
 			close(out_json_fd);
 		}
@@ -3744,11 +3768,11 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 	else if (user_param->output == OUTPUT_MR)
 		printf("%lf\n",msgRate_avg);
 	else if (user_param->raw_qos)
-		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_min);
 	else if (user_param->report_per_port)
 		printf(REPORT_FMT_PER_PORT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
 	else
-		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_min);
 	if (user_param->output == FULL_VERBOSITY) {
 		fflush(stdout);
 		fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));

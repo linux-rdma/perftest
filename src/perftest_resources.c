@@ -3345,6 +3345,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
+	cycles_t    batch_start = 0;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -3536,6 +3537,17 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					return_value = FAILURE;
 					goto cleaning;
 					}
+		}
+		if(user_param->report_min_bw) {
+			if ((totccnt % user_param->report_min_bw) == 0 && totscnt >= user_param->report_min_bw) {
+				batch_start = get_cycles();
+			}
+			if ((totccnt % user_param->report_min_bw) == (user_param->report_min_bw-1) && totccnt > user_param->report_min_bw) {
+				cycles_t batch_duration = get_cycles() - batch_start;
+				if(batch_duration > user_param->report_min_bw_cycles) {
+					user_param->report_min_bw_cycles = batch_duration;
+				}
+			}
 		}
 	}
 	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
