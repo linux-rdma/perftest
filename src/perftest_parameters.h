@@ -631,7 +631,7 @@ struct perftest_parameters {
 	int 				has_source_ip;
 	int 			ah_allocated;
 	int             report_min_bw;
-	int             report_min_bw_cycles;
+	uint64_t             report_min_bw_cycles;
 };
 
 struct report_options {
