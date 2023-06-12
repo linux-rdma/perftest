@@ -22,9 +22,6 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
-#ifdef HAVE_SYS_RANDOM_H
-#include <sys/random.h>
-#endif
 #ifdef HAVE_SRD
 #include <infiniband/efadv.h>
 #endif
@@ -1538,33 +1535,12 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 	return ret;
 }
 
-static void random_data(char *buf, int buff_size)
-{
-	int i;
-#ifdef HAVE_SYS_RANDOM_H
-	char *tmp = buf;
-	int ret;
-
-	for(i = buff_size; i > 0;) {
-		ret = getrandom(tmp, i, 0);
-		if(ret < 0)
-			goto fall_back;
-		tmp += ret;
-		i -= ret;
-	}
-	return;
-fall_back:
-#endif
-	srand(time(NULL));
-	for (i = 0; i < buff_size; i++)
-		buf[i] = (char)rand();
-}
-
 /******************************************************************************
  *
  ******************************************************************************/
 int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
 {
+	int i;
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 	bool can_init_mem = true;
 	int dmabuf_fd = 0;
@@ -1666,6 +1642,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
 	if (can_init_mem) {
+		srand(time(NULL));
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
@@ -1675,7 +1652,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
 				}
 			} else {
-				random_data(ctx->buf[qp_index], ctx->buff_size);
+				for (i = 0; i < ctx->buff_size; i++) {
+				((char*)ctx->buf[qp_index])[i] = (char)rand();
+				}
 			}
 		}
 	}
