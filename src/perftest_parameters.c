@@ -1712,6 +1712,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if (user_param->report_min_bw > 0) {
+		if (user_param->tst != BW) {
+			printf(" Sample minimum bandwidth only supports BW tests.\n");
+			exit (1);
+		}
+	}
+
 	return;
 }
 /******************************************************************************
