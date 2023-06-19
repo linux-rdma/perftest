@@ -465,7 +465,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	// please note it is a different source_ip from raw_ethernet case
 	if (connection_type != RawEth) {
-		printf("      --source_ip ");
+		printf("      --bind_source_ip ");
 		printf(" Source IP of the interface used for connection establishment. By default taken from routing table.\n");
 	}
 
@@ -2370,7 +2370,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#if defined HAVE_OOO_ATTR
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
-			{.name = "source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
+			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -2888,8 +2888,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					local_ip = optarg;
 					local_ip_flag = 0;
 				}
-				if (source_ip_flag)
-				{
+				if (source_ip_flag) {
 					user_param->has_source_ip = 1;
 					GET_STRING(user_param->source_ip, strdupa(optarg));
 					source_ip_flag = 0;
