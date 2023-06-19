@@ -3059,6 +3059,8 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			num_of_qps = user_param->num_of_qps;
 	struct ibv_recv_wr	*bad_wr_recv;
 	int			size_per_qp = user_param->rx_depth / user_param->recv_post_list;
+	int mtu = MTU_SIZE(user_param->curr_mtu);
+	uint64_t length = user_param->use_srq == ON ? (((SIZE(user_param->connection_type ,user_param->size, 1) + mtu - 1 )/ mtu) * mtu) : SIZE(user_param->connection_type, user_param->size, 1);
 
 	if((user_param->use_xrc || user_param->connection_type == DC) &&
 				(user_param->duplex || user_param->tst == LAT)) {
@@ -3085,7 +3087,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 		ctx->rx_buffer_addr[i] = ctx->recv_sge_list[i * user_param->recv_post_list].addr;
 
 		for (j = 0; j < user_param->recv_post_list; j++) {
-			ctx->recv_sge_list[i * user_param->recv_post_list + j].length = SIZE(user_param->connection_type,user_param->size,1);
+			ctx->recv_sge_list[i * user_param->recv_post_list + j].length = length;
 			ctx->recv_sge_list[i * user_param->recv_post_list + j].lkey   = ctx->mr[i]->lkey;
 
 			if (j > 0) {
