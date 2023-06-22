@@ -1268,7 +1268,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->verb == SEND && user_param->work_rdma_cm == ON && ctx->send_rcredit) {
+	if (ctx->send_rcredit) {
 		if (ibv_dereg_mr(ctx->credit_mr)) {
 			fprintf(stderr, "Failed to deregister send credit MR\n");
 			test_result = 1;
