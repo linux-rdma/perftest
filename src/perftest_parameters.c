@@ -461,6 +461,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
+		printf("      --ipv6-addr=<IPv6> ");
+		printf(" Use IPv6 address for parameters negotiation. Default is IPv4\n");
 	}
 
 	// please note it is a different source_ip from raw_ethernet case
@@ -816,6 +818,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->retry_count			= DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions		= 0;
 	user_param->ipv6			= 0;
+	user_param->ai_family			= AF_INET;
 	user_param->report_per_port		= 0;
 	user_param->use_odp			= 0;
 	user_param->use_hugepages		= 0;
@@ -2175,6 +2178,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
 	static int ipv6_flag = 0;
+	static int ipv6_addr_flag = 0;
 	static int raw_ipv6_flag = 0;
 	static int report_per_port_flag = 0;
 	static int odp_flag = 0;
@@ -2326,6 +2330,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
+			{ .name = "ipv6-addr",		.has_arg = 0, .flag = &ipv6_addr_flag, .val = 1},
 			#ifdef HAVE_IPV6
 			{ .name = "raw_ipv6",		.has_arg = 0, .flag = &raw_ipv6_flag, .val = 1},
 			#endif
@@ -3045,6 +3050,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (ipv6_flag) {
 		user_param->ipv6 = 1;
+	}
+
+	if (ipv6_addr_flag) {
+		user_param->ai_family = AF_INET6;
 	}
 
 	if (raw_ipv6_flag) {
