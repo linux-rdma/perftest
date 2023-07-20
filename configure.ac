@@ -277,6 +277,20 @@ AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETER
 
 AM_CONDITIONAL([CUDA], [test "$CUDA_H_PATH"])
 
+# Device Memory support
+AC_ARG_WITH([dm],
+            [AS_HELP_STRING([--with-dm], [Compile with Infiniband Device Memory support])],
+            [],
+            [with_dm=yes])
+
+AS_IF([test "x$with_dm" != xno], [
+    AC_CHECK_DECLS([ibv_alloc_dm],
+        [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
+        [], [[#include <infiniband/verbs.h>]])])
+
+AM_CONDITIONAL([HAVE_IBV_DM], [test "x$with_dm" != "xno"])
+
+
 AC_ARG_ENABLE([neuron],
               [AS_HELP_STRING([--enable-neuron],
                               [Enable Neuron benchmarks])

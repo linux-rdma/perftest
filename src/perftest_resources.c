@@ -1085,6 +1085,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	if (user_param->connection_type == UD)
 		ctx->buff_size += ctx->cache_line_size;
 
+	user_param->ib_ctx = ctx->context;
 	ctx->memory = user_param->memory_create(user_param);
 
 	return SUCCESS;
@@ -1328,16 +1329,15 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
-	if (user_param->use_rdma_cm == OFF) {
+	for (i = 0; i < dereg_counter; i++) {
+		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
+	}
 
+	if (user_param->use_rdma_cm == OFF && !(user_param->use_ib_dm)) {
 		if (ibv_close_device(ctx->context)) {
 			fprintf(stderr, "Failed to close device context\n");
 			test_result = 1;
 		}
-	}
-
-	for (i = 0; i < dereg_counter; i++) {
-		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
 	}
 
 	free(ctx->qp);
@@ -1394,6 +1394,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 	if (ctx->memory != NULL) {
 		ctx->memory->destroy(ctx->memory);
 		ctx->memory = NULL;
+	}
+
+	if (user_param->use_ib_dm) {
+		if (ibv_close_device(ctx->context)) {
+			fprintf(stderr, "Failed to close device context\n");
+			test_result = 1;
+		}
 	}
 
 	return test_result;
@@ -1637,6 +1644,12 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	else
 #endif
 	{
+#ifdef HAVE_IBV_DM
+	if(user_param->memory_type == MEMORY_IB_DEVICE)
+	{
+		flags |= IBV_ACCESS_ON_DEMAND;
+	}
+#endif
 		ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
 		if (!ctx->mr[qp_index]) {
 			fprintf(stderr, "Couldn't allocate MR\n");

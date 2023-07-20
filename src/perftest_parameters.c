@@ -16,6 +16,7 @@
 #include "mmap_memory.h"
 #include "cuda_memory.h"
 #include "rocm_memory.h"
+#include "ib_device_memory.h"
 #include "neuron_memory.h"
 #include "hl_memory.h"
 #include<math.h>
@@ -2172,6 +2173,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_rocm_flag = 0;
+	static int use_ib_dm_flag = 0;
 	static int use_neuron_flag = 0;
 	static int use_hl_flag = 0;
 	static int disable_pcir_flag = 0;
@@ -2325,6 +2327,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
+			{ .name = "use_ib_dm",		.has_arg = 0, .flag = &use_ib_dm_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_hl",		.has_arg = 1, .flag = &use_hl_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
@@ -2746,7 +2749,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
 				    (use_rocm_flag && !rocm_memory_supported()) ||
 				    (use_neuron_flag && !neuron_memory_supported()) ||
-				    (use_hl_flag && !hl_memory_supported())) {
+				    (use_hl_flag && !hl_memory_supported())	||
+					(use_ib_dm_flag && !ib_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -2784,6 +2788,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_type = MEMORY_ROCM;
 					user_param->memory_create = rocm_memory_create;
 					use_rocm_flag = 0;
+				}
+				if (use_ib_dm_flag) {
+					user_param->memory_type 	= MEMORY_IB_DEVICE;
+					user_param->memory_create 	= ib_memory_create;
+					user_param->use_ib_dm		= ON;
+					use_ib_dm_flag = 0;
 				}
 				if (use_neuron_flag) {
 					user_param->neuron_core_id = strtol(optarg, NULL, 0);
