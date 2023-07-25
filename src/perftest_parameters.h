@@ -62,6 +62,8 @@
 #include "get_clock.h"
 #include "perftest_counters.h"
 #include "memory.h"
+#include "ib_device_memory.h"
+
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

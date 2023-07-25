@@ -19,15 +19,6 @@
     align_down_pow2((_n) + (_alignment) - 1, _alignment)
 
 
-struct ib_memory_ctx {
-	struct memory_ctx	base;
-	struct ibv_dm		*dm;
-	struct ibv_mr		*mr;
-	struct ibv_context	*ib_ctx;
-	struct ibv_pd		*pd;
-	void			*addr;
-	void			*malloc_address;
-};
 
 static int ib_memory_init(struct memory_ctx *ctx) {
 	struct ib_memory_ctx *ib_ctx = container_of(ctx, struct ib_memory_ctx, base);
@@ -76,8 +67,7 @@ static int ib_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint
 		return FAILURE;
 	}
 
-	/* Mandatory - so ibv_reg_mr won't know its a dm address */
-	*addr = mmap(ib_ctx->addr, dm_attr.length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	*addr = ib_ctx->addr;
 	*can_init = false;
 	memset(*addr, 0, dm_attr.length);
 	return SUCCESS;

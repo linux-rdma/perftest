@@ -1643,13 +1643,21 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 	else
 #endif
-	{
 #ifdef HAVE_IBV_DM
-	if(user_param->memory_type == MEMORY_IB_DEVICE)
-	{
-		flags |= IBV_ACCESS_ON_DEMAND;
-	}
+	if(user_param->memory_type == MEMORY_IB_DEVICE) {
+		struct ib_memory_ctx *ib_ctx = container_of(ctx->memory, struct ib_memory_ctx, base);
+		ctx->mr[qp_index] = ibv_reg_dm_mr(ctx->pd, ib_ctx->dm, 0, ctx->buff_size,
+        								  IBV_ACCESS_ZERO_BASED   |
+        								  IBV_ACCESS_LOCAL_WRITE  |
+        								  IBV_ACCESS_REMOTE_READ  |
+        								  IBV_ACCESS_REMOTE_WRITE |
+        								  IBV_ACCESS_REMOTE_ATOMIC);
+		/* Zero-Based access in RDMA operations */
+		ctx->buf[qp_index] = NULL;
+	} else
+#else
 #endif
+	{
 		ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
 		if (!ctx->mr[qp_index]) {
 			fprintf(stderr, "Couldn't allocate MR\n");

@@ -16,8 +16,17 @@ bool ib_memory_supported();
 
 struct memory_ctx *ib_memory_create(struct perftest_parameters *params);
 
-
-#ifndef HAVE_IBV_DM
+#if HAVE_IBV_DM
+struct ib_memory_ctx {
+	struct memory_ctx	base;
+	struct ibv_dm		*dm;
+	struct ibv_mr		*mr;
+	struct ibv_context	*ib_ctx;
+	struct ibv_pd		*pd;
+	void			*addr;
+	void			*malloc_address;
+};
+#else
 
 inline bool ib_memory_supported() {
 	return false;

@@ -2750,7 +2750,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_rocm_flag && !rocm_memory_supported()) ||
 				    (use_neuron_flag && !neuron_memory_supported()) ||
 				    (use_hl_flag && !hl_memory_supported())	||
-					(use_ib_dm_flag && !ib_memory_supported())) {
+				    (use_ib_dm_flag && !ib_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
