@@ -3722,7 +3722,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
 	}
 
-	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)) {
+	if ( (user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL) || (user_param->duplex && user_param->verb == SEND)) {
 		/* Verify Limits */
 		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > bw_avg)) )
 			user_param->is_bw_limit_passed |= 0;
