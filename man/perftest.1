@@ -362,6 +362,18 @@ many different options and modes.
  Not relevant for raw_ethernet_fs_rate.
  System support required.
 .TP
+.B --use_hl=<hl device id>
+ Use HabanaLabs specific device for HW accelerator direct RDMA testing.
+ System support required.
+.TP
+.B --use_neuron=<logical neuron core id>
+ Use Neuron specific device for HW accelerator direct RDMA testing.
+ System support required.
+.TP
+.B --use_neuron_dmabuf
+ Use Neuron DMA-BUF for HW accelerator direct RDMA testing.
+ System support required.
+.TP
 .B --use_rocm=<rocm device id>
  Use selected ROCm device for GPUDirect RDMA testing.
  Not relevant for raw_ethernet_fs_rate.

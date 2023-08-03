@@ -14,12 +14,18 @@ struct perftest_parameters;
 
 bool neuron_memory_supported();
 
+bool neuron_memory_dmabuf_supported();
+
 struct memory_ctx *neuron_memory_create(struct perftest_parameters *params);
 
 
 #ifndef HAVE_NEURON
 
 inline bool neuron_memory_supported() {
+	return false;
+}
+
+inline bool neuron_memory_dmabuf_supported() {
 	return false;
 }
 

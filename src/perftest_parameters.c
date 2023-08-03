@@ -565,6 +565,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (neuron_memory_supported()) {
 			printf("      --use_neuron=<logical neuron core id>");
 			printf(" Use selected logical neuron core for NeuronDirect RDMA testing\n");
+
+			if (neuron_memory_dmabuf_supported()) {
+				printf("      --use_neuron_dmabuf");
+				printf(" Use DMA-BUF for HW accelerator direct RDMA testing\n");
+			}
 		}
 
 		if (hl_memory_supported()) {
@@ -2173,6 +2178,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_neuron_flag = 0;
+	static int use_neuron_dmabuf_flag = 0;
 	static int use_hl_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
@@ -2326,6 +2332,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
+			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
 			{ .name = "use_hl",		.has_arg = 1, .flag = &use_hl_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -2746,6 +2753,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
 				    (use_rocm_flag && !rocm_memory_supported()) ||
 				    (use_neuron_flag && !neuron_memory_supported()) ||
+				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
@@ -2794,6 +2802,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_type = MEMORY_NEURON;
 					user_param->memory_create = neuron_memory_create;
 					use_neuron_flag = 0;
+				}
+				if (use_neuron_dmabuf_flag) {
+					user_param->use_neuron_dmabuf = 1;
+					if (user_param->memory_type != MEMORY_NEURON) {
+						fprintf(stderr, "Neuron DMA-BUF cannot be used without Neuron device\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					use_neuron_dmabuf_flag = 0;
 				}
 				if (use_hl_flag) {
 					user_param->hl_device_bus_id = strdup(optarg);

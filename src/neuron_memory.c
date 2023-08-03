@@ -20,6 +20,7 @@ struct neuron_memory_ctx {
 	int max_tensors;
 	nrt_tensor_t **tensors;
 	int num_of_tensors;
+	bool use_dmabuf;
 };
 
 
@@ -91,6 +92,17 @@ int neuron_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_
 		return FAILURE;
 	}
 
+	if (neuron_ctx->use_dmabuf) {
+		result = nrt_get_dmabuf_fd((uint64_t)d_A, (uint64_t)buf_size, dmabuf_fd);
+		if (result != NRT_SUCCESS) {
+			nrt_tensor_free(&neuron_ctx->tensors[tensor_index]);
+			neuron_ctx->tensors[tensor_index] = NULL;
+			*dmabuf_fd = 0;
+			printf("Unable to retrieve dmabuf fd of Neuron device buffer\n");
+			return FAILURE;
+		}
+	}
+
 	neuron_ctx->num_of_tensors++;
 	*addr = d_A;
 	*can_init = false;
@@ -103,6 +115,14 @@ int neuron_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr,
 
 bool neuron_memory_supported() {
 	return true;
+}
+
+bool neuron_memory_dmabuf_supported() {
+#ifdef HAVE_NEURON_DMABUF
+	return true;
+#else
+	return false;
+#endif
 }
 
 struct memory_ctx *neuron_memory_create(struct perftest_parameters *params) {
@@ -120,5 +140,6 @@ struct memory_ctx *neuron_memory_create(struct perftest_parameters *params) {
 	ctx->max_tensors = params->num_of_qps * 2;
 	ALLOCATE(ctx->tensors, nrt_tensor_t* , ctx->max_tensors);
 	ctx->num_of_tensors = 0;
+	ctx->use_dmabuf = params->use_neuron_dmabuf;
 	return &ctx->base;
 }
