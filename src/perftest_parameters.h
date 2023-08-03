@@ -62,6 +62,8 @@
 #include "get_clock.h"
 #include "perftest_counters.h"
 #include "memory.h"
+#include "ib_device_memory.h"
+
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -440,7 +442,8 @@ enum memory_type {
 	MEMORY_CUDA,
 	MEMORY_ROCM,
 	MEMORY_NEURON,
-	MEMORY_HL
+	MEMORY_HL,
+	MEMORY_IB_DEVICE
 };
 
 struct perftest_parameters {
@@ -630,7 +633,9 @@ struct perftest_parameters {
 	struct counter_context		*counter_ctx;
 	char				*source_ip;
 	int 				has_source_ip;
-	int 			ah_allocated;
+	int				ah_allocated;
+	struct ibv_context		*ib_ctx;
+	int				use_ib_dm;
 };
 
 struct report_options {
