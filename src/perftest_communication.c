@@ -1810,13 +1810,6 @@ int ctx_close_connection(struct perftest_comm *comm,
 	}
 
 	if (!comm->rdma_params->use_rdma_cm && !comm->rdma_params->work_rdma_cm) {
-
-		if (write(comm->rdma_params->sockfd,"done",sizeof "done") != sizeof "done") {
-			perror(" Client write");
-			fprintf(stderr,"Couldn't write to socket\n");
-			return -1;
-		}
-
 		close(comm->rdma_params->sockfd);
 		return 0;
 	}
