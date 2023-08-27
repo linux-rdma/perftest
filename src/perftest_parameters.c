@@ -544,6 +544,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --tclass=<value> ");
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
+		if (connection_type != RawEth) {
+			printf("      --flow_label=<value> ");
+			printf(" Set the flow_label in GRH (if GRH is in use)\n");
+		}
+
 		if (cuda_memory_supported()) {
 			printf("      --use_cuda=<cuda device id>");
 			printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
@@ -841,6 +846,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->mr_per_qp			= 0;
 	user_param->dlid			= 0;
 	user_param->traffic_class		= 0;
+	user_param->flow_label			= 0;
 	user_param->flows			= DEF_FLOWS;
 	user_param->flows_burst			= 1;
 	user_param->perform_warm_up		= 0;
@@ -2819,7 +2825,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					use_hl_flag = 0;
 				}
 				if (flow_label_flag) {
-					CHECK_VALUE_NON_NEGATIVE(user_param->flow_label,int,"flow label",not_int_ptr);
+					CHECK_VALUE(user_param->flow_label,int,"flow label",not_int_ptr);
+					if (user_param->connection_type == RawEth && user_param->flow_label < 0) {
+						fprintf(stderr," flow label must be non-negative for RawEth\n");
+						return FAILURE;
+					}
 					flow_label_flag = 0;
 				}
 				if (retry_count_flag) {
