@@ -106,7 +106,7 @@ static int send_set_up_connection(struct pingpong_context *ctx,
 
 		for (i=0; i < user_param->num_of_qps; i++) {
 			if (ibv_attach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-				fprintf(stderr, "Couldn't attach QP to MultiCast group");
+				fprintf(stderr, "Couldn't attach QP to MultiCast group\n");
 				return FAILURE;
 			}
 		}
@@ -133,7 +133,7 @@ static int send_destroy_ctx(
 			int i;
 			for (i=0; i < user_param->num_of_qps; i++) {
 				if (ibv_detach_mcast(ctx->qp[i],&mcg_params->mgid,mcg_params->mlid)) {
-					fprintf(stderr, "Couldn't attach QP to MultiCast group");
+					fprintf(stderr, "Couldn't attach QP to MultiCast group\n");
 					return FAILURE;
 				}
 			}

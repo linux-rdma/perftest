@@ -53,7 +53,7 @@ int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *kek,
 int main (int argc , char** argv)
 {
 	if(argc != 3){
-		fprintf(stderr, "The application should get 3 parameters");
+		fprintf(stderr, "The application should get 3 parameters\n");
 		exit(1);
 	}
 	/* A 128 bit kek */
@@ -85,7 +85,7 @@ int main (int argc , char** argv)
 	kek_file = fopen(argv[1] , "r");
 
 	if(kek_file == NULL){
-		fprintf(stderr, "Couldn't open key encryption key file");
+		fprintf(stderr, "Couldn't open key encryption key file\n");
 		exit(1);
 	}
 
