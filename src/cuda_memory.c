@@ -117,7 +117,7 @@ int cuda_memory_init(struct memory_ctx *ctx) {
 		printf("Finding PCIe BUS %s\n", cuda_ctx->device_bus_id);
 		err = cuDeviceGetByPCIBusId(&cuda_ctx->device_id, cuda_ctx->device_bus_id);
 		if (err != 0) {
-			fprintf(stderr, "No such PCI Bus Id (%s) exists in system; cuDeviceGetByPCIBusId error: %d\n", cuda_ctx->device_bus_id, err);
+			fprintf(stderr, "cuDeviceGetByPCIBusId failed with error: %d; Failed to get PCI Bus ID (%s)\n", err, cuda_ctx->device_bus_id);
 			return FAILURE;
 		}
 		printf("Picking GPU number %d\n", cuda_ctx->device_id);
