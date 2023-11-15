@@ -324,7 +324,7 @@ t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
 } while (0)
 
 /* The Verb of the benchmark. */
-typedef enum { SEND , WRITE, READ, ATOMIC } VerbType;
+typedef enum { SEND , WRITE, WRITE_IMM, READ, ATOMIC } VerbType;
 
 /* The type of the test */
 typedef enum { LAT , BW , LAT_BY_BW, FS_RATE } TestType;
@@ -633,6 +633,7 @@ struct perftest_parameters {
 	char				*source_ip;
 	int 				has_source_ip;
 	int 			ah_allocated;
+	int				use_write_with_imm;
 };
 
 struct report_options {

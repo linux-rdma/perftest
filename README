@@ -195,6 +195,11 @@ SEND tests (ib_send_lat or ib_send_bw) flags:
   -g, --mcg=<num_of_qps> 		Send messages to multicast group with <num_of_qps> qps attached to it
   -M, --MGID=<multicast_gid>		In multicast, uses <multicast_gid> as the group MGID
 
+WRITE latency (ib_write_lat) flags:
+-----------------------------------
+
+  --write_with_imm				Use write-with-immediate verb instead of write
+
 ATOMIC tests (ib_atomic_lat or ib_atomic_bw) flags: 
 ---------------------------------------------------
 
