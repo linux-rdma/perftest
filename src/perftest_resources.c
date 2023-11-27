@@ -1662,7 +1662,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
-			int i;
+			uint64_t i;
 			if (user_param->has_payload_modification) {
 				for (i = 0; i < ctx->buff_size; i++) {
 					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
