@@ -1409,7 +1409,7 @@ int establish_connection(struct perftest_comm *comm)
 		ptr = comm->rdma_params->servername ? &ethernet_client_connect : &ethernet_server_connect;
 
 		if ((*ptr)(comm)) {
-			fprintf(stderr,"Unable to open file descriptor for socket connection");
+			fprintf(stderr,"Unable to open file descriptor for socket connection\n");
 			return 1;
 		}
 	}

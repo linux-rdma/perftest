@@ -787,13 +787,13 @@ static __inline int ctx_notify_send_recv_events(struct pingpong_context *ctx)
 
 	if (FD_ISSET(ctx->recv_channel->fd, &rfds) &&
 	    ctx_notify_events(ctx->recv_channel)) {
-		fprintf(stderr,"Failed to notify receive events to CQ");
+		fprintf(stderr,"Failed to notify receive events to CQ\n");
 		return FAILURE;
 	}
 
 	if (FD_ISSET(ctx->send_channel->fd, &rfds) &&
 	    ctx_notify_events(ctx->send_channel)) {
-		fprintf(stderr,"Failed to notify send events to CQ");
+		fprintf(stderr,"Failed to notify send events to CQ\n");
 		return FAILURE;
 	}
 

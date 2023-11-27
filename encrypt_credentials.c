@@ -127,7 +127,7 @@ int main (int argc , char** argv)
 	encrypted_credentials = fopen(argv[3], "w");
 
 	if(encrypted_credentials == NULL) {
-		printf("Couldn't open the encrypted credentials file");
+		fprintf(stderr, "Couldn't open the encrypted credentials file\n");
 		exit(1);
 	}
 

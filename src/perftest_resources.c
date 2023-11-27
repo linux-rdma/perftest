@@ -694,7 +694,7 @@ static int ctx_xrcd_create(struct pingpong_context *ctx,struct perftest_paramete
 
 	ctx->fd = open(tmp_file_name, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP);
 	if (ctx->fd < 0) {
-		fprintf(stderr,"Error opening file %s errno: %s", tmp_file_name,strerror(errno));
+		fprintf(stderr,"Error opening file %s errno: %s\n", tmp_file_name,strerror(errno));
 		return FAILURE;
 	}
 
@@ -3629,7 +3629,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 		if (user_param->use_event) {
 			if (ctx_notify_events(ctx->recv_channel)) {
-				fprintf(stderr ," Failed to notify events to CQ");
+				fprintf(stderr ," Failed to notify events to CQ\n");
 				return_value = FAILURE;
 				goto cleaning;
 			}
@@ -4613,7 +4613,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == CLIENT)) {
 			if (user_param->use_event) {
 				if (ctx_notify_events(ctx->recv_channel)) {
-					fprintf(stderr , " Failed to notify events to CQ");
+					fprintf(stderr , " Failed to notify events to CQ\n");
 					return 1;
 				}
 			}
