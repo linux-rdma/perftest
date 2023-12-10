@@ -1044,7 +1044,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (uint64_t));
 
 	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW)
-		   && user_param->verb == SEND && user_param->machine == SERVER) {
+		   && (user_param->verb == SEND || user_param->verb == WRITE_IMM) && user_param->machine == SERVER) {
 
 		ALLOC(ctx->my_addr, uint64_t, user_param->num_of_qps);
 		ALLOC(user_param->tcompleted, cycles_t, 1);
@@ -4331,7 +4331,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 					goto cleaning;
 				}
 
-				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE) {
+				if (wc_tx[i].opcode == IBV_WC_RDMA_WRITE && user_param->verb != WRITE_IMM) {
 					if (!ctx->send_rcredit) {
 						fprintf(stderr, "Polled RDMA_WRITE completion without recv credit request\n");
 						return_value = FAILURE;
@@ -4511,14 +4511,13 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 	uint64_t                rcnt = 0;
 	int                     ne;
 	int			err = 0;
-	int 			poll_buf_offset = 0;
-	volatile char           *poll_buf = NULL;
 	volatile char           *post_buf = NULL;
 
 	int 			size_per_qp = (user_param->use_srq) ?
 					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	struct ibv_wc           wc;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
+
 
 	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
 	int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
@@ -4536,12 +4535,7 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
 	}
 
-
-	if((user_param->use_xrc || user_param->connection_type == DC))
-		poll_buf_offset = 1;
-
 	post_buf = (char*)ctx->buf[0] + user_param->size - 1;
-	poll_buf = (char*)ctx->buf[0] + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size, ctx->cycle_buffer) + user_param->size - 1;
 
 	/* Duration support in latency tests. */
 	if (user_param->test_type == DURATION) {

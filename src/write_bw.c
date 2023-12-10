@@ -241,8 +241,8 @@ int main(int argc, char *argv[])
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
-	/* For half duplex tests, server just waits for client to exit */
-	if (user_param.machine == SERVER && !user_param.duplex) {
+	/* For half duplex write tests, server just waits for client to exit */
+	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto free_mem;
@@ -297,26 +297,58 @@ int main(int argc, char *argv[])
 		for (i = 1; i < 24 ; ++i) {
 
 			user_param.size = (uint64_t)1 << i;
-			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
+			if (user_param.machine == CLIENT || user_param.duplex)
+				ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
+			if (user_param.verb == WRITE_IMM && (user_param.machine == SERVER || user_param.duplex)) {
+				if (ctx_set_recv_wqes(&ctx,&user_param)) {
+					fprintf(stderr," Failed to post receive recv_wqes\n");
+					goto free_mem;
+				}
+			}
+
 			if (user_param.perform_warm_up) {
-				if(perform_warm_up(&ctx, &user_param)) {
+
+				if (user_param.verb == WRITE_IMM) {
+					fprintf(stderr, "Warm up not supported for WRITE_IMM verb.\n");
+					fprintf(stderr, "Skipping\n");
+				} else if(perform_warm_up(&ctx, &user_param)) {
 					fprintf(stderr, "Problems with warm up\n");
 					goto free_mem;
 				}
 			}
 
-			if(user_param.duplex) {
+			if(user_param.duplex || user_param.verb == WRITE_IMM) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
 					goto free_mem;
 				}
 			}
-			if(run_iter_bw(&ctx,&user_param)) {
-				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
-				goto free_mem;
+
+			if (user_param.duplex && user_param.verb == WRITE_IMM) {
+
+				if(run_iter_bi(&ctx,&user_param)){
+					fprintf(stderr," Failed to complete run_iter_bi function successfully\n");
+					goto free_mem;
+				}
+
+			} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
+
+				if(run_iter_bw(&ctx,&user_param)) {
+					fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
+					goto free_mem;
+				}
+
+			} else if (user_param.machine == SERVER) {
+
+				if(run_iter_bw_server(&ctx,&user_param)) {
+					fprintf(stderr," Failed to complete run_iter_bw_server function successfully\n");
+					goto free_mem;
+				}
 			}
 
-			if (user_param.duplex && (atof(user_param.version) >= 4.6)) {
+			if (user_param.verb == WRITE_IMM || (user_param.duplex && (atof(user_param.version) >= 4.6))) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
 					goto free_mem;
@@ -333,9 +365,17 @@ int main(int argc, char *argv[])
 
 	} else if (user_param.test_method == RUN_REGULAR) {
 
-		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+		if (user_param.machine == CLIENT || user_param.duplex)
+			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-		if (user_param.verb != SEND) {
+		if (user_param.verb == WRITE_IMM && (user_param.machine == SERVER || user_param.duplex)) {
+			if (ctx_set_recv_wqes(&ctx,&user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				goto free_mem;
+			}
+		}
+
+		if (user_param.verb != SEND && user_param.verb != WRITE_IMM) {
 
 			if (user_param.perform_warm_up) {
 				if(perform_warm_up(&ctx, &user_param)) {
@@ -344,16 +384,34 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-		if(user_param.duplex) {
+
+		if(user_param.duplex || user_param.verb == WRITE_IMM) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
 				goto free_mem;
 			}
 		}
 
-		if(run_iter_bw(&ctx,&user_param)) {
-			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
-			goto free_mem;
+		if (user_param.duplex && user_param.verb == WRITE_IMM) {
+
+			if(run_iter_bi(&ctx,&user_param)){
+				fprintf(stderr," Failed to complete run_iter_bi function successfully\n");
+				goto free_mem;
+			}
+
+		} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
+
+			if(run_iter_bw(&ctx,&user_param)) {
+				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
+				goto free_mem;
+			}
+
+		} else if (user_param.machine == SERVER) {
+
+			if(run_iter_bw_server(&ctx,&user_param)) {
+				fprintf(stderr," Failed to complete run_iter_bw_server function successfully\n");
+				goto free_mem;
+			}
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -380,10 +438,33 @@ int main(int argc, char *argv[])
 		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 
-		ctx_set_send_wqes(&ctx,&user_param,rem_dest);
-		if(run_iter_bw_infinitely(&ctx,&user_param)) {
-			fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
-			goto free_mem;
+		if (user_param.machine == CLIENT || user_param.duplex)
+			ctx_set_send_wqes(&ctx,&user_param,rem_dest);
+
+		else if (user_param.machine == SERVER && user_param.verb == WRITE_IMM) {
+			if (ctx_set_recv_wqes(&ctx,&user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				goto free_mem;
+			}
+		}
+
+		if (user_param.verb == WRITE_IMM) {
+			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+				fprintf(stderr,"Failed to exchange data between server and clients\n");
+				goto free_mem;
+			}
+		}
+
+		if (user_param.machine == CLIENT || user_param.verb == WRITE) {
+			if(run_iter_bw_infinitely(&ctx,&user_param)) {
+				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
+				goto free_mem;
+			}
+		} else if (user_param.machine == SERVER && user_param.verb == WRITE_IMM) {
+			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
+				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
+				goto free_mem;
+			}
 		}
 	}
 
@@ -394,8 +475,8 @@ int main(int argc, char *argv[])
 			printf(RESULT_LINE);
 	}
 
-	/* For half duplex tests, server just waits for client to exit */
-	if (user_param.machine == CLIENT && !user_param.duplex) {
+	/* For half duplex write tests, server just waits for client to exit */
+	if (user_param.machine == CLIENT && user_param.verb == WRITE && !user_param.duplex) {
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto free_mem;
