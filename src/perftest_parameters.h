@@ -176,6 +176,7 @@
 #define MAX_INLINE_UD (1024)
 #define MIN_EQ_NUM    (0)
 #define MAX_EQ_NUM    (2048)
+#define MIN_UD_RX_DEPTH (100)
 
 /* Raw etherent defines */
 #define RAWETH_MIN_MSG_SIZE	(64)
