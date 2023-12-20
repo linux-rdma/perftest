@@ -3610,7 +3610,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->msgRate_avg_p2 = msgRate_avg_p2;
 	my_bw_rep->sl = user_param->sl;
 
-	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION)
+	if (!user_param->duplex || ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && user_param->test_type == DURATION)
 			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 
