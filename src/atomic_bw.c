@@ -231,7 +231,11 @@ int main(int argc, char *argv[])
 	if (user_param.machine == SERVER && !user_param.duplex) {
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			if (user_param.report_min_bw) {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT_MINBW : RESULT_FMT_G_MINBW));
+			} else {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			}
 			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 		}
 
@@ -289,7 +293,11 @@ int main(int argc, char *argv[])
 	}
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
-		printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		if (user_param.report_min_bw) {
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_MINBW : RESULT_FMT_G_MINBW));
+		} else {
+			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		}
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
 
@@ -327,14 +335,22 @@ int main(int argc, char *argv[])
 			printf(RESULT_LINE);
 			printf("\n Local results:\n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			if (user_param.report_min_bw) {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT_MINBW : RESULT_FMT_G_MINBW));
+			} else {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			}
 			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 			print_full_bw_report(&user_param, &my_bw_rep, NULL);
 			printf(RESULT_LINE);
 
 			printf("\n Remote results:\n");
 			printf(RESULT_LINE);
-			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			if (user_param.report_min_bw) {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT_MINBW : RESULT_FMT_G_MINBW));
+			} else {
+				printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			}
 			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
 		}

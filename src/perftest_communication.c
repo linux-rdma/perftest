@@ -1676,6 +1676,7 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 	temp.msgRate_avg = hton_double(my_bw_rep->msgRate_avg);
 	temp.msgRate_avg_p1 = hton_double(my_bw_rep->msgRate_avg_p1);
 	temp.msgRate_avg_p2 = hton_double(my_bw_rep->msgRate_avg_p2);
+	temp.bw_min = hton_double(my_bw_rep->bw_min);
 
 	/*******************Exchange Reports*******************/
 	if (ctx_xchg_data(comm, (void*) (&temp.size), (void*) (&rem_bw_rep->size), sizeof(unsigned long))) {
@@ -1721,6 +1722,11 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 			exit(1);
 		}
 	}
+	if (ctx_xchg_data(comm, (void*) (&temp.bw_min), (void*) (&rem_bw_rep->bw_min), sizeof(double))) {
+		fprintf(stderr," Failed to exchange data between server and clients\n");
+		exit(1);
+	}
+
 	// cppcheck-suppress selfAssignment
 	rem_bw_rep->size = hton_long(rem_bw_rep->size);
 
@@ -1745,6 +1751,8 @@ void xchg_bw_reports (struct perftest_comm *comm, struct bw_report_data *my_bw_r
 	rem_bw_rep->msgRate_avg_p1 = hton_double(rem_bw_rep->msgRate_avg_p1);
 	// cppcheck-suppress selfAssignment
 	rem_bw_rep->msgRate_avg_p2 = hton_double(rem_bw_rep->msgRate_avg_p2);
+	// cppcheck-suppress selfAssignment
+	rem_bw_rep->bw_min = hton_double(rem_bw_rep->bw_min);
 
 }
 

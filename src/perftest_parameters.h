@@ -193,16 +193,20 @@
 #define USEC	"usec"
 /* The format of the results */
 #define RESULT_FMT		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
+#define RESULT_FMT_MINBW		" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]       BW min[MB/sec]"
 
 #define RESULT_FMT_PER_PORT	" #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]   BW Port1[MB/sec]   MsgRate Port1[Mpps]   BW Port2[MB/sec]   MsgRate Port2[Mpps]"
 
 #define RESULT_FMT_G	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
+#define RESULT_FMT_G_MINBW	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]        BW min[Gb/sec]"
 
 #define RESULT_FMT_G_PER_PORT	" #bytes     #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]   BW Port1[Gb/sec]   MsgRate Port1[Mpps]   BW Port2[Gb/sec]   MsgRate Port2[Mpps]"
 
 #define RESULT_FMT_QOS  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]"
+#define RESULT_FMT_QOS_MINBW  " #bytes    #sl      #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]   BW min[MB/sec]"
 
 #define RESULT_FMT_G_QOS  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]"
+#define RESULT_FMT_G_QOS_MINBW  " #bytes    #sl      #iterations    BW peak[Gb/sec]    BW average[Gb/sec]   MsgRate[Mpps]    BW min[Gb/sec]"
 
 #define RESULT_FMT_LAT " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]    t_avg[usec]    t_stdev[usec]   99""%"" percentile[usec]   99.9""%"" percentile[usec] "
 
@@ -218,12 +222,16 @@
 
 /* Result print format */
 #define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf"
+#define REPORT_FMT_MINBW " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf		  %-7.2lf"
 
 #define REPORT_FMT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.2lf,\nBW_average: %.2lf,\nMsgRate: %.6lf,\n"
+#define REPORT_FMT_JSON_MINBW "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.2lf,\nBW_average: %.2lf,\nMsgRate: %.6lf,\nBW_min: %.2lf,\n"
 
 #define REPORT_FMT_EXT " %-7lu    %" PRIu64 "           %-7.6lf            %-7.6lf            %-7.6lf"
+#define REPORT_FMT_EXT_MINBW " %-7lu    %" PRIu64 "           %-7.6lf            %-7.6lf            %-7.6lf		  %-7.2lf"
 
 #define REPORT_FMT_EXT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.6lf,\nBW_average: %.6lf,\nMsgRate: %.6lf,\n"
+#define REPORT_FMT_EXT_JSON_MINBW "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.6lf,\nBW_average: %.6lf,\nMsgRate: %.6lf,\nBW_min: %.2lf,\n"
 
 #define REPORT_FMT_PER_PORT     " %-7lu    %-10" PRIu64 "     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
 
@@ -234,8 +242,10 @@
 #define REPORT_EXT_CPU_UTIL_JSON "CPU_util: %.2f,\n"
 
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
+#define REPORT_FMT_QOS_MINBW " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf	%-7.2lf\n"
 
 #define REPORT_FMT_QOS_JSON "MsgSize: %lu,\nsl: %d,\nn_iterations: %lu,\nBW_peak: %.2lf,\nBW_average: %.2lf,\n MsgRate: %.6lf,\n"
+#define REPORT_FMT_QOS_JSON_MINBW "MsgSize: %lu,\nsl: %d,\nn_iterations: %lu,\nBW_peak: %.2lf,\nBW_average: %.2lf,\n MsgRate: %.6lf,\nBW_min: %.2lf,\n"
 
 /* Result print format for latency tests. */
 #define REPORT_FMT_LAT " %-7lu %" PRIu64 "          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
@@ -633,6 +643,8 @@ struct perftest_parameters {
 	char				*source_ip;
 	int 				has_source_ip;
 	int 			ah_allocated;
+	int             report_min_bw;
+	uint64_t             report_min_bw_cycles;
 };
 
 struct report_options {
@@ -652,6 +664,7 @@ struct bw_report_data {
 	double msgRate_avg_p1;
 	double msgRate_avg_p2;
 	int sl;
+	double bw_min;
 };
 
 struct rate_gbps_string {
