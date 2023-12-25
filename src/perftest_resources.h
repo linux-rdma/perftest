@@ -517,7 +517,8 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
  *
  * Description :
  *
- *	Prepare the receives work request templates for all QPs in SEND receive test.
+ *	Prepare the receives work request templates for all QPs in SEND and
+ *	WRITE_IMM receive test.
  *
  * Parameters :
  *
@@ -646,6 +647,19 @@ int run_iter_bi(struct pingpong_context *ctx,struct perftest_parameters *user_pa
  *	user_param  - user_parameters struct for this test.
  */
 int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_lat_write_imm
+ *
+ * Description :
+ *
+ *  This is the latency test function for WRITE_IMM verb.
+ *
+ * Parameters :
+ *
+ *	ctx     - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ */
+int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
 /* run_iter_lat
  *

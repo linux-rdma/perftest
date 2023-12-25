@@ -29,7 +29,7 @@
 #define HEX_BASE (16)
 #define DEFAULT_JSON_FILE_NAME "perftest_out.json"
 static const char *connStr[] = {"RC","UC","UD","RawEth","XRC","DC","SRD"};
-static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Read","Atomic"};
+static const char *testsStr[] = {"Send","RDMA_Write","RDMA_Write_imm","RDMA_Read","Atomic"};
 static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"};
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
@@ -240,7 +240,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (verb == SEND) {
 			printf("  -c, --connection=<RC/XRC/UC/UD/DC/SRD> ");
 			printf(" Connection type RC/XRC/UC/UD/DC/SRD (default RC)\n");
-		} else 	if (verb == WRITE) {
+		} else 	if (verb == WRITE || verb == WRITE_IMM) {
 			printf("  -c, --connection=<RC/XRC/UC/DC> ");
 			printf(" Connection type RC/XRC/UC/DC (default RC)\n");
 		} else if (verb == READ || verb == ATOMIC) {
@@ -275,7 +275,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -D, --duration ");
 	printf(" Run test for a customized period of seconds.\n");
 
-	if (verb != WRITE && connection_type != RawEth) {
+	if (verb != WRITE && verb != WRITE_IMM && connection_type != RawEth) {
 		printf("  -e, --events ");
 		printf(" Sleep on CQ events (default poll)\n");
 
@@ -337,7 +337,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	printf("  -n, --iters=<iters> ");
-	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
+	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE || verb == WRITE_IMM) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
 
 	if (tst == BW) {
 		printf("  -N, --noPeak");
@@ -363,7 +363,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Generate Cqe only after <--cq-mod> completion\n");
 	}
 
-	if (verb == SEND && tst != FS_RATE) {
+	if ((verb == SEND || verb == WRITE_IMM) && tst != FS_RATE) {
 		printf("  -r, --rx-depth=<dep> ");
 		printf(" Rx queue size (default %d).",DEF_RX_SEND);
 		printf(" If using srq, rx-depth controls max-wr size of the srq\n");
@@ -497,7 +497,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --output=<units>");
 	printf(" Set verbosity output level: bandwidth , message_rate, latency \n");
 
-	if (connection_type != RawEth && !(verb == WRITE && tst == LAT)) {
+	if (connection_type != RawEth && !((verb == WRITE || verb == WRITE_IMM) && tst == LAT)) {
 		printf("      --payload_file_path=<payload_txt_file_path>");
 		printf(" Set the payload by passing a txt file containing a pattern in the next form(little endian): '0xaaaaaaaa, 0xbbbbbbbb, ...' .\n");
 	}
@@ -586,7 +586,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
 	}
 
-	if (verb == WRITE || verb == READ) {
+	if (verb == WRITE || verb == WRITE_IMM || verb == READ) {
 		printf("      --use-null-mr ");
 		printf(" Allocate a null memory region for the client with ibv_alloc_null_mr.\n");
 	}
@@ -623,6 +623,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --use_ooo ");
 	printf(" Use out of order data placement\n");
 	#endif
+
+	if ((tst == LAT || tst == BW) && verb == WRITE) {
+		printf("      --write_with_imm ");
+		printf(" use write-with-immediate verb instead of write\n");
+	}
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -745,13 +751,15 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_mcg		= OFF;
 	user_param->use_rdma_cm		= OFF;
 	user_param->work_rdma_cm	= OFF;
-	user_param->rx_depth		= user_param->verb == SEND ? DEF_RX_SEND : DEF_RX_RDMA;
+	user_param->rx_depth		= (user_param->verb == SEND || user_param->verb == WRITE || user_param->verb == WRITE_IMM)
+						? DEF_RX_SEND : DEF_RX_RDMA;
 	user_param->duplex		= OFF;
 	user_param->noPeak		= OFF;
 	user_param->req_cq_mod		= 0;
 	user_param->req_size 		= 0;
 	user_param->cq_mod		= DEF_CQ_MOD;
-	user_param->iters		= (user_param->tst == BW && user_param->verb == WRITE) ? DEF_ITERS_WB : DEF_ITERS;
+	user_param->iters		= (user_param->tst == BW && (user_param->verb == WRITE || user_param->verb == WRITE_IMM))
+						? DEF_ITERS_WB : DEF_ITERS;
 	user_param->dualport		= OFF;
 	user_param->post_list		= 1;
 	user_param->recv_post_list	= 1;
@@ -854,6 +862,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->disable_pcir		= 0;
 	user_param->source_ip		= NULL;
 	user_param->has_source_ip	= 0;
+	user_param->use_write_with_imm	= 0;
 }
 
 static int open_file_write(const char* file_path)
@@ -938,8 +947,8 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
 		#ifdef HAVE_SRD
-		if (verb != SEND && verb != READ && verb != WRITE) {
-			fprintf(stderr, " SRD connection only possible in SEND/READ/WRITE verbs\n");
+		if (verb != SEND && verb != READ && verb != WRITE && verb != WRITE_IMM) {
+			fprintf(stderr, " SRD connection only possible in SEND/READ/WRITE/WRITE_IMM verbs\n");
 			exit(1);
 		}
 		*cptr = SRD;
@@ -1041,12 +1050,17 @@ void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 static void force_dependecies(struct perftest_parameters *user_param)
 {
 	/*Additional configuration and assignments.*/
+	if (user_param->verb == WRITE) {
+		user_param->rx_depth = DEF_RX_RDMA;
+	}
+
 	if (user_param->test_method != RUN_INFINITELY && user_param->test_type == ITERATIONS) {
 		if (user_param->tx_depth > user_param->iters) {
 			user_param->tx_depth = user_param->iters;
 		}
 
-		if (user_param->verb == SEND && user_param->rx_depth > user_param->iters) {
+		if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) &&
+				user_param->rx_depth > user_param->iters) {
 			user_param->rx_depth = user_param->iters > MIN_UD_RX_DEPTH ? user_param->iters : MIN_UD_RX_DEPTH;
 		}
 
@@ -1361,7 +1375,8 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
-	if (user_param->verb == SEND && user_param->tst == BW && user_param->machine == SERVER && !user_param->duplex )
+	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && user_param->tst == BW
+			&& user_param->machine == SERVER && !user_param->duplex )
 		user_param->noPeak = ON;
 
 	/* Run infinitely dependencies */
@@ -1381,9 +1396,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 		}
 
-		if (user_param->duplex && user_param->verb == SEND) {
+		if (user_param->duplex && (user_param->verb == SEND || user_param->verb == WRITE_IMM)) {
 			printf(RESULT_LINE);
-			fprintf(stderr," run_infinitely mode is not supported in SEND Bidirectional BW test\n");
+			fprintf(stderr," run_infinitely mode is not supported in SEND or WRITE_IMM "
+					"Bidirectional BW test\n");
 			exit(1);
 		}
 		if (user_param->rate_limit_type != DISABLE_RATE_LIMIT) {
@@ -1495,7 +1511,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr," rdma_cm doesn't support aes_xts\n");
 			exit(1);
 		}
-		if(user_param->tst == LAT && user_param->verb == WRITE) {
+		if(user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
 			printf(RESULT_LINE);
 			fprintf(stderr," aes_xts isn't supported on write_lat\n");
 			exit(1);
@@ -1674,13 +1690,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->margin = user_param->duration / 4;
 	}
 
-	if (user_param->use_null_mr && !(user_param->verb == WRITE || user_param->verb == READ)) {
+	if (user_param->use_null_mr && !(user_param->verb == WRITE || user_param->verb == WRITE_IMM || user_param->verb == READ)) {
 		printf(RESULT_LINE);
 		fprintf(stderr, "Perftest supports using a null memory region with write/read verbs only\n");
 		exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_CUDA && user_param->tst == LAT && user_param->verb == WRITE) {
+	if (user_param->memory_type == MEMORY_CUDA && user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"Perftest supports CUDA latency tests with read/send verbs only\n");
 		exit(1);
@@ -1705,7 +1721,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	/* WA for a bug when rx_depth is odd in SEND */
-	if (user_param->verb == SEND && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
+	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
 		user_param->rx_depth += 1;
 
 	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW)
@@ -2089,6 +2105,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 
 		if (user_param->tst == LAT) {
 			switch(user_param->verb) {
+				case WRITE_IMM:
 				case WRITE: user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : DEF_INLINE_WRITE; break;
 				case SEND : user_param->inline_size = (user_param->connection_type == DC)? DEF_INLINE_DC : (user_param->connection_type == UD)? DEF_INLINE_SEND_UD :
 					    DEF_INLINE_SEND_RC_UC_XRC ; break;
@@ -2234,6 +2251,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int kek_path_flag = 0;
 	static int credentials_path_flag = 0;
 	static int data_enc_key_app_path_flag = 0;
+	static int use_write_with_imm_flag = 0;
 	#endif
 
 	char *server_ip = NULL;
@@ -2389,6 +2407,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
 			#endif
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
+			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -2472,7 +2491,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  break;
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
 			case 'r': CHECK_VALUE_IN_RANGE(user_param->rx_depth,int,MIN_RX,MAX_RX," Rx depth",not_int_ptr);
-				  if (user_param->verb != SEND && user_param->rx_depth > DEF_RX_RDMA) {
+				  if (user_param->verb != SEND && user_param->verb != WRITE && user_param->verb != WRITE_IMM && user_param->rx_depth > DEF_RX_RDMA) {
 					  fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					  free(duplicates_checker);
 					  return FAILURE;
@@ -2539,14 +2558,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  }
 				  break;
 			case 'e': user_param->use_event = ON;
-				  if (user_param->verb == WRITE) {
+				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 					  fprintf(stderr," Events feature not available on WRITE verb\n");
 					  free(duplicates_checker);
 					  return FAILURE;
 				  }
 				  break;
 			case 'X':
-				  if (user_param->verb == WRITE) {
+				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 					  fprintf(stderr, " Events feature not available on WRITE verb\n");
 					  free(duplicates_checker);
 					  return FAILURE;
@@ -3008,6 +3027,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					log_active_dci_streams_flag_was_ever_set = 1;
 				}
 				#endif
+				if (use_write_with_imm_flag) {
+					if ((user_param->tst != LAT && user_param->tst != BW) || user_param->verb != WRITE) {
+						fprintf(stderr, "Write_with_imm can only be used with write_lat and write_bw tests\n");
+						return FAILURE;
+					}
+					user_param->verb = WRITE_IMM;
+					use_write_with_imm_flag = 0;
+				}
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
@@ -3402,7 +3429,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	if (user_param->recv_post_list > 1)
 		printf(" Recv Post List  : %d\n", user_param->recv_post_list);
 
-	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) {
+	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && (user_param->machine == SERVER || user_param->duplex)) {
 		printf(" RX depth        : %d\n",user_param->rx_depth);
 	}
 
@@ -3583,7 +3610,7 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 	my_bw_rep->msgRate_avg_p2 = msgRate_avg_p2;
 	my_bw_rep->sl = user_param->sl;
 
-	if (!user_param->duplex || (user_param->verb == SEND && user_param->test_type == DURATION)
+	if (!user_param->duplex || ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && user_param->test_type == DURATION)
 			|| user_param->test_method == RUN_INFINITELY || user_param->connection_type == RawEth)
 		print_full_bw_report(user_param, my_bw_rep, NULL);
 
@@ -3656,7 +3683,8 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 	if (user_param->recv_post_list > 1)
 		dprintf(out_json_fds, "Recv_Post_List: %d,\n", user_param->recv_post_list);
 
-	if (user_param->verb == SEND && (user_param->machine == SERVER || user_param->duplex)) {
+	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) &&
+			(user_param->machine == SERVER || user_param->duplex)) {
 		dprintf(out_json_fds, "RX_depth: %d,\n",user_param->rx_depth);
 	}
 
