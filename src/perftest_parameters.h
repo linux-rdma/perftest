@@ -123,7 +123,7 @@
 #define DEF_CACHE_LINE_SIZE (64)
 #define DEF_PAGE_SIZE (4096)
 #define DEF_FLOWS (1)
-#define RATE_VALUES_COUNT (18)
+#define RATE_VALUES_COUNT (22)
 #define DISABLED_CQ_MOD_VALUE    (1)
 #define MSG_SIZE_CQ_MOD_LIMIT (8192)
 
@@ -669,8 +669,10 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
 	{IBV_RATE_14_GBPS, "14"},
 	{IBV_RATE_20_GBPS, "20"},
 	{IBV_RATE_25_GBPS, "25"},
+	{IBV_RATE_28_GBPS, "28"},
 	{IBV_RATE_30_GBPS, "30"},
 	{IBV_RATE_40_GBPS, "40"},
+	{IBV_RATE_50_GBPS, "50"},
 	{IBV_RATE_56_GBPS, "56"},
 	{IBV_RATE_60_GBPS, "60"},
 	{IBV_RATE_80_GBPS, "80"},
@@ -680,6 +682,8 @@ static const struct rate_gbps_string RATE_VALUES[RATE_VALUES_COUNT] = {
 	{IBV_RATE_168_GBPS, "168"},
 	{IBV_RATE_200_GBPS, "200"},
 	{IBV_RATE_300_GBPS, "300"},
+	{IBV_RATE_400_GBPS, "400"},
+	{IBV_RATE_600_GBPS, "600"},
 	{IBV_RATE_MAX, "MAX"}
 };
 
