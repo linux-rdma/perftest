@@ -3437,7 +3437,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				burst_iter = 0;
 			}
 			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) &&
-					(ctx->scnt[index] - ctx->ccnt[index] + user_param->post_list) <= (user_param->tx_depth) &&
+					(ctx->scnt[index] + user_param->post_list) <= (user_param->tx_depth + ctx->ccnt[index]) &&
 					!((user_param->rate_limit_type == SW_RATE_LIMIT ) && is_sending_burst == 0)) {
 
 				if (ctx->send_rcredit) {
@@ -3508,6 +3508,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 			}
 		}
+
 		if (totccnt < tot_iters || (user_param->test_type == DURATION &&  totccnt < totscnt)) {
 				/* Make sure all completions from previous event were polled before waiting for another */
 				if (user_param->use_event && ne == 0) {
@@ -3527,9 +3528,13 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 							return_value = FAILURE;
 							goto cleaning;
 						}
+						int fill = user_param->cq_mod;
+						if (user_param->fill_count && ctx->ccnt[wc_id] + user_param->cq_mod > user_param->iters) {
+							fill = user_param->iters - ctx->ccnt[wc_id];
+						}
+						ctx->ccnt[wc_id] += fill;
+						totccnt += fill;
 
-						ctx->ccnt[wc_id] += user_param->cq_mod;
-						totccnt += user_param->cq_mod;
 						if (user_param->noPeak == OFF) {
 							if (totccnt > tot_iters)
 								user_param->tcompleted[user_param->iters*num_of_qps - 1] = get_cycles();
@@ -4263,7 +4268,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 						struct ibv_send_wr *bad_wr = NULL;
 						ctx->ctrl_buf[wc[i].wr_id] = rcnt_for_qp[wc[i].wr_id];
 
-						while ((ctx->scnt[wc[i].wr_id] + scredit_for_qp[wc[i].wr_id] - ctx->ccnt[wc[i].wr_id]) >= user_param->tx_depth) {
+						while ((ctx->scnt[wc[i].wr_id] + scredit_for_qp[wc[i].wr_id]) >= (user_param->tx_depth + ctx->ccnt[wc[i].wr_id])) {
 							sne = ibv_poll_cq(ctx->send_cq, 1, &credit_wc);
 							if (sne > 0) {
 								if (credit_wc.status != IBV_WC_SUCCESS) {

@@ -516,6 +516,7 @@ struct perftest_parameters {
 	int				duplex;
 	int				noPeak;
 	int				cq_mod;
+	int				fill_count;
 	int				req_cq_mod;
 	int 				spec;
 	int 				dualport;
