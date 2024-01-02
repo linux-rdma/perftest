@@ -3631,8 +3631,8 @@ void print_report_bw (struct perftest_parameters *user_param, struct bw_report_d
 static void write_test_info_to_file(int out_json_fds, struct perftest_parameters *user_param)
 {
 	int temp = 0;
-	dprintf(out_json_fds, "test_info: {\n");
-	dprintf(out_json_fds, "test: %s_",testsStr[user_param->verb]);
+	dprintf(out_json_fds, "\"test_info\": {\n");
+	dprintf(out_json_fds, "\"test\": \"%s_",testsStr[user_param->verb]);
 
 	if (user_param->verb == ATOMIC) {
 		dprintf(out_json_fds, "%s_",atomicTypesStr[user_param->atomicType]);
@@ -3660,94 +3660,94 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 	if (user_param->use_mcg)
 		dprintf(out_json_fds, "Multicast_");
 
-	dprintf(out_json_fds, "Test,\n");
+	dprintf(out_json_fds, "Test\",\n");
 
 	if (user_param->use_event) {
-		dprintf(out_json_fds, "Test with events: Using_%s_comp%d,\n", user_param->ib_devname, user_param->eq_num);
+		dprintf(out_json_fds, "\"Test with events\": \"Using_%s_comp%d\",\n", user_param->ib_devname, user_param->eq_num);
 	}
 
 	if (user_param->use_mcg)
-		dprintf(out_json_fds, " MultiCast_runs: on_UD,\n");
+		dprintf(out_json_fds, " \"MultiCast_runs\": \"on_UD\",\n");
 
-	dprintf(out_json_fds, "Dual_port: %s,\nDevice: \"%s\",\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
-	dprintf(out_json_fds, "Number_of_qps: %d,\nTransport_type: %s,\n", user_param->num_of_qps, transport_str(user_param->transport_type));
-	dprintf(out_json_fds, "Connection_type: %s,\nUsing_SRQ: %s,\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
+	dprintf(out_json_fds, "\"Dual_port\": \"%s\",\n\"Device\": \"%s\",\n", user_param->dualport ? "ON" : "OFF",user_param->ib_devname);
+	dprintf(out_json_fds, "\"Number_of_qps\": %d,\n\"Transport_type\": \"%s\",\n", user_param->num_of_qps, transport_str(user_param->transport_type));
+	dprintf(out_json_fds, "\"Connection_type\": \"%s\",\n\"Using_SRQ\": \"%s\",\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
 	#ifdef HAVE_RO
-	dprintf(out_json_fds, "PCIe_relax_order: %s,\n", user_param->disable_pcir ? "OFF"  : "ON");
+	dprintf(out_json_fds, "\"PCIe_relax_order\": \"%s\",\n", user_param->disable_pcir ? "OFF"  : "ON");
 	if ((check_pcie_relaxed_ordering_compliant() == false) &&
 	    (user_param->disable_pcir == 0)) {
-		dprintf(out_json_fds, "WARNING1: \"CPU is not PCIe relaxed ordering compliant\",\n");
-		dprintf(out_json_fds, "WARNING2: \"You should disable PCIe RO with --disable_pcie_relaxed for both server and client\",\n");
+		dprintf(out_json_fds, "\"WARNING1\": \"CPU is not PCIe relaxed ordering compliant\",\n");
+		dprintf(out_json_fds, "\"WARNING2\": \"You should disable PCIe RO with --disable_pcie_relaxed for both server and client\",\n");
 	}
 	#else
-	dprintf(out_json_fds, " PCIe_relax_order: %s,\n", "Unsupported");
+	dprintf(out_json_fds, " \"PCIe_relax_order\": \"%s\",\n", "Unsupported");
 	#endif
-	dprintf(out_json_fds, "ibv_wr_API: %s,\n", user_param->use_old_post_send ? "OFF" : "ON");
+	dprintf(out_json_fds, "\"ibv_wr_API\": \"%s\",\n", user_param->use_old_post_send ? "OFF" : "ON");
 	if (user_param->machine == CLIENT || user_param->duplex) {
-		dprintf(out_json_fds, "TX_depth : %d,\n",user_param->tx_depth);
+		dprintf(out_json_fds, "\"TX_depth\": %d,\n",user_param->tx_depth);
 	}
 
 	if (user_param->post_list > 1)
-		dprintf(out_json_fds, "Post_List: %d,\n",user_param->post_list);
+		dprintf(out_json_fds, "\"Post_List\": %d,\n",user_param->post_list);
 	if (user_param->recv_post_list > 1)
-		dprintf(out_json_fds, "Recv_Post_List: %d,\n", user_param->recv_post_list);
+		dprintf(out_json_fds, "\"Recv_Post_List\": %d,\n", user_param->recv_post_list);
 
 	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) &&
 			(user_param->machine == SERVER || user_param->duplex)) {
-		dprintf(out_json_fds, "RX_depth: %d,\n",user_param->rx_depth);
+		dprintf(out_json_fds, "\"RX_depth\": %d,\n",user_param->rx_depth);
 	}
 
 	if (user_param->tst == BW) {
-		dprintf(out_json_fds, "CQ_Moderation: %d,\n",user_param->cq_mod);
+		dprintf(out_json_fds, "\"CQ_Moderation\": %d,\n",user_param->cq_mod);
 	}
 
-	dprintf(out_json_fds, "Mtu: %lu,\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
-	dprintf(out_json_fds, "Link_type: %s,\n" ,link_layer_str(user_param->link_type));
+	dprintf(out_json_fds, "\"Mtu\": %lu,\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
+	dprintf(out_json_fds, "\"Link_type\": \"%s\",\n" ,link_layer_str(user_param->link_type));
 
 	/* we use the receive buffer only for mac forwarding. */
 	if (user_param->mac_fwd == ON)
-		dprintf(out_json_fds, "Buffer_size: %d,\n" ,user_param->buff_size/2);
+		dprintf(out_json_fds, "\"Buffer_size\": %d,\n" ,user_param->buff_size/2);
 
 	if (user_param->gid_index != DEF_GID_INDEX)
-		dprintf(out_json_fds, "GID_index: %d,\n", user_param->gid_index);
+		dprintf(out_json_fds, "\"GID_index\": %d,\n", user_param->gid_index);
 	if ((user_param->dualport == ON) && (user_param->gid_index2 != DEF_GID_INDEX))
-		dprintf(out_json_fds, "GID_index2: %d,\n", user_param->gid_index2);
+		dprintf(out_json_fds, "\"GID_index2\": %d,\n", user_param->gid_index2);
 
 	if (user_param->verb != READ && user_param->verb != ATOMIC)
-		dprintf(out_json_fds, "Max_inline_data: %d,\n",user_param->inline_size);
+		dprintf(out_json_fds, "\"Max_inline_data\": %d,\n",user_param->inline_size);
 
 	else
-		dprintf(out_json_fds, "Outstand_reads: %d,\n",user_param->out_reads);
+		dprintf(out_json_fds, "\"Outstand_reads\": %d,\n",user_param->out_reads);
 
-	dprintf(out_json_fds, "rdma_cm_QPs: %s,\n",qp_state[user_param->work_rdma_cm]);
+	dprintf(out_json_fds, "\"rdma_cm_QPs\": \"%s\",\n",qp_state[user_param->work_rdma_cm]);
 
 	if (user_param->use_rdma_cm)
 		temp = 1;
 
-	dprintf(out_json_fds, "Use_ROCm_memory: %s,\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
+	dprintf(out_json_fds, "\"Use_ROCm_memory\": \"%s\",\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
 
-	dprintf(out_json_fds, "Data_ex_method: %s,\n",exchange_state[temp]);
+	dprintf(out_json_fds, "\"Data_ex_method\": \"%s\"",exchange_state[temp]);
 
 	if (user_param->work_rdma_cm) {
 
 		if (user_param->tos != DEF_TOS) {
-			dprintf(out_json_fds, "TOS: %d,\n",user_param->tos);
+			dprintf(out_json_fds, ",\n\"TOS\": %d",user_param->tos);
 		}
 
 	}
 
-	dprintf(out_json_fds, "},\n");
+	dprintf(out_json_fds, "\n},\n");
 }
 
 static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters *user_param, int inc_accuracy,
 		double bw_avg, double msgRate_avg, unsigned long size, int sl, uint64_t iters, double bw_peak) {
 
-	dprintf(out_json_fd, "results: {\n");
+	dprintf(out_json_fd, "\"results\": {\n");
 
 	if (user_param->output == OUTPUT_BW)
-		dprintf(out_json_fd, "bw_avg: %lf,\n", bw_avg);
+		dprintf(out_json_fd, "\"bw_avg\": %lf,\n", bw_avg);
 	else if (user_param->output == OUTPUT_MR)
-		dprintf(out_json_fd, "msgRate_avg: %lf,\n", msgRate_avg);
+		dprintf(out_json_fd, "\"msgRate_avg\": %lf,\n", msgRate_avg);
 	else if (user_param->raw_qos)
 		dprintf(out_json_fd, REPORT_FMT_QOS_JSON, size, sl, iters, bw_peak, bw_avg, msgRate_avg);
 	else
@@ -3757,7 +3757,7 @@ static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters 
 	dprintf(out_json_fd, user_param->cpu_util_data.enable ?
 							REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON, calc_cpu_util(user_param));
 
-	dprintf(out_json_fd, "},\n");
+	dprintf(out_json_fd, "}\n");
 }
 
 /******************************************************************************
@@ -3860,10 +3860,10 @@ void write_report_lat_to_file(int out_json_fd, struct perftest_parameters *user_
 		int iters_99, int iters_99_9, double cycles_rtt_quotient, cycles_t *delta, int measure_cnt) // cppcheck-suppress constParameter
 		{
 
-	dprintf(out_json_fd, "results: {\n");
+	dprintf(out_json_fd, "\"results\": {\n");
 
 	if (user_param->output == OUTPUT_LAT)
-		dprintf(out_json_fd, "avg_lat: %lf,\n",average);
+		dprintf(out_json_fd, "\"avg_lat\": %lf\n",average);
 	else {
 		dprintf(out_json_fd, REPORT_FMT_LAT_JSON,
 				(unsigned long)user_param->size,
@@ -3879,7 +3879,7 @@ void write_report_lat_to_file(int out_json_fd, struct perftest_parameters *user_
 		REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON , calc_cpu_util(user_param));
 	}
 
-	dprintf(out_json_fd, "},\n");
+	dprintf(out_json_fd, "}\n");
 }
 
 /******************************************************************************
@@ -4005,10 +4005,10 @@ void print_report_lat (struct perftest_parameters *user_param)
 
 void write_report_lat_duration_to_file (int out_json_fd, struct perftest_parameters *user_param, double latency, double tps){
 
-	dprintf(out_json_fd, "results: {\n");
+	dprintf(out_json_fd, "\"results\": {\n");
 
 	if (user_param->output == OUTPUT_LAT) {
-		dprintf(out_json_fd, "t_avg: %lf\n",latency);
+		dprintf(out_json_fd, "\"t_avg\": %lf\n",latency);
 	}
 	else {
 		dprintf(out_json_fd, REPORT_FMT_LAT_DUR_JSON,
@@ -4020,7 +4020,7 @@ void write_report_lat_duration_to_file (int out_json_fd, struct perftest_paramet
 		calc_cpu_util(user_param));
 	}
 
-	dprintf(out_json_fd, "},\n");
+	dprintf(out_json_fd, "}\n");
 }
 /******************************************************************************
  *
