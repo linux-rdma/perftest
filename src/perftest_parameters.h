@@ -219,33 +219,33 @@
 /* Result print format */
 #define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf"
 
-#define REPORT_FMT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.2lf,\nBW_average: %.2lf,\nMsgRate: %.6lf,\n"
+#define REPORT_FMT_JSON "\"MsgSize\": %lu,\n\"n_iterations\": %" PRIu64 ",\n\"BW_peak\": %.2lf,\n\"BW_average\": %.2lf,\n\"MsgRate\": %.6lf"
 
 #define REPORT_FMT_EXT " %-7lu    %" PRIu64 "           %-7.6lf            %-7.6lf            %-7.6lf"
 
-#define REPORT_FMT_EXT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nBW_peak: %.6lf,\nBW_average: %.6lf,\nMsgRate: %.6lf,\n"
+#define REPORT_FMT_EXT_JSON "\"MsgSize\": %lu,\n\"n_iterations\": %" PRIu64 ",\n\"BW_peak\": %.6lf,\n\"BW_average\": %.6lf,\n\"MsgRate\": %.6lf"
 
 #define REPORT_FMT_PER_PORT     " %-7lu    %-10" PRIu64 "     %-7.2lf            %-7.2lf		   %-7.6lf        %-7.2lf            %-7.6lf              %-7.2lf            %-7.6lf"
 
 #define REPORT_EXT	"\n"
-#define REPORT_EXT_JSON	""
+#define REPORT_EXT_JSON	"\n"
 
 #define REPORT_EXT_CPU_UTIL	"	    %-3.2f\n"
-#define REPORT_EXT_CPU_UTIL_JSON "CPU_util: %.2f,\n"
+#define REPORT_EXT_CPU_UTIL_JSON ",\n\"CPU_util\": %.2f\n"
 
 #define REPORT_FMT_QOS " %-7lu    %d           %lu           %-7.2lf            %-7.2lf                  %-7.6lf\n"
 
-#define REPORT_FMT_QOS_JSON "MsgSize: %lu,\nsl: %d,\nn_iterations: %lu,\nBW_peak: %.2lf,\nBW_average: %.2lf,\n MsgRate: %.6lf,\n"
+#define REPORT_FMT_QOS_JSON "\"MsgSize\": %lu,\nsl: %d,\n\"n_iterations\": %lu,\n\"BW_peak\": %.2lf,\n\"BW_average\": %.2lf,\n \"MsgRate\": %.6lf"
 
 /* Result print format for latency tests. */
 #define REPORT_FMT_LAT " %-7lu %" PRIu64 "          %-7.2f        %-7.2f      %-7.2f  	       %-7.2f     	%-7.2f		%-7.2f 		%-7.2f"
 
-#define REPORT_FMT_LAT_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nt_min: %.2f,\nt_max: %.2f,\nt_typical: %.2f,\nt_avg: %.2f,\n\
-t_stdev: %.2f,\npercentile_99: %.2f,\npercentile_99.9: %.2f,\n"
+#define REPORT_FMT_LAT_JSON "\"MsgSize\": %lu,\n\"n_iterations\": %" PRIu64 ",\n\"t_min\": %.2f,\n\"t_max\": %.2f,\n\"t_typical\": %.2f,\n\"t_avg\": %.2f,\n\
+\"t_stdev\": %.2f,\n\"percentile_99\": %.2f,\n\"percentile_99.9\": %.2f"
 
 #define REPORT_FMT_LAT_DUR " %-7lu       %" PRIu64 "            %-7.2f        %-7.2f"
 
-#define REPORT_FMT_LAT_DUR_JSON "MsgSize: %lu,\nn_iterations: %" PRIu64 ",\nt_avg: %.2f,\ntps_average: %.2f,\n"
+#define REPORT_FMT_LAT_DUR_JSON "\"MsgSize\": %lu,\n\"n_iterations\": %" PRIu64 ",\n\"t_avg\": %.2f,\n\"tps_average\": %.2f"
 
 #define REPORT_FMT_FS_RATE "%" PRIu64 "          %-7.2f        		%-7.2f      	%-7.2f  	       		%-7.2f     	%-7.2f"
 
