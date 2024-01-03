@@ -101,6 +101,8 @@ int neuron_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_
 			printf("Unable to retrieve dmabuf fd of Neuron device buffer\n");
 			return FAILURE;
 		}
+
+		*dmabuf_offset = 0;
 	}
 
 	neuron_ctx->num_of_tensors++;
