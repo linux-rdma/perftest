@@ -1221,6 +1221,8 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		We also use it for "global" counter of packets.
 		*/
 		user_param->iters = 0;
+		if (user_param->noPeak == OFF && user_param->tst == BW)
+			printf(" WARNING: BW peak won't be measured in this run.\n");
 		user_param->noPeak = ON;
 
 		if (user_param->use_event) {
@@ -1376,11 +1378,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && user_param->tst == BW
-			&& user_param->machine == SERVER && !user_param->duplex )
+			&& user_param->machine == SERVER && !user_param->duplex ) {
+		if (user_param->noPeak == OFF)
+			printf(" WARNING: BW peak won't be measured in this run.\n");
 		user_param->noPeak = ON;
+	}
 
 	/* Run infinitely dependencies */
 	if (user_param->test_method == RUN_INFINITELY) {
+		if (user_param->noPeak == OFF && user_param->tst == BW)
+			printf(" WARNING: BW peak won't be measured in this run.\n");
 		user_param->noPeak = ON;
 		user_param->test_type = DURATION;
 		if (user_param->use_event) {
@@ -1724,8 +1731,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if ((user_param->verb == SEND || user_param->verb == WRITE_IMM) && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
 		user_param->rx_depth += 1;
 
-	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW)
+	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW) {
+		printf(" WARNING: BW peak won't be measured in this run.\n");
 		user_param->noPeak = ON;
+	}
 
 	if (!(user_param->duration > 2*user_param->margin)) {
 		printf(RESULT_LINE);
