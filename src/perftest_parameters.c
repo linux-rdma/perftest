@@ -1909,6 +1909,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 5872  : dev_fname = NETXTREME; break;
 			case 5873  : dev_fname = NETXTREME; break;
 			case 5968  : dev_fname = NETXTREME; break;
+			case 5984 : dev_fname = NETXTREME; break;
+			case 6169 : dev_fname = NETXTREME; break;
 			case 55296 : dev_fname = NETXTREME; break;
 			case 55298 : dev_fname = NETXTREME; break;
 			case 55300 : dev_fname = NETXTREME; break;
