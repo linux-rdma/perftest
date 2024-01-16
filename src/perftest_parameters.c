@@ -2257,6 +2257,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
 	static int payload_flag = 0;
+	static int use_write_with_imm_flag = 0;
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
@@ -2271,7 +2272,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int kek_path_flag = 0;
 	static int credentials_path_flag = 0;
 	static int data_enc_key_app_path_flag = 0;
-	static int use_write_with_imm_flag = 0;
 	#endif
 
 	char *server_ip = NULL;
