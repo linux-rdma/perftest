@@ -6,8 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <hip/hip_runtime_api.h>
 #include "rocm_memory.h"
+#include <hip/hip_runtime_api.h>
+#include <hip/hip_version.h>
 #include "perftest_parameters.h"
 
 #define ROCM_CHECK(stmt)			\
@@ -44,9 +45,13 @@ static int init_rocm(int device_id) {
 
 	hipDeviceProp_t prop = {0};
 	ROCM_CHECK(hipGetDeviceProperties(&prop, device_id));
+#if HIP_VERSION >= 60000000
+	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %s\n",
+	       device_id, prop.name, prop.pciBusID, prop.gcnArchName);
+#else
 	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
 	       device_id, prop.name, prop.pciBusID, prop.gcnArch);
-
+#endif
 	return SUCCESS;
 }
 
