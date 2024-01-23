@@ -245,6 +245,8 @@ AS_IF([test "x$enable_rocm" = xyes], [
        AC_DEFINE([__HIP_PLATFORM_AMD__], [1], [Enable ROCm])
        AC_CHECK_HEADERS([hip/hip_runtime_api.h], [],
                         [AC_MSG_ERROR([cannot include hip/hip_runtime_api.h])])
+       AC_CHECK_HEADERS([hip/hip_version.h], [],
+                        [AC_MSG_ERROR([cannot include hip_version.h])])
        AC_SEARCH_LIBS([hipFree], [amdhip64], [],
                       [AC_MSG_ERROR([cannot link with -lamdhip64])])
        AC_DEFINE([HAVE_ROCM], [1], [Enable ROCm])
