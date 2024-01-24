@@ -2633,10 +2633,12 @@ int rdma_cm_disconnect_nodes(struct pingpong_context *ctx,
 		}
 
 		ctx->cma_master.nodes[i].connected = 0;
-		rc = rdma_disconnect(ctx->cma_master.nodes[i].cma_id);
-		if (rc) {
-			error_message = "Failed to disconnect RDMA CM connection.";
-			goto error;
+		if (user_param->machine == SERVER) {
+			rc = rdma_disconnect(ctx->cma_master.nodes[i].cma_id);
+			if (rc) {
+				error_message = "Failed to disconnect RDMA CM connection.";
+				goto error;
+			}
 		}
 	}
 	while (ctx->cma_master.disconnects_left) {
