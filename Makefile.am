@@ -58,25 +58,25 @@ bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices
 
 # Non-source man pages:
 man1_MANS = \
-	man/ib_write_bw.1 \
-	man/ib_read_bw.1 \
-	man/ib_send_bw.1 \
-	man/ib_atomic_bw.1 \
-	man/ib_write_lat.1 \
-	man/ib_read_lat.1 \
-	man/ib_send_lat.1 \
-	man/ib_atomic_lat.1 \
-	man/raw_ethernet_bw.1 \
-	man/raw_ethernet_lat.1 \
-	man/raw_ethernet_burst_lat.1 \
-	man/raw_ethernet_fs_rate.1 \
+	$(top_builddir)/man/ib_write_bw.1 \
+	$(top_builddir)/man/ib_read_bw.1 \
+	$(top_builddir)/man/ib_send_bw.1 \
+	$(top_builddir)/man/ib_atomic_bw.1 \
+	$(top_builddir)/man/ib_write_lat.1 \
+	$(top_builddir)/man/ib_read_lat.1 \
+	$(top_builddir)/man/ib_send_lat.1 \
+	$(top_builddir)/man/ib_atomic_lat.1 \
+	$(top_builddir)/man/raw_ethernet_bw.1 \
+	$(top_builddir)/man/raw_ethernet_lat.1 \
+	$(top_builddir)/man/raw_ethernet_burst_lat.1 \
+	$(top_builddir)/man/raw_ethernet_fs_rate.1 \
 	#
 
 dist_man_MANS = man/perftest.1
 
 generated_mans = $(man1_MANS)
-$(generated_mans): man/%.1: man/perftest.1
-	ln -s perftest.1 $@
+$(generated_mans): $(top_builddir)/man/%.1: man/perftest.1
+	ln -s ../$(top_srcdir)/man/perftest.1 $@
 
 clean-local:
 	-rm -f man/[ir]*.1
