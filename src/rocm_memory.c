@@ -6,8 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <hip/hip_runtime_api.h>
 #include "rocm_memory.h"
+#include <hip/hip_runtime_api.h>
+#if defined HAVE_HIP_HIP_VERSION_H
+#include <hip/hip_version.h>
+#endif
 #include "perftest_parameters.h"
 
 #define ROCM_CHECK(stmt)			\
@@ -44,8 +47,17 @@ static int init_rocm(int device_id) {
 
 	hipDeviceProp_t prop = {0};
 	ROCM_CHECK(hipGetDeviceProperties(&prop, device_id));
-	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %d\n",
-	       device_id, prop.name, prop.pciBusID, prop.gcnArch);
+
+	/* Need 256 bytes to silence compiler warning */
+	char archName[256];
+#if HIP_VERSION >= 60000000
+	snprintf(archName, 256, "%s", prop.gcnArchName);
+#else
+	snprintf(archName, 256, "%d", prop.gcnArch);
+#endif
+
+	printf("Using ROCm Device with ID: %d, Name: %s, PCI Bus ID: 0x%x, GCN Arch: %s\n",
+	       device_id, prop.name, prop.pciBusID, archName);
 
 	return SUCCESS;
 }
