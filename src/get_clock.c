@@ -155,6 +155,9 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 		#if defined (__ia64__)
 		/* Use the ITC frequency on IA64 */
 		rc = sscanf(buf, "itc MHz : %lf", &m);
+		#elif defined (__loongarch__)
+		/* Use upper case cpu on LoongArch */
+		rc = sscanf(buf, "CPU MHz : %lf", &m);
 		#elif defined (__PPC__) || defined (__PPC64__)
 		/* PPC has a different format as well */
 		rc = sscanf(buf, "clock : %lf", &m);
