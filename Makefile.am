@@ -76,7 +76,13 @@ dist_man_MANS = man/perftest.1
 
 generated_mans = $(man1_MANS)
 $(generated_mans): $(top_builddir)/man/%.1: man/perftest.1
-	ln -s ../$(top_srcdir)/man/perftest.1 $@
+	@if echo $(top_srcdir) | grep '^/' > /dev/null ; then \
+	  echo ln -s $(top_srcdir)/man/perftest.1 $@ ; \
+	  ln -s $(top_srcdir)/man/perftest.1 $@ ; \
+	else \
+	  echo ln -s ../$(top_srcdir)/man/perftest.1 $@ ; \
+	  ln -s ../$(top_srcdir)/man/perftest.1 $@ ; \
+	fi
 
 clean-local:
 	-rm -f man/[ir]*.1
