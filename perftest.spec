@@ -7,8 +7,8 @@ Group:          Productivity/Networking/Diagnostic
 Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz
 Url:            http://www.openfabrics.org
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  libibverbs-devel librdmacm-devel libibumad-devel
-BuildRequires:  pciutils-devel
+BuildRequires:  libibverbs-dev librdmacm-dev libibumad-dev
+BuildRequires:  libpci-dev
 
 %description
 gen3 uverbs microbenchmarks
