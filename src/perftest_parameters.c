@@ -1711,7 +1711,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 	if (user_param->memory_type == MEMORY_CUDA && (int)user_param->size <= user_param->inline_size) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"Perftest doesn't supports CUDA tests with inline messages\n");
+		fprintf(stderr,"Perftest doesn't support CUDA tests with inline messages\n");
 		exit(1);
 	}
 
