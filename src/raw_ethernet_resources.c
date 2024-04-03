@@ -577,8 +577,8 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 
 	if(user_param->vlan_en) {
 		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
-		// cppcheck-suppress integerOverflow
-		uint32_t vlan_header = htonl(VLAN_TPID << 16 |
+
+		uint32_t vlan_header = htonl((uint32_t)VLAN_TPID << 16 |
 								((vlan_pcp & 0x7) << 13) | VLAN_VID | VLAN_CFI << 12);;
 
 		memory->copy_buffer_to_buffer(&p_eth_vlan->eth_type, &eth_header->eth_type, sizeof(uint16_t));
