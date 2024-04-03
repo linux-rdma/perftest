@@ -154,58 +154,84 @@ int cuda_memory_destroy(struct memory_ctx *ctx) {
 
 int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t size, int *dmabuf_fd,
 				uint64_t *dmabuf_offset,  void **addr, bool *can_init) {
-	CUdeviceptr d_A;
 	int error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 
-	printf("cuMemAlloc() of a %lu bytes GPU buffer\n", size);
+	// Check if discrete or integrated GPU (tegra), for allocating memory where adequate
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+	int cuda_device_integrated;
+	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
+	printf("CUDA device integrated: %X\n", (unsigned int)cuda_device_integrated);
 
-	error = cuMemAlloc(&d_A, buf_size);
-	if (error != CUDA_SUCCESS) {
-		printf("cuMemAlloc error=%d\n", error);
-		return FAILURE;
-	}
+	if (cuda_device_integrated == 1) {
+		printf("cuMemAllocHost() of a %lu bytes GPU buffer\n", size);
 
-	printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A, (void *)d_A);
-	*addr = (void *)d_A;
-	*can_init = false;
+		error = cuMemAllocHost(addr, buf_size);
+		if (error != CUDA_SUCCESS) {
+			printf("cuMemAllocHost error=%d\n", error);
+			return FAILURE;
+		}
+
+		printf("allocated GPU buffer address at %p\n", addr);
+		*can_init = false;
+	} else {
+		CUdeviceptr d_A;
+		printf("cuMemAlloc() of a %lu bytes GPU buffer\n", size);
+
+		error = cuMemAlloc(&d_A, buf_size);
+		if (error != CUDA_SUCCESS) {
+			printf("cuMemAlloc error=%d\n", error);
+			return FAILURE;
+		}
+
+		printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A, (void *)d_A);
+		*addr = (void *)d_A;
+		*can_init = false;
 
 #ifdef HAVE_CUDA_DMABUF
-	{
-		struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+		{
+			if (cuda_ctx->use_dmabuf) {
+				CUdeviceptr aligned_ptr;
+				const size_t host_page_size = sysconf(_SC_PAGESIZE);
+				uint64_t offset;
+				size_t aligned_size;
 
-		if (cuda_ctx->use_dmabuf) {
-			CUdeviceptr aligned_ptr;
-			const size_t host_page_size = sysconf(_SC_PAGESIZE);
-			uint64_t offset;
-			size_t aligned_size;
+				// Round down to host page size
+				aligned_ptr = d_A & ~(host_page_size - 1);
+				offset = d_A - aligned_ptr;
+				aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
 
-			// Round down to host page size
-			aligned_ptr = d_A & ~(host_page_size - 1);
-			offset = d_A - aligned_ptr;
-			aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
+				printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
+				*dmabuf_fd = 0;
+				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+				if (error != CUDA_SUCCESS) {
+					printf("cuMemGetHandleForAddressRange error=%d\n", error);
+					return FAILURE;
+				}
 
-			printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
-			*dmabuf_fd = 0;
-			error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
-			if (error != CUDA_SUCCESS) {
-				printf("cuMemGetHandleForAddressRange error=%d\n", error);
-				return FAILURE;
+				*dmabuf_offset = offset;
 			}
-
-			*dmabuf_offset = offset;
 		}
-	}
 #endif
+	}
 
 	return SUCCESS;
 }
 
 int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, uint64_t size) {
-	CUdeviceptr d_A = (CUdeviceptr)addr;
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+	int cuda_device_integrated;
+	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 
-	printf("deallocating RX GPU buffer %016llx\n", d_A);
-	cuMemFree(d_A);
+	if (cuda_device_integrated == 1) {
+		printf("deallocating GPU buffer %p\n", addr);
+		cuMemFreeHost(addr);
+	} else {
+		CUdeviceptr d_A = (CUdeviceptr)addr;
+		printf("deallocating GPU buffer %016llx\n", d_A);
+		cuMemFree(d_A);
+	}
+
 	return SUCCESS;
 }
 
