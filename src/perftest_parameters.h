@@ -216,7 +216,7 @@
 #define RESULT_FMT_FS_RATE_DUR " #flows		fs_avg_time[usec]    	fps[flow per sec]"
 
 /* Result print format */
-#define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		   %-7.6lf"
+#define REPORT_FMT " %-7lu    %-10" PRIu64 "       %-7.2lf            %-7.2lf		     %-7.6lf"
 
 #define REPORT_FMT_JSON "\"MsgSize\": %lu,\n\"n_iterations\": %" PRIu64 ",\n\"BW_peak\": %.2lf,\n\"BW_average\": %.2lf,\n\"MsgRate\": %.6lf"
 
