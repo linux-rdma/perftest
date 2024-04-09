@@ -1,18 +1,15 @@
 .TH perftest 1
-.SH NAME:
+.SH NAME
+ib_write_bw, ib_read_bw, ib_send_bw, ib_atomic_bw,
+ib_write_lat, ib_read_lat, ib_send_lat, ib_atomic_lat,
+raw_ethernet_bw, raw_ethernet_lat, raw_ethernet_burst_lat,
+raw_ethernet_fs_rate \- benchmarks for various types of infinabnd performance
+.SH DESCRIPTION
 .TP
-        ib_write_bw, ib_read_bw, ib_send_bw, ib_atomic_bw
- ib_write_lat, ib_read_lat, ib_send_lat, ib_atomic_lat
- raw_ethernet_bw, raw_ethernet_lat, raw_ethernet_burst_lat
- raw_ethernet_fs_rate
-.SH DESCRIPTION:
-.SH
-.TP
-.B Perftest:
-This is a set of benchmarks that measures different metrics & verbs performance which include
+Perftest is a package that includes various benchmarks that measures
+different metrics & verbs performance which include
 many different options and modes.
-.SS RUNNING TESTS:
-.SS
+.SS RUNNING TESTS
 .TP
 .B Server:
  ./<test name> <options>
@@ -29,14 +26,13 @@ many different options and modes.
     Server: ./ib_read_lat -s 32 -n 5000
     Client: ./ib_read_lat -s 32 -n 5000 192.168.0.1
 
-.SS IMPORTANT NOTES:
+.SS IMPORTANT NOTES
 .TP
         1- The options that specific to modes in perftest must be the same for both server and client.
  2- Perftest applications may need to be ran with sudo when running from non root.
  3- Perftest applications usually installed to the /usr/bin/.
  4- Perftest may print some failures with syndroms to the stderr, perftest get those errors from rdma-core.
-.SH OPTIONS:
-.SH
+.SH OPTIONS
 .TP
 .B -h, --help
  Lists the available options to the screen.
@@ -419,8 +415,7 @@ many different options and modes.
 .B --write_with_imm
  Use write-with-immediate verb instead of write.
  Write tests only.
-.SS RawEth only options:
-.SS
+.SS RawEth only options
 .TP
 .B -B, --source_mac
  Source MAC address by this format XX:XX:XX:XX:XX:XX **MUST** be entered.
@@ -499,8 +494,7 @@ many different options and modes.
 .TP
 .B --raw_mcast.
  Relevant only for bandwidth.
-.SH AUTHORS:
-.SH
+.SH AUTHORS
 .TP
 .B  Hassan Khadour <hkhadour@nvidia.com>
 .TP
