@@ -4483,7 +4483,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 
 		if (ccnt < user_param->iters || user_param->test_type == DURATION) {
 
-			do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0);
+			do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0 && !(user_param->test_type == DURATION && user_param->state == END_STATE));
 
 			if(ne > 0) {
 
@@ -4562,7 +4562,7 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 			rcnt++;
 
 			/* Poll for a completion */
-			do { ne = ibv_poll_cq(ctx->recv_cq, 1, &wc); } while (ne == 0);
+			do { ne = ibv_poll_cq(ctx->recv_cq, 1, &wc); } while (ne == 0 && !(user_param->test_type == DURATION && user_param->state == END_STATE));
 			if (ne > 0) {
 				if (wc.status != IBV_WC_SUCCESS) {
 					//coverity[uninit_use_in_call]
