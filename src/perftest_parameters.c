@@ -1124,7 +1124,19 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
-	if (user_param->use_srq && user_param->num_of_qps > user_param->rx_depth) {
+	/* XRC Part */
+	if (user_param->connection_type == XRC) {
+		if (user_param->work_rdma_cm == ON) {
+			printf(RESULT_LINE);
+			fprintf(stderr," XRC does not support RDMA_CM\n");
+			exit(1);
+		}
+		user_param->use_xrc = ON;
+		user_param->use_srq = ON;
+	}
+
+	if (user_param->use_srq && user_param->verb == SEND &&
+	    user_param->num_of_qps > user_param->rx_depth) {
 		printf(RESULT_LINE);
 		printf(" Using SRQ depth should be greater than number of QPs.\n");
 		exit (1);
@@ -1418,17 +1430,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 	if (user_param->connection_type == DC && !user_param->use_srq)
 		user_param->use_srq = ON;
-
-	/* XRC Part */
-	if (user_param->connection_type == XRC) {
-		if (user_param->work_rdma_cm == ON) {
-			printf(RESULT_LINE);
-			fprintf(stderr," XRC does not support RDMA_CM\n");
-			exit(1);
-		}
-		user_param->use_xrc = ON;
-		user_param->use_srq = ON;
-	}
 
 	if (!user_param->use_old_post_send)
 	{
