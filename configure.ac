@@ -340,6 +340,33 @@ AS_IF([test "x$enable_hl" = xyes], [
 
 AM_CONDITIONAL([HABANALABS], [test x$enable_hl = xyes])
 
+AC_ARG_ENABLE([mlu],
+              [AS_HELP_STRING([--enable-mlu],
+                              [Enable MLU benchmarks])
+              ],
+              [],
+              [enable_mlu=no])
+
+AC_ARG_WITH([mlu],
+            [AS_HELP_STRING([--with-mlu=@<:@MLU installation path@:>@],
+                            [Provide path to MLU installation])
+            ],
+            [AS_CASE([$with_mlu],
+                     [yes|no], [],
+                     [CPPFLAGS="-I$with_mlu/include $CPPFLAGS"
+                      LDFLAGS="-L$with_mlu/lib64 -Wl,-rpath=$with_mlu/lib64 -lcndrv $LDFLAGS"])
+            ])
+
+AS_IF([test "x$enable_mlu" = xyes], [
+       AC_DEFINE([HAVE_MLU], [1], [Enable MLU benchmarks])
+       AC_CHECK_HEADERS([cn_api.h], [],
+                        [AC_MSG_ERROR([could not find cn_api.h in include path])])
+       AC_SEARCH_LIBS([cnMalloc], [cndrv], [],
+                      [AC_MSG_ERROR([could not find library, cndrv])])
+       ])
+
+AM_CONDITIONAL([MLU], [test x$enable_mlu = xyes])
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_qp_attr *attr; int x = attr->rate_limit;],[HAVE_PACKET_PACING=yes], [HAVE_PACKET_PACING=no])
 AM_CONDITIONAL([HAVE_PACKET_PACING],[test "x$HAVE_PACKET_PACING" = "xyes"])
