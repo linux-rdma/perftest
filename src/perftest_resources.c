@@ -2219,6 +2219,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	struct efadv_qp_init_attr efa_attr = {};
 	#endif
 	#endif
+	#ifdef HAVE_HNSDV
+	struct hnsdv_qp_init_attr hns_attr = {};
+	#endif
 
 	attr.send_cq = ctx->send_cq;
 	attr.recv_cq = (user_param->verb == SEND || user_param->verb == WRITE_IMM) ? ctx->recv_cq : ctx->send_cq;
@@ -2382,6 +2385,15 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			#endif // HAVE_AES_XTS
 			else
 			#endif // HAVE_MLX5DV
+
+			#ifdef HAVE_HNSDV
+			if (user_param->congest_type) {
+				hns_attr.comp_mask = HNSDV_QP_INIT_ATTR_MASK_QP_CONGEST_TYPE;
+				hns_attr.congest_type = user_param->congest_type;
+				qp = hnsdv_create_qp(ctx->context, &attr_ex, &hns_attr);
+			}
+			else
+			#endif //HAVE_HNSDV
 				qp = ibv_create_qp_ex(ctx->context, &attr_ex);
 		}
 		else

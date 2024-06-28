@@ -55,6 +55,9 @@
 #if defined(HAVE_MLX5DV)
 #include <infiniband/mlx5dv.h>
 #endif
+#if defined(HAVE_HNSDV)
+#include <infiniband/hnsdv.h>
+#endif
 #include <rdma/rdma_cma.h>
 #include <stdint.h>
 #if defined(__FreeBSD__)

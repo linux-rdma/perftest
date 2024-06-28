@@ -382,6 +382,13 @@ if [test $HAVE_MLX5DV_LIB = yes] && [test $HAVE_MLX5DV = yes]; then
 	AC_SUBST([LIBMLX5])
 fi
 
+AC_CHECK_LIB([hns], [hnsdv_query_device], [HAVE_HNSDV=yes LIBHNS=-lhns], [HAVE_HNSDV=no])
+AM_CONDITIONAL([HAVE_HNSDV], [test "x$HAVE_HNSDV" = "xyes"])
+if [test $HAVE_HNSDV = yes]; then
+	AC_DEFINE([HAVE_HNSDV], [1], [Have hns Direct Verbs support])
+	AC_SUBST([LIBHNS])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"

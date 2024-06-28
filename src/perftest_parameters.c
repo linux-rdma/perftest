@@ -34,6 +34,9 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
+#ifdef HAVE_HNSDV
+static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
+#endif
 
 /******************************************************************************
  * parse_mac_from_str.
@@ -437,6 +440,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	printf("      --cpu_util ");
 	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
+
+	#ifdef HAVE_HNSDV
+	printf("      --congest_type=<DCQCN, LDCP, HC3, DIP> ");
+	printf(" Use the hnsdv interface to set congestion control algorithm.\n");
+	#endif
 
 	if (tst != FS_RATE) {
 		printf("      --dlid ");
@@ -863,6 +871,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->source_ip		= NULL;
 	user_param->has_source_ip	= 0;
 	user_param->use_write_with_imm	= 0;
+	user_param->congest_type	= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -961,6 +970,25 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		exit(1);
 	}
 }
+
+#ifdef HAVE_HNSDV
+static void set_congest_type(int *cgtr, const char *optarg)
+{
+	if (strcmp(congestStr[0], optarg) == 0) {
+		*cgtr = HNSDV_QP_CREATE_ENABLE_DCQCN;
+	} else if (strcmp(congestStr[1], optarg) == 0) {
+		*cgtr = HNSDV_QP_CREATE_ENABLE_LDCP;
+	} else if (strcmp(congestStr[2], optarg) == 0) {
+		*cgtr = HNSDV_QP_CREATE_ENABLE_HC3;
+	} else if (strcmp(congestStr[3], optarg) == 0) {
+		*cgtr = HNSDV_QP_CREATE_ENABLE_DIP;
+	} else {
+		fprintf(stderr, " Invalid congest type. Please choose from {DCQCN,LDCP,HC3,DIP}\n");
+		exit(1);
+	}
+}
+#endif
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1756,6 +1784,23 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	#ifdef HAVE_HNSDV
+	if (user_param->congest_type) {
+		if (user_param->work_rdma_cm == ON)
+		{
+			printf(RESULT_LINE);
+			fprintf(stderr, "rdma_cm does not support setting congest type.\n");
+			exit(1);
+		}
+
+		if (user_param->connection_type == XRC || user_param->connection_type == UD) {
+			printf(RESULT_LINE);
+			fprintf(stdout, "XRC/UD does not support setting congest type.\n");
+			exit(1);
+		}
+	}
+	#endif
+
 	return;
 }
 /******************************************************************************
@@ -2273,6 +2318,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int credentials_path_flag = 0;
 	static int data_enc_key_app_path_flag = 0;
 	#endif
+	#ifdef HAVE_HNSDV
+	static int congest_type_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2425,6 +2473,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			#if defined HAVE_OOO_ATTR
 			{.name = "use_ooo", .has_arg = 0, .flag = &use_ooo_flag, .val = 1},
+			#endif
+			#ifdef HAVE_HNSDV
+			{ .name = "congest_type", .has_arg = 1, .flag = &congest_type_flag, .val = 1},
 			#endif
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
@@ -2720,6 +2771,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				free(duplicates_checker);
 				return FAILURE;
 			case 0: /* required for long options to work. */
+				#ifdef HAVE_HNSDV
+				if (congest_type_flag) {
+					set_congest_type(&user_param->congest_type, optarg);
+					congest_type_flag = 0;
+				}
+				#endif
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
 					pkey_flag = 0;

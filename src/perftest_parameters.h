@@ -523,6 +523,7 @@ struct perftest_parameters {
 	int 				recv_post_list;
 	int				duration;
 	int 				use_srq;
+	int 				congest_type;
 	int				use_xrc;
 	int				use_rss;
 	int				srq_exists;
