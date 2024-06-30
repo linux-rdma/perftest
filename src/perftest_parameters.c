@@ -1093,6 +1093,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 
 		if (user_param->connection_type == UD || user_param->connection_type == UC) {
+			if (user_param->use_srq && user_param->iters <= MIN_SRQ_UD_RX_DEPTH) {
+			        user_param->rx_depth = MIN_SRQ_UD_RX_DEPTH;
+			}
+
 			if (user_param->rx_depth == DEF_RX_SEND) {
 				user_param->rx_depth = (user_param->iters < UC_MAX_RX) ? user_param->iters : UC_MAX_RX;
 			}
