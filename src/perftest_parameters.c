@@ -1974,6 +1974,7 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 61344 : dev_fname = EFA; break; /* efa0 */
 			case 61345 : dev_fname = EFA; break; /* efa1 */
 			case 61346 : dev_fname = EFA; break; /* efa2 */
+			case 61347 : dev_fname = EFA; break; /* efa3 */
 			case 4223  : dev_fname = ERDMA; break;
 			case 41506 : dev_fname = HNS; break;
 			case 41507 : dev_fname = HNS; break;
