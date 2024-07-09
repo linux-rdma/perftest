@@ -1627,7 +1627,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 	bool can_init_mem = true;
 	int dmabuf_fd = 0;
-	uint64_t dmabuf_offset;
+	uint64_t dmabuf_offset = 0;
 
 	#if defined(__FreeBSD__)
 	ctx->is_contig_supported = FAILURE;
@@ -1682,14 +1682,28 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 #ifdef HAVE_REG_DMABUF_MR
 	/* Allocating Memory region and assigning our buffer to it. */
 	if (dmabuf_fd) {
-		printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-			dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
-		ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
-			ctx->pd, dmabuf_offset,
-			ctx->buff_size, (uint64_t)ctx->buf[qp_index],
-			dmabuf_fd,
-			flags
-		);
+	#ifdef HAVE_DATA_DIRECT
+	    if (user_param->use_data_direct) {
+			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			ctx->mr[qp_index] = mlx5dv_reg_dmabuf_mr(
+		        ctx->pd, dmabuf_offset,
+		        ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+		        dmabuf_fd,
+		        flags, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT
+		        );
+	    } else
+	#endif
+		{
+			printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+				   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
+                ctx->pd, dmabuf_offset,
+                ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+                dmabuf_fd,
+                flags
+                );
+	    }
 		if (!ctx->mr[qp_index]) {
 			int error = errno;
 			fprintf(stderr, "Couldn't allocate MR with error=%d\n", error);

@@ -620,6 +620,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			if (cuda_memory_dmabuf_supported()) {
 				printf("      --use_cuda_dmabuf");
 				printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
+				if (data_direct_supported()) {
+					printf("      --use_data_direct");
+					printf(" Use Data-Direct CUDA DMA-BUF for GPUDirect RDMA testing\n");
+				}
 			}
 		}
 
@@ -871,6 +875,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_id	= 0;
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
+	user_param->use_data_direct	= 0;
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
@@ -2363,6 +2368,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
+	static int use_data_direct_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_neuron_flag = 0;
 	static int use_neuron_dmabuf_flag = 0;
@@ -2535,6 +2541,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
+			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
@@ -2982,6 +2989,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
+				if(use_data_direct_flag && !data_direct_supported()){
+					printf(" Data Direct is not supported\n");
+					return FAILURE;
+				}
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
 				    (mmap_file_flag || use_mlu_flag || use_rocm_flag || use_neuron_flag || use_hl_flag ||
@@ -3010,6 +3021,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					use_cuda_dmabuf_flag = 0;
+				}
+				if (use_data_direct_flag) {
+				    user_param->use_data_direct = 1;
+				    use_data_direct_flag = 0;
 				}
 				if (use_rocm_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
@@ -3439,6 +3454,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->vlan_en = ON;
 		user_param->print_eth_func = &print_ethernet_vlan_header;
 		vlan_en = 0;
+	}
+	if(user_param->use_data_direct && !user_param->use_cuda_dmabuf){
+		fprintf(stderr, " DMABUF must be enabled in order to use Data Direct \n");
+		return FAILURE;
 	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));

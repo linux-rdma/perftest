@@ -173,6 +173,14 @@ fi
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
+	[int x = MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT;],[HAVE_DATA_DIRECT=yes], [HAVE_DATA_DIRECT=no])
+AM_CONDITIONAL([HAVE_DATA_DIRECT],[test "x$HAVE_DATA_DIRECT" = "xyes"])
+if [test $HAVE_DATA_DIRECT = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_DATA_DIRECT], [1], [Have Data Direct support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES_XTS=yes], [HAVE_AES_XTS=no])
 AM_CONDITIONAL([HAVE_AES_XTS],[test "x$HAVE_AES_XTS" = "xyes"])
 if [test $HAVE_AES_XTS = yes] && [test $HAVE_MLX5DV = yes];  then

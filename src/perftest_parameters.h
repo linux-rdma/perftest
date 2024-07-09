@@ -573,6 +573,7 @@ struct perftest_parameters {
 	int				cuda_device_id;
 	char				*cuda_device_bus_id;
 	int				use_cuda_dmabuf;
+	int				use_data_direct;
 	int				rocm_device_id;
 	int				neuron_core_id;
 	int				use_neuron_dmabuf;
