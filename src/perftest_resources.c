@@ -2307,6 +2307,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_init_attr attr_dv;
 	memset(&attr_dv, 0, sizeof(attr_dv));
+	#ifdef HAVE_OOO_RECV_WRS
+	struct mlx5dv_context ctx_dv;
+	memset(&ctx_dv, 0, sizeof(ctx_dv));
+	#endif
 	#endif
 	#ifdef HAVE_SRD
 	struct efadv_qp_init_attr efa_attr = {};
@@ -2450,6 +2454,20 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		if (!user_param->use_old_post_send)
 		{
 			#ifdef HAVE_MLX5DV
+			#ifdef HAVE_OOO_RECV_WRS
+			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
+
+			int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
+
+			if (ret) {
+				fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
+				return NULL;
+			}
+
+			if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+			}
+			#endif
 			if (user_param->connection_type == DC)
 			{
 				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -2482,13 +2500,17 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				attr_ex.cap.max_inline_data = AES_XTS_INLINE;
 				attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_SEND_OPS_FLAGS;
 				attr_dv.send_ops_flags = MLX5DV_QP_EX_WITH_MKEY_CONFIGURE;
-				attr_dv.create_flags = MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
 			#endif // HAVE_AES_XTS
+			#ifdef HAVE_OOO_RECV_WRS
+			else if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+			}
+			#endif
 			else
 			#endif // HAVE_MLX5DV
-
 			#ifdef HAVE_HNSDV
 			if (user_param->congest_type) {
 				hns_attr.comp_mask = HNSDV_QP_INIT_ATTR_MASK_QP_CONGEST_TYPE;
