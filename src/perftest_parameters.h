@@ -443,7 +443,8 @@ enum memory_type {
 	MEMORY_ROCM,
 	MEMORY_NEURON,
 	MEMORY_HL,
-	MEMORY_MLU
+	MEMORY_MLU,
+	MEMORY_OPENCL
 };
 
 enum cuda_mem_type {
@@ -595,6 +596,8 @@ struct perftest_parameters {
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
 	int				mlu_device_id;
+	int                             opencl_platform_id;
+	int                             opencl_device_id;
 	int                             gpu_touch;
 	char				*mmap_file;
 	unsigned long			mmap_offset;

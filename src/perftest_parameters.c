@@ -19,6 +19,7 @@
 #include "neuron_memory.h"
 #include "hl_memory.h"
 #include "mlu_memory.h"
+#include "opencl_memory.h"
 #include<math.h>
 #ifdef HAVE_RO
 #include <stdbool.h>
@@ -613,8 +614,16 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			printf(" Use selected MLU device for MLUDirect RDMA testing\n");
 		}
 
-		if (cuda_memory_supported() {
-			printf("      --gpu_touch=<once \\ infinte> ");
+		if (opencl_memory_supported()) {
+			printf("      --use_opencl=<opencl device id>");
+			printf(" Use OpenCl specific device for GPUDirect RDMA testing\n");
+			printf("      --opencl_platform_id=<opencl platform id>");
+			printf(" Use OpenCl specific platform ID\n");
+		}
+
+		if (cuda_memory_supported() ||
+		    opencl_memory_supported()) {
+			printf("      --gpu_touch=<once\\infinte> ");
 			printf(" Set GPU touch mode to test memory accesses during the testing process.\n");
 		}
 
@@ -845,6 +854,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
+	user_param->opencl_platform_id	= 0;
+	user_param->opencl_device_id	= 0;
 	user_param->gpu_touch		= GPU_NO_TOUCH;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
@@ -2341,6 +2352,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_neuron_dmabuf_flag = 0;
 	static int use_hl_flag = 0;
 	static int use_mlu_flag = 0;
+	static int use_opencl_flag = 0;
+	static int opencl_platform_id_flag = 0;
 	static int gpu_touch_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
@@ -2515,6 +2528,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
 			{ .name = "use_hl",		.has_arg = 1, .flag = &use_hl_flag, .val = 1},
 			{ .name = "use_mlu",		.has_arg = 1, .flag = &use_mlu_flag, .val = 1},
+			{ .name = "use_opencl",         .has_arg = 1, .flag = &use_opencl_flag, .val = 1},
+			{ .name = "opencl_platform_id", .has_arg = 1, .flag = &opencl_platform_id_flag, .val = 1},
 			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -2957,7 +2972,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_neuron_flag && !neuron_memory_supported()) ||
 				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported()) ||
-				    (use_mlu_flag && !mlu_memory_supported())) {
+				    (use_mlu_flag && !mlu_memory_supported()) ||
+				    (use_opencl_flag && !opencl_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -3050,8 +3066,29 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					use_mlu_flag = 0;
 				}
 
+				if (use_opencl_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->opencl_device_id,int,"OPENCL device",not_int_ptr);
+					if (!user_param->use_odp) {
+						fprintf(stderr, "OPENCL flag is only supported for ODP MR\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					user_param->memory_type = MEMORY_OPENCL;
+					user_param->memory_create = opencl_memory_create;
+					use_opencl_flag = 0;
+				}
+				if (opencl_platform_id_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->opencl_platform_id,int,"OPENCL Platform ID",not_int_ptr);
+					if (user_param->memory_type != MEMORY_OPENCL) {
+						fprintf(stderr, "OpenCL platform ID cannot be used without OpenCL device\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					opencl_platform_id_flag = 0;
+				}
 				if (gpu_touch_flag) {
-					if (user_param->memory_type != MEMORY_CUDA)
+					if (user_param->memory_type != MEMORY_CUDA &&
+					    user_param->memory_type != MEMORY_OPENCL) {
 						fprintf(stderr, "GPU touch is not supported for this MEMORY_TYPE\n");
 						free(duplicates_checker);
 						return FAILURE;
