@@ -455,6 +455,13 @@ enum cuda_mem_type {
 	CUDA_MEM_TYPES
 };
 
+enum gpu_touch_type {
+	GPU_NO_TOUCH,
+	GPU_TOUCH_ONCE,
+	GPU_TOUCH_INFINITE,
+	GPU_TOUCH_TYPES
+};
+
 struct perftest_parameters {
 
 	int				port;
@@ -588,6 +595,7 @@ struct perftest_parameters {
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
 	int				mlu_device_id;
+	int                             gpu_touch;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
