@@ -39,6 +39,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
 
+AC_ARG_VAR(HAVE_OPENCL, opencl support)
 AC_ARG_VAR(CUDA_H_PATH, help-string)
 AC_ARG_VAR(RANLIB, ranlib tool)
 
@@ -446,6 +447,12 @@ fi
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"
+AM_CONDITIONAL([OPENCL], [test "$HAVE_OPENCL"])
+if [test $HAVE_OPENCL = yes]; then
+	AC_DEFINE([HAVE_OPENCL], [1], [Enable OPENCL feature])
+	AC_CHECK_LIB([OpenCL], [clGetDeviceIDs], [], [AC_MSG_ERROR([libOpenCL not found])])
+fi
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 AC_CONFIG_FILES([Makefile])

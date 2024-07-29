@@ -380,6 +380,15 @@ many different options and modes.
  Not relevant for raw_ethernet_fs_rate.
  System support required.
 .TP
+.B --use_opencl=<opencl device id>
+ Use OpenCl specific device for GPUDirect RDMA testing
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B  --opencl_platform_id=<opencl platform id>
+ Use OpenCl specific platform ID
+ System support required.
+.TP
 .B --gpu_touch=<once\\infinte>
  Set GPU touch mode to test memory accesses during the testing process.
  Relevant only for CUDA and OpenCL memory types
