@@ -1,0 +1,32 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    name: Build without libibverbs and librdmacm installed (Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Configure and build (Clang)
+        uses: threeal/cmake-action@main
+        with:
+          generator: Ninja
+          c-compiler: clang
+
+      - name: Configure and build (GCC)
+        uses: threeal/cmake-action@main
+        with:
+          generator: Ninja
+          c-compiler: gcc
+
