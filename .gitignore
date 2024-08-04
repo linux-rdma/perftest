@@ -57,3 +57,8 @@ debian/compat
 debian/*.log
 debian/files
 debian/perftest
+
+# CMake
+.cache
+build
+man

@@ -1,0 +1,32 @@
+#cmakedefine VERSION "@VERSION@"
+
+#cmakedefine CUDA_PATH "@CUDA_PATH@"
+#cmakedefine HAVE_CUDA
+#cmakedefine HAVE_CUDA_DMABUF
+#cmakedefine ENABLE_HL
+#cmakedefine ENABLE_NEURON
+#cmakedefine HAVE_AES_XTS
+#cmakedefine HAVE_DCS
+#cmakedefine HAVE_DLFCN_H
+#cmakedefine HAVE_ENDIAN
+#cmakedefine HAVE_EX
+#cmakedefine HAVE_EX_ODP
+#cmakedefine HAVE_GID_TYPE
+#cmakedefine HAVE_GID_TYPE_DECLARED
+#cmakedefine HAVE_IBV_WR_API
+#cmakedefine HAVE_IPV4_EXT
+#cmakedefine HAVE_IPV6
+#cmakedefine HAVE_MLX5DV
+#cmakedefine HAVE_MLX5DV_LIB
+#cmakedefine HAVE_MLX5_DEVX
+#cmakedefine HAVE_OOO_ATTR
+#cmakedefine HAVE_PACKET_PACING
+#cmakedefine HAVE_RAW_ETH
+#cmakedefine HAVE_RAW_ETH_REG
+#cmakedefine HAVE_RO
+#cmakedefine HAVE_ROCM
+#cmakedefine HAVE_SNIFFER
+#cmakedefine HAVE_SRD
+#cmakedefine HAVE_SYS_RANDOM_H
+#cmakedefine HAVE_XRCD
+#cmakedefine IS_FREEBSD
