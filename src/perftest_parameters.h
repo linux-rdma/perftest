@@ -441,7 +441,8 @@ enum memory_type {
 	MEMORY_CUDA,
 	MEMORY_ROCM,
 	MEMORY_NEURON,
-	MEMORY_HL
+	MEMORY_HL,
+	MEMORY_MLU
 };
 
 struct perftest_parameters {
@@ -574,6 +575,7 @@ struct perftest_parameters {
 	int				neuron_core_id;
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
+	int				mlu_device_id;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
