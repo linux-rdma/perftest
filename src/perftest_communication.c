@@ -999,6 +999,12 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 		}
 	}
 
+	if (rdma_set_option(ctx->cm_id, RDMA_OPTION_ID, RDMA_OPTION_ID_ACK_TIMEOUT,
+			    &user_param->qp_timeout, sizeof(uint8_t))) {
+		fprintf(stderr, " Set RDMA-CM Ack timeout option failed: %d\n", event->event);
+		return FAILURE;
+	}
+
 	while (1) {
 
 		if (num_of_retry <= 0) {
@@ -1230,6 +1236,12 @@ int rdma_server_connect(struct pingpong_context *ctx,
 				return 1;
 			}
 		}
+	}
+
+	if (rdma_set_option(ctx->cm_id, RDMA_OPTION_ID, RDMA_OPTION_ID_ACK_TIMEOUT,
+			    &user_param->qp_timeout, sizeof(uint8_t))) {
+		fprintf(stderr, " Set RDMA-CM Ack timeout option failed: %d\n", event->event);
+		return FAILURE;
 	}
 
 	if (rdma_accept(ctx->cm_id, &conn_param)) {
