@@ -1174,6 +1174,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->use_srq = ON;
 	}
 
+	if (user_param->connection_type == DC && !user_param->use_srq)
+		user_param->use_srq = ON;
+
 	if (user_param->use_srq && user_param->verb == SEND &&
 	    user_param->num_of_qps > user_param->rx_depth) {
 		printf(RESULT_LINE);
@@ -1466,9 +1469,6 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 	}
-
-	if (user_param->connection_type == DC && !user_param->use_srq)
-		user_param->use_srq = ON;
 
 	if (!user_param->use_old_post_send)
 	{
