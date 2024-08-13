@@ -389,6 +389,20 @@ if [test $HAVE_HNSDV = yes]; then
 	AC_SUBST([LIBHNS])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[ibv_cq_ex_to_cq], [HAVE_CQ_EX=yes], [HAVE_CQ_EX=no])
+AM_CONDITIONAL([HAVE_CQ_EX], [test "x$HAVE_CQ_EX" = "xyes"])
+if [test $HAVE_CQ_EX = yes]; then
+	AC_DEFINE([HAVE_CQ_EX], [1], [Have CQ EX API support])
+fi
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[ibv_alloc_td], [HAVE_TD_API=yes], [HAVE_TD_API=no])
+AM_CONDITIONAL([HAVE_TD_API], [test "x$HAVE_TD_API" = "xyes"])
+if [test $HAVE_TD_API = yes]; then
+	AC_DEFINE([HAVE_TD_API], [1], [Have TD API support])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"
