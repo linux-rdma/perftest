@@ -467,6 +467,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ \n");
 	}
 
+	#ifdef HAVE_TD_API
+	printf("      --no_lock ");
+	printf(" No lock in IO, including post send, post recv, post srq recv and poll cq \n");
+	#endif
+
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
@@ -879,6 +884,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->has_source_ip	= 0;
 	user_param->use_write_with_imm	= 0;
 	user_param->congest_type	= OFF;
+	user_param->no_lock		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -2335,6 +2341,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_HNSDV
 	static int congest_type_flag = 0;
 	#endif
+	#ifdef HAVE_TD_API
+	static int no_lock_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2414,6 +2423,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "run_infinitely",	.has_arg = 0, .flag = &run_inf_flag, .val = 1 },
 			{ .name = "report_gbits",	.has_arg = 0, .flag = &report_fmt_flag, .val = 1},
 			{ .name = "use-srq",		.has_arg = 0, .flag = &srq_flag, .val = 1},
+			#ifdef HAVE_TD_API
+			{ .name = "no_lock",		.has_arg = 0, .flag = &no_lock_flag, .val = 1},
+			#endif
 			{ .name = "use-null-mr",	.has_arg = 0, .flag = &use_null_mr_flag, .val = 1},
 			{ .name = "report-both",	.has_arg = 0, .flag = &report_both_flag, .val = 1},
 			{ .name = "reversed",		.has_arg = 0, .flag = &is_reversed_flag, .val = 1},
@@ -3165,6 +3177,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->use_srq = 1;
 	}
 
+	#ifdef HAVE_TD_API
+	if (no_lock_flag) {
+		user_param->no_lock = 1;
+	}
+	#endif
+
 	if (use_null_mr_flag) {
 		user_param->use_null_mr = 1;
 	}
@@ -3509,15 +3527,24 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	printf(" Number of qps   : %d\t\tTransport type : %s\n", user_param->num_of_qps, transport_str(user_param->transport_type));
 	printf(" Connection type : %s\t\tUsing SRQ      : %s\n", connStr[user_param->connection_type], user_param->use_srq ? "ON"  : "OFF");
 	#ifdef HAVE_RO
-	printf(" PCIe relax order: %s\n", user_param->disable_pcir ? "OFF"  : "ON");
+	#ifdef HAVE_TD_API
+	printf(" PCIe relax order: %s\t\tLock-free      : %s\n", user_param->disable_pcir ? "OFF"  : "ON", user_param->no_lock ? "ON" : "OFF");
+	#else
+	printf(" PCIe relax order: %s\t\tLock-free      : %s\n", user_param->disable_pcir ? "OFF"  : "ON", "Unsupported");
+	#endif //HAVE_TD_API
 	if ((check_pcie_relaxed_ordering_compliant() == false) &&
 	    (user_param->disable_pcir == 0)) {
 		printf(" WARNING: CPU is not PCIe relaxed ordering compliant.\n");
 		printf(" WARNING: You should disable PCIe RO with `--disable_pcie_relaxed` for both server and client.\n");
 	}
 	#else
-	printf(" PCIe relax order: %s\n", "Unsupported");
+	#ifdef HAVE_TD_API
+	printf(" PCIe relax order: %s\t\tLock-free      : %s\n", "Unsupported", user_param->no_lock ? "ON" : "OFF");
+	#else
+	printf(" PCIe relax order: %s\t\tLock-free	: %s\n", "Unsupported", "Unsupported");
+	#endif //HAVE_TD_API
 	#endif
+
 	printf(" ibv_wr* API     : %s\n", user_param->use_old_post_send ? "OFF" : "ON");
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
