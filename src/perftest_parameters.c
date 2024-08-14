@@ -621,6 +621,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (cuda_memory_supported()) {
 			printf("      --use_cuda=<cuda device id>");
 			printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
+			printf("      --cuda_mem_type=<value>");
+			printf(" Set CUDA memory type <value>=0(device,default),1(managed),4(malloc)\n");
 
 			printf("      --use_cuda_bus_id=<cuda full BUS id>");
 			printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
@@ -890,6 +892,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_cuda_dmabuf	= 0;
 	user_param->use_rocm_dmabuf = 0;
 	user_param->use_data_direct	= 0;
+	user_param->cuda_mem_type       = CUDA_MEM_DEVICE;
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
@@ -2399,6 +2402,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_data_direct_flag = 0;
+	static int cuda_mem_type_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_rocm_dmabuf_flag = 0;
 	static int use_neuron_flag = 0;
@@ -2574,6 +2578,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
+			{ .name = "cuda_mem_type",	.has_arg = 1, .flag = &cuda_mem_type_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_rocm_dmabuf",	.has_arg = 0, .flag = &use_rocm_dmabuf_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
@@ -3061,6 +3066,27 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (use_data_direct_flag) {
 				    user_param->use_data_direct = 1;
 				    use_data_direct_flag = 0;
+				}
+				if (cuda_mem_type_flag) {
+					user_param->cuda_mem_type = strtol(optarg,NULL,0);
+					if (user_param->memory_type != MEMORY_CUDA) {
+						fprintf(stderr, "CUDA MEM TYPE cannot be used without CUDA\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					if (user_param->cuda_mem_type < CUDA_MEM_DEVICE || user_param->cuda_mem_type >= CUDA_MEM_TYPES) {
+						fprintf(stderr, "invalid CUDA memory type %d\n", user_param->cuda_mem_type);
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					if ((user_param->cuda_mem_type == CUDA_MEM_MALLOC ||
+					    user_param->cuda_mem_type == CUDA_MEM_MANAGED) &&
+					    (!user_param->use_odp || user_param->use_cuda_dmabuf)) {
+						fprintf(stderr, "CUDA Memory type is not supported with no odp MR or with dmabuf\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					cuda_mem_type_flag = 0;
 				}
 				if (use_rocm_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);

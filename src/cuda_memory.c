@@ -18,9 +18,18 @@
 
 #define ACCEL_PAGE_SIZE (64 * 1024)
 
+static const char *cuda_mem_type_str[] = {
+	"CUDA_MEM_DEVICE",
+	"CUDA_MEM_MANAGED",
+	"CUDA_MEM_HOSTALLOC",
+	"CUDA_MEM_HOSTREGISTER",
+	"CUDA_MEM_MALLOC",
+	"CUDA_MEM_TYPES"
+};
 
 struct cuda_memory_ctx {
 	struct memory_ctx base;
+	int mem_type;
 	int device_id;
 	char *device_bus_id;
 	CUdevice cuDevice;
@@ -156,20 +165,17 @@ int cuda_memory_destroy(struct memory_ctx *ctx) {
 	return SUCCESS;
 }
 
-int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t size, int *dmabuf_fd,
-				uint64_t *dmabuf_offset,  void **addr, bool *can_init) {
+static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, uint64_t size, int *dmabuf_fd,
+		uint64_t *dmabuf_offset, void **addr, bool *can_init) {
 	int error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 
 	// Check if discrete or integrated GPU (tegra), for allocating memory where adequate
-	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 	int cuda_device_integrated;
 	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 	printf("CUDA device integrated: %X\n", (unsigned int)cuda_device_integrated);
 
 	if (cuda_device_integrated == 1) {
-		printf("cuMemAllocHost() of a %lu bytes GPU buffer\n", size);
-
 		error = cuMemAllocHost(addr, buf_size);
 		if (error != CUDA_SUCCESS) {
 			printf("cuMemAllocHost error=%d\n", error);
@@ -180,15 +186,12 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 		*can_init = false;
 	} else {
 		CUdeviceptr d_A;
-		printf("cuMemAlloc() of a %lu bytes GPU buffer\n", size);
-
 		error = cuMemAlloc(&d_A, buf_size);
 		if (error != CUDA_SUCCESS) {
 			printf("cuMemAlloc error=%d\n", error);
 			return FAILURE;
 		}
 
-		printf("allocated GPU buffer address at %016llx pointer=%p\n", d_A, (void *)d_A);
 		*addr = (void *)d_A;
 		*can_init = false;
 
@@ -237,6 +240,59 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 #endif
 	}
 
+	return CUDA_SUCCESS;
+}
+
+int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t size, int *dmabuf_fd,
+				uint64_t *dmabuf_offset, void **addr, bool *can_init) {
+	int error;
+	CUdeviceptr d_ptr;
+
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+
+	switch (cuda_ctx->mem_type) {
+		case CUDA_MEM_DEVICE:
+			error = cuda_allocate_device_memory_buffer(cuda_ctx, size, dmabuf_fd,
+					dmabuf_offset, addr, can_init);
+			if (error != CUDA_SUCCESS)
+				return FAILURE;
+			break;
+		case CUDA_MEM_MANAGED:
+			error = cuMemAllocManaged(&d_ptr, size, CU_MEM_ATTACH_GLOBAL);
+			if (error != CUDA_SUCCESS) {
+				printf("cuMemAllocManaged error=%d\n", error);
+				return FAILURE;
+			}
+
+			*addr = (void *)d_ptr;
+			*can_init = false;
+			break;
+
+		case CUDA_MEM_MALLOC:
+			*can_init = false;
+			// Fall through
+
+			printf("Host allocation selected, calling memalign allocator for %zd bytes with %d page size\n", size, alignment);
+			*addr = memalign(alignment, size);
+			if (!*addr) {
+				printf("memalign error=%d\n", errno);
+				return FAILURE;
+			}
+
+			break;
+		/*
+		 * TODO: Add Implementation for HOSTALLOC and HOSTREGISTER
+		 * buffer allocations
+		 */
+		case CUDA_MEM_HOSTALLOC:
+		case CUDA_MEM_HOSTREGISTER:
+		default:
+			printf("invalid CUDA memory type\n");
+			return FAILURE;
+	}
+
+	printf("allocated GPU buffer of a %lu address at %p for type %s\n", size, addr, cuda_mem_type_str[cuda_ctx->mem_type]);
+
 	return SUCCESS;
 }
 
@@ -245,13 +301,23 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 	int cuda_device_integrated;
 	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 
-	if (cuda_device_integrated == 1) {
-		printf("deallocating GPU buffer %p\n", addr);
-		cuMemFreeHost(addr);
-	} else {
-		CUdeviceptr d_A = (CUdeviceptr)addr;
-		printf("deallocating GPU buffer %016llx\n", d_A);
-		cuMemFree(d_A);
+	switch (cuda_ctx->mem_type) {
+		case CUDA_MEM_DEVICE:
+			if (cuda_device_integrated == 1) {
+				printf("deallocating GPU buffer %p\n", addr);
+				cuMemFreeHost(addr);
+			} else {
+				CUdeviceptr d_A = (CUdeviceptr)addr;
+				printf("deallocating GPU buffer %016llx\n", d_A);
+				cuMemFree(d_A);
+			}
+			break;
+		case CUDA_MEM_MANAGED:
+			CUCHECK(cuMemFree((CUdeviceptr)addr));
+			break;
+		case CUDA_MEM_MALLOC:
+			free((void *) addr);
+			break;
 	}
 
 	return SUCCESS;
@@ -303,6 +369,7 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->device_bus_id = params->cuda_device_bus_id;
 	ctx->use_dmabuf = params->use_cuda_dmabuf;
 	ctx->use_data_direct = params->use_data_direct;
+	ctx->mem_type = params->cuda_mem_type;
 
 	return &ctx->base;
 }
