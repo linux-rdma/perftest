@@ -2384,7 +2384,13 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		else if (opcode == IBV_WR_RDMA_READ)
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
 	}
+
+	#ifdef HAVE_TD_API
+	attr_ex.pd = user_param->no_lock ? ctx->pad : ctx->pd;
+	#else
 	attr_ex.pd = ctx->pd;
+	#endif
+
 	attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
 	attr_ex.send_cq = attr.send_cq;
 	attr_ex.recv_cq = attr.recv_cq;
