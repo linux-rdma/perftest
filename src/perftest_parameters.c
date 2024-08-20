@@ -3838,6 +3838,9 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 
 	dprintf(out_json_fds, "\"rdma_cm_QPs\": \"%s\",\n",qp_state[user_param->work_rdma_cm]);
 
+	if (user_param->memory_type == MEMORY_CUDA)
+		dprintf(out_json_fds, "\"cuda_device\": %d,\n",user_param->cuda_device_id);
+
 	if (user_param->use_rdma_cm)
 		temp = 1;
 
