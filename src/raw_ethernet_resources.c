@@ -732,9 +732,10 @@ static void fill_ip_common(struct ibv_flow_spec* spec_info,
 			}
 			if (user_param->flow_label) {
 				ipv6_spec->val.flow_label =
-					htonl(user_param->flow_label);
+					htonl(user_param->flow_label[user_param->flow_label[1] % user_param->flow_label[0] + 2]);
 				ipv6_spec->mask.flow_label =
 					htonl(0xfffff);
+				user_param->flow_label[1] = user_param->flow_label[1] + 1;
 			}
 			memcpy((void*)&ipv6_spec->mask.dst_ip, ipv6_mask, 16);
 			memcpy((void*)&ipv6_spec->mask.src_ip, ipv6_mask, 16);
