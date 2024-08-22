@@ -114,6 +114,43 @@ static int parse_ethertype_from_str(char *ether_str, uint16_t *ethertype_val)
 	return SUCCESS;
 }
 
+static int parse_flow_label_from_str(struct perftest_parameters *user_param, char *flow_label_str)
+{
+	int fl_cnt = 1;
+	const char* sep = NULL;
+
+	sep = strchr(flow_label_str, ',');
+	if (sep != NULL)
+		do {
+			fl_cnt++;
+			sep = strchr(sep + 1, ',');
+		} while (sep);
+
+	int *flow_label = calloc(fl_cnt + 2, sizeof(int));
+	flow_label[0] = fl_cnt;
+	flow_label[1] = 0;
+	flow_label[2] = strtol(flow_label_str, NULL, 0);
+	sep = strchr(flow_label_str, ',');
+
+	for (int i = 3; i < fl_cnt + 2; i++) {
+		flow_label[i] = strtol(sep + 1, NULL, 0);
+		sep = strchr(sep + 1, ',');
+	}
+
+	if (user_param->connection_type == RawEth) {
+		for (int i = 2; i < fl_cnt + 2; i++) {
+			if (flow_label[i] < 0) {
+				fprintf(stderr," flow label must be non-negative for RawEth\n");
+				return -1;
+			}
+		}
+	}
+
+	user_param->flow_label = flow_label;
+
+	return 0;
+}
+
 /******************************************************************************
   parse_ip_from_str.
  *
@@ -569,8 +606,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
 		if (connection_type != RawEth) {
-			printf("      --flow_label=<value> ");
-			printf(" Set the flow_label in GRH (if GRH is in use)\n");
+			printf("      --flow_label=<fl0,fl1,fl2,...> ");
+			printf(" Set the flow_label in GRH for each qp in roundrobin method(if GRH is in use)\n");
 		}
 
 		if (cuda_memory_supported()) {
@@ -889,7 +926,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->mr_per_qp			= 0;
 	user_param->dlid			= 0;
 	user_param->traffic_class		= 0;
-	user_param->flow_label			= 0;
+	user_param->flow_label			= NULL;
 	user_param->flows			= DEF_FLOWS;
 	user_param->flows_burst			= 1;
 	user_param->perform_warm_up		= 0;
@@ -3012,9 +3049,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					use_mlu_flag = 0;
 				}
 				if (flow_label_flag) {
-					CHECK_VALUE(user_param->flow_label,int,"flow label",not_int_ptr);
-					if (user_param->connection_type == RawEth && user_param->flow_label < 0) {
-						fprintf(stderr," flow label must be non-negative for RawEth\n");
+					if (parse_flow_label_from_str(user_param, optarg)) {
 						return FAILURE;
 					}
 					flow_label_flag = 0;
@@ -3427,6 +3462,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	force_dependecies(user_param);
 	return 0;
 }
+
 
 /******************************************************************************
  *
