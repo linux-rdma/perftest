@@ -301,7 +301,8 @@ int main(int argc, char *argv[])
 			if (user_param.machine == CLIENT || user_param.duplex)
 				ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
-			if (user_param.verb == WRITE_IMM && (user_param.machine == SERVER || user_param.duplex)) {
+			if (user_param.verb == WRITE_IMM && !user_param.use_unsolicited_write &&
+			    (user_param.machine == SERVER || user_param.duplex)) {
 				if (ctx_set_recv_wqes(&ctx,&user_param)) {
 					fprintf(stderr," Failed to post receive recv_wqes\n");
 					goto free_mem;

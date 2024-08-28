@@ -639,6 +639,7 @@ struct perftest_parameters {
 	int 				has_source_ip;
 	int 			ah_allocated;
 	int				use_write_with_imm;
+	int				use_unsolicited_write;
 };
 
 struct report_options {
