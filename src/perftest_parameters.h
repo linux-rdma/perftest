@@ -640,6 +640,7 @@ struct perftest_parameters {
 	int 			ah_allocated;
 	int				use_write_with_imm;
 	int				use_unsolicited_write;
+	int				use_ddp;
 };
 
 struct report_options {

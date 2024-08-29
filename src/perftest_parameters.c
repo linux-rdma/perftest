@@ -891,6 +891,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_unsolicited_write = 0;
 	user_param->congest_type	= OFF;
 	user_param->no_lock		= OFF;
+	user_param->use_ddp		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -3576,7 +3577,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	#endif //HAVE_TD_API
 	#endif
 
-	printf(" ibv_wr* API     : %s\n", user_param->use_old_post_send ? "OFF" : "ON");
+	printf(" ibv_wr* API     : %s\t\tUsing DDP      : %s\n", user_param->use_old_post_send ? "OFF" : "ON", user_param->use_ddp ? "ON" : "OFF");
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
 	}

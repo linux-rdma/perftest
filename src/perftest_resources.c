@@ -2465,7 +2465,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			}
 
 			if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+				user_param->use_ddp = ON;
 				attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
 			}
 			#endif
 			if (user_param->connection_type == DC)
