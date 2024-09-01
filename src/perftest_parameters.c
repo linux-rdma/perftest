@@ -472,6 +472,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" No lock in IO, including post send, post recv, post srq recv and poll cq \n");
 	#endif
 
+	#ifdef HAVE_OOO_RECV_WRS
+	printf("      --no_ddp ");
+	printf(" Disable the receiver capability to consume out-of-order WRs. \n");
+	#endif
+
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
@@ -892,6 +897,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->congest_type	= OFF;
 	user_param->no_lock		= OFF;
 	user_param->use_ddp		= OFF;
+	user_param->no_ddp		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -2367,6 +2373,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_TD_API
 	static int no_lock_flag = 0;
 	#endif
+	#ifdef HAVE_OOO_RECV_WRS
+	static int no_ddp_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2529,6 +2538,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
+			#ifdef HAVE_OOO_RECV_WRS
+			{ .name = "no_ddp",		.has_arg = 0, .flag = &no_ddp_flag, .val = 1},
+			#endif
 			#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 			{.name = "unsolicited_write", .has_arg = 0, .flag = &unsolicited_write_flag, .val = 1 },
 			#endif
@@ -3212,6 +3224,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_TD_API
 	if (no_lock_flag) {
 		user_param->no_lock = 1;
+	}
+	#endif
+
+	#ifdef HAVE_OOO_RECV_WRS
+	if (no_ddp_flag) {
+		user_param->no_ddp = 1;
 	}
 	#endif
 

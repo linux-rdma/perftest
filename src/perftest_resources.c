@@ -2455,19 +2455,21 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		{
 			#ifdef HAVE_MLX5DV
 			#ifdef HAVE_OOO_RECV_WRS
-			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
+			if (!user_param->no_ddp){
+				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
-			int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
+				int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
 
-			if (ret) {
-				fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
-				return NULL;
-			}
+				if (ret) {
+					fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
+					return NULL;
+				}
 
-			if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
-				user_param->use_ddp = ON;
-				attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
-				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+				if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+					user_param->use_ddp = ON;
+					attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+				}
 			}
 			#endif
 			if (user_param->connection_type == DC)
