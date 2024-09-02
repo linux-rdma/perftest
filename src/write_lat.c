@@ -262,10 +262,12 @@ int main(int argc, char *argv[])
 			user_param.size = (uint64_t)1 << i;
 
 			if (user_param.verb == WRITE_IMM) {
-				/* Post receive recv_wqes fo current message size */
-				if (ctx_set_recv_wqes(&ctx,&user_param)) {
-					fprintf(stderr," Failed to post receive recv_wqes\n");
-					goto free_mem;
+				if (!user_param.use_unsolicited_write) {
+					/* Post receive recv_wqes fo current message size */
+					if (ctx_set_recv_wqes(&ctx,&user_param)) {
+						fprintf(stderr," Failed to post receive recv_wqes\n");
+						goto free_mem;
+					}
 				}
 
 				/* Sync between the client and server so the client won't send packets

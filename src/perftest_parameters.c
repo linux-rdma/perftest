@@ -645,7 +645,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if ((tst == LAT || tst == BW) && verb == WRITE) {
 		printf("      --write_with_imm ");
-		printf(" use write-with-immediate verb instead of write\n");
+		printf(" Use write-with-immediate verb instead of write\n");
+
+		#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
+		printf("      --unsolicited_write ");
+		printf(" Use unsolicited receive for write-with-immediate\n");
+		#endif
 	}
 
 	putchar('\n');
@@ -883,6 +888,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->source_ip		= NULL;
 	user_param->has_source_ip	= 0;
 	user_param->use_write_with_imm	= 0;
+	user_param->use_unsolicited_write = 0;
 	user_param->congest_type	= OFF;
 	user_param->no_lock		= OFF;
 }
@@ -1617,6 +1623,19 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->cq_mod = 1;
 	}
 
+	if (user_param->use_unsolicited_write) {
+		if (user_param->connection_type != SRD) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Unsolicited write receive is supported only for SRD\n");
+			exit(1);
+		}
+		if (user_param->verb != WRITE_IMM) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Unsolicited write receive can only be used with write-with-immediate\n");
+			exit(1);
+		}
+	}
+
 	if ((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
 
@@ -2323,6 +2342,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int recv_post_list_flag = 0;
 	static int payload_flag = 0;
 	static int use_write_with_imm_flag = 0;
+	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
+	static int unsolicited_write_flag = 0;
+	#endif
 	#ifdef HAVE_DCS
 	static int log_dci_streams_flag = 0;
 	static int log_active_dci_streams_flag = 0;
@@ -2506,6 +2528,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
+			#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
+			{.name = "unsolicited_write", .has_arg = 0, .flag = &unsolicited_write_flag, .val = 1 },
+			#endif
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3146,6 +3171,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->verb = WRITE_IMM;
 					use_write_with_imm_flag = 0;
 				}
+				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
+				if (unsolicited_write_flag) {
+					user_param->use_unsolicited_write = 1;
+					unsolicited_write_flag = 0;
+				}
+				#endif
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");

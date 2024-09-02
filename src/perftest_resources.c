@@ -2434,6 +2434,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_SRD
 		#ifdef HAVE_IBV_WR_API
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
+		#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
+		if (user_param->use_unsolicited_write)
+			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
+		#endif
 		qp = efadv_create_qp_ex(ctx->context, &attr_ex,
 					&efa_attr, sizeof(efa_attr));
 		#else
@@ -3800,7 +3804,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					}
 					//coverity[uninit_use]
 					if ((user_param->test_type==DURATION || posted_per_qp[wc_id] + user_param->recv_post_list <= user_param->iters) &&
-							unused_recv_for_qp[wc_id] >= user_param->recv_post_list) {
+					    unused_recv_for_qp[wc_id] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc_id * user_param->recv_post_list], &bad_wr_recv)) {
 								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n", wc_id,rcnt);
@@ -4087,7 +4091,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 				}
 				user_param->iters++;
 				unused_recv_for_qp[wc[i].wr_id]++;
-				if (unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list) {
+				if (unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d:\n",(int)wc[i].wr_id);
@@ -4341,7 +4345,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 				}
 
 				if ((user_param->test_type==DURATION || posted_per_qp[wc[i].wr_id] + user_param->recv_post_list <= user_param->iters) &&
-						unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list) {
+				    unused_recv_for_qp[wc[i].wr_id] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc[i].wr_id * user_param->recv_post_list],&bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%d\n",(int)wc[i].wr_id,(int)totrcnt);
@@ -4685,7 +4689,8 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 				 * is enough space in the rx_depth,
 				 * post that you received a packet.
 				 */
-				if (user_param->test_type == DURATION || (rcnt + size_per_qp <= user_param->iters)) {
+				if ((user_param->test_type == DURATION || (rcnt + size_per_qp <= user_param->iters)) &&
+				    !user_param->use_unsolicited_write) {
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[wc.wr_id], &bad_wr_recv)) {
 							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.wr_id, rcnt);
