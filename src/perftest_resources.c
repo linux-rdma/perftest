@@ -1547,6 +1547,8 @@ int create_reg_cqs(struct pingpong_context *ctx,
 	#endif
 	ctx->send_cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ctx->context, &send_cq_attr));
 	if (!ctx->send_cq) {
+		if (!user_param->no_lock && errno == EOPNOTSUPP)
+			goto cq_ex_not_supported;
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
 	}
@@ -1571,7 +1573,9 @@ int create_reg_cqs(struct pingpong_context *ctx,
 		}
 	}
 	return SUCCESS;
-#else
+
+cq_ex_not_supported:
+#endif
 	ctx->send_cq = ibv_create_cq(ctx->context,tx_buffer_depth *
 					user_param->num_of_qps, NULL, ctx->send_channel, user_param->eq_num);
 	if (!ctx->send_cq) {
@@ -1589,7 +1593,6 @@ int create_reg_cqs(struct pingpong_context *ctx,
 	}
 
 	return SUCCESS;
-#endif
 }
 
 /******************************************************************************
