@@ -2329,6 +2329,14 @@ int rdma_cm_address_handler(struct pingpong_context *ctx,
 		}
 	}
 
+	rc = rdma_set_option(cma_id, RDMA_OPTION_ID, RDMA_OPTION_ID_ACK_TIMEOUT,
+			     &user_param->qp_timeout, sizeof(uint8_t));
+	if (rc) {
+		error_message = "Failed to set qp_timeout.";
+		rdma_cm_connect_error(ctx);
+		goto error;
+	}
+
 	rc = rdma_resolve_route(cma_id, 2000);
 	if (rc) {
 		error_message = "Failed to resolve RDMA CM route.";
@@ -2461,6 +2469,14 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	if (rc) {
 		error_message = \
 			"Failed request UD connection parameters for RDMA CM.";
+		goto error_2;
+	}
+
+	rc = rdma_set_option(ctx->cm_id, RDMA_OPTION_ID,
+			     RDMA_OPTION_ID_ACK_TIMEOUT,
+			     &user_param->qp_timeout, sizeof(uint8_t));
+	if (rc) {
+		error_message = "Failed to set qp_timeout.";
 		goto error_2;
 	}
 
