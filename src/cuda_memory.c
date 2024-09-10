@@ -27,11 +27,15 @@ static const char *cuda_mem_type_str[] = {
 	"CUDA_MEM_TYPES"
 };
 
+int touch_gpu_pages(uint8_t *addr, int buf_size, int is_infinitely, volatile int **stop_flag);
+
 struct cuda_memory_ctx {
 	struct memory_ctx base;
 	int mem_type;
+	int gpu_touch;
 	int device_id;
 	char *device_bus_id;
+	volatile int *stop_touch_gpu_kernel_flag; // used for stopping cuda gpu_touch kernel
 	CUdevice cuDevice;
 	CUcontext cuContext;
 	bool use_dmabuf;
@@ -293,6 +297,11 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 	printf("allocated GPU buffer of a %lu address at %p for type %s\n", size, addr, cuda_mem_type_str[cuda_ctx->mem_type]);
 
+	if (cuda_ctx->gpu_touch != GPU_NO_TOUCH) {
+		printf("Starting GPU touching process\n");
+		return touch_gpu_pages((uint8_t *)*addr, size, cuda_ctx->gpu_touch == GPU_TOUCH_INFINITE, &cuda_ctx->stop_touch_gpu_kernel_flag);
+	}
+
 	return SUCCESS;
 }
 
@@ -300,6 +309,13 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 	int cuda_device_integrated;
 	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
+
+	if (cuda_ctx->stop_touch_gpu_kernel_flag) {
+		*cuda_ctx->stop_touch_gpu_kernel_flag = 1;
+		printf("stopping CUDA gpu touch running kernel\n");
+		cuCtxSynchronize();
+		cuMemFree((CUdeviceptr)cuda_ctx->stop_touch_gpu_kernel_flag);
+	}
 
 	switch (cuda_ctx->mem_type) {
 		case CUDA_MEM_DEVICE:
@@ -369,6 +385,8 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->device_bus_id = params->cuda_device_bus_id;
 	ctx->use_dmabuf = params->use_cuda_dmabuf;
 	ctx->use_data_direct = params->use_data_direct;
+	ctx->gpu_touch = params->gpu_touch;
+	ctx->stop_touch_gpu_kernel_flag = NULL;
 	ctx->mem_type = params->cuda_mem_type;
 
 	return &ctx->base;
