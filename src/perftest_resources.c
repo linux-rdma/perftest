@@ -3920,6 +3920,14 @@ cleaning:
 /******************************************************************************
  *
  ******************************************************************************/
+
+// Signal flag and handler for proper exit when running infinitely
+volatile sig_atomic_t sigint_flag = 0;
+
+void handle_sigint(int sig) {
+    sigint_flag = 1;
+}
+
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
 	uint64_t		totscnt = 0;
@@ -3950,6 +3958,10 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		free(wc);
 		free(scnt_for_qp);
 		return FAILURE;
+	}
+
+	if (!user_param->duplex && user_param->verb != WRITE_IMM){
+		signal(SIGINT, handle_sigint);
 	}
 
 	user_param->iters = 0;
@@ -4017,6 +4029,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				return_value = FAILURE;
 				goto cleaning;
 			}
+		}
+
+		if (sigint_flag) {
+			printf("\n User stopped traffic\n");
+			goto cleaning;
 		}
 	}
 cleaning:

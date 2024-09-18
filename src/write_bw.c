@@ -243,13 +243,20 @@ int main(int argc, char *argv[])
 
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
+
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto free_mem;
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+
+		if (user_param.test_method != RUN_INFINITELY) {
+			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+		} else {
+			printf(" Client closed connection\n");
+		}
+
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			goto free_mem;
