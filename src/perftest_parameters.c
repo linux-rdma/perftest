@@ -1903,6 +1903,18 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if (user_param->memory_type == MEMORY_MLU && user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Perftest supports MLU latency tests with read/send verbs only\n");
+		exit(1);
+	}
+
+	if (user_param->memory_type == MEMORY_MLU && (int)user_param->size <= user_param->inline_size) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Perftest doesn't support MLU tests with inline messages\n");
+		exit(1);
+	}
+
 	if (user_param->use_data_direct) {
 		user_param->use_cuda_pcie_mapping = 1;
 	}
@@ -2336,6 +2348,12 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 		if (user_param->memory_type == MEMORY_CUDA){
 			user_param->inline_size = 0;
 			printf("Perftest doesn't supports CUDA tests with inline messages: inline size set to 0\n");
+			return;
+		}
+
+		if (user_param->memory_type == MEMORY_MLU){
+			user_param->inline_size = 0;
+			printf("Perftest doesn't supports MLU tests with inline messages: inline size set to 0\n");
 			return;
 		}
 
