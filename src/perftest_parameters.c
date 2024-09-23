@@ -337,6 +337,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (verb == SEND) {
 			printf("  -M, --MGID=<multicast_gid> ");
 			printf(" In multicast, uses <multicast_gid> as the group MGID.\n");
+
+			if (tst == BW) {
+				printf("      --connectionless ");
+				printf(" Open a connectionless server instance for multicast traffic.\n");
+			}
 		}
 	}
 
@@ -898,6 +903,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->no_lock		= OFF;
 	user_param->use_ddp		= OFF;
 	user_param->no_ddp		= OFF;
+	user_param->connectionless		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -1179,6 +1185,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->use_srq && user_param->verb != SEND) {
 		printf(RESULT_LINE);
 		printf(" Using SRQ only avavilible in SEND tests.\n");
+		exit (1);
+	}
+
+	if (user_param->connectionless && (user_param->machine != SERVER ||
+										!user_param->use_mcg ||
+										user_param->tst != BW ||
+										user_param->connection_type != UD ||
+										user_param->test_method != RUN_INFINITELY)) {
+		printf(RESULT_LINE);
+		printf(" Using Connectionless server only avavilible in Multicast, UD BW with RUN INFINITELY tests.\n");
 		exit (1);
 	}
 
@@ -2376,6 +2392,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_OOO_RECV_WRS
 	static int no_ddp_flag = 0;
 	#endif
+	static int connectionless_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2544,6 +2561,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 			{.name = "unsolicited_write", .has_arg = 0, .flag = &unsolicited_write_flag, .val = 1 },
 			#endif
+			{.name = "connectionless", .has_arg = 0, .flag = &connectionless_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3232,6 +3250,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->no_ddp = 1;
 	}
 	#endif
+
+	if (connectionless_flag) {
+		user_param->connectionless = 1;
+	}
 
 	if (use_null_mr_flag) {
 		user_param->use_null_mr = 1;

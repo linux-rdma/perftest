@@ -642,6 +642,7 @@ struct perftest_parameters {
 	int				use_unsolicited_write;
 	int				use_ddp;
 	int				no_ddp;
+	int				connectionless;
 };
 
 struct report_options {

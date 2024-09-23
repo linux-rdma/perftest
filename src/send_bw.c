@@ -228,22 +228,24 @@ int main(int argc, char *argv[])
 		goto free_devname;
 	}
 
-	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
-		printf("\n************************************\n");
-		printf("* Waiting for client to connect... *\n");
-		printf("************************************\n");
-	}
+	if (!user_param.connectionless){
+		if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
+			printf("\n************************************\n");
+			printf("* Waiting for client to connect... *\n");
+			printf("************************************\n");
+		}
 
-	/* Initialize the connection and print the local data. */
-	if (establish_connection(&user_comm)) {
-		fprintf(stderr," Unable to init the socket connection\n");
-		dealloc_comm_struct(&user_comm,&user_param);
-		goto free_devname;
-	}
+		/* Initialize the connection and print the local data. */
+		if (establish_connection(&user_comm)) {
+			fprintf(stderr," Unable to init the socket connection\n");
+			dealloc_comm_struct(&user_comm,&user_param);
+			goto free_devname;
+		}
 
-	exchange_versions(&user_comm, &user_param);
-	check_version_compatibility(&user_param);
-	check_sys_data(&user_comm, &user_param);
+		exchange_versions(&user_comm, &user_param);
+		check_version_compatibility(&user_param);
+		check_sys_data(&user_comm, &user_param);
+	}
 
 	/* See if MTU is valid and supported. */
 	if (check_mtu(ctx.context,&user_param, &user_comm)) {
@@ -298,22 +300,23 @@ int main(int argc, char *argv[])
 	if (ctx.send_rcredit)
 		ctx_alloc_credit(&ctx,&user_param,my_dest);
 
-	for (i=0; i < user_param.num_of_qps; i++) {
-		/* shaking hands and gather the other side info. */
-		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			goto destroy_context;
+	if (!user_param.connectionless) {
+		for (i=0; i < user_param.num_of_qps; i++) {
+			/* shaking hands and gather the other side info. */
+			if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+				fprintf(stderr,"Failed to exchange data between server and clients\n");
+				goto destroy_context;
+			}
+		}
+
+		if (user_param.work_rdma_cm == OFF) {
+			if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
+				fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+				fprintf(stderr," Please Try to use a different IP version.\n\n");
+				goto destroy_context;
+			}
 		}
 	}
-
-	if (user_param.work_rdma_cm == OFF) {
-		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
-			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
-			fprintf(stderr," Please Try to use a different IP version.\n\n");
-			goto destroy_context;
-		}
-	}
-
 	/* If credit for available recieve buffers is necessary,
 	 * the credit sending is done via RDMA WRITE ops and the ctx_hand_shake above
 	 * is used to exchange the rkeys and buf addresses for the RDMA WRITEs
@@ -351,9 +354,11 @@ int main(int argc, char *argv[])
 	}
 
 	/* shaking hands and gather the other side info. */
-	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-		fprintf(stderr,"Failed to exchange data between server and clients\n");
-		goto destroy_context;
+	if (!user_param.connectionless) {
+		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr,"Failed to exchange data between server and clients\n");
+			goto destroy_context;
+		}
 	}
 
 	if (user_param.connection_type == DC)
@@ -371,14 +376,16 @@ int main(int argc, char *argv[])
 
 	user_comm.rdma_params->side = REMOTE;
 
-	for (i=0; i < user_param.num_of_qps; i++) {
+	if (!user_param.connectionless) {
+		for (i=0; i < user_param.num_of_qps; i++) {
 
-		if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
-			fprintf(stderr," Failed to exchange data between server and clients\n");
-			goto destroy_context;
+			if (ctx_hand_shake(&user_comm,&my_dest[i],&rem_dest[i])) {
+				fprintf(stderr," Failed to exchange data between server and clients\n");
+				goto destroy_context;
+			}
+
+			ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 		}
-
-		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
 	if (user_param.use_event) {
@@ -540,9 +547,11 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
-			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			goto free_mem;
+		if (!user_param.connectionless){
+			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
+				fprintf(stderr,"Failed to exchange data between server and clients\n");
+				goto free_mem;
+			}
 		}
 
 		if (user_param.machine == CLIENT) {
