@@ -3960,7 +3960,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		return FAILURE;
 	}
 
-	if (!user_param->duplex && user_param->verb != WRITE_IMM){
+	if (!user_param->duplex && user_param->verb != WRITE_IMM && user_param->verb != SEND){
 		signal(SIGINT, handle_sigint);
 	}
 
