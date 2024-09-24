@@ -2455,7 +2455,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		{
 			#ifdef HAVE_MLX5DV
 			#ifdef HAVE_OOO_RECV_WRS
-			if (!user_param->no_ddp){
+			if (!user_param->no_ddp && user_param->connection_type != UD && user_param->connection_type != UC){
 				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
 				int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
@@ -2466,6 +2466,12 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				}
 
 				if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+					if ((user_param->connection_type == RC && ctx_dv.ooo_recv_wrs_caps.max_rc < user_param->rx_depth) ||
+					(user_param->connection_type == DC && ctx_dv.ooo_recv_wrs_caps.max_dct < user_param->rx_depth))
+					{
+						fprintf(stderr, "RX Depth=%d  must not exceed the maximal OOO receive WR's\n", user_param->rx_depth);
+						return NULL;
+						}
 					user_param->use_ddp = ON;
 					attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
 					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
