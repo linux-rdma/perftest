@@ -322,7 +322,7 @@ AC_ARG_WITH([hl],
 	],
 	[AS_CASE([$with_hl],
 		[yes|no], [],
-		[CPPFLAGS="-I$with_hl/include/habanalabs $CPPFLAGS"
+		[CPPFLAGS="-I$with_hl/include/habanalabs -I/usr/include/drm -I/usr/include/libdrm $CPPFLAGS"
 		LDFLAGS="-L$with_hl/lib/habanalabs -Wl,-rpath=$with_hl/lib/habanalabs $LDFLAGS"])
 	])
 
