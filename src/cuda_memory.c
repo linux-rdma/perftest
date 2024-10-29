@@ -196,6 +196,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				const size_t host_page_size = sysconf(_SC_PAGESIZE);
 				uint64_t offset;
 				size_t aligned_size;
+				int cu_flags = 0;
 
 				// Round down to host page size
 				aligned_ptr = d_A & ~(host_page_size - 1);
@@ -205,7 +206,9 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
 				*dmabuf_fd = 0;
 				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
-				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, 0);
+				if (cuda_ctx->use_data_direct)
+				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
 				if (error != CUDA_SUCCESS) {
 					printf("cuMemGetHandleForAddressRange error=%d\n", error);
 					return FAILURE;
