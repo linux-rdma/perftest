@@ -43,7 +43,7 @@ struct mlu_memory_ctx {
 	int device_id;
 	CNdev cnDevice;
 	CNcontext cnContext;
-
+	bool use_dmabuf;
 };
 
 
@@ -129,6 +129,18 @@ int mlu_memory_init(struct memory_ctx *ctx) {
 		return FAILURE;
 	}
 
+#ifdef HAVE_MLU_DMABUF
+	if (mlu_ctx->use_dmabuf) {
+		int is_supported = 0;
+
+		ERROR_CHECK(cnDeviceGetAttribute(&is_supported, CN_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, mlu_ctx->cnDevice));
+		if (!is_supported) {
+			fprintf(stderr, "DMA-BUF is not supported on this MLU\n");
+			return FAILURE;
+		}
+	}
+#endif
+
 	return SUCCESS;
 }
 
@@ -144,8 +156,8 @@ int mlu_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t s
 				uint64_t *dmabuf_offset, void **addr, bool *can_init) {
 	CNresult error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
-
 	CNaddr mlu_addr;
+
 	printf("cnMalloc() of a %lu bytes MLU buffer\n", size);
 
 	error = cnMalloc(&mlu_addr, buf_size);
@@ -157,6 +169,35 @@ int mlu_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t s
 	printf("allocated %lu bytes of MLU buffer at %ld\n", (unsigned long)buf_size, mlu_addr);
 	*addr = (void *)mlu_addr;
 	*can_init = false;
+
+#ifdef HAVE_MLU_DMABUF
+	struct mlu_memory_ctx *mlu_ctx = container_of(ctx, struct mlu_memory_ctx, base);
+
+	{
+		if (mlu_ctx->use_dmabuf) {
+			CNaddr aligned_ptr;
+			const size_t host_page_size = sysconf(_SC_PAGESIZE);
+			uint64_t offset;
+			size_t aligned_size;
+
+			// Round down to host page size
+			aligned_ptr = mlu_addr & ~(host_page_size - 1);
+			offset = mlu_addr - aligned_ptr;
+			aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
+
+			printf("using DMA-BUF for MLU buffer address at %#lx aligned at %#lx with aligned size %zu\n", mlu_addr, aligned_ptr, aligned_size);
+			*dmabuf_fd = 0;
+			error = cnMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, CN_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+			if (error != CN_SUCCESS) {
+				printf("cnMemGetHandleForAddressRange error=%d\n", error);
+				return FAILURE;
+			}
+
+			*dmabuf_offset = offset;
+		}
+	}
+#endif
+
 	return SUCCESS;
 }
 
@@ -182,6 +223,14 @@ bool mlu_memory_supported() {
 	return true;
 }
 
+bool mlu_memory_dmabuf_supported() {
+#ifdef HAVE_MLU_DMABUF
+	return true;
+#else
+	return false;
+#endif
+}
+
 struct memory_ctx *mlu_memory_create(struct perftest_parameters *params) {
 	struct mlu_memory_ctx *ctx;
 
@@ -194,6 +243,7 @@ struct memory_ctx *mlu_memory_create(struct perftest_parameters *params) {
 	ctx->base.copy_buffer_to_host = mlu_memory_copy_host_buffer;
 	ctx->base.copy_buffer_to_buffer = mlu_memory_copy_buffer_to_buffer;
 	ctx->device_id = params->mlu_device_id;
+	ctx->use_dmabuf = params->use_mlu_dmabuf;
 
 	return &ctx->base;
 }
