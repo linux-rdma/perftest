@@ -16,12 +16,18 @@ struct perftest_parameters;
 
 bool mlu_memory_supported();
 
+bool mlu_memory_dmabuf_supported();
+
 struct memory_ctx *mlu_memory_create(struct perftest_parameters *params);
 
 
 #ifndef HAVE_MLU
 
 inline bool mlu_memory_supported() {
+	return false;
+}
+
+inline bool mlu_memory_dmabuf_supported() {
 	return false;
 }
 
