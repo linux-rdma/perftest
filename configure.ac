@@ -363,6 +363,9 @@ AS_IF([test "x$enable_mlu" = xyes], [
                         [AC_MSG_ERROR([could not find cn_api.h in include path])])
        AC_SEARCH_LIBS([cnMalloc], [cndrv], [],
                       [AC_MSG_ERROR([could not find library, cndrv])])
+       AC_SEARCH_LIBS([cnMemGetHandleForAddressRange], [cndrv],
+					  [AC_DEFINE([HAVE_MLU_DMABUF], [1], [Enable MLU DMA buffers])],
+		      [])
        ])
 
 AM_CONDITIONAL([MLU], [test x$enable_mlu = xyes])
