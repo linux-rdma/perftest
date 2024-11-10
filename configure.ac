@@ -165,6 +165,14 @@ fi
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
+	[int x = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;],[HAVE_OOO_RECV_WRS=yes], [HAVE_OOO_RECV_WRS=no])
+AM_CONDITIONAL([HAVE_OOO_RECV_WRS],[test "x$HAVE_OOO_RECV_WRS" = "xyes"])
+if [test $HAVE_OOO_RECV_WRS = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_OOO_RECV_WRS], [1], [Have DDP support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES_XTS=yes], [HAVE_AES_XTS=no])
 AM_CONDITIONAL([HAVE_AES_XTS],[test "x$HAVE_AES_XTS" = "xyes"])
 if [test $HAVE_AES_XTS = yes] && [test $HAVE_MLX5DV = yes];  then
