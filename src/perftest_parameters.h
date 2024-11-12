@@ -385,7 +385,8 @@ enum ctx_device {
 	ERDMA			= 29,
 	HNS			= 30,
 	CONNECTX8		= 31,
-  INTEL_GEN2		= 32,
+  	INTEL_GEN2		= 32,
+	CONNECTX9               = 33,
 };
 
 /* Units for rate limiter */
