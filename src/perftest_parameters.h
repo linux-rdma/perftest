@@ -605,7 +605,7 @@ struct perftest_parameters {
 	char				*out_json_file_name;
 	struct cpu_util_data 		cpu_util_data;
 	int 				latency_gap;
-	int 				flow_label;
+	int*  				flow_label;
 	int 				retry_count;
 	int 				dont_xchg_versions;
 	int 				ipv6;

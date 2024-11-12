@@ -2682,7 +2682,10 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
 			attr->ah_attr.grh.hop_limit = 0xFF;
 			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
-			attr->ah_attr.grh.flow_label = user_param->flow_label;
+			if (user_param->flow_label) {
+				attr->ah_attr.grh.flow_label = user_param->flow_label[user_param->flow_label[1] % user_param->flow_label[0] + 2];
+				user_param->flow_label[1] = user_param->flow_label[1] + 1;
+			}
 		}
 		if (user_param->connection_type != UD && user_param->connection_type != SRD) {
 			if (user_param->connection_type == DC) {
