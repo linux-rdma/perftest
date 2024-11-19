@@ -1630,18 +1630,12 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	int dmabuf_fd = 0;
 	uint64_t dmabuf_offset = 0;
 
-	#if defined(__FreeBSD__)
-	ctx->is_contig_supported = FAILURE;
-	#endif
-
 	/* ODP */
 	#ifdef HAVE_EX_ODP
 	if (user_param->use_odp) {
 		if ( !check_odp_support(ctx, user_param) )
 			return FAILURE;
 
-		/* ODP does not support contig pages */
-		ctx->is_contig_supported = FAILURE;
 		flags |= IBV_ACCESS_ON_DEMAND;
 	}
 	#endif
@@ -1654,11 +1648,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		#endif
 	}
 
-	if (ctx->is_contig_supported == SUCCESS)
-	{
-		ctx->buf[qp_index] = NULL;
-		flags |= (1 << 5);
-	} else if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
+	if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
 						&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
 						&can_init_mem)) {
 		return FAILURE;
@@ -1733,10 +1723,6 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			return FAILURE;
 		}
 	}
-
-	if (ctx->is_contig_supported == SUCCESS)
-		ctx->buf[qp_index] = ctx->mr[qp_index]->addr;
-
 
 	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
 	if (can_init_mem) {
@@ -1992,7 +1978,6 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		}
 	}
 	#endif
-	ctx->is_contig_supported = FAILURE;
 
 	/* Allocating event channels if requested. */
 	if (user_param->use_event) {
