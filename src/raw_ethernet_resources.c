@@ -62,7 +62,7 @@ int check_flow_steering_support(char *dev_name)
 	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
 	FILE *fp;
 	char line[4];
-	int is_flow_steering_supported = 0;
+	int is_flow_steering_not_supported = 0;
 
 	if (strstr(dev_name, "mlx5") != NULL)
 		return 0;
@@ -84,11 +84,11 @@ int check_flow_steering_support(char *dev_name)
 			fprintf(stderr," and restart the driver: %s restart \n", openibd_path);
 		else
 			fprintf(stderr," and restart the driver: modprobe -r mlx4_core; modprobe mlx4_core \n");
-		is_flow_steering_supported =  1;
+		is_flow_steering_not_supported =  1;
 	}
 
 	fclose(fp);
-	return is_flow_steering_supported;
+	return is_flow_steering_not_supported;
 }
 
 /******************************************************************************
