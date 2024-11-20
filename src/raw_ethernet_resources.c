@@ -203,7 +203,7 @@ void gen_tcp_header(void* TCP_header_buffer,int src_port ,int dst_port)
  * generates a new ethernet header
  *****************************************************************************/
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac, uint8_t* dst_mac, uint16_t eth_type,
-		    struct perftest_parameters* user_param, struct memory_ctx *memory)
+		    struct memory_ctx *memory)
 {
 	uint16_t eth_type_temp = htons(eth_type);
 	memory->copy_host_to_buffer(eth_header->src_mac, src_mac, 6);
@@ -572,7 +572,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 		vlan_pcp = user_param->vlan_pcp;
 	}
 
-	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, user_param, memory);
+	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, memory);
 
 	if(user_param->vlan_en) {
 		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
