@@ -1023,6 +1023,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	ALLOC(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#ifdef HAVE_DCS
 	ALLOC(ctx->dci_stream_id, uint32_t, user_param->num_of_qps);
+	memset(ctx->dci_stream_id, 0, user_param->num_of_qps * sizeof (uint32_t));
 	#endif
 	#ifdef HAVE_AES_XTS
 	ALLOC(ctx->dek, struct mlx5dv_dek*, user_param->data_enc_keys_number);
@@ -2171,9 +2172,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		if (user_param->work_rdma_cm == OFF) {
 			modify_qp_to_init(ctx, user_param, i);
 		}
-		#ifdef HAVE_DCS
-		ctx->dci_stream_id[i] = 0;
-		#endif
+
 		qp_index++;
 	}
 
