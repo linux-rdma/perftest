@@ -9,6 +9,7 @@ Url:            http://www.openfabrics.org
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  libibverbs-devel librdmacm-devel libibumad-devel
 BuildRequires:  pciutils-devel
+Requires:       libibverbs libibumad librdmacm libpci3 rdma-core
 
 %description
 gen3 uverbs microbenchmarks

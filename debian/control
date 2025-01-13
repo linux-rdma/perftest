@@ -10,7 +10,7 @@ Vcs-Browser: http://git.openfabrics.org/git?p=~shamoya/perftest.git;a=summary
 
 Package: perftest
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libibverbs1 (>= 1.1.6), librdmacm1 (>=1.0.8)
+Depends: ${shlibs:Depends}, ${misc:Depends}, libibverbs1 (>= 1.1.6), librdmacm1 (>=1.0.8), libibumad, rdma-core
 Description: Infiniband verbs performance tests
  This is a collection of tests written using Infiniband verbs intended for
  use as a performance micro-benchmark. The tests can measure the latency
