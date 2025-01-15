@@ -630,6 +630,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (rocm_memory_supported()) {
 			printf("      --use_rocm=<rocm device id>");
 			printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
+
+			if (rocm_memory_dmabuf_supported()) {
+				printf("      --use_rocm_dmabuf");
+				printf(" Use ROCm DMA-BUF for GPUDirect RDMA testing\n");
+			}
 		}
 
 		if (neuron_memory_supported()) {
@@ -875,6 +880,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_id	= 0;
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
+	user_param->use_rocm_dmabuf = 0;
 	user_param->use_data_direct	= 0;
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
@@ -2370,6 +2376,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_data_direct_flag = 0;
 	static int use_rocm_flag = 0;
+	static int use_rocm_dmabuf_flag = 0;
 	static int use_neuron_flag = 0;
 	static int use_neuron_dmabuf_flag = 0;
 	static int use_hl_flag = 0;
@@ -2543,6 +2550,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
+			{ .name = "use_rocm_dmabuf",	.has_arg = 0, .flag = &use_rocm_dmabuf_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
 			{ .name = "use_hl",		.has_arg = 1, .flag = &use_hl_flag, .val = 1},
@@ -2982,6 +2990,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (((use_cuda_flag || use_cuda_bus_id_flag) && !cuda_memory_supported()) ||
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
 				    (use_rocm_flag && !rocm_memory_supported()) ||
+				    (use_rocm_dmabuf_flag && !rocm_memory_dmabuf_supported()) ||
 				    (use_neuron_flag && !neuron_memory_supported()) ||
 				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported()) ||
@@ -2995,7 +3004,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
-				    (mmap_file_flag || use_mlu_flag || use_rocm_flag || use_neuron_flag || use_hl_flag ||
+				    (mmap_file_flag || use_mlu_flag || use_neuron_flag || use_hl_flag ||
+					 (use_rocm_flag && user_param->memory_type != MEMORY_ROCM) ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
 					fprintf(stderr, " Can't use multiple memory types\n");
 					return FAILURE;
@@ -3031,6 +3041,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_type = MEMORY_ROCM;
 					user_param->memory_create = rocm_memory_create;
 					use_rocm_flag = 0;
+				}
+				if (use_rocm_dmabuf_flag) {
+					user_param->use_rocm_dmabuf = 1;
+					if (user_param->memory_type != MEMORY_ROCM) {
+						fprintf(stderr, "ROCm DMA-BUF cannot be used without ROCm\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					use_rocm_dmabuf_flag = 0;
 				}
 				if (use_neuron_flag) {
 					user_param->neuron_core_id = strtol(optarg, NULL, 0);
