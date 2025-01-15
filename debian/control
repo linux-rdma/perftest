@@ -3,7 +3,9 @@ Section: net
 Priority: extra
 Maintainer: Gil Rockah <gilr@dev.mellanox.co.il>
 Build-Depends: debhelper (>= 8.0.0),
+               libibumad-dev,
                libibverbs-dev (>= 1.1.6),
+               libpci-dev,
                librdmacm-dev (>= 1.0.8)
 Standards-Version: 3.9.2
 Homepage: https://openfabrics.org/downloads/perftest/
