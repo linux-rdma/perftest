@@ -2,7 +2,7 @@ Source: perftest
 Section: net
 Priority: extra
 Maintainer: Gil Rockah <gilr@dev.mellanox.co.il>
-Build-Depends: debhelper (>= 8.0.0),
+Build-Depends: debhelper (>= 10),
                libibumad-dev,
                libibverbs-dev (>= 1.1.6),
                libpci-dev,
