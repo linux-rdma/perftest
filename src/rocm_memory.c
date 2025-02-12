@@ -114,6 +114,10 @@ int rocm_memory_init(struct memory_ctx *ctx) {
 			}
 		}
 		fclose(fp);
+
+		if (dmabuf_supported == 0) {
+			return FAILURE;
+		}
 	}
 #endif
 
@@ -153,7 +157,7 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 		offset = d_A - aligned_ptr;
 		aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
 
-		printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
+		printf("using DMA-BUF for GPU buffer address at %p aligned at %p with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
 		*dmabuf_fd = 0;
 
 		status = hsa_amd_portable_export_dmabuf(d_A, aligned_size, dmabuf_fd, &offset);
