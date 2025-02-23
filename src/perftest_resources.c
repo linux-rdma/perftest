@@ -3533,7 +3533,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
 		duration_param->state = START_STATE;
@@ -3686,7 +3686,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						goto cleaning;
 					}
 				}
-				ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc);
+				ne = ibv_poll_cq(ctx->send_cq, user_param->cqe_poll, wc);
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 						wc_id = (int)wc[i].wr_id;
@@ -3785,7 +3785,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -3828,7 +3828,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			if (user_param->test_type == DURATION && user_param->state == END_STATE)
 				break;
 
-			ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
+			ne = ibv_poll_cq(ctx->recv_cq,user_param->cqe_poll,wc);
 
 			if (ne > 0) {
 				if (firstRx) {
@@ -3999,7 +3999,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
@@ -4061,7 +4061,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 			}
 		}
 		if (totccnt < totscnt) {
-			ne = ibv_poll_cq(ctx->send_cq,CTX_POLL_BATCH,wc);
+			ne = ibv_poll_cq(ctx->send_cq,user_param->cqe_poll,wc);
 
 			if (ne > 0) {
 
@@ -4115,7 +4115,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,CTX_POLL_BATCH);
+	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -4148,7 +4148,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 	while (1) {
 
-		ne = ibv_poll_cq(ctx->recv_cq,CTX_POLL_BATCH,wc);
+		ne = ibv_poll_cq(ctx->recv_cq,user_param->cqe_poll,wc);
 
 		if (ne > 0) {
 
@@ -4271,7 +4271,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc_tx,struct ibv_wc,CTX_POLL_BATCH);
+	ALLOCATE(wc_tx,struct ibv_wc,user_param->cqe_poll);
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	ALLOCATE(wc,struct ibv_wc,user_param->rx_depth);
@@ -4511,7 +4511,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 			}
 		}
 
-		send_ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
+		send_ne = ibv_poll_cq(ctx->send_cq, user_param->cqe_poll, wc_tx);
 
 		if (send_ne > 0) {
 			for (i = 0; i < send_ne; i++) {

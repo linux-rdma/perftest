@@ -646,6 +646,8 @@ struct perftest_parameters {
 	int				use_ddp;
 	int				no_ddp;
 	int				connectionless;
+	uint16_t			cqe_poll;
+	int				use_cqe_poll;
 };
 
 struct report_options {

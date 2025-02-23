@@ -488,6 +488,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --cpu_util ");
 	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
 
+	printf("      --cqe_poll ");
+	printf(" Number of CQEs polled per iteration \n");
+
 	#ifdef HAVE_HNSDV
 	printf("      --congest_type=<DCQCN, LDCP, HC3, DIP> ");
 	printf(" Use the hnsdv interface to set congestion control algorithm.\n");
@@ -957,6 +960,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_ddp		= OFF;
 	user_param->no_ddp		= OFF;
 	user_param->connectionless		= OFF;
+	user_param->cqe_poll		= CTX_POLL_BATCH;
+	user_param->use_cqe_poll		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -1104,6 +1109,19 @@ void print_supported_ibv_rate_values()
 	int i;
 	for (i = 0; i < RATE_VALUES_COUNT; i++)
 		printf("\t\t\t %s Gbps \t\t\n", RATE_VALUES[i].rate_gbps_str);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int check_intense_polling(struct perftest_parameters *user_param){
+	if (!user_param->use_cqe_poll &&
+		user_param->num_of_qps > CQE_POLL_INTENSE_NUM_QPS_THRESHOLD &&
+		user_param->size > CQE_POLL_INTENSE_MSG_SIZE_THRESHOLD) {
+			return ON;
+	}
+
+	return OFF;
 }
 
 /******************************************************************************
@@ -1914,6 +1932,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
+	if (check_intense_polling(user_param)) {
+		printf("Increasing CQE polling batch to %d\n", CTX_POLL_BATCH_INTENSE);
+		user_param->cqe_poll = CTX_POLL_BATCH_INTENSE;
+	}
+
 	return;
 }
 /******************************************************************************
@@ -2449,6 +2472,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int no_ddp_flag = 0;
 	#endif
 	static int connectionless_flag = 0;
+	static int cqe_poll_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2620,6 +2644,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "unsolicited_write", .has_arg = 0, .flag = &unsolicited_write_flag, .val = 1 },
 			#endif
 			{.name = "connectionless", .has_arg = 0, .flag = &connectionless_flag, .val = 1 },
+			{.name = "cqe_poll", .has_arg = 1, .flag = &cqe_poll_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3283,6 +3308,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					unsolicited_write_flag = 0;
 				}
 				#endif
+				if (cqe_poll_flag) {
+					CHECK_VALUE_IN_RANGE(user_param->cqe_poll,uint16_t,1,65535,"CQE Poll",not_int_ptr);
+					user_param->use_cqe_poll = ON;
+					cqe_poll_flag = 0;
+				}
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
@@ -3729,7 +3759,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	#endif
 
 	if (user_param->tst == BW) {
-		printf(" CQ Moderation   : %d\n",user_param->cq_mod);
+		printf(" CQ Moderation   : %d\n", user_param->cq_mod);
+		printf(" CQE Poll Batch  : %hu\n", user_param->cqe_poll);
 	}
 
 	printf(" Mtu             : %lu[B]\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));

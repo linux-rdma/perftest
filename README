@@ -367,3 +367,5 @@ Special feature detailed explanation in tests:
  8. If GPUDirect is not working, (e.g. you see "Couldn't allocate MR" error message), consider disabling Scatter to CQE feature. Set the environmental variable MLX5_SCATTER_TO_CQE=0. E.g.:
     MLX5_SCATTER_TO_CQE=0 ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
 
+ 9. When using high number of qps (>2K) with message size larger than 8KB, BW may degrade. perftest will set the polling batch to 64.
+  In higher scales, consider using --cqe_poll to set the number of CQE's that polled every iteration to be higher than default value.
