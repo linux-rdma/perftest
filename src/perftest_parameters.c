@@ -650,6 +650,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (mlu_memory_supported()) {
 			printf("      --use_mlu=<mlu device id>");
 			printf(" Use selected MLU device for MLUDirect RDMA testing\n");
+
+			if (mlu_memory_dmabuf_supported()) {
+				printf("      --use_mlu_dmabuf");
+				printf(" Use DMA-BUF for HW accelerator direct RDMA testing\n");
+			}
 		}
 
 		printf("      --use_hugepages ");
@@ -879,6 +884,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
+	user_param->use_mlu_dmabuf	= 0;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -2374,6 +2380,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_neuron_dmabuf_flag = 0;
 	static int use_hl_flag = 0;
 	static int use_mlu_flag = 0;
+	static int use_mlu_dmabuf_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -2542,6 +2549,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
+			{ .name = "use_mlu_dmabuf",	.has_arg = 0, .flag = &use_mlu_dmabuf_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
@@ -2985,7 +2993,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_neuron_flag && !neuron_memory_supported()) ||
 				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported()) ||
-				    (use_mlu_flag && !mlu_memory_supported())) {
+				    (use_mlu_flag && !mlu_memory_supported()) ||
+				    (use_mlu_dmabuf_flag && !mlu_memory_dmabuf_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -3062,6 +3071,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_type = MEMORY_MLU;
 					user_param->memory_create = mlu_memory_create;
 					use_mlu_flag = 0;
+				}
+				if (use_mlu_dmabuf_flag) {
+					user_param->use_mlu_dmabuf = 1;
+					if (user_param->memory_type != MEMORY_MLU) {
+						fprintf(stderr, "MLU DMA-BUF cannot be used without MLU device\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					use_mlu_dmabuf_flag = 0;
 				}
 				if (flow_label_flag) {
 					if (parse_flow_label_from_str(user_param, optarg)) {
