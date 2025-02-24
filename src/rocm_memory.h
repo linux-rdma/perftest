@@ -16,12 +16,18 @@ struct perftest_parameters;
 
 bool rocm_memory_supported();
 
+bool rocm_memory_dmabuf_supported();
+
 struct memory_ctx *rocm_memory_create(struct perftest_parameters *params);
 
 
 #ifndef HAVE_ROCM
 
 inline bool rocm_memory_supported() {
+	return false;
+}
+
+inline bool rocm_memory_dmabuf_supported() {
 	return false;
 }
 
