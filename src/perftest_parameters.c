@@ -261,33 +261,36 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("  %s             run a server to measure FS rate \n", argv0);
 
 	printf("\n");
+	printf("Note: Some options must match on both server and client for consistent behavior (marked 'SYMMETRIC').\n");
+
+	printf("\n");
 	printf("Options:\n");
 
 	if (verb != ATOMIC && connection_type != RawEth) {
 		printf("  -a, --all ");
-		printf(" Run sizes from 2 till 2^23\n");
+		printf(" Run sizes from 2 till 2^23 (SYMMETRIC)\n");
 	}
 
 	if (verb == ATOMIC) {
 		printf("  -A, --atomic_type=<type> ");
-		printf(" type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD} (default FETCH_AND_ADD)\n");
+		printf(" type of atomic operation from {CMP_AND_SWAP,FETCH_AND_ADD} (default FETCH_AND_ADD) (SYMMETRIC)\n");
 	}
 
 	if (tst == BW) {
 		printf("  -b, --bidirectional ");
-		printf(" Measure bidirectional bandwidth (default unidirectional)\n");
+		printf(" Measure bidirectional bandwidth (default unidirectional) (SYMMETRIC)\n");
 	}
 
 	if (connection_type != RawEth) {
 		if (verb == SEND) {
 			printf("  -c, --connection=<RC/XRC/UC/UD/DC/SRD> ");
-			printf(" Connection type RC/XRC/UC/UD/DC/SRD (default RC)\n");
+			printf(" Connection type RC/XRC/UC/UD/DC/SRD (default RC) (SYMMETRIC)\n");
 		} else 	if (verb == WRITE || verb == WRITE_IMM) {
 			printf("  -c, --connection=<RC/XRC/UC/DC> ");
-			printf(" Connection type RC/XRC/UC/DC (default RC)\n");
+			printf(" Connection type RC/XRC/UC/DC (default RC) (SYMMETRIC)\n");
 		} else if (verb == READ || verb == ATOMIC) {
 			printf("  -c, --connection=<RC/XRC/DC> ");
-			printf(" Connection type RC/XRC/DC (default RC)\n");
+			printf(" Connection type RC/XRC/DC (default RC) (SYMMETRIC)\n");
 		}
 		#ifdef HAVE_DCS
 		printf("      --log_dci_streams=<log_num_dci_stream_channels> (default 0) ");
@@ -315,7 +318,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Use IB device <dev> (default first device found)\n");
 
 	printf("  -D, --duration ");
-	printf(" Run test for a customized period of seconds.\n");
+	printf(" Run test for a customized period of seconds. (SYMMETRIC)\n");
 
 	if (verb != WRITE && verb != WRITE_IMM && connection_type != RawEth) {
 		printf("  -e, --events ");
@@ -326,14 +329,14 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	printf("  -f, --margin ");
-	printf(" measure results within margins. (default=2sec)\n");
+	printf(" measure results within margins. (default=2sec) (SYMMETRIC)\n");
 
 	printf("  -F, --CPU-freq ");
 	printf(" Do not show a warning even if cpufreq_ondemand module is loaded, and cpu-freq is not on max.\n");
 
 	if (verb == SEND && tst != FS_RATE) {
 		printf("  -g, --mcg ");
-		printf(" Send messages to multicast group with 1 QP attached to it.\n");
+		printf(" Send messages to multicast group with 1 QP attached to it. (SYMMETRIC)\n");
 		printf("         When there is no multicast gid specified, a default IPv6 typed gid will be used.\n");
 	}
 
@@ -366,10 +369,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		if (connection_type == RawEth) {
 			printf("  -m, --mtu=<mtu> ");
-			printf(" MTU size : 64 - 9600 (default port mtu)\n");
+			printf(" MTU size : 64 - 9600 (default port mtu) (SYMMETRIC)\n");
 		} else {
 			printf("  -m, --mtu=<mtu> ");
-			printf(" MTU size : 256 - 4096 (default port mtu)\n");
+			printf(" MTU size : 256 - 4096 (default port mtu) (SYMMETRIC)\n");
 		}
 
 		if (verb == SEND) {
@@ -384,7 +387,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	}
 
 	printf("  -n, --iters=<iters> ");
-	printf(" Number of exchanges (at least %d, default %d)\n", MIN_ITER, ((verb == WRITE || verb == WRITE_IMM) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
+	printf(" Number of exchanges (at least %d, default %d) (SYMMETRIC)\n", MIN_ITER, ((verb == WRITE || verb == WRITE_IMM) && (tst == BW)) ? DEF_ITERS_WB : DEF_ITERS);
 
 	if (tst == BW) {
 		printf("  -N, --noPeak");
@@ -398,14 +401,14 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (tst == BW && connection_type != RawEth) {
 		printf("  -O, --dualport ");
-		printf(" Run test in dual-port mode.\n");
+		printf(" Run test in dual-port mode. (SYMMETRIC)\n");
 	}
 
 	printf("  -p, --port=<port> ");
-	printf(" Listen on/connect to port <port> (default %d)\n",DEF_PORT);
+	printf(" Listen on/connect to port <port> (default %d) (SYMMETRIC)\n",DEF_PORT);
 
 	if (tst == BW ) {
-		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d)\n", DEF_NUM_QPS);
+		printf("  -q, --qp=<num of qp's>  Num of qp's(default %d) (SYMMETRIC)\n", DEF_NUM_QPS);
 		printf("  -Q, --cq-mod ");
 		printf(" Generate Cqe only after <--cq-mod> completion\n");
 	}
@@ -423,7 +426,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (verb != ATOMIC) {
 		printf("  -s, --size=<size> ");
-		printf(" Size of message to exchange (default %d)\n", tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
+		printf(" Size of message to exchange (default %d) (SYMMETRIC)\n", tst == LAT ? DEF_SIZE_LAT : DEF_SIZE_BW);
 	}
 
 	if (tst != FS_RATE) {
@@ -470,7 +473,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (connection_type != RawEth) {
 		printf("  -z, --comm_rdma_cm ");
-		printf(" Communicate with rdma_cm module to exchange data - use regular QPs\n");
+		printf(" Communicate with rdma_cm module to exchange data - use regular QPs (SYMMETRIC)\n");
 	}
 
 	/*Long flags*/
@@ -517,13 +520,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	#ifdef HAVE_OOO_RECV_WRS
 	printf("      --no_ddp ");
-	printf(" Disable the receiver capability to consume out-of-order WRs. \n");
+	printf(" Disable the receiver capability to consume out-of-order WRs. (SYMMETRIC)\n");
 	#endif
 
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
-		printf("      --ipv6-addr=<IPv6> ");
+		printf("      --ipv6-addr=<IPv6> (SYMMETRIC)");
 		printf(" Use IPv6 address for parameters negotiation. Default is IPv4\n");
 	}
 
@@ -581,7 +584,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Report RX & TX results separately on Bidirectional BW tests\n");
 
 		printf("      --report_gbits ");
-		printf(" Report Max/Average BW of test in Gbit/sec (instead of MiB/sec)\n");
+		printf(" Report Max/Average BW of test in Gbit/sec (instead of MiB/sec) (SYMMETRIC)\n");
 		printf("        Note: MiB=2^20 byte, while Gb=10^9 bits. Use these formulas for conversion:\n");
 		printf("        Factor=10^9/(2^20*8)=119.2; MiB=Gb_result * factor; Gb=MiB_result / factor\n");
 
@@ -591,10 +594,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		}
 
 		printf("      --reversed ");
-		printf(" Reverse traffic direction - Server send to client\n");
+		printf(" Reverse traffic direction - Server send to client (SYMMETRIC)\n");
 
 		printf("      --run_infinitely ");
-		printf(" Run test forever, print results every <duration> seconds\n");
+		printf(" Run test forever, print results every <duration> seconds (SYMMETRIC)\n");
 	}
 
 	if (connection_type != RawEth) {
@@ -702,7 +705,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if ((tst == LAT || tst == BW) && verb == WRITE) {
 		printf("      --write_with_imm ");
-		printf(" Use write-with-immediate verb instead of write\n");
+		printf(" Use write-with-immediate verb instead of write (SYMMETRIC)\n");
 
 		#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 		printf("      --unsolicited_write ");
