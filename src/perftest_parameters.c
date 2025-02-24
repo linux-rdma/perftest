@@ -560,7 +560,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (connection_type != RawEth && !((verb == WRITE || verb == WRITE_IMM) && tst == LAT)) {
 		printf("      --payload_file_path=<payload_txt_file_path>");
-		printf(" Set the payload by passing a txt file containing a pattern in the next form(little endian): '0xaaaaaaaa, 0xbbbbbbbb, ...' .\n");
+		printf(" Set the payload by passing a txt file containing a pattern in the next form(little endian): '0xaaaaaaaa,0xbbbbbbbb,...' .\n");
 	}
 
 	printf(" Latency measurement is Average calculation \n");
