@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Verify user parameters that require the device context,
-	 * the function will print the relevent error info. */
+	 * the function will print the relevant error info. */
 	if (verify_params_with_device_context(ctx.context, &user_param)) {
 		goto free_devname;
 	}
