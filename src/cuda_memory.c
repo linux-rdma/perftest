@@ -26,6 +26,7 @@ struct cuda_memory_ctx {
 	CUdevice cuDevice;
 	CUcontext cuContext;
 	bool use_dmabuf;
+	bool use_data_direct;
 };
 
 
@@ -195,6 +196,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				const size_t host_page_size = sysconf(_SC_PAGESIZE);
 				uint64_t offset;
 				size_t aligned_size;
+				int cu_flags = 0;
 
 				// Round down to host page size
 				aligned_ptr = d_A & ~(host_page_size - 1);
@@ -203,7 +205,14 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 				printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
 				*dmabuf_fd = 0;
-				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
+
+				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
+				if (cuda_ctx->use_data_direct)
+				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+				#endif
+
+				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
 				if (error != CUDA_SUCCESS) {
 					printf("cuMemGetHandleForAddressRange error=%d\n", error);
 					return FAILURE;
@@ -257,6 +266,15 @@ bool cuda_memory_dmabuf_supported() {
 #endif
 }
 
+
+bool data_direct_supported() {
+#ifdef HAVE_DATA_DIRECT
+	return true;
+#else
+	return false;
+#endif
+}
+
 struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	struct cuda_memory_ctx *ctx;
 
@@ -271,6 +289,7 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->device_id = params->cuda_device_id;
 	ctx->device_bus_id = params->cuda_device_bus_id;
 	ctx->use_dmabuf = params->use_cuda_dmabuf;
+	ctx->use_data_direct = params->use_data_direct;
 
 	return &ctx->base;
 }

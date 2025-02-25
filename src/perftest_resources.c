@@ -1023,6 +1023,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	ALLOC(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#ifdef HAVE_DCS
 	ALLOC(ctx->dci_stream_id, uint32_t, user_param->num_of_qps);
+	memset(ctx->dci_stream_id, 0, user_param->num_of_qps * sizeof (uint32_t));
 	#endif
 	#ifdef HAVE_AES_XTS
 	ALLOC(ctx->dek, struct mlx5dv_dek*, user_param->data_enc_keys_number);
@@ -1627,7 +1628,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	int flags = IBV_ACCESS_LOCAL_WRITE;
 	bool can_init_mem = true;
 	int dmabuf_fd = 0;
-	uint64_t dmabuf_offset;
+	uint64_t dmabuf_offset = 0;
 
 	#if defined(__FreeBSD__)
 	ctx->is_contig_supported = FAILURE;
@@ -1682,14 +1683,28 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 #ifdef HAVE_REG_DMABUF_MR
 	/* Allocating Memory region and assigning our buffer to it. */
 	if (dmabuf_fd) {
-		printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-			dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
-		ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
-			ctx->pd, dmabuf_offset,
-			ctx->buff_size, (uint64_t)ctx->buf[qp_index],
-			dmabuf_fd,
-			flags
-		);
+	#ifdef HAVE_DATA_DIRECT
+	    if (user_param->use_data_direct) {
+			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			ctx->mr[qp_index] = mlx5dv_reg_dmabuf_mr(
+		        ctx->pd, dmabuf_offset,
+		        ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+		        dmabuf_fd,
+		        flags, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT
+		        );
+	    } else
+	#endif
+		{
+			printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+				   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
+                ctx->pd, dmabuf_offset,
+                ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+                dmabuf_fd,
+                flags
+                );
+	    }
 		if (!ctx->mr[qp_index]) {
 			int error = errno;
 			fprintf(stderr, "Couldn't allocate MR with error=%d\n", error);
@@ -1897,6 +1912,7 @@ int verify_params_with_device_context(struct ibv_context *context,
 		current_dev != CONNECTX6LX &&
 		current_dev != CONNECTX7 &&
 		current_dev != CONNECTX8 &&
+		current_dev != CONNECTX9 &&
 		current_dev != MLX5GENVF &&
 		current_dev != BLUEFIELD &&
 		current_dev != BLUEFIELD2 &&
@@ -2156,9 +2172,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		if (user_param->work_rdma_cm == OFF) {
 			modify_qp_to_init(ctx, user_param, i);
 		}
-		#ifdef HAVE_DCS
-		ctx->dci_stream_id[i] = 0;
-		#endif
+
 		qp_index++;
 	}
 
@@ -2307,6 +2321,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_init_attr attr_dv;
 	memset(&attr_dv, 0, sizeof(attr_dv));
+	#ifdef HAVE_OOO_RECV_WRS
+	struct mlx5dv_context ctx_dv;
+	memset(&ctx_dv, 0, sizeof(ctx_dv));
+	#endif
 	#endif
 	#ifdef HAVE_SRD
 	struct efadv_qp_init_attr efa_attr = {};
@@ -2450,6 +2468,30 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		if (!user_param->use_old_post_send)
 		{
 			#ifdef HAVE_MLX5DV
+			#ifdef HAVE_OOO_RECV_WRS
+			if (!user_param->no_ddp && user_param->connection_type != UD && user_param->connection_type != UC){
+				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
+
+				int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
+
+				if (ret) {
+					fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
+					return NULL;
+				}
+
+				if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+					if ((user_param->connection_type == RC && ctx_dv.ooo_recv_wrs_caps.max_rc < user_param->rx_depth) ||
+					(user_param->connection_type == DC && ctx_dv.ooo_recv_wrs_caps.max_dct < user_param->rx_depth))
+					{
+						fprintf(stderr, "RX Depth=%d  must not exceed the maximal OOO receive WR's\n", user_param->rx_depth);
+						return NULL;
+						}
+					user_param->use_ddp = ON;
+					attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+				}
+			}
+			#endif
 			if (user_param->connection_type == DC)
 			{
 				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -2482,13 +2524,17 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 				attr_ex.cap.max_inline_data = AES_XTS_INLINE;
 				attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_SEND_OPS_FLAGS;
 				attr_dv.send_ops_flags = MLX5DV_QP_EX_WITH_MKEY_CONFIGURE;
-				attr_dv.create_flags = MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
 				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
 			}
 			#endif // HAVE_AES_XTS
+			#ifdef HAVE_OOO_RECV_WRS
+			else if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+			}
+			#endif
 			else
 			#endif // HAVE_MLX5DV
-
 			#ifdef HAVE_HNSDV
 			if (user_param->congest_type) {
 				hns_attr.comp_mask = HNSDV_QP_INIT_ATTR_MASK_QP_CONGEST_TYPE;
@@ -2649,7 +2695,10 @@ static int ctx_modify_qp_to_rtr(struct ibv_qp *qp,
 			attr->ah_attr.grh.sgid_index = (attr->ah_attr.port_num == user_param->ib_port) ? user_param->gid_index : user_param->gid_index2;
 			attr->ah_attr.grh.hop_limit = 0xFF;
 			attr->ah_attr.grh.traffic_class = user_param->traffic_class;
-			attr->ah_attr.grh.flow_label = user_param->flow_label;
+			if (user_param->flow_label) {
+				attr->ah_attr.grh.flow_label = user_param->flow_label[user_param->flow_label[1] % user_param->flow_label[0] + 2];
+				user_param->flow_label[1] = user_param->flow_label[1] + 1;
+			}
 		}
 		if (user_param->connection_type != UD && user_param->connection_type != SRD) {
 			if (user_param->connection_type == DC) {
@@ -3210,6 +3259,10 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			size_per_qp = user_param->rx_depth / user_param->recv_post_list;
 	int mtu = MTU_SIZE(user_param->curr_mtu);
 	uint64_t length = user_param->use_srq == ON ? (((SIZE(user_param->connection_type ,user_param->size, 1) + mtu - 1 )/ mtu) * mtu) : SIZE(user_param->connection_type, user_param->size, 1);
+
+	/* Write w/imm completions have zero recieve buffer length */
+	if (user_param->verb == WRITE_IMM)
+		length = 0;
 
 	if((user_param->use_xrc || user_param->connection_type == DC) &&
 				(user_param->duplex || user_param->tst == LAT)) {
@@ -3920,6 +3973,14 @@ cleaning:
 /******************************************************************************
  *
  ******************************************************************************/
+
+// Signal flag and handler for proper exit when running infinitely
+volatile sig_atomic_t sigint_flag = 0;
+
+void handle_sigint(int sig) {
+    sigint_flag = 1;
+}
+
 int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
 {
 	uint64_t		totscnt = 0;
@@ -3950,6 +4011,10 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		free(wc);
 		free(scnt_for_qp);
 		return FAILURE;
+	}
+
+	if (!user_param->duplex && user_param->verb != WRITE_IMM && user_param->verb != SEND){
+		signal(SIGINT, handle_sigint);
 	}
 
 	user_param->iters = 0;
@@ -4017,6 +4082,11 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 				return_value = FAILURE;
 				goto cleaning;
 			}
+		}
+
+		if (sigint_flag) {
+			printf("\n User stopped traffic\n");
+			goto cleaning;
 		}
 	}
 cleaning:

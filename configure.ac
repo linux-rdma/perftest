@@ -29,7 +29,7 @@
 # SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([perftest],[6.23],[linux-rdma@vger.kernel.org])
+AC_INIT([perftest],[6.24],[linux-rdma@vger.kernel.org])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
@@ -165,6 +165,22 @@ fi
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
+	[int x = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;],[HAVE_OOO_RECV_WRS=yes], [HAVE_OOO_RECV_WRS=no])
+AM_CONDITIONAL([HAVE_OOO_RECV_WRS],[test "x$HAVE_OOO_RECV_WRS" = "xyes"])
+if [test $HAVE_OOO_RECV_WRS = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_OOO_RECV_WRS], [1], [Have DDP support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
+	[int x = MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT;],[HAVE_DATA_DIRECT=yes], [HAVE_DATA_DIRECT=no])
+AM_CONDITIONAL([HAVE_DATA_DIRECT],[test "x$HAVE_DATA_DIRECT" = "xyes"])
+if [test $HAVE_DATA_DIRECT = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_DATA_DIRECT], [1], [Have Data Direct support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_CRYPTO_STANDARD_AES_XTS;],[HAVE_AES_XTS=yes], [HAVE_AES_XTS=no])
 AM_CONDITIONAL([HAVE_AES_XTS],[test "x$HAVE_AES_XTS" = "xyes"])
 if [test $HAVE_AES_XTS = yes] && [test $HAVE_MLX5DV = yes];  then
@@ -274,8 +290,16 @@ if [test "$CUDA_H_PATH" ]; then
 	if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
 		AC_DEFINE([HAVE_CUDA_DMABUF], [1], [Enable CUDA DMABUF feature])
 	fi
+	AC_TRY_LINK([
+	#include <$CUDA_H_PATH>],
+	[int x = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;],
+	[CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=yes], [CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=no])
+	if [test "x$CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"] && [test "x$HAVE_CUDA_DMABUF" = "xyes"]; then
+		AC_DEFINE([HAVE_DMABUF_MAPPING_TYPE_PCIE], [1], [Enable CUDA DMABUF handle mapping via PCIe BAR1])
+	fi
 fi
 AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
+AM_CONDITIONAL([CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"])
 
 AM_CONDITIONAL([CUDA], [test "$CUDA_H_PATH"])
 

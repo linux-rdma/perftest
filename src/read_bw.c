@@ -244,7 +244,12 @@ int main(int argc, char *argv[])
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
-		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+
+		if (user_param.test_method != RUN_INFINITELY) {
+			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+		} else {
+			printf(" Client closed connection\n");
+		}
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");

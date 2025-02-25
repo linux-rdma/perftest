@@ -114,6 +114,43 @@ static int parse_ethertype_from_str(char *ether_str, uint16_t *ethertype_val)
 	return SUCCESS;
 }
 
+static int parse_flow_label_from_str(struct perftest_parameters *user_param, char *flow_label_str)
+{
+	int fl_cnt = 1;
+	const char* sep = NULL;
+
+	sep = strchr(flow_label_str, ',');
+	if (sep != NULL)
+		do {
+			fl_cnt++;
+			sep = strchr(sep + 1, ',');
+		} while (sep);
+
+	int *flow_label = calloc(fl_cnt + 2, sizeof(int));
+	flow_label[0] = fl_cnt;
+	flow_label[1] = 0;
+	flow_label[2] = strtol(flow_label_str, NULL, 0);
+	sep = strchr(flow_label_str, ',');
+
+	for (int i = 3; i < fl_cnt + 2; i++) {
+		flow_label[i] = strtol(sep + 1, NULL, 0);
+		sep = strchr(sep + 1, ',');
+	}
+
+	if (user_param->connection_type == RawEth) {
+		for (int i = 2; i < fl_cnt + 2; i++) {
+			if (flow_label[i] < 0) {
+				fprintf(stderr," flow label must be non-negative for RawEth\n");
+				return -1;
+			}
+		}
+	}
+
+	user_param->flow_label = flow_label;
+
+	return 0;
+}
+
 /******************************************************************************
   parse_ip_from_str.
  *
@@ -337,6 +374,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (verb == SEND) {
 			printf("  -M, --MGID=<multicast_gid> ");
 			printf(" In multicast, uses <multicast_gid> as the group MGID.\n");
+
+			if (tst == BW) {
+				printf("      --connectionless ");
+				printf(" Open a connectionless server instance for multicast traffic.\n");
+			}
 		}
 	}
 
@@ -472,6 +514,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" No lock in IO, including post send, post recv, post srq recv and poll cq \n");
 	#endif
 
+	#ifdef HAVE_OOO_RECV_WRS
+	printf("      --no_ddp ");
+	printf(" Disable the receiver capability to consume out-of-order WRs. \n");
+	#endif
+
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
@@ -559,8 +606,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
 
 		if (connection_type != RawEth) {
-			printf("      --flow_label=<value> ");
-			printf(" Set the flow_label in GRH (if GRH is in use)\n");
+			printf("      --flow_label=<fl0,fl1,fl2,...> ");
+			printf(" Set the flow_label in GRH for each qp in roundrobin method(if GRH is in use)\n");
 		}
 
 		if (cuda_memory_supported()) {
@@ -573,6 +620,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			if (cuda_memory_dmabuf_supported()) {
 				printf("      --use_cuda_dmabuf");
 				printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
+				if (data_direct_supported()) {
+					printf("      --use_data_direct");
+					printf(" Use Data-Direct CUDA DMA-BUF for GPUDirect RDMA testing\n");
+				}
 			}
 		}
 
@@ -824,6 +875,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_id	= 0;
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
+	user_param->use_data_direct	= 0;
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
@@ -879,7 +931,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->mr_per_qp			= 0;
 	user_param->dlid			= 0;
 	user_param->traffic_class		= 0;
-	user_param->flow_label			= 0;
+	user_param->flow_label			= NULL;
 	user_param->flows			= DEF_FLOWS;
 	user_param->flows_burst			= 1;
 	user_param->perform_warm_up		= 0;
@@ -891,6 +943,9 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_unsolicited_write = 0;
 	user_param->congest_type	= OFF;
 	user_param->no_lock		= OFF;
+	user_param->use_ddp		= OFF;
+	user_param->no_ddp		= OFF;
+	user_param->connectionless		= OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -1172,6 +1227,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->use_srq && user_param->verb != SEND) {
 		printf(RESULT_LINE);
 		printf(" Using SRQ only avavilible in SEND tests.\n");
+		exit (1);
+	}
+
+	if (user_param->connectionless && (user_param->machine != SERVER ||
+										!user_param->use_mcg ||
+										user_param->tst != BW ||
+										user_param->connection_type != UD ||
+										user_param->test_method != RUN_INFINITELY)) {
+		printf(RESULT_LINE);
+		printf(" Using Connectionless server only avavilible in Multicast, UD BW with RUN INFINITELY tests.\n");
 		exit (1);
 	}
 
@@ -1943,6 +2008,7 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 4127  : dev_fname = CONNECTX6LX; break;
 			case 4129  : dev_fname = CONNECTX7; break;
 			case 4131  : dev_fname = CONNECTX8; break;
+			case 4133  : dev_fname = CONNECTX9; break;
 			case 41682 : dev_fname = BLUEFIELD; break;
 			case 41683 : dev_fname = BLUEFIELD; break;
 			case 41686 : dev_fname = BLUEFIELD2; break;
@@ -2302,6 +2368,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
+	static int use_data_direct_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_neuron_flag = 0;
 	static int use_neuron_dmabuf_flag = 0;
@@ -2366,6 +2433,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#ifdef HAVE_TD_API
 	static int no_lock_flag = 0;
 	#endif
+	#ifdef HAVE_OOO_RECV_WRS
+	static int no_ddp_flag = 0;
+	#endif
+	static int connectionless_flag = 0;
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2470,6 +2541,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
+			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
@@ -2528,9 +2600,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
+			#ifdef HAVE_OOO_RECV_WRS
+			{ .name = "no_ddp",		.has_arg = 0, .flag = &no_ddp_flag, .val = 1},
+			#endif
 			#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 			{.name = "unsolicited_write", .has_arg = 0, .flag = &unsolicited_write_flag, .val = 1 },
 			#endif
+			{.name = "connectionless", .has_arg = 0, .flag = &connectionless_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -2913,6 +2989,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
+				if(use_data_direct_flag && !data_direct_supported()){
+					printf(" Data Direct is not supported\n");
+					return FAILURE;
+				}
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
 				    (mmap_file_flag || use_mlu_flag || use_rocm_flag || use_neuron_flag || use_hl_flag ||
@@ -2941,6 +3021,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					use_cuda_dmabuf_flag = 0;
+				}
+				if (use_data_direct_flag) {
+				    user_param->use_data_direct = 1;
+				    use_data_direct_flag = 0;
 				}
 				if (use_rocm_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
@@ -2980,9 +3064,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					use_mlu_flag = 0;
 				}
 				if (flow_label_flag) {
-					CHECK_VALUE(user_param->flow_label,int,"flow label",not_int_ptr);
-					if (user_param->connection_type == RawEth && user_param->flow_label < 0) {
-						fprintf(stderr," flow label must be non-negative for RawEth\n");
+					if (parse_flow_label_from_str(user_param, optarg)) {
 						return FAILURE;
 					}
 					flow_label_flag = 0;
@@ -3214,6 +3296,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 	#endif
 
+	#ifdef HAVE_OOO_RECV_WRS
+	if (no_ddp_flag) {
+		user_param->no_ddp = 1;
+	}
+	#endif
+
+	if (connectionless_flag) {
+		user_param->connectionless = 1;
+	}
+
 	if (use_null_mr_flag) {
 		user_param->use_null_mr = 1;
 	}
@@ -3363,6 +3455,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->print_eth_func = &print_ethernet_vlan_header;
 		vlan_en = 0;
 	}
+	if(user_param->use_data_direct && !user_param->use_cuda_dmabuf){
+		fprintf(stderr, " DMABUF must be enabled in order to use Data Direct \n");
+		return FAILURE;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
@@ -3385,6 +3481,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	force_dependecies(user_param);
 	return 0;
 }
+
 
 /******************************************************************************
  *
@@ -3576,7 +3673,7 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 	#endif //HAVE_TD_API
 	#endif
 
-	printf(" ibv_wr* API     : %s\n", user_param->use_old_post_send ? "OFF" : "ON");
+	printf(" ibv_wr* API     : %s\t\tUsing DDP      : %s\n", user_param->use_old_post_send ? "OFF" : "ON", user_param->use_ddp ? "ON" : "OFF");
 	if (user_param->machine == CLIENT || user_param->duplex) {
 		printf(" TX depth        : %d\n",user_param->tx_depth);
 	}

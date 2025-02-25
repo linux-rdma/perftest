@@ -385,7 +385,8 @@ enum ctx_device {
 	ERDMA			= 29,
 	HNS			= 30,
 	CONNECTX8		= 31,
-  INTEL_GEN2		= 32,
+  	INTEL_GEN2		= 32,
+	CONNECTX9               = 33,
 };
 
 /* Units for rate limiter */
@@ -572,6 +573,7 @@ struct perftest_parameters {
 	int				cuda_device_id;
 	char				*cuda_device_bus_id;
 	int				use_cuda_dmabuf;
+	int				use_data_direct;
 	int				rocm_device_id;
 	int				neuron_core_id;
 	int				use_neuron_dmabuf;
@@ -604,7 +606,7 @@ struct perftest_parameters {
 	char				*out_json_file_name;
 	struct cpu_util_data 		cpu_util_data;
 	int 				latency_gap;
-	int 				flow_label;
+	int*  				flow_label;
 	int 				retry_count;
 	int 				dont_xchg_versions;
 	int 				ipv6;
@@ -640,6 +642,9 @@ struct perftest_parameters {
 	int 			ah_allocated;
 	int				use_write_with_imm;
 	int				use_unsolicited_write;
+	int				use_ddp;
+	int				no_ddp;
+	int				connectionless;
 };
 
 struct report_options {

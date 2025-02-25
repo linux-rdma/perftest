@@ -16,6 +16,8 @@ bool cuda_memory_supported();
 
 bool cuda_memory_dmabuf_supported();
 
+bool data_direct_supported();
+
 struct memory_ctx *cuda_memory_create(struct perftest_parameters *params);
 
 
@@ -26,6 +28,10 @@ inline bool cuda_memory_supported() {
 }
 
 inline bool cuda_memory_dmabuf_supported() {
+	return false;
+}
+
+inline bool data_direct_supported() {
 	return false;
 }
 
