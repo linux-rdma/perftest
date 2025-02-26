@@ -117,6 +117,7 @@ static int parse_ethertype_from_str(char *ether_str, uint16_t *ethertype_val)
 static int parse_flow_label_from_str(struct perftest_parameters *user_param, char *flow_label_str)
 {
 	int fl_cnt = 1;
+	int i;
 	const char* sep = NULL;
 
 	sep = strchr(flow_label_str, ',');
@@ -132,13 +133,13 @@ static int parse_flow_label_from_str(struct perftest_parameters *user_param, cha
 	flow_label[2] = strtol(flow_label_str, NULL, 0);
 	sep = strchr(flow_label_str, ',');
 
-	for (int i = 3; i < fl_cnt + 2; i++) {
+	for (i = 3; i < fl_cnt + 2; i++) {
 		flow_label[i] = strtol(sep + 1, NULL, 0);
 		sep = strchr(sep + 1, ',');
 	}
 
 	if (user_param->connection_type == RawEth) {
-		for (int i = 2; i < fl_cnt + 2; i++) {
+		for (i = 2; i < fl_cnt + 2; i++) {
 			if (flow_label[i] < 0) {
 				fprintf(stderr," flow label must be non-negative for RawEth\n");
 				return -1;
