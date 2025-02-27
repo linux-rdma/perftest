@@ -137,7 +137,6 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 	hipError_t error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 
-	struct rocm_memory_ctx *rocm_ctx = container_of(ctx, struct rocm_memory_ctx, base);
 	error = hipMalloc(&d_A, buf_size);
 	if (error != hipSuccess) {
 		printf("hipMalloc error=%d\n", error);
@@ -145,6 +144,8 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 	}
 
 #ifdef HAVE_ROCM_DMABUF
+	struct rocm_memory_ctx *rocm_ctx = container_of(ctx, struct rocm_memory_ctx, base);
+
 	if (rocm_ctx->use_dmabuf) {
 		hipDeviceptr_t aligned_ptr;
 		const size_t host_page_size = sysconf(_SC_PAGESIZE);
@@ -167,7 +168,7 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 			return FAILURE;
 		}
 
-		printf("dmabuf export addr %p %lu to dmabuf fd %d offset %zu\n",
+		printf("dmabuf export addr %p %zu to dmabuf fd %d offset %lu\n",
 				d_A, aligned_size, *dmabuf_fd, offset);
 
 		*dmabuf_offset = offset;
