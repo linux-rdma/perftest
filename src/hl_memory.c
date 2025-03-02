@@ -102,7 +102,7 @@ int hl_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t si
     const uint64_t memory_handle = hlthunk_device_memory_alloc(hl_ctx->device_fd, buf_size, page_size,
 							       HL_MEM_CONTIGUOUS, NOT_SHARED);
     if (memory_handle == 0) {
-	fprintf(stderr, "Failed to allocate %lu bytes of device memory\n", buf_size);
+	fprintf(stderr, "Failed to allocate %lu bytes of device memory\n", (unsigned long) buf_size);
 	return FAILURE;
     }
     buffer_addr = hlthunk_device_memory_map(hl_ctx->device_fd, memory_handle, 0);
