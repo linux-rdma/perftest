@@ -207,10 +207,15 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				*dmabuf_fd = 0;
 				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
 
+				if (cuda_ctx->use_data_direct) {
 				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
-				if (cuda_ctx->use_data_direct)
 				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+				#else
+					// this may happen if building with the CUDA toolkit older than 12.8
+					print("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
+					return FAILURE;
 				#endif
+				}
 
 				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
 				if (error != CUDA_SUCCESS) {
