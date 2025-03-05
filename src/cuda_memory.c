@@ -219,7 +219,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 					}
 				#else
 					// this may happen with binaries built with a CUDA toolkit older than 12.8
-					print("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
+					printf("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
 					return FAILURE;
 				#endif
 				}
