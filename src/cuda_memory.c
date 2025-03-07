@@ -214,7 +214,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
 				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 					if (cuda_ctx->driver_version < 12*1000+8*10) {
-						print("The GPU driver does not support CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE\n");
+						printf("The GPU driver does not support CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE\n");
 						return FAILURE;
 					}
 				#else
