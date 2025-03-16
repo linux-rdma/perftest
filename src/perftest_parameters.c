@@ -526,7 +526,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (connection_type != RawEth) {
 		printf("      --ipv6 ");
 		printf(" Use IPv6 GID. Default is IPv4\n");
-		printf("      --ipv6-addr=<IPv6> (SYMMETRIC)");
+		printf("      --ipv6-addr (SYMMETRIC)");
 		printf(" Use IPv6 address for parameters negotiation. Default is IPv4\n");
 	}
 
@@ -534,6 +534,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (connection_type != RawEth) {
 		printf("      --bind_source_ip ");
 		printf(" Source IP of the interface used for connection establishment. By default taken from routing table.\n");
+		printf(" --ipv6-addr flag must be used when specifying an IPv6 source IP.\n");
 	}
 
 

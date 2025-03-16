@@ -660,56 +660,106 @@ static int get_best_gid_index (struct pingpong_context *ctx,
 /******************************************************************************
  *
  ******************************************************************************/
-static int ethernet_client_connect(struct perftest_comm *comm)
-{
-	struct addrinfo *res, *t;
-	struct addrinfo hints;
-	char *service;
-	struct sockaddr_in source;
+static int set_source_address(struct perftest_comm *comm, struct sockaddr *source, socklen_t *addrlen) {
+    if (comm->rdma_params->ai_family == AF_INET) {
+        struct sockaddr_in *source_ipv4 = (struct sockaddr_in *)source;
+        memset(source_ipv4, 0, sizeof(*source_ipv4));
+        source_ipv4->sin_family = AF_INET;
+        source_ipv4->sin_addr.s_addr = inet_addr(comm->rdma_params->source_ip);
 
-	int sockfd = -1;
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family   = comm->rdma_params->ai_family;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if (comm->rdma_params->has_source_ip) {
-		memset(&source, 0, sizeof(source));
-		source.sin_family = AF_INET;
-		source.sin_addr.s_addr = inet_addr(comm->rdma_params->source_ip);
-	}
-
-	if (check_add_port(&service,comm->rdma_params->port,comm->rdma_params->servername,&hints,&res)) {
-		fprintf(stderr, "Problem in resolving basic address and port\n");
-		return 1;
-	}
-
-	for (t = res; t; t = t->ai_next) {
-		sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
-		if (sockfd >= 0) {
-			if (comm->rdma_params->has_source_ip) {
-				if (bind(sockfd, (struct sockaddr *)&source, sizeof(source)) < 0)
-				{
-					fprintf(stderr, "Failed to bind socket\n");
-					close(sockfd);
-					return 1;
-				}
-			}
-			if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
-				break;
-			close(sockfd);
-			sockfd = -1;
+		if (source_ipv4->sin_addr.s_addr < 0) {
+			fprintf(stderr, "Invalid source address.\n");
+			return 1;
 		}
-	}
 
-	freeaddrinfo(res);
+        *addrlen = sizeof(*source_ipv4);
+        return 0;
 
-	if (sockfd < 0) {
-		fprintf(stderr, "Couldn't connect to %s:%d\n",comm->rdma_params->servername,comm->rdma_params->port);
-		return 1;
-	}
+    } else if (comm->rdma_params->ai_family == AF_INET6) {
+        struct sockaddr_in6 *source_ipv6 = (struct sockaddr_in6 *)source;
+        memset(source_ipv6, 0, sizeof(*source_ipv6));
+        source_ipv6->sin6_family = AF_INET6;
 
-	comm->rdma_params->sockfd = sockfd;
-	return 0;
+        if (inet_pton(AF_INET6, comm->rdma_params->source_ip, &source_ipv6->sin6_addr) != 1) {
+            fprintf(stderr, "Invalid IPv6 source address.\n");
+            return 1;
+        }
+
+        *addrlen = sizeof(*source_ipv6);
+        return 0;
+    }
+
+    fprintf(stderr, "Unsupported address family for source IP.\n");
+    return 1;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int ethernet_client_connect(struct perftest_comm *comm) {
+    struct addrinfo *res, *t;
+    struct addrinfo hints;
+    char *service;
+    struct sockaddr *source = NULL;
+    socklen_t addrlen = 0;
+    int sockfd = -1;
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family   = comm->rdma_params->ai_family;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (comm->rdma_params->has_source_ip) {
+        source = malloc(sizeof(struct sockaddr_storage));
+
+        if (!source) {
+            fprintf(stderr, "Failed to allocate memory for source address.\n");
+            return 1;
+        }
+
+		memset(source, 0, sizeof(struct sockaddr_storage));
+
+        if (set_source_address(comm, source, &addrlen)) {
+            free(source);
+            fprintf(stderr, "Failed to set source address.\n");
+            return 1;
+        }
+    }
+
+    if (check_add_port(&service, comm->rdma_params->port, comm->rdma_params->servername, &hints, &res)) {
+        fprintf(stderr, "Problem in resolving basic address and port\n");
+        if (source) free(source);
+        return 1;
+    }
+
+    for (t = res; t; t = t->ai_next) {
+        sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
+        if (sockfd >= 0) {
+            if (comm->rdma_params->has_source_ip) {
+                if (bind(sockfd, source, addrlen) < 0) {
+                    fprintf(stderr, "Failed to bind socket\n");
+                    close(sockfd);
+                    sockfd = -1;
+                    break;
+                }
+            }
+            if (!connect(sockfd, t->ai_addr, t->ai_addrlen))
+                break;
+            close(sockfd);
+            sockfd = -1;
+        }
+    }
+
+    freeaddrinfo(res);
+
+    if (source) free(source);
+
+    if (sockfd < 0) {
+        fprintf(stderr, "Couldn't connect to %s:%d\n", comm->rdma_params->servername, comm->rdma_params->port);
+        return 1;
+    }
+
+    comm->rdma_params->sockfd = sockfd;
+    return 0;
 }
 
 /******************************************************************************

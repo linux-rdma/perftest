@@ -5557,14 +5557,39 @@ int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 		}
 	}
 
-        if (user_param->has_source_ip) {
-                struct sockaddr_in *source_addr;
-                source_addr = calloc(1, sizeof(*source_addr));
-                source_addr->sin_family = AF_INET;
-                source_addr->sin_addr.s_addr = inet_addr(user_param->source_ip);
-                hints->ai_src_addr = (struct sockaddr *)(source_addr);
-                hints->ai_src_len = sizeof(*source_addr);
-        }
+	if (user_param->has_source_ip) {
+		if (AF_INET == user_param->ai_family) {
+			struct sockaddr_in *source_addr;
+			source_addr = calloc(1, sizeof(*source_addr));
+			source_addr->sin_family = AF_INET;
+			source_addr->sin_addr.s_addr = inet_addr(user_param->source_ip);
+
+			if (source_addr->sin_addr.s_addr < 0) {
+				fprintf(stderr, "Invalid source address.\n");
+				return 1;
+			}
+
+			hints->ai_src_addr = (struct sockaddr *)(source_addr);
+			hints->ai_src_len = sizeof(*source_addr);
+		} else {
+			int err = 0;
+			struct sockaddr_in6 *source_addr;
+			source_addr = calloc(1, sizeof(*source_addr));
+			source_addr->sin6_family = AF_INET6;
+			err = inet_pton(AF_INET6, user_param->source_ip, source_addr->sin6_addr.s6_addr);
+
+			if (!err) {
+				fprintf(stderr, "Invalid network address in the specified address family.\n");
+				return 1;
+			} else if (err < 0) {
+				fprintf(stderr, "Invalid address family.\n");
+				return 1;
+			}
+
+			hints->ai_src_addr = (struct sockaddr *)(source_addr);
+			hints->ai_src_len = sizeof(*source_addr);
+		}
+	}
 
 	return rc;
 
