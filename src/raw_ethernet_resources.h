@@ -158,7 +158,7 @@ struct TCP_header {
 	uint16_t        th_urgptr;
 }__attribute__((packed));
 
-void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type, struct perftest_parameters* user_param, struct memory_ctx* memory);
+void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac,uint8_t* dst_mac, uint16_t eth_type, struct memory_ctx* memory);
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param);
 //void print_ethernet_header(struct ETH_header* p_ethernet_header);
 void print_ethernet_header(void* p_ethernet_header, struct perftest_parameters* user_param, struct memory_ctx *memory);
