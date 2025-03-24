@@ -319,6 +319,8 @@ if [test "$CUDA_H_PATH" ]; then
 		AC_DEFINE([HAVE_DMABUF_MAPPING_TYPE_PCIE], [1], [Enable CUDA DMABUF handle mapping via PCIe BAR1])
 	fi
 
+	CPPFLAGS="-I$(dirname $CUDA_H_PATH)/include $CPPFLAGS"
+	LDFLAGS="-L$(dirname $(dirname $CUDA_H_PATH))/lib -L$(dirname $(dirname $CUDA_H_PATH))/lib64 $LDFLAGS"
 	if [test "x${gpu_arch}" != "x"]; then
 		NVCCFLAGS="${NVCCFLAGS} -arch compute_${gpu_arch} -code compute_${gpu_arch},sm_${gpu_arch}"
 		AC_MSG_NOTICE([Setting GPU_ARCH = ${gpu_arch}])
@@ -335,7 +337,7 @@ if [test "$CUDA_H_PATH" ]; then
 		fi
 	fi
 
-	CUDA_TOOLKIT_PATH=$(dirname $(dirname $(dirname $(dirname $CUDA_H_PATH))))
+	CUDA_TOOLKIT_PATH=$(dirname $(dirname $CUDA_H_PATH))
 	AC_DEFINE_UNQUOTED([CUDA_TOOLKIT_PATH], "$CUDA_TOOLKIT_PATH", [Path to the CUDA Toolkit])
 	AC_SUBST([NVCCFLAGS], ["${NVCCFLAGS}"])
 	AC_SUBST([NVCC], ["$CUDA_TOOLKIT_PATH/bin/nvcc"])
