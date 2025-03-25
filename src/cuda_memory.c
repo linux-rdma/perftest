@@ -27,6 +27,7 @@ struct cuda_memory_ctx {
 	CUcontext cuContext;
 	bool use_dmabuf;
 	bool use_data_direct;
+	int driver_version;
 };
 
 
@@ -91,6 +92,8 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 		printf("cuCtxSetCurrent() error=%d\n", error);
 		return FAILURE;
 	}
+
+	CUCHECK(cuDriverGetVersion(&ctx->driver_version));
 
 	return SUCCESS;
 }
@@ -207,10 +210,20 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				*dmabuf_fd = 0;
 				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
 
+				if (cuda_ctx->use_data_direct) {
 				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
-				if (cuda_ctx->use_data_direct)
 				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+					if (cuda_ctx->driver_version < 12*1000+8*10) {
+						printf("CUDA driver version %d.%d does not support CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE\n",
+							  (cuda_ctx->driver_version / 1000), (cuda_ctx->driver_version % 1000) / 10);
+						return FAILURE;
+					}
+				#else
+					// this may happen with binaries built with a CUDA toolkit older than 12.8
+					printf("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
+					return FAILURE;
 				#endif
+				}
 
 				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
 				if (error != CUDA_SUCCESS) {
