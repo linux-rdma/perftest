@@ -510,7 +510,8 @@ static inline int validation_is_sync(enum validation_type type)
 enum validation_fill {
 	VALIDATION_FILL_NONE = 0,
 	VALIDATION_FILL_RANDOM,
-	VALIDATION_FILL_SERIAL
+	VALIDATION_FILL_SERIAL,
+	VALIDATION_FILL_PATTERN
 };
 
 /* Data validation mode */
