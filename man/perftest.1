@@ -480,10 +480,11 @@ Incompatible with: -a, --post_list>1, --run_infinitely, --mr_per_qp,
 Note: some bandwidth degradation is expected (mainly in READ mode).
 Using 2MB or 1GB huge pages will improve bandwidth in most cases.
 .TP
-.B --data_validation_fill=<random|serial>
+.B --data_validation_fill=<random|serial|pattern>
 How sync data validation generates the payload. Random by default.
  random: Data is randomized.
  serial: Data is filled with sequential numeric series. Use --data_start_value=<N> to set starting point.
+ pattern: Data is filled using contents of file provided by --payload_file_path=<file>.
 Requires --data_validation=sync.
 .TP
 .B --data_start_value
