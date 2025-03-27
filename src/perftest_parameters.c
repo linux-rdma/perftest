@@ -41,6 +41,7 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
+static const char *validationFillStr[] = {"none", "random", "serial"};
 #ifdef HAVE_HNSDV
 static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
 #endif
@@ -581,6 +582,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("       but throttles the sender. Write BW with immediate only, and requires\n");
 		printf("                         ");
 		printf("       post_list == tx_depth and recv_post_list == rx_depth\n");
+		printf("      --data_validation_fill=<random|serial> ");
+		printf(" How sync data validation generates the payload. Random by default\n");
+		printf("                         ");
+		printf(" serial: sequential numeric series, see --data_start_value\n");
+		printf("      --data_start_value ");
+		printf(" Starting value for serial data validation. Set to 0 by default\n");
 		printf("      --data_validation_debug ");
 		printf(" Enable verbose debug output for data validation\n");
 	}
@@ -1177,6 +1184,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->numa_node		= -1;
 	user_param->disable_numa	= 0;
 	CPU_ZERO(&user_param->cpu_affinity);
+	user_param->validation_fill	= VALIDATION_FILL_NONE;
+	user_param->data_start_value	= 0;
 }
 
 static int open_file_write(const char* file_path)
@@ -2498,6 +2507,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	if (user_param->validation_fill != VALIDATION_FILL_NONE &&
+	    !validation_is_sync(user_param->data_validation)) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --data_validation_fill requires --data_validation=sync\n");
+		exit(1);
+	}
+
 	if (validation_is_sync(user_param->data_validation)) {
 		if (user_param->tst != BW || user_param->verb != WRITE_IMM) {
 			printf(RESULT_LINE);
@@ -2524,6 +2540,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
+		if (user_param->validation_fill == VALIDATION_FILL_NONE) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Synchronous data validation requires --data_validation_fill=<random|serial>\n");
+			exit(1);
+		}
+
 		if (user_param->memory_type != MEMORY_HOST) {
 			printf(RESULT_LINE);
 			fprintf(stderr, "Synchronous data validation is supported only for host memory.\n");
@@ -2538,7 +2560,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 
 		if (user_param->has_payload_modification) {
 			printf(RESULT_LINE);
-			fprintf(stderr, "Payload modification input is not supported with random data validation.\n");
+			fprintf(stderr, "Payload modification input is not supported with random or serial data validation.\n");
 			exit(1);
 		}
 
@@ -3148,6 +3170,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int payload_flag = 0;
 	static int use_write_with_imm_flag = 0;
 	static int use_send_with_imm_flag = 0;
+	static int validation_fill_flag = 0;
+	static int data_start_value_flag = 0;
 	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 	static int unsolicited_write_flag = 0;
 	#endif
@@ -3394,6 +3418,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
 			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
 			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
+			{.name = "data_validation_fill", .has_arg = 1, .flag = &validation_fill_flag, .val = 1 },
+			{.name = "data_start_value", .has_arg = 1, .flag = &data_start_value_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -4197,6 +4223,23 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->verb = SEND_IMM;
 					use_send_with_imm_flag = 0;
 				}
+				if (validation_fill_flag) {
+
+					int i, fill_array_size = GET_ARRAY_SIZE(validationFillStr);
+					for (i = 1; i < fill_array_size; i++) {
+						if (strcmp(validationFillStr[i],optarg) == 0) {
+							user_param->validation_fill = i;
+							break;
+						}
+					}
+
+					if (i == fill_array_size) {
+						fprintf(stderr, " Invalid data validation fill. Please use random or serial.\n");
+						return FAILURE;
+					}
+
+					validation_fill_flag = 0;
+				}
 				if (data_validation_flag) {
 					if (optarg == NULL) {
 						if (optind < argc && (strcmp(argv[optind], "sync") == 0 || strcmp(argv[optind], "async") == 0)) {
@@ -4213,6 +4256,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					data_validation_flag = 0;
+				}
+				if (data_start_value_flag) {
+					user_param->data_start_value = (uint32_t)strtoul(optarg, NULL, 10);
+					data_start_value_flag = 0;
 				}
 				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 				if (unsolicited_write_flag) {

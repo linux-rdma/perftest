@@ -2153,7 +2153,11 @@ static void generate_buffer_data(struct pingpong_context *ctx,
 		if (user_param->machine == SERVER) {
 			current_data = ctx->data_validation_hint;
 		} else {
-			current_data = init_perftest_rand_state();
+			if (user_param->validation_fill == VALIDATION_FILL_SERIAL) {
+				current_data = user_param->data_start_value;
+			} else {
+				current_data = init_perftest_rand_state();
+			}
 			ctx->data_validation_hint = current_data;
 		}
 	} else {
@@ -2166,7 +2170,12 @@ static void generate_buffer_data(struct pingpong_context *ctx,
 		}
 	} else {
 		for (i = 0; i < ctx->buff_size/4; i++) {
-			buf_ptr[i] = htonl(perftest_rand(&current_data));
+			if (user_param->validation_fill == VALIDATION_FILL_SERIAL) {
+				buf_ptr[i] = htonl(current_data);
+				current_data++;
+			} else {
+				buf_ptr[i] = htonl(perftest_rand(&current_data));
+			}
 		}
 	}
 }

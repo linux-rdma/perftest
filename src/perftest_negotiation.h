@@ -60,6 +60,7 @@ struct perftest_parameters_negotiate {
 	int no_enhanced_reorder;
 	int sig_offload;
 	int data_validation;
+	int validation_fill;
 	int max_qp_rd_atom;
 	int duplex;
 

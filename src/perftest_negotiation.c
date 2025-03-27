@@ -391,6 +391,7 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 		.no_enhanced_reorder = hton_int(user_param->no_enhanced_reorder),
 		.sig_offload = hton_int(user_param->sig_offload),
 		.data_validation = hton_int(user_param->data_validation),
+		.validation_fill = hton_int(user_param->validation_fill),
 		.max_qp_rd_atom = hton_int(dev_attr.max_qp_rd_atom),
 		.tx_depth = hton_int(user_param->tx_depth),
 		.duplex = hton_int(user_param->duplex),
@@ -436,6 +437,7 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 		COMPARE(compare, no_enhanced_reorder, INT, true, ((char *[]){"OFF", "ON"})),
 		COMPARE(compare, sig_offload, INT, true, ((char *[]){"OFF", "ON"})),
 		COMPARE(compare, data_validation, INT, true, ((char *[]){"NONE", "ASYNC", "SYNC"})),
+		COMPARE(compare, validation_fill, INT, true, ((char *[]){"NONE", "RANDOM", "SERIAL", "PATTERN"})),
 		COMPARE(compare, tx_depth, INT, true, NULL),
 		COMPARE(compare_max_qp_rd_atom, max_qp_rd_atom, INT, user_param->connection_type != DC, NULL),
 
