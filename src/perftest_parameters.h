@@ -443,7 +443,24 @@ enum memory_type {
 	MEMORY_ROCM,
 	MEMORY_NEURON,
 	MEMORY_HL,
-	MEMORY_MLU
+	MEMORY_MLU,
+	MEMORY_OPENCL
+};
+
+enum cuda_mem_type {
+	CUDA_MEM_DEVICE = 0,
+	CUDA_MEM_MANAGED,
+	CUDA_MEM_HOSTALLOC,
+	CUDA_MEM_HOSTREGISTER,
+	CUDA_MEM_MALLOC,
+	CUDA_MEM_TYPES
+};
+
+enum gpu_touch_type {
+	GPU_NO_TOUCH,
+	GPU_TOUCH_ONCE,
+	GPU_TOUCH_INFINITE,
+	GPU_TOUCH_TYPES
 };
 
 struct perftest_parameters {
@@ -572,6 +589,7 @@ struct perftest_parameters {
 	struct memory_ctx		*(*memory_create)(struct perftest_parameters *params);
 	int				cuda_device_id;
 	char				*cuda_device_bus_id;
+	int				cuda_mem_type;
 	int				use_cuda_dmabuf;
 	int				use_data_direct;
 	int				rocm_device_id;
@@ -580,6 +598,9 @@ struct perftest_parameters {
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
 	int				mlu_device_id;
+	int                             opencl_platform_id;
+	int                             opencl_device_id;
+	int                             gpu_touch;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */
