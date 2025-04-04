@@ -216,7 +216,6 @@ struct pingpong_context {
 	int					tx_depth;
 	uint64_t				*scnt;
 	uint64_t				*ccnt;
-	int					is_contig_supported;
 	uint32_t				*r_dctn;
 	uint32_t				*dci_stream_id;
 	int 					dek_number;

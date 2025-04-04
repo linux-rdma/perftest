@@ -2351,12 +2351,8 @@ void set_raw_eth_parameters(struct perftest_parameters *user_param)
 		exit(1);
 	}
 	if (user_param->is_new_raw_eth_param) {
-		int i;
-		for (i = 0; i < MAC_ARR_LEN; i++)
-		{
-			user_param->source_mac[i] = user_param->local_mac[i];
-			user_param->dest_mac[i] = user_param->remote_mac[i];
-		}
+		memcpy(user_param->source_mac, user_param->local_mac, MAC_ARR_LEN);
+		memcpy(user_param->dest_mac, user_param->remote_mac, MAC_ARR_LEN);
 
 		if (user_param->machine == SERVER) {
 			user_param->server_ip = user_param->local_ip;
