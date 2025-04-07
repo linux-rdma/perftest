@@ -309,7 +309,7 @@ int main(int argc, char *argv[])
 				ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
 			if (user_param.verb == WRITE_IMM && !user_param.use_unsolicited_write &&
-			    (user_param.machine == SERVER || user_param.duplex)) {
+				(user_param.machine == SERVER || user_param.duplex)) {
 				if (ctx_set_recv_wqes(&ctx,&user_param)) {
 					fprintf(stderr," Failed to post receive recv_wqes\n");
 					goto free_mem;
@@ -424,11 +424,14 @@ int main(int argc, char *argv[])
 
 		print_report_bw(&user_param,&my_bw_rep);
 
+		// print either just the local, or the aggregate of local and remote
 		if (user_param.duplex && (user_param.verb != WRITE_IMM || user_param.test_type != DURATION)) {
 			xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
 			print_full_bw_report(&user_param, &my_bw_rep, &rem_bw_rep);
 		}
 
+		// print local and remote separately, if separate reporting was requested
+		// and a duplex test was run
 		if (user_param.report_both && user_param.duplex) {
 			printf(RESULT_LINE);
 			printf("\n Local results: \n");
@@ -443,6 +446,11 @@ int main(int argc, char *argv[])
 			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 			printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+		}
+
+		// print JSON, if requested
+		if (user_param.out_json) {
+			print_full_bw_report_to_file(&user_param, &my_bw_rep, &rem_bw_rep);
 		}
 	} else if (user_param.test_method == RUN_INFINITELY) {
 

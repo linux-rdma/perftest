@@ -791,6 +791,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param);
  */
 void print_report_bw (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep);
 
+void print_full_bw_report_to_file (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep);
+
 /* print_full_bw_report
  *
  * Description : Print the peak and average throughput of the BW test.
