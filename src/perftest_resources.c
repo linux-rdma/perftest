@@ -3448,6 +3448,7 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 	struct ibv_wc 		*wc_for_cleaning = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int			return_value = 0;
+	int			set_signaled = 0;
 
 	if(user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
 		num_of_qps /= 2;
@@ -3464,15 +3465,25 @@ int perform_warm_up(struct pingpong_context *ctx,struct perftest_parameters *use
 	ne = ibv_poll_cq(ctx->send_cq,user_param->tx_depth,wc_for_cleaning);
 
 	for (index=0 ; index < num_of_qps ; index++) {
+		/* ask for completion on this wr */
+		if (user_param->post_list == 1 && !(ctx->wr[index].send_flags & IBV_SEND_SIGNALED)) {
+			ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+			set_signaled = 1;
+		}
 
 		for (warmindex = 0 ;warmindex < warmupsession ;warmindex += user_param->post_list) {
-
 			err = post_send_method(ctx, index, user_param);
 			if (err) {
 				fprintf(stderr,"Couldn't post send during warm up: qp %d scnt=%d \n",index,warmindex);
 				return_value = FAILURE;
 				goto cleaning;
 			}
+		}
+
+		/* Clear the flag to avoid affecting subsequent tests. */
+		if (set_signaled) {
+			ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+			set_signaled = 0;
 		}
 
 		do {
