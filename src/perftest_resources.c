@@ -737,7 +737,8 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,
 	else
 		srq_init_attr.cq = ctx->send_cq;
 
-	srq_init_attr.pd = ctx->pd;
+	srq_init_attr.pd = ctx->pad;
+
 	ctx->srq = ibv_create_srq_ex(ctx->context, &srq_init_attr);
 	if (ctx->srq == NULL) {
 		fprintf(stderr, "Couldn't open XRC SRQ\n");
@@ -780,7 +781,8 @@ static struct ibv_qp *ctx_xrc_qp_create(struct pingpong_context *ctx,
 		qp_init_attr.cap.max_send_wr = user_param->tx_depth;
 		qp_init_attr.cap.max_send_sge = 1;
 		qp_init_attr.comp_mask = IBV_QP_INIT_ATTR_PD;
-		qp_init_attr.pd = ctx->pd;
+		qp_init_attr.pd = ctx->pad;
+
 		#ifdef HAVE_IBV_WR_API
 		if (!user_param->use_old_post_send)
 			qp_init_attr.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
@@ -2037,8 +2039,13 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			fprintf(stderr, "Couldn't allocate PAD\n");
 			goto td;
 		}
+	} else {
+	#endif
+		ctx->pad = ctx->pd;
+	#ifdef HAVE_TD_API
 	}
 	#endif
+
 
 	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
@@ -2127,7 +2134,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		attr.comp_mask = IBV_SRQ_INIT_ATTR_TYPE | IBV_SRQ_INIT_ATTR_PD;
 		attr.attr.max_wr = user_param->rx_depth;
 		attr.attr.max_sge = 1;
-		attr.pd = ctx->pd;
+		attr.pd = ctx->pad;
 
 		attr.srq_type = IBV_SRQT_BASIC;
 		ctx->srq = ibv_create_srq_ex(ctx->context, &attr);
@@ -2148,7 +2155,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 				.max_sge = 1
 			}
 		};
-		ctx->srq = ibv_create_srq(ctx->pd, &attr);
+		ctx->srq = ibv_create_srq(ctx->pad, &attr);
 		if (!ctx->srq)  {
 			fprintf(stderr, "Couldn't create SRQ\n");
 			goto xrcd;
@@ -2406,11 +2413,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
 	}
 
-	#ifdef HAVE_TD_API
-	attr_ex.pd = user_param->no_lock ? ctx->pad : ctx->pd;
-	#else
-	attr_ex.pd = ctx->pd;
-	#endif
+	attr_ex.pd = ctx->pad;
 
 	attr_ex.comp_mask |= IBV_QP_INIT_ATTR_SEND_OPS_FLAGS | IBV_QP_INIT_ATTR_PD;
 	attr_ex.send_cq = attr.send_cq;
