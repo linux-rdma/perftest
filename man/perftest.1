@@ -449,12 +449,18 @@ many different options and modes.
  Set GPU touch mode to test memory accesses during the testing process.
  Relevant only for CUDA and OpenCL memory types
 .TP
-.B --data_validation
-Enable real-time data validation for RDMA transfers.
+.B --data_validation[=async|sync]
+Defaults to async when no type is given.
+.br
+async: Enable real-time data validation for RDMA transfers.
 Validates that received data matches expected byte patterns.
 Works with both host memory (SIMD-accelerated: AVX-512/AVX2/SSE4.2/NEON)
 and GPU memory (CUDA kernel plugin, auto-detected at build time).
 tx_depth (-t) must be the same on both server and client (minimum 32).
+.br
+sync: Validate inline on the receive path. Works over any transport and any
+device, and does not require ATOMIC support, at the cost of throttling the
+sender. Write BW with immediate only.
 .br
 Requirements:
 .br

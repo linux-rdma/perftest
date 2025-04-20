@@ -567,10 +567,20 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --disable_dynamic_polling ");
 		printf(" Disable dynamic CQE polling adaptation (default enabled)\n");
 
-		printf("      --data_validation ");
-		printf(" Enable data validation (tx_depth must be same on both sides)\n");
+		printf("      --data_validation[=async|sync] ");
+		printf(" Enable data validation. Defaults to async when no kind is given\n");
+		printf("                         ");
+		printf(" async: validate out of band, does not throttle the sender. Requires RC and ATOMIC\n");
+		printf("                         ");
+		printf("        support, and tx_depth must be same on both sides\n");
 		printf("                         ");
 		printf(" In DURATION mode, bytes_validated = duration/(duration-2*margin) * iters * size\n");
+		printf("                         ");
+		printf(" sync: validate inline on the receive path, works on any transport and device\n");
+		printf("                         ");
+		printf("       but throttles the sender. Write BW with immediate only, and requires\n");
+		printf("                         ");
+		printf("       post_list == tx_depth and recv_post_list == rx_depth\n");
 		printf("      --data_validation_debug ");
 		printf(" Enable verbose debug output for data validation\n");
 	}
@@ -1162,7 +1172,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_id		= -1;
 	user_param->processing_hints			= -1;
 	user_param->dynamic_cqe_poll = ON;
-	user_param->data_validation = OFF;
+	user_param->data_validation = VALIDATION_NONE;
 	user_param->data_validation_debug = OFF;
 	user_param->numa_node		= -1;
 	user_param->disable_numa	= 0;
@@ -1430,6 +1440,7 @@ static int host_validation_runtime_supported(void)
  ******************************************************************************/
 static void force_dependecies(struct perftest_parameters *user_param)
 {
+	int rx_depth_rounded_up = 0;
 	/*Additional configuration and assignments.*/
 	if (user_param->verb == WRITE) {
 		user_param->rx_depth = DEF_RX_RDMA;
@@ -1518,7 +1529,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
-	if (user_param->data_validation) {
+	if (validation_is_async(user_param->data_validation)) {
 		/* Require CUDA or HOST memory */
 		if (user_param->memory_type != MEMORY_CUDA &&
 		    user_param->memory_type != MEMORY_HOST) {
@@ -2375,8 +2386,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	/* WA for a bug when rx_depth is odd in SEND */
-	if (has_recv_comp(user_param->verb) && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
+	if (has_recv_comp(user_param->verb) && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR) {
 		user_param->rx_depth += 1;
+		rx_depth_rounded_up = 1;
+	}
 
 	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW) {
 		printf(" WARNING: BW peak won't be measured in this run.\n");
@@ -2481,6 +2494,57 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		if (user_param->numa_node != -1) {
 			printf(RESULT_LINE);
 			fprintf(stderr, " --numa_node is not supported for raw Ethernet tests\n");
+			exit(1);
+		}
+	}
+
+	if (validation_is_sync(user_param->data_validation)) {
+		if (user_param->tst != BW || user_param->verb != WRITE_IMM) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Synchronous data validation can only be used with write with immediate BW test.\n");
+			exit(1);
+		}
+
+		if (user_param->test_method == RUN_INFINITELY) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Synchronous data validation is not supported with --run_infinitely.\n");
+			exit(1);
+		}
+
+		if (rx_depth_rounded_up && user_param->recv_post_list == user_param->rx_depth - 1) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Synchronous data validation needs an even receive depth: -r %d was rounded up to %d"
+				" and no longer matches --recv_post_list.\n", user_param->rx_depth - 1, user_param->rx_depth);
+			exit(1);
+		}
+
+		if (user_param->post_list != user_param->tx_depth || user_param->recv_post_list != user_param->rx_depth) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Invalid data validation qps configuration. Post list size should be equal to corresponding queue depth.\n");
+			exit(1);
+		}
+
+		if (user_param->memory_type != MEMORY_HOST) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Synchronous data validation is supported only for host memory.\n");
+			exit(1);
+		}
+
+		if (user_param->duplex) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Bidirectional mode not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->has_payload_modification) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is not supported with random data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->mr_per_qp) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "MR per QP is not supported in data validation.\n");
 			exit(1);
 		}
 	}
@@ -3325,7 +3389,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SIG_OFFLOAD
 			{.name = "sig_offload", .has_arg = 0, .flag = &sig_offload_flag, .val = 1 },
 			#endif
-			{.name = "data_validation", .has_arg = 0, .flag = &data_validation_flag, .val = 1 },
+			{.name = "data_validation", .has_arg = optional_argument, .flag = &data_validation_flag, .val = 1 },
 			{.name = "data_validation_debug", .has_arg = 0, .flag = &data_validation_debug_flag, .val = 1 },
 			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
 			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
@@ -4133,6 +4197,23 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->verb = SEND_IMM;
 					use_send_with_imm_flag = 0;
 				}
+				if (data_validation_flag) {
+					if (optarg == NULL) {
+						if (optind < argc && (strcmp(argv[optind], "sync") == 0 || strcmp(argv[optind], "async") == 0)) {
+							fprintf(stderr, " The data validation kind must be given with '=': --data_validation=async or --data_validation=sync.\n");
+							return FAILURE;
+						}
+						user_param->data_validation = VALIDATION_ASYNC;
+					} else if (strcmp(optarg, "async") == 0) {
+						user_param->data_validation = VALIDATION_ASYNC;
+					} else if (strcmp(optarg, "sync") == 0) {
+						user_param->data_validation = VALIDATION_SYNC;
+					} else {
+						fprintf(stderr, " Invalid data validation kind. Please use async or sync.\n");
+						return FAILURE;
+					}
+					data_validation_flag = 0;
+				}
 				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 				if (unsolicited_write_flag) {
 					user_param->use_unsolicited_write = 1;
@@ -4248,11 +4329,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (connectionless_flag) {
 		user_param->connectionless = 1;
-	}
-
-	if (data_validation_flag) {
-		user_param->data_validation = 1;
-		data_validation_flag = 0;
 	}
 
 	if (data_validation_debug_flag) {
@@ -4483,7 +4559,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation))
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;
@@ -4549,7 +4625,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation))
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;

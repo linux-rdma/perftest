@@ -478,6 +478,31 @@ enum gpu_touch_type {
 	GPU_TOUCH_TYPES
 };
 
+/*
+ * Data validation type.
+ *
+ * ASYNC is the performance oriented validation: the receiver validates
+ * out of band and never backpressures the requestor, at the cost of
+ * requiring RC and ATOMIC support.
+ * SYNC validates inline on the receive path, which works over any
+ * transport and any device but does throttle the traffic.
+ */
+enum validation_type {
+	VALIDATION_NONE = 0,
+	VALIDATION_ASYNC,
+	VALIDATION_SYNC
+};
+
+static inline int validation_is_async(enum validation_type type)
+{
+	return type == VALIDATION_ASYNC;
+}
+
+static inline int validation_is_sync(enum validation_type type)
+{
+	return type == VALIDATION_SYNC;
+}
+
 /* Data validation mode */
 enum validation_mode {
 	VALIDATION_MODE_WRITE,  /* Receiver validates incoming WRITEs */
@@ -706,7 +731,7 @@ struct perftest_parameters {
 	int				processing_hints;
 	int				dynamic_cqe_poll;
 	int				sig_offload;
-	int				data_validation;
+	enum validation_type		data_validation;
 	int				data_validation_debug;
 	int				validation_chunks_per_qp; /* Dynamic buffer depth */
 	uint32_t			validation_chunk_size;    /* Operations per validation chunk (may differ from tx_depth) */
