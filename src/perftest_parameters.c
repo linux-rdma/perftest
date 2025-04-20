@@ -677,7 +677,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		if (cuda_memory_supported() ||
 		    opencl_memory_supported()) {
-			printf("      --gpu_touch=<once\\infinte> ");
+			printf("      --gpu_touch=<once\\infinite> ");
 			printf(" Set GPU touch mode to test memory accesses during the testing process.\n");
 		}
 

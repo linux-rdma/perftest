@@ -301,8 +301,11 @@ fi
 if [test "$CUDA_H_PATH" ]; then
 	AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA feature])
 	AC_DEFINE_UNQUOTED([CUDA_PATH], "$CUDA_H_PATH" , [Enable CUDA feature])
-	LIBS=$LIBS" -lcuda -lcudart"
-	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
+	LIBS=$LIBS" -lcuda -lcudart" 
+	CPPFLAGS="-I$(dirname $CUDA_H_PATH)/include $CPPFLAGS"
+	LDFLAGS="-L$(dirname $(dirname $CUDA_H_PATH))/lib -L$(dirname $(dirname $CUDA_H_PATH))/lib64 $LDFLAGS"
+	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no]) 
+
 	AC_TRY_LINK([
 	#include <$CUDA_H_PATH>],
 	[int x = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
@@ -319,8 +322,7 @@ if [test "$CUDA_H_PATH" ]; then
 		AC_DEFINE([HAVE_DMABUF_MAPPING_TYPE_PCIE], [1], [Enable CUDA DMABUF handle mapping via PCIe BAR1])
 	fi
 
-	CPPFLAGS="-I$(dirname $CUDA_H_PATH)/include $CPPFLAGS"
-	LDFLAGS="-L$(dirname $(dirname $CUDA_H_PATH))/lib -L$(dirname $(dirname $CUDA_H_PATH))/lib64 $LDFLAGS"
+	
 	if [test "x${gpu_arch}" != "x"]; then
 		NVCCFLAGS="${NVCCFLAGS} -arch compute_${gpu_arch} -code compute_${gpu_arch},sm_${gpu_arch}"
 		AC_MSG_NOTICE([Setting GPU_ARCH = ${gpu_arch}])

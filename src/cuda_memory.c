@@ -276,7 +276,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 			*can_init = false;
 			// Fall through
 
-			printf("Host allocation selected, calling memalign allocator for %zd bytes with %d page size\n", size, alignment);
+			printf("Host allocation selected, calling memalign allocator for %ld bytes with %d page size\n", size, alignment);
 			*addr = memalign(alignment, size);
 			if (!*addr) {
 				printf("memalign error=%d\n", errno);

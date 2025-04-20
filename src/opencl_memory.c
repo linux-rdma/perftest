@@ -154,7 +154,7 @@ int opencl_memory_destroy(struct memory_ctx *ctx) {
 
 void *touch_gpu_pages(void *ctx_param) {
 	struct buffer_ctx *ctx = (struct buffer_ctx *)ctx_param;
-	int ret;
+	int ret;// cppcheck-suppress variableScope
 	do {
 		ret = clEnqueueSVMMigrateMem(ctx->command_queue, 1, &ctx->addr, &ctx->size, 0, 0, NULL, NULL);
 		if (ret) {

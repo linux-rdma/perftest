@@ -23,7 +23,7 @@ extern "C" int touch_gpu_pages(uint8_t *addr, int buf_size,
 		return -1;
 	}
 
-	*stop_flag = 0;
+	**stop_flag = 0;
 	cuda_touch_pages<<<1, 1>>>(addr, buf_size, *stop_flag, is_infinite);
 
 	return 0;
