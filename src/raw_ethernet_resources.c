@@ -62,7 +62,7 @@ int check_flow_steering_support(char *dev_name)
 	char* file_name = "/sys/module/mlx4_core/parameters/log_num_mgm_entry_size";
 	FILE *fp;
 	char line[4];
-	int is_flow_steering_supported = 0;
+	int is_flow_steering_not_supported = 0;
 
 	if (strstr(dev_name, "mlx5") != NULL)
 		return 0;
@@ -84,11 +84,11 @@ int check_flow_steering_support(char *dev_name)
 			fprintf(stderr," and restart the driver: %s restart \n", openibd_path);
 		else
 			fprintf(stderr," and restart the driver: modprobe -r mlx4_core; modprobe mlx4_core \n");
-		is_flow_steering_supported =  1;
+		is_flow_steering_not_supported =  1;
 	}
 
 	fclose(fp);
-	return is_flow_steering_supported;
+	return is_flow_steering_not_supported;
 }
 
 /******************************************************************************
@@ -203,7 +203,7 @@ void gen_tcp_header(void* TCP_header_buffer,int src_port ,int dst_port)
  * generates a new ethernet header
  *****************************************************************************/
 void gen_eth_header(struct ETH_header* eth_header,uint8_t* src_mac, uint8_t* dst_mac, uint16_t eth_type,
-		    struct perftest_parameters* user_param, struct memory_ctx *memory)
+		    struct memory_ctx *memory)
 {
 	uint16_t eth_type_temp = htons(eth_type);
 	memory->copy_host_to_buffer(eth_header->src_mac, src_mac, 6);
@@ -230,75 +230,74 @@ static int get_ip_size(int is_ipv6)
  ******************************************************************************/
 void print_spec(struct ibv_flow_attr* flow_rules,struct perftest_parameters* user_param)
 {
-		struct ibv_flow_spec* spec_info = NULL;
-		#ifdef HAVE_IPV6
-		struct ibv_flow_spec_ipv6 *ipv6_spec;
-		#endif
-		void* header_buff = (void*)flow_rules;
-		int ip_size = get_ip_size(user_param->raw_ipv6);
+	struct ibv_flow_spec* spec_info = NULL;
+	#ifdef HAVE_IPV6
+	struct ibv_flow_spec_ipv6 *ipv6_spec;
+	#endif
+	void* header_buff = (void*)flow_rules;
+	int ip_size = get_ip_size(user_param->raw_ipv6);
 
-		if (user_param->output != FULL_VERBOSITY) {
-			return;
-		}
-
-		if (flow_rules == NULL) {
-			printf("error : spec is NULL\n");
-			return;
-		}
-
-		// cppcheck-suppress arithOperationsOnVoidPointer
-		header_buff = header_buff + sizeof(struct ibv_flow_attr);
-		spec_info = (struct ibv_flow_spec*)header_buff;
-
-		printf("MAC attached  : %02X:%02X:%02X:%02X:%02X:%02X\n",
-				spec_info->eth.val.dst_mac[0],
-				spec_info->eth.val.dst_mac[1],
-				spec_info->eth.val.dst_mac[2],
-				spec_info->eth.val.dst_mac[3],
-				spec_info->eth.val.dst_mac[4],
-				spec_info->eth.val.dst_mac[5]);
-
-		if (user_param->is_server_ip && user_param->is_client_ip) {
-			char str_ip_s[INET_ADDRSTRLEN] = {0};
-			char str_ip_d[INET_ADDRSTRLEN] = {0};
-			#ifdef HAVE_IPV6
-			char str_ip6_s[INET6_ADDRSTRLEN] = {0};
-			char str_ip6_d[INET6_ADDRSTRLEN] = {0};
-			#endif
-			// cppcheck-suppress arithOperationsOnVoidPointer
-			header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
-			spec_info = (struct ibv_flow_spec*)header_buff;
-			#ifdef HAVE_IPV6
-			ipv6_spec = &spec_info->ipv6;
-			#endif
-			if (!user_param->raw_ipv6) {
-				uint32_t dst_ip = spec_info->ipv4.val.dst_ip;
-				uint32_t src_ip = spec_info->ipv4.val.src_ip;
-				inet_ntop(AF_INET, &dst_ip, str_ip_d, INET_ADDRSTRLEN);
-				printf("spec_info - dst_ip   : %s\n",str_ip_d);
-				inet_ntop(AF_INET, &src_ip, str_ip_s, INET_ADDRSTRLEN);
-				printf("spec_info - src_ip   : %s\n",str_ip_s);
-			}
-			else {
-				#ifdef HAVE_IPV6
-				void *dst_ip = ipv6_spec->val.dst_ip;
-				void *src_ip = ipv6_spec->val.src_ip;
-				inet_ntop(AF_INET6, dst_ip, str_ip6_d, INET6_ADDRSTRLEN);
-				printf("spec_info - dst_ip   : %s\n",str_ip6_d);
-				inet_ntop(AF_INET6, src_ip, str_ip6_s, INET6_ADDRSTRLEN);
-				printf("spec_info - src_ip   : %s\n",str_ip6_s);
-				#endif
-			}
-		}
-		if (user_param->is_server_port && user_param->is_client_port) {
-			// cppcheck-suppress arithOperationsOnVoidPointer
-			header_buff = header_buff + ip_size;
-			spec_info = header_buff;
-			printf("spec_info - dst_port : %d\n",ntohs(spec_info->tcp_udp.val.dst_port));
-			printf("spec_info - src_port : %d\n",ntohs(spec_info->tcp_udp.val.src_port));
-		}
-
+	if (user_param->output != FULL_VERBOSITY) {
+		return;
 	}
+
+	if (flow_rules == NULL) {
+		printf("error : spec is NULL\n");
+		return;
+	}
+
+	// cppcheck-suppress arithOperationsOnVoidPointer
+	header_buff = header_buff + sizeof(struct ibv_flow_attr);
+	spec_info = (struct ibv_flow_spec*)header_buff;
+
+	printf("MAC attached  : %02X:%02X:%02X:%02X:%02X:%02X\n",
+			spec_info->eth.val.dst_mac[0],
+			spec_info->eth.val.dst_mac[1],
+			spec_info->eth.val.dst_mac[2],
+			spec_info->eth.val.dst_mac[3],
+			spec_info->eth.val.dst_mac[4],
+			spec_info->eth.val.dst_mac[5]);
+
+	if (user_param->is_server_ip && user_param->is_client_ip) {
+		char str_ip_s[INET_ADDRSTRLEN] = {0};
+		char str_ip_d[INET_ADDRSTRLEN] = {0};
+		#ifdef HAVE_IPV6
+		char str_ip6_s[INET6_ADDRSTRLEN] = {0};
+		char str_ip6_d[INET6_ADDRSTRLEN] = {0};
+		#endif
+		// cppcheck-suppress arithOperationsOnVoidPointer
+		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
+		spec_info = (struct ibv_flow_spec*)header_buff;
+		#ifdef HAVE_IPV6
+		ipv6_spec = &spec_info->ipv6;
+		#endif
+		if (!user_param->raw_ipv6) {
+			uint32_t dst_ip = spec_info->ipv4.val.dst_ip;
+			uint32_t src_ip = spec_info->ipv4.val.src_ip;
+			inet_ntop(AF_INET, &dst_ip, str_ip_d, INET_ADDRSTRLEN);
+			printf("spec_info - dst_ip   : %s\n",str_ip_d);
+			inet_ntop(AF_INET, &src_ip, str_ip_s, INET_ADDRSTRLEN);
+			printf("spec_info - src_ip   : %s\n",str_ip_s);
+		}
+		else {
+			#ifdef HAVE_IPV6
+			void *dst_ip = ipv6_spec->val.dst_ip;
+			void *src_ip = ipv6_spec->val.src_ip;
+			inet_ntop(AF_INET6, dst_ip, str_ip6_d, INET6_ADDRSTRLEN);
+			printf("spec_info - dst_ip   : %s\n",str_ip6_d);
+			inet_ntop(AF_INET6, src_ip, str_ip6_s, INET6_ADDRSTRLEN);
+			printf("spec_info - src_ip   : %s\n",str_ip6_s);
+			#endif
+		}
+	}
+	if (user_param->is_server_port && user_param->is_client_port) {
+		// cppcheck-suppress arithOperationsOnVoidPointer
+		header_buff = header_buff + ip_size;
+		spec_info = header_buff;
+		printf("spec_info - dst_port : %d\n",ntohs(spec_info->tcp_udp.val.dst_port));
+		printf("spec_info - src_port : %d\n",ntohs(spec_info->tcp_udp.val.src_port));
+	}
+}
 
 static char *etype_str(uint16_t etype)
 {
@@ -573,7 +572,7 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 		vlan_pcp = user_param->vlan_pcp;
 	}
 
-	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, user_param, memory);
+	gen_eth_header(eth_header, my_dest_info->mac, rem_dest_info->mac, eth_type, memory);
 
 	if(user_param->vlan_en) {
 		struct ETH_vlan_header *p_eth_vlan = (struct ETH_vlan_header *)eth_header;
@@ -646,7 +645,7 @@ void create_raw_eth_pkt( struct perftest_parameters *user_param,
 	uint16_t eth_type = user_param->is_ethertype ? user_param->ethertype :
 		(user_param->is_client_ip || user_param->is_server_ip ?
 		 (user_param->raw_ipv6) ? IP6_ETHER_TYPE :
-		 IP_ETHER_TYPE : (ctx->size-RAWETH_ADDITION-vlan_tag_size));
+		 IP_ETHER_TYPE : (ctx->size - RAWETH_ADDITION - vlan_tag_size));
 	if(user_param->is_client_port && user_param->is_server_port)
 		ip_next_protocol = (user_param->tcp ? TCP_PROTOCOL : UDP_PROTOCOL);
 
@@ -816,7 +815,7 @@ int set_up_flow_rules(
 
 	mac_from_user(spec_info->eth.val.dst_mac, &(user_param->source_mac[0]), sizeof(user_param->source_mac));
 
-	memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.src_mac));
+	memset(spec_info->eth.mask.dst_mac, 0xFF,sizeof(spec_info->eth.mask.dst_mac));
 	if(user_param->is_server_ip || user_param->is_client_ip) {
 		// cppcheck-suppress arithOperationsOnVoidPointer
 		header_buff = header_buff + sizeof(struct ibv_flow_spec_eth);
