@@ -38,6 +38,7 @@ static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV
 struct perftest_parameters* duration_param;
 struct check_alive_data check_alive_data;
 
+
 /******************************************************************************
  * Beginning
  ******************************************************************************/
@@ -151,6 +152,33 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 	return 0;
 }
 #endif
+
+static uint32_t perftest_rand(uint32_t *state) {
+    uint32_t x = *state;
+    *state = x * 747796405 + 2891336453;
+    uint32_t word = ((x >> ((x >> 28) + 4)) ^ x) * 277803737;
+    return (word >> 22) ^ word;
+}
+
+// Proper initialization the rand algorithm
+static uint32_t init_perftest_rand_state() {
+    uint32_t seed;
+
+    FILE* f = fopen("/dev/urandom", "rb");
+    if (f) {
+        if (fread(&seed, sizeof(seed), 1, f) == 1) {
+            fclose(f);
+            return seed;
+        }
+        fclose(f);
+    }
+
+    seed = (uint32_t)time(NULL);
+    seed ^= (uint32_t)getpid();
+    seed ^= (uint32_t)clock();
+
+    return seed;
+}
 
 // cppcheck-suppress constParameter
 static int next_word_string(char* input, char* output, int from_index)
@@ -1726,7 +1754,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
 	if (can_init_mem) {
-		srand(time(NULL));
+		uint32_t rng_state = init_perftest_rand_state();
 		if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) {
 			memset(ctx->buf[qp_index], 0, ctx->buff_size);
 		} else {
@@ -1737,7 +1765,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 				}
 			} else {
 				for (i = 0; i < ctx->buff_size; i++) {
-				((char*)ctx->buf[qp_index])[i] = (char)rand();
+					((char*)ctx->buf[qp_index])[i] = (char)perftest_rand(&rng_state);
 				}
 			}
 		}
