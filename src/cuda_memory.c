@@ -28,6 +28,7 @@ static const char *cuda_mem_type_str[] = {
 };
 
 int touch_gpu_pages(uint8_t *addr, int buf_size, int is_infinitely, volatile int **stop_flag);
+int init_gpu_stop_flag(volatile int **stop_flag);
 
 struct cuda_memory_ctx {
 	struct memory_ctx base;
@@ -103,6 +104,12 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	error = cuCtxSetCurrent(ctx->cuContext);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxSetCurrent() error=%d\n", error);
+		return FAILURE;
+	}
+
+	error = init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
+	if (error != 0) {
+		printf("init_gpu_stop_flag() error=%d\n", error);
 		return FAILURE;
 	}
 

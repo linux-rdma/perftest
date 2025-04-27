@@ -17,14 +17,17 @@ __global__ void cuda_touch_pages(volatile uint8_t *c, int size,
 extern "C" int touch_gpu_pages(uint8_t *addr, int buf_size,
 		int is_infinite, volatile int **stop_flag)
 {
+	cuda_touch_pages<<<1, 1>>>(addr, buf_size, *stop_flag, is_infinite);
+	return 0;
+}
+
+extern "C" int init_gpu_stop_flag(volatile int **stop_flag)
+{
 	cudaError_t ret = cudaMallocManaged((void **)stop_flag, sizeof(int));
 	if (ret) {
 		printf("failed to allocate stop flag\n");
 		return -1;
 	}
-
 	**stop_flag = 0;
-	cuda_touch_pages<<<1, 1>>>(addr, buf_size, *stop_flag, is_infinite);
-
 	return 0;
 }
