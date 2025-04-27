@@ -3261,6 +3261,19 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 	}
 }
 
+static uint64_t set_recv_length(struct pingpong_context *ctx,
+				struct perftest_parameters *user_param)
+{
+	enum ctx_device current_dev = ib_dev_name(ctx->context);
+	int mtu = MTU_SIZE(user_param->curr_mtu);
+	uint64_t length = SIZE(user_param->connection_type, user_param->size, 1);
+
+	if (current_dev != HNS && user_param->use_srq == ON)
+		length = ((length + mtu - 1 )/ mtu) * mtu;
+
+	return length;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -3270,8 +3283,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			num_of_qps = user_param->num_of_qps;
 	struct ibv_recv_wr	*bad_wr_recv;
 	int			size_per_qp = user_param->rx_depth / user_param->recv_post_list;
-	int mtu = MTU_SIZE(user_param->curr_mtu);
-	uint64_t length = user_param->use_srq == ON ? (((SIZE(user_param->connection_type ,user_param->size, 1) + mtu - 1 )/ mtu) * mtu) : SIZE(user_param->connection_type, user_param->size, 1);
+	uint64_t length = set_recv_length(ctx, user_param);
 
 	/* Write w/imm completions have zero recieve buffer length */
 	if (user_param->verb == WRITE_IMM)
