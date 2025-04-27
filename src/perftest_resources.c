@@ -1764,8 +1764,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
 				}
 			} else {
-				for (i = 0; i < ctx->buff_size; i++) {
-					((char*)ctx->buf[qp_index])[i] = (char)perftest_rand(&rng_state);
+				uint32_t *buf_ptr = (uint32_t*)ctx->buf[qp_index];
+				for (i = 0; i < ctx->buff_size/4; i++) {
+					buf_ptr[i] = perftest_rand(&rng_state);
 				}
 			}
 		}
