@@ -107,10 +107,12 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 		return FAILURE;
 	}
 
-	error = init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
-	if (error != 0) {
-		printf("init_gpu_stop_flag() error=%d\n", error);
-		return FAILURE;
+	if (ctx->gpu_touch != GPU_NO_TOUCH){
+		error = init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
+		if (error != 0) {
+			printf("init_gpu_stop_flag() error=%d\n", error);
+			return FAILURE;
+		}
 	}
 
 	CUCHECK(cuDriverGetVersion(&ctx->driver_version));
@@ -322,6 +324,7 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 		printf("stopping CUDA gpu touch running kernel\n");
 		cuCtxSynchronize();
 		cuMemFree((CUdeviceptr)cuda_ctx->stop_touch_gpu_kernel_flag);
+		cuda_ctx->stop_touch_gpu_kernel_flag = NULL;
 	}
 
 	switch (cuda_ctx->mem_type) {
