@@ -57,6 +57,10 @@ if HABANALABS
 libperftest_a_SOURCES += src/hl_memory.c
 endif
 
+if OPENCL
+libperftest_a_SOURCES += src/opencl_memory.c
+endif
+
 bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
 bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices
 
@@ -106,6 +110,17 @@ LIBMLX4= -lmlx4
 else
 LIBMLX4=
 endif
+
+if HAVE_CUDA
+libperftest_a_SOURCES += src/cuda_utils.cu
+libperftest_a_LIBADD = src/cuda_utils.cu.o src/cuda_utils.cu.lo
+SUFFIXES= .cu
+%.cu.lo: %.cu.o
+	$(NVCC) -dlink -o $@ $< -L$(CUDA_LIB_DIR) -lcudadevrt -lcudart
+%.cu.o: %.cu
+	$(NVCC) -DHAVE_CONFIG_H $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) -o $@ -c $< $(NVCCFLAGS)
+endif
+
 
 ib_send_bw_SOURCES = src/send_bw.c src/multicast_resources.c src/multicast_resources.h
 ib_send_bw_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA) $(LIBHNS)

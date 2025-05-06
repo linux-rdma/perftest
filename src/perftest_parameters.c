@@ -19,6 +19,7 @@
 #include "neuron_memory.h"
 #include "hl_memory.h"
 #include "mlu_memory.h"
+#include "opencl_memory.h"
 #include<math.h>
 #ifdef HAVE_RO
 #include <stdbool.h>
@@ -621,6 +622,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (cuda_memory_supported()) {
 			printf("      --use_cuda=<cuda device id>");
 			printf(" Use CUDA specific device for GPUDirect RDMA testing\n");
+			printf("      --cuda_mem_type=<value>");
+			printf(" Set CUDA memory type <value>=0(device,default),1(managed),4(malloc)\n");
 
 			printf("      --use_cuda_bus_id=<cuda full BUS id>");
 			printf(" Use CUDA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
@@ -663,6 +666,19 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (mlu_memory_supported()) {
 			printf("      --use_mlu=<mlu device id>");
 			printf(" Use selected MLU device for MLUDirect RDMA testing\n");
+		}
+
+		if (opencl_memory_supported()) {
+			printf("      --use_opencl=<opencl device id>");
+			printf(" Use OpenCl specific device for GPUDirect RDMA testing\n");
+			printf("      --opencl_platform_id=<opencl platform id>");
+			printf(" Use OpenCl specific platform ID\n");
+		}
+
+		if (cuda_memory_supported() ||
+		    opencl_memory_supported()) {
+			printf("      --gpu_touch=<once\\infinite> ");
+			printf(" Set GPU touch mode to test memory accesses during the testing process.\n");
 		}
 
 		printf("      --use_hugepages ");
@@ -890,9 +906,13 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_cuda_dmabuf	= 0;
 	user_param->use_rocm_dmabuf = 0;
 	user_param->use_data_direct	= 0;
+	user_param->cuda_mem_type       = CUDA_MEM_DEVICE;
 	user_param->rocm_device_id	= 0;
 	user_param->neuron_core_id	= 0;
 	user_param->mlu_device_id	= 0;
+	user_param->opencl_platform_id	= 0;
+	user_param->opencl_device_id	= 0;
+	user_param->gpu_touch		= GPU_NO_TOUCH;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
 	user_param->iters_per_port[0]	= 0;
@@ -2399,12 +2419,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
 	static int use_data_direct_flag = 0;
+	static int cuda_mem_type_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_rocm_dmabuf_flag = 0;
 	static int use_neuron_flag = 0;
 	static int use_neuron_dmabuf_flag = 0;
 	static int use_hl_flag = 0;
 	static int use_mlu_flag = 0;
+	static int use_opencl_flag = 0;
+	static int opencl_platform_id_flag = 0;
+	static int gpu_touch_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
@@ -2574,12 +2598,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
+			{ .name = "cuda_mem_type",	.has_arg = 1, .flag = &cuda_mem_type_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_rocm_dmabuf",	.has_arg = 0, .flag = &use_rocm_dmabuf_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
 			{ .name = "use_neuron_dmabuf",	.has_arg = 0, .flag = &use_neuron_dmabuf_flag, .val = 1},
 			{ .name = "use_hl",		.has_arg = 1, .flag = &use_hl_flag, .val = 1},
 			{ .name = "use_mlu",		.has_arg = 1, .flag = &use_mlu_flag, .val = 1},
+			{ .name = "use_opencl",         .has_arg = 1, .flag = &use_opencl_flag, .val = 1},
+			{ .name = "opencl_platform_id", .has_arg = 1, .flag = &opencl_platform_id_flag, .val = 1},
+			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
@@ -3012,6 +3040,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					CHECK_VALUE_NON_NEGATIVE(user_param->latency_gap,int,"Latency gap time",not_int_ptr);
 					latency_gap_flag = 0;
 				}
+				if (odp_flag) {
+					user_param->use_odp = 1;
+				}
 				/* We statically define memory type options so check if requested option is actually supported. */
 				if (((use_cuda_flag || use_cuda_bus_id_flag) && !cuda_memory_supported()) ||
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
@@ -3020,7 +3051,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_neuron_flag && !neuron_memory_supported()) ||
 				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported()) ||
-				    (use_mlu_flag && !mlu_memory_supported())) {
+				    (use_mlu_flag && !mlu_memory_supported()) ||
+				    (use_opencl_flag && !opencl_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -3062,6 +3094,27 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    user_param->use_data_direct = 1;
 				    use_data_direct_flag = 0;
 				}
+				if (cuda_mem_type_flag) {
+					user_param->cuda_mem_type = strtol(optarg,NULL,0);
+					if (user_param->memory_type != MEMORY_CUDA) {
+						fprintf(stderr, "CUDA MEM TYPE cannot be used without CUDA\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					if (user_param->cuda_mem_type < CUDA_MEM_DEVICE || user_param->cuda_mem_type >= CUDA_MEM_TYPES) {
+						fprintf(stderr, "invalid CUDA memory type %d\n", user_param->cuda_mem_type);
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					if ((user_param->cuda_mem_type == CUDA_MEM_MALLOC ||
+					    user_param->cuda_mem_type == CUDA_MEM_MANAGED) &&
+					    (!user_param->use_odp || user_param->use_cuda_dmabuf)) {
+						fprintf(stderr, "CUDA Memory type is not supported with no odp MR or with dmabuf\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					cuda_mem_type_flag = 0;
+				}
 				if (use_rocm_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
 					user_param->memory_type = MEMORY_ROCM;
@@ -3102,11 +3155,58 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->memory_create = hl_memory_create;
 					use_hl_flag = 0;
 				}
+
 				if (use_mlu_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->mlu_device_id,int,"MLU device",not_int_ptr);
 					user_param->memory_type = MEMORY_MLU;
 					user_param->memory_create = mlu_memory_create;
 					use_mlu_flag = 0;
+				}
+
+				if (use_opencl_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->opencl_device_id,int,"OPENCL device",not_int_ptr);
+					if (!user_param->use_odp) {
+						fprintf(stderr, "OPENCL flag is only supported for ODP MR\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					user_param->memory_type = MEMORY_OPENCL;
+					user_param->memory_create = opencl_memory_create;
+					use_opencl_flag = 0;
+				}
+				if (opencl_platform_id_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->opencl_platform_id,int,"OPENCL Platform ID",not_int_ptr);
+					if (user_param->memory_type != MEMORY_OPENCL) {
+						fprintf(stderr, "OpenCL platform ID cannot be used without OpenCL device\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					opencl_platform_id_flag = 0;
+				}
+				if (gpu_touch_flag) {
+					if (user_param->memory_type != MEMORY_CUDA &&
+					    user_param->memory_type != MEMORY_OPENCL) {
+						fprintf(stderr, "GPU touch is not supported for this MEMORY_TYPE\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+
+					if (!user_param->use_odp) {
+						fprintf(stderr, "GPU touch is only supported for ODP MR\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+
+					if (strcmp("ONCE", optarg) == 0 || strcmp("once", optarg) == 0)
+						user_param->gpu_touch = GPU_TOUCH_ONCE;
+					else if (strcmp("INFINITE", optarg) == 0 || strcmp("infinite", optarg) == 0)
+						user_param->gpu_touch = GPU_TOUCH_INFINITE;
+					else {
+						fprintf(stderr," Unsupported value for gpu_touch\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					gpu_touch_flag = 0;
 				}
 				if (flow_label_flag) {
 					if (parse_flow_label_from_str(user_param, optarg)) {
@@ -3467,9 +3567,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		}
 	}
 
-	if(odp_flag) {
-		user_param->use_odp = 1;
-	}
 
 	if(hugepages_flag) {
 		user_param->use_hugepages = 1;
