@@ -244,8 +244,14 @@ Special feature detailed explanation in tests:
      "-M" flag allows you to choose the multicast group address.
 
   4. GPUDirect usage:
-     To utilize GPUDirect feature, perftest should be compiled as:
-     ./autogen.sh && ./configure CUDA_H_PATH=<path to cuda.h> && make -j, e.g.:
+     As of perftest release 25.07 the build system automatically
+     detects the location of cuda.h. Passing CUDA_H_PATH to the configure
+     script is therefore no longer required. The variable is still accepted
+     for backward-compatibility but its usage is not recommended.
+     The variable will depracted in the 25.10 release.
+
+     For perftest releases earlier than 25.07 you must still provide the path to
+     cuda.h explicitly during configuration, for example:
      ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j
 
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
@@ -266,6 +272,9 @@ Special feature detailed explanation in tests:
     CUDA Runtime API support:
       To use the --gpu_touch option in Perftest, you must build Perftest with support for the CUDA Runtime API (libcudart).
       Run the configure script with the following flags:
+      ./configure --enable-cudart
+
+      For releases earlier than 25.07:
       ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h --enable-cudart
 
       Note: Ensure that your NVIDIA CUDA Compiler (nvcc) version is compatible with your GCC version. Incompatibility between nvcc and gcc can cause build or runtime issues.

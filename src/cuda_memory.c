@@ -8,7 +8,7 @@
 #include <errno.h>
 #include "cuda_memory.h"
 #include "perftest_parameters.h"
-#include CUDA_PATH
+#include "cuda_loader.h"
 
 #define CUCHECK(stmt) \
 	do { \
@@ -56,14 +56,14 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	CUdevice cu_device;
 
 	printf("initializing CUDA\n");
-	CUresult error = cuInit(0);
+	CUresult error = p_cuInit(0);
 	if (error != CUDA_SUCCESS) {
 		printf("cuInit(0) returned %d\n", error);
 		return FAILURE;
 	}
 
 	int deviceCount = 0;
-	error = cuDeviceGetCount(&deviceCount);
+	error = p_cuDeviceGetCount(&deviceCount);
 	if (error != CUDA_SUCCESS) {
 		printf("cuDeviceGetCount() returned %d\n", error);
 		return FAILURE;
@@ -80,30 +80,30 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 
 	printf("Listing all CUDA devices in system:\n");
 	for (index = 0; index < deviceCount; index++) {
-		CUCHECK(cuDeviceGet(&cu_device, index));
-		cuDeviceGetAttribute(&cuda_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID , cu_device);
-		cuDeviceGetAttribute(&cuda_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID , cu_device);
+		CUCHECK(p_cuDeviceGet(&cu_device, index));
+		p_cuDeviceGetAttribute(&cuda_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID , cu_device);
+		p_cuDeviceGetAttribute(&cuda_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID , cu_device);
 		printf("CUDA device %d: PCIe address is %02X:%02X\n", index, (unsigned int)cuda_pci_bus_id, (unsigned int)cuda_pci_device_id);
 	}
 
 	printf("\nPicking device No. %d\n", cuda_device_id);
 
-	CUCHECK(cuDeviceGet(&ctx->cuDevice, cuda_device_id));
+	CUCHECK(p_cuDeviceGet(&ctx->cuDevice, cuda_device_id));
 
 	char name[128];
-	CUCHECK(cuDeviceGetName(name, sizeof(name), cuda_device_id));
+	CUCHECK(p_cuDeviceGetName(name, sizeof(name), cuda_device_id));
 	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), ctx->cuDevice, name);
 	printf("creating CUDA Ctx\n");
 
 	/* Create context */
-	error = cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
+	error = p_cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxCreate() error=%d\n", error);
 		return FAILURE;
 	}
 
 	printf("making it the current CUDA Ctx\n");
-	error = cuCtxSetCurrent(ctx->cuContext);
+	error = p_cuCtxSetCurrent(ctx->cuContext);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxSetCurrent() error=%d\n", error);
 		return FAILURE;
@@ -119,7 +119,7 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	}
 	#endif
 
-	CUCHECK(cuDriverGetVersion(&ctx->driver_version));
+	CUCHECK(p_cuDriverGetVersion(&ctx->driver_version));
 
 	return SUCCESS;
 }
@@ -127,25 +127,30 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 static void free_gpu(struct cuda_memory_ctx *ctx)
 {
 	printf("destroying current CUDA Ctx\n");
-	CUCHECK(cuCtxDestroy(ctx->cuContext));
+	CUCHECK(p_cuCtxDestroy(ctx->cuContext));
 }
 
 int cuda_memory_init(struct memory_ctx *ctx) {
 	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 	int return_value = 0;
 
+	if (load_cuda_library() != 0) {
+        printf("Failed to load CUDA library dynamically\n");
+        exit(1);
+    }
+
 	if (cuda_ctx->device_bus_id) {
 		int err;
 
 		printf("initializing CUDA\n");
-		CUresult error = cuInit(0);
+		CUresult error = p_cuInit(0);
 		if (error != CUDA_SUCCESS) {
 			printf("cuInit(0) returned %d\n", error);
 			return FAILURE;
 		}
 
 		printf("Finding PCIe BUS %s\n", cuda_ctx->device_bus_id);
-		err = cuDeviceGetByPCIBusId(&cuda_ctx->device_id, cuda_ctx->device_bus_id);
+		err = p_cuDeviceGetByPCIBusId(&cuda_ctx->device_id, cuda_ctx->device_bus_id);
 		if (err != 0) {
 			fprintf(stderr, "cuDeviceGetByPCIBusId failed with error: %d; Failed to get PCI Bus ID (%s)\n", err, cuda_ctx->device_bus_id);
 			return FAILURE;
@@ -163,7 +168,7 @@ int cuda_memory_init(struct memory_ctx *ctx) {
 	if (cuda_ctx->use_dmabuf) {
 		int is_supported = 0;
 
-		CUCHECK(cuDeviceGetAttribute(&is_supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, cuda_ctx->cuDevice));
+		CUCHECK(p_cuDeviceGetAttribute(&is_supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, cuda_ctx->cuDevice));
 		if (!is_supported) {
 			fprintf(stderr, "DMA-BUF is not supported on this GPU\n");
 			return FAILURE;
@@ -179,6 +184,7 @@ int cuda_memory_destroy(struct memory_ctx *ctx) {
 
 	free_gpu(cuda_ctx);
 	free(cuda_ctx);
+	unload_cuda_library();
 	return SUCCESS;
 }
 
@@ -189,11 +195,11 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 
 	// Check if discrete or integrated GPU (tegra), for allocating memory where adequate
 	int cuda_device_integrated;
-	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
+	p_cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 	printf("CUDA device integrated: %X\n", (unsigned int)cuda_device_integrated);
 
 	if (cuda_device_integrated == 1) {
-		error = cuMemAllocHost(addr, buf_size);
+		error = p_cuMemAllocHost(addr, buf_size);
 		if (error != CUDA_SUCCESS) {
 			printf("cuMemAllocHost error=%d\n", error);
 			return FAILURE;
@@ -203,7 +209,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 		*can_init = false;
 	} else {
 		CUdeviceptr d_A;
-		error = cuMemAlloc(&d_A, buf_size);
+		error = p_cuMemAlloc(&d_A, buf_size);
 		if (error != CUDA_SUCCESS) {
 			printf("cuMemAlloc error=%d\n", error);
 			return FAILURE;
@@ -245,7 +251,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 				#endif
 				}
 
-				error = cuMemGetHandleForAddressRange((void *)dmabuf_fd, aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
+				error = p_cuMemGetHandleForAddressRange((void *)dmabuf_fd, (void *)aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
 				if (error != CUDA_SUCCESS) {
 					printf("cuMemGetHandleForAddressRange error=%d\n", error);
 					return FAILURE;
@@ -275,7 +281,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 				return FAILURE;
 			break;
 		case CUDA_MEM_MANAGED:
-			error = cuMemAllocManaged(&d_ptr, size, CU_MEM_ATTACH_GLOBAL);
+			error = p_cuMemAllocManaged(&d_ptr, size, CU_MEM_ATTACH_GLOBAL);
 			if (error != CUDA_SUCCESS) {
 				printf("cuMemAllocManaged error=%d\n", error);
 				return FAILURE;
@@ -323,13 +329,13 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, uint64_t size) {
 	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 	int cuda_device_integrated;
-	cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
+	p_cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 
 	if (cuda_ctx->stop_touch_gpu_kernel_flag) {
 		*cuda_ctx->stop_touch_gpu_kernel_flag = 1;
 		printf("stopping CUDA gpu touch running kernel\n");
-		cuCtxSynchronize();
-		cuMemFree((CUdeviceptr)cuda_ctx->stop_touch_gpu_kernel_flag);
+		p_cuCtxSynchronize();
+		p_cuMemFree((CUdeviceptr)cuda_ctx->stop_touch_gpu_kernel_flag);
 		cuda_ctx->stop_touch_gpu_kernel_flag = NULL;
 	}
 
@@ -337,15 +343,15 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 		case CUDA_MEM_DEVICE:
 			if (cuda_device_integrated == 1) {
 				printf("deallocating GPU buffer %p\n", addr);
-				cuMemFreeHost(addr);
+				p_cuMemFreeHost(addr);
 			} else {
 				CUdeviceptr d_A = (CUdeviceptr)addr;
 				printf("deallocating GPU buffer %016llx\n", d_A);
-				cuMemFree(d_A);
+				p_cuMemFree(d_A);
 			}
 			break;
 		case CUDA_MEM_MANAGED:
-			CUCHECK(cuMemFree((CUdeviceptr)addr));
+			CUCHECK(p_cuMemFree((CUdeviceptr)addr));
 			break;
 		case CUDA_MEM_MALLOC:
 			free((void *) addr);
@@ -356,12 +362,12 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 }
 
 void *cuda_memory_copy_host_buffer(void *dest, const void *src, size_t size) {
-	cuMemcpy((CUdeviceptr)dest, (CUdeviceptr)src, size);
+	p_cuMemcpy((CUdeviceptr)dest, (CUdeviceptr)src, size);
 	return dest;
 }
 
 void *cuda_memory_copy_buffer_to_buffer(void *dest, const void *src, size_t size) {
-	cuMemcpyDtoD((CUdeviceptr)dest, (CUdeviceptr)src, size);
+	p_cuMemcpyDtoD((CUdeviceptr)dest, (CUdeviceptr)src, size);
 	return dest;
 }
 

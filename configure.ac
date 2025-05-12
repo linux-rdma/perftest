@@ -312,14 +312,38 @@ if [test $HAVE_EX_ODP = yes] && [test $HAVE_EX = yes]; then
         AC_DEFINE([HAVE_EX_ODP], [1], [Have Extended  ODP support])
 fi
 
-if [test "$CUDA_H_PATH" ]; then
-	AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA feature])
-	AC_DEFINE_UNQUOTED([CUDA_PATH], "$CUDA_H_PATH" , [Enable CUDA feature])
-	LIBS=$LIBS" -lcuda"
-	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
+AC_CHECK_LIB([dl], [dlclose],
+    [AC_MSG_RESULT([libdl found])
+     LIBS="$LIBS -ldl"],
+    [AC_MSG_ERROR([libdl not found. You need to install libdl for dynamic loading support])])
 
+
+# Check for CUDA header file in common location
+AC_MSG_CHECKING([for CUDA header file])
+cuda_found=no
+cuda_h_path=""
+
+if test -f "/usr/local/cuda/include/cuda.h"; then
+	cuda_h_path="/usr/local/cuda/include/cuda.h"
+	cuda_found=yes
+	AC_MSG_RESULT([found at $cuda_h_path])
+fi
+
+# User defined cuda header path
+if test -f "$CUDA_H_PATH"; then
+       cuda_h_path="$CUDA_H_PATH"
+       cuda_found=yes
+       AC_MSG_RESULT([found at $cuda_h_path])
+fi
+
+if test "$cuda_found" = "yes"; then
+	AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA feature])
+	AC_DEFINE_UNQUOTED([CUDA_PATH], "$cuda_h_path" , [Enable CUDA feature])
+	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
+	cuda_toolkit_version=`grep "define CUDA_VERSION" $cuda_h_path | cut -d' ' -f3`
+	AC_DEFINE_UNQUOTED([CUDA_VER], [$cuda_toolkit_version], [Define CUDA_VER])
 	AC_TRY_LINK([
-	#include <$CUDA_H_PATH>],
+	#include <$cuda_h_path>],
 	[int x = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
 	[CUDA_DMA_BUF_PARAMETERS_SUPPORT=yes], [CUDA_DMA_BUF_PARAMETERS_SUPPORT=no])
 	if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
@@ -327,7 +351,7 @@ if [test "$CUDA_H_PATH" ]; then
 		AC_DEFINE([HAVE_CUDA_DMABUF], [1], [Enable CUDA DMABUF feature])
 	fi
 	AC_TRY_LINK([
-	#include <$CUDA_H_PATH>],
+	#include <$cuda_h_path>],
 	[int x = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;],
 	[CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=yes], [CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=no])
 	if [test "x$CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"] && [test "x$HAVE_REG_DMABUF_MR" = "xyes"]; then
@@ -337,17 +361,16 @@ if [test "$CUDA_H_PATH" ]; then
 	if [test "x$enable_cudart" = "xyes"]; then
 		AC_DEFINE([HAVE_CUDART], [1], [Enable CUDART features])
 		LIBS=$LIBS" -lcudart -lstdc++"
-		CPPFLAGS="-I$(dirname $CUDA_H_PATH)/include $CPPFLAGS"
-		LDFLAGS="-L$(dirname $(dirname $CUDA_H_PATH))/lib -L$(dirname $(dirname $CUDA_H_PATH))/lib64 $LDFLAGS"
+		CPPFLAGS="-I$(dirname $cuda_h_path)/include $CPPFLAGS"
+		LDFLAGS="-L$(dirname $(dirname $cuda_h_path))/lib -L$(dirname $(dirname $cuda_h_path))/lib64 $LDFLAGS"
 
 		if [test "x${gpu_arch}" != "x"]; then
 			NVCCFLAGS="${NVCCFLAGS} -arch compute_${gpu_arch} -code compute_${gpu_arch},sm_${gpu_arch}"
 			AC_MSG_NOTICE([Setting GPU_ARCH = ${gpu_arch}])
 		fi
 		NVCCFLAGS="${NVCCFLAGS} -Xcompiler -fpermissive"
-		AC_CHECK_DECLS([CUDA_VERSION], [HAVE_CUDA_VERSION=yes], [HAVE_CUDA_VERSION=no], [[#include "$CUDA_H_PATH"]])
+		AC_CHECK_DECLS([CUDA_VERSION], [HAVE_CUDA_VERSION=yes], [HAVE_CUDA_VERSION=no], [[#include "$cuda_h_path"]])
 		if [test "x$HAVE_CUDA_VERSION" = "xyes"]; then
-			cuda_toolkit_version=`grep "define CUDA_VERSION" $CUDA_H_PATH | cut -d' ' -f3`
 			AS_VERSION_COMPARE([$cuda_toolkit_version], [11070], [HAVE_CUDA_DIAGSUPPRESS=no], [HAVE_CUDA_DIAGSUPPRESS=yes], [HAVE_CUDA_DIAGSUPPRESS=yes])
 			if [test "x$HAVE_CUDA_DIAGSUPPRESS" = "xyes"]; then
 				NVCCFLAGS="${NVCCFLAGS} -Xcompiler -fpermissive -diag-suppress 2464 -diag-suppress 815"
@@ -356,7 +379,7 @@ if [test "$CUDA_H_PATH" ]; then
 			fi
 		fi
 
-		CUDA_TOOLKIT_PATH=$(dirname $(dirname $CUDA_H_PATH))
+		CUDA_TOOLKIT_PATH=$(dirname $(dirname $cuda_h_path))
 		AC_DEFINE_UNQUOTED([CUDA_TOOLKIT_PATH], "$CUDA_TOOLKIT_PATH", [Path to the CUDA Toolkit])
 		AC_SUBST([NVCCFLAGS], ["${NVCCFLAGS}"])
 		AC_SUBST([NVCC], ["$CUDA_TOOLKIT_PATH/bin/nvcc"])
@@ -367,8 +390,8 @@ fi
 AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
 AM_CONDITIONAL([CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"])
 
-AM_CONDITIONAL([CUDA], [test "$CUDA_H_PATH"])
-AM_CONDITIONAL([HAVE_CUDA], [test "$CUDA_H_PATH"])
+AM_CONDITIONAL([CUDA], [test "$cuda_h_path"])
+AM_CONDITIONAL([HAVE_CUDA], [test "$cuda_h_path"])
 AM_CONDITIONAL([HAVE_CUDART], [test "x$enable_cudart" = "xyes"])
 
 AC_ARG_ENABLE([neuron],
