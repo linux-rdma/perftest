@@ -3184,6 +3184,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					opencl_platform_id_flag = 0;
 				}
 				if (gpu_touch_flag) {
+					if (!cuda_gpu_touch_supported()) {
+						fprintf(stderr, "GPU touch is not supported\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+
 					if (user_param->memory_type != MEMORY_CUDA &&
 					    user_param->memory_type != MEMORY_OPENCL) {
 						fprintf(stderr, "GPU touch is not supported for this MEMORY_TYPE\n");

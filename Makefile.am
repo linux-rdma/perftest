@@ -111,7 +111,7 @@ else
 LIBMLX4=
 endif
 
-if HAVE_CUDA
+if HAVE_CUDART
 libperftest_a_SOURCES += src/cuda_utils.cu
 libperftest_a_LIBADD = src/cuda_utils.cu.o src/cuda_utils.cu.lo
 SUFFIXES= .cu

@@ -27,8 +27,10 @@ static const char *cuda_mem_type_str[] = {
 	"CUDA_MEM_TYPES"
 };
 
+#ifdef HAVE_CUDART
 int touch_gpu_pages(uint8_t *addr, int buf_size, int is_infinitely, volatile int **stop_flag);
 int init_gpu_stop_flag(volatile int **stop_flag);
+#endif
 
 struct cuda_memory_ctx {
 	struct memory_ctx base;
@@ -107,6 +109,7 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 		return FAILURE;
 	}
 
+	#ifdef HAVE_CUDART
 	if (ctx->gpu_touch != GPU_NO_TOUCH){
 		error = init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
 		if (error != 0) {
@@ -114,6 +117,7 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 			return FAILURE;
 		}
 	}
+	#endif
 
 	CUCHECK(cuDriverGetVersion(&ctx->driver_version));
 
@@ -306,10 +310,12 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 	printf("allocated GPU buffer of a %lu address at %p for type %s\n", size, addr, cuda_mem_type_str[cuda_ctx->mem_type]);
 
+	#ifdef HAVE_CUDART
 	if (cuda_ctx->gpu_touch != GPU_NO_TOUCH) {
 		printf("Starting GPU touching process\n");
 		return touch_gpu_pages((uint8_t *)*addr, size, cuda_ctx->gpu_touch == GPU_TOUCH_INFINITE, &cuda_ctx->stop_touch_gpu_kernel_flag);
 	}
+	#endif
 
 	return SUCCESS;
 }
@@ -379,6 +385,16 @@ bool data_direct_supported() {
 	return false;
 #endif
 }
+
+
+bool cuda_gpu_touch_supported() {
+#ifdef HAVE_CUDART
+	return true;
+#else
+	return false;
+#endif
+}
+
 
 struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	struct cuda_memory_ctx *ctx;
