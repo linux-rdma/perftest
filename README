@@ -263,6 +263,13 @@ Special feature detailed explanation in tests:
               e.g: export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
           perform compilation as decribe in the begining of section 4 (GPUDirect usage).
 
+    CUDA Runtime API support:
+      To use the --gpu_touch option in Perftest, you must build Perftest with support for the CUDA Runtime API (libcudart).
+      Run the configure script with the following flags:
+      ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h --enable-cudart
+
+      Note: Ensure that your NVIDIA CUDA Compiler (nvcc) version is compatible with your GCC version. Incompatibility between nvcc and gcc can cause build or runtime issues.
+
   5. AES_XTS (encryption/decryption)
      In perftest repository there are two files as follow:
       1) gen_data_enc_key.c
