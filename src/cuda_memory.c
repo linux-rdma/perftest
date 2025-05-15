@@ -42,7 +42,7 @@ struct cuda_memory_ctx {
 	CUdevice cuDevice;
 	CUcontext cuContext;
 	bool use_dmabuf;
-	bool use_data_direct;
+	bool use_pcie_mapping;
 	int driver_version;
 };
 
@@ -230,7 +230,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 				*dmabuf_fd = 0;
 				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
 
-				if (cuda_ctx->use_data_direct) {
+				if (cuda_ctx->use_pcie_mapping) {
 				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
 				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 					if (cuda_ctx->driver_version < 12*1000+8*10) {
@@ -410,7 +410,7 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->device_id = params->cuda_device_id;
 	ctx->device_bus_id = params->cuda_device_bus_id;
 	ctx->use_dmabuf = params->use_cuda_dmabuf;
-	ctx->use_data_direct = params->use_data_direct;
+	ctx->use_pcie_mapping = params->use_cuda_pcie_mapping;
 	ctx->gpu_touch = params->gpu_touch;
 	ctx->stop_touch_gpu_kernel_flag = NULL;
 	ctx->mem_type = params->cuda_mem_type;
