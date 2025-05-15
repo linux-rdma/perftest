@@ -3887,7 +3887,6 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							}
 						}
 						unused_recv_for_qp[wc_id] -= user_param->recv_post_list;
-						posted_per_qp[wc_id] += user_param->recv_post_list;
 
 						if (user_param->flows != DEF_FLOWS) {
 							if (++recv_flows_burst == user_param->flows_burst) {
@@ -3906,6 +3905,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 									ctx->rx_buffer_addr[wc_id] + address_flows_offset,
 									user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 						}
+						posted_per_qp[wc_id] += user_param->recv_post_list;
 					}
 
 					if (ctx->send_rcredit) {
@@ -4447,7 +4447,6 @@ int run_iter_bi(struct pingpong_context *ctx,
 					}
 					unused_recv_for_qp[wc[i].wr_id] -= user_param->recv_post_list;
 					//coverity[uninit_use]
-					posted_per_qp[wc[i].wr_id] += user_param->recv_post_list;
 
 					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2) &&
 							user_param->recv_post_list == 1) {
@@ -4457,6 +4456,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 								ctx->rx_buffer_addr[wc[i].wr_id],user_param->connection_type,
 								ctx->cache_line_size,ctx->cycle_buffer);
 					}
+					posted_per_qp[wc[i].wr_id] += user_param->recv_post_list;
 				}
 				if (ctx->send_rcredit) {
 					int credit_cnt = rcnt_for_qp[wc[i].wr_id]%user_param->rx_depth;
