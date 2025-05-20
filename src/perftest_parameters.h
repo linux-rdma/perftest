@@ -387,6 +387,7 @@ enum ctx_device {
 	CONNECTX8		= 31,
   	INTEL_GEN2		= 32,
 	CONNECTX9               = 33,
+	RXE			= 33,
 };
 
 /* Units for rate limiter */
