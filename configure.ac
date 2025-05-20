@@ -172,6 +172,14 @@ fi
 
 AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
+	[int x = MLX5DV_CONTEXT_FLAGS_BLUEFLAME;],[HAVE_MLX5DV_BF_FLAG=yes], [HAVE_MLX5DV_BF_FLAG=no])
+AM_CONDITIONAL([HAVE_MLX5DV_BF_FLAG],[test "x$HAVE_MLX5DV_BF_FLAG" = "xyes"])
+if [test $HAVE_MLX5DV_BF_FLAG = yes] && [test $HAVE_MLX5DV = yes]; then
+	AC_DEFINE([HAVE_MLX5DV_BF_FLAG], [1], [Have BF indication support])
+fi
+
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
 	[int x = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;],[HAVE_OOO_RECV_WRS=yes], [HAVE_OOO_RECV_WRS=no])
 AM_CONDITIONAL([HAVE_OOO_RECV_WRS],[test "x$HAVE_OOO_RECV_WRS" = "xyes"])
 if [test $HAVE_OOO_RECV_WRS = yes] && [test $HAVE_MLX5DV = yes]; then

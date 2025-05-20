@@ -299,6 +299,7 @@ int main(int argc, char *argv[])
 
 	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
+	check_bf_support(&ctx);
 
 	for (i=0; i < user_param.num_of_qps; i++) {
 

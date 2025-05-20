@@ -187,6 +187,7 @@ int main(int argc, char *argv[])
 
 	/* Print basic test information. */
 	ctx_print_test_info(&user_param);
+	check_bf_support(&ctx);
 
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {

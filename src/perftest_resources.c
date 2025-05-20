@@ -2011,6 +2011,28 @@ static int verify_ooo_settings(struct pingpong_context *ctx,
 	}
 }
 #endif
+
+void check_bf_support(struct pingpong_context *ctx)
+{
+	if (get_device_vendor(ctx->context) != 0x02c9)
+		return;
+
+	#ifdef HAVE_MLX5DV_BF_FLAG
+	struct mlx5dv_context ctx_dv;
+	int ret;
+
+	ret = mlx5dv_query_device(ctx->context, &ctx_dv);
+	if (ret) {
+		fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
+		return;
+	}
+	if (!(ctx_dv.flags & MLX5DV_CONTEXT_FLAGS_BLUEFLAME)) {
+		fprintf(stderr, "Warning: Blueflame is not supported in the system\n");
+		printf(RESULT_LINE);
+	}
+	#endif
+}
+
 int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_param)
 {
 	int i;
