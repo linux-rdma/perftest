@@ -591,6 +591,7 @@ struct perftest_parameters {
 	char				*cuda_device_bus_id;
 	int				cuda_mem_type;
 	int				use_cuda_dmabuf;
+	int				use_cuda_pcie_mapping;
 	int				use_data_direct;
 	int				rocm_device_id;
 	int				use_rocm_dmabuf;
