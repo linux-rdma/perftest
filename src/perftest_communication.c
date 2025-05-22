@@ -1396,7 +1396,7 @@ int create_comm_struct(struct perftest_comm *comm,
 
 	return SUCCESS;
 
-free_mem: __attribute__((unused))
+free_mem:
 	#ifdef HAVE_DCS
 	free(comm->rdma_ctx->dci_stream_id);
 	#endif
@@ -1406,7 +1406,7 @@ free_qpx: __attribute__((unused))
 	free(comm->rdma_ctx->qpx);
 	#endif
 // cppcheck-suppress unusedLabelConfiguration
-free_qp:
+free_qp: __attribute__((unused))
 	free(comm->rdma_ctx->qp);
 free_buf:
 	free(comm->rdma_ctx->buf);
