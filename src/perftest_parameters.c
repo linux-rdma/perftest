@@ -631,6 +631,8 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			if (cuda_memory_dmabuf_supported()) {
 				printf("      --use_cuda_dmabuf");
 				printf(" Use CUDA DMA-BUF for GPUDirect RDMA testing\n");
+				printf("      --use_cuda_pcie_mapping");
+				printf(" Use CUDA DMABUF handle mapping via PCIe BAR1\n");
 				if (data_direct_supported()) {
 					printf("      --use_data_direct");
 					printf(" Use Data-Direct CUDA DMA-BUF for GPUDirect RDMA testing\n");
@@ -904,6 +906,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_id	= 0;
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
+	user_param->use_cuda_pcie_mapping = 0;
 	user_param->use_rocm_dmabuf = 0;
 	user_param->use_data_direct	= 0;
 	user_param->cuda_mem_type       = CUDA_MEM_DEVICE;
@@ -1894,6 +1897,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if (user_param->use_data_direct) {
+		user_param->use_cuda_pcie_mapping = 1;
+	}
+
 	if ( (user_param->connection_type == UD) && (user_param->inline_size > MAX_INLINE_UD) ) {
 		printf(RESULT_LINE);
 		fprintf(stderr, "Setting inline size to %d (Max inline size in UD)\n",MAX_INLINE_UD);
@@ -2418,6 +2425,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
+	static int use_cuda_pcie_mapping_flag = 0;
 	static int use_data_direct_flag = 0;
 	static int cuda_mem_type_flag = 0;
 	static int use_rocm_flag = 0;
@@ -2597,6 +2605,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda",		.has_arg = 1, .flag = &use_cuda_flag, .val = 1},
 			{ .name = "use_cuda_bus_id",	.has_arg = 1, .flag = &use_cuda_bus_id_flag, .val = 1},
 			{ .name = "use_cuda_dmabuf",	.has_arg = 0, .flag = &use_cuda_dmabuf_flag, .val = 1},
+			{ .name = "use_cuda_pcie_mapping", .has_arg = 0, .flag = &use_cuda_pcie_mapping_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
 			{ .name = "cuda_mem_type",	.has_arg = 1, .flag = &cuda_mem_type_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
@@ -3093,6 +3102,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (use_data_direct_flag) {
 				    user_param->use_data_direct = 1;
 				    use_data_direct_flag = 0;
+				}
+				if (use_cuda_pcie_mapping_flag) {
+					user_param->use_cuda_pcie_mapping = 1;
+					use_cuda_pcie_mapping_flag = 0;
 				}
 				if (cuda_mem_type_flag) {
 					user_param->cuda_mem_type = strtol(optarg,NULL,0);
@@ -3610,6 +3623,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 	if(user_param->use_data_direct && !user_param->use_cuda_dmabuf){
 		fprintf(stderr, " DMABUF must be enabled in order to use Data Direct \n");
+		return FAILURE;
+	}
+	if (user_param->use_cuda_pcie_mapping && !user_param->use_cuda_dmabuf) {
+		fprintf(stderr, " CUDA PCIe mapping requires DMA-BUF\n");
 		return FAILURE;
 	}
 	if (optind == argc - 1) {
