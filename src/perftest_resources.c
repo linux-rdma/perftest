@@ -3166,10 +3166,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->sge_list[i*user_param->post_list + j].length =
 				(user_param->connection_type == RawEth) ? (user_param->size - HW_CRC_ADDITION) : user_param->size;
 
-			ctx->sge_list[i*user_param->post_list + j].lkey = ctx->mr[i]->lkey;
-			if (user_param->use_null_mr) {
-				ctx->sge_list[i*user_param->post_list + j].lkey = ctx->null_mr->lkey;
-			}
+			ctx->sge_list[i*user_param->post_list + j].lkey = user_param->use_null_mr ? ctx->null_mr->lkey : ctx->mr[i]->lkey;
 
 			if (j > 0) {
 
@@ -3319,7 +3316,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 
 		for (j = 0; j < user_param->recv_post_list; j++) {
 			ctx->recv_sge_list[i * user_param->recv_post_list + j].length = length;
-			ctx->recv_sge_list[i * user_param->recv_post_list + j].lkey   = ctx->mr[i]->lkey;
+			ctx->recv_sge_list[i * user_param->recv_post_list + j].lkey   = user_param->use_null_mr ? ctx->null_mr->lkey : ctx->mr[i]->lkey;
 
 			if (j > 0) {
 				ctx->recv_sge_list[i * user_param->recv_post_list + j].addr = ctx->recv_sge_list[i * user_param->recv_post_list + j - 1].addr;

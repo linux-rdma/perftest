@@ -689,7 +689,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 	if (verb == WRITE || verb == WRITE_IMM || verb == READ) {
 		printf("      --use-null-mr ");
-		printf(" Allocate a null memory region for the client with ibv_alloc_null_mr.\n");
+		printf(" Allocate a null memory region with ibv_alloc_null_mr.\n");
 	}
 
 	if (tst == BW || tst == LAT_BY_BW) {
