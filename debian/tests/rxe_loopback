@@ -1,0 +1,81 @@
+#!/bin/sh
+
+set -e
+
+link_name="rxe_test"
+port_index=1 # Always?
+dev_name="$link_name/$port_index"
+
+get_eth_dev() {
+	ip -o link | awk '/link\/ether/ {print $2}' | tr -d : | head -n1
+}
+
+do_init() {
+	base_link=`get_eth_dev`
+	if rdma link show "$dev_name" >/dev/null 2>&1; then
+		echo "$0: Error: rdma link $link_name already exists. Run $0 shutdown"
+	else
+		rdma link add "$link_name" type rxe netdev "$base_link"
+	fi
+}
+
+run_loopback() {
+	echo "==== Running loopback for $*: ===="
+	run_loopback_server "$@" &
+	sleep 1
+	run_loopback_client "$@"
+	echo "==== Done    loopback for $*: ===="
+
+}
+
+run_loopback_server() {
+	command_name="$1"
+
+	"$@" ||  killall "$command_name" || :
+}
+
+run_loopback_client() {
+	"$@" localhost
+}
+
+
+do_check() {
+	run_loopback ib_write_bw -s 10
+	run_loopback ib_read_bw
+	run_loopback ib_send_bw
+	run_loopback ib_atomic_bw
+	run_loopback ib_write_lat
+	run_loopback ib_atomic_lat
+	run_loopback ib_write_lat
+	# Can't test:
+	# run_loopback raw_ethernet_burst_lat
+	# run_loopback raw_ethernet_bw
+	# run_loopback raw_ethernet_fs_rate
+	# run_loopback raw_ethernet_lat
+}
+
+do_shutdown() {
+	if rdma link show "$dev_name" >/dev/null 2>&1; then
+		rdma link delete "$link_name"
+	fi
+}
+
+do_all() {
+	do_init
+	do_check
+	do_shutdown
+}
+
+do_help() {
+	echo "$0 <all | init | check | shutdown>" 
+}
+
+case "$1" in
+init | check | shutdown | help | all)
+	cmd="$1"
+	shift
+	do_$cmd "$@"
+	;;
+'') do_all;;
+*) do_help; exit 1
+esac
