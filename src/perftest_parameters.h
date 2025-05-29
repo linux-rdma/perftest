@@ -599,6 +599,7 @@ struct perftest_parameters {
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
 	int				mlu_device_id;
+	int				use_mlu_dmabuf;
 	int                             opencl_platform_id;
 	int                             opencl_device_id;
 	int                             gpu_touch;
