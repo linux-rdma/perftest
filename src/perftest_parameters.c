@@ -2045,6 +2045,12 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 5522  : dev_fname = INTEL_GEN2; break;
 			default    : dev_fname = INTEL_GEN2; break;
 		}
+	} else if (attr.vendor_id == 0x1f67) {
+		switch (attr.vendor_part_id) {
+			case 0x1021 :	dev_fname = YUNSILICON_DIAMOND; break;
+			case 0x1023 :	dev_fname = YUNSILICON_DIAMOND_NEXT; break;
+			default :	dev_fname = YUNSILICON_ANDES; break;
+		}
 	} else {
 
 		//coverity[uninit_use]
