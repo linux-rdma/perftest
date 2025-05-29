@@ -2045,6 +2045,11 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 5522  : dev_fname = INTEL_GEN2; break;
 			default    : dev_fname = INTEL_GEN2; break;
 		}
+	} else if (attr.vendor_id == 0x209b) {
+		switch (attr.vendor_part_id) {
+			case 0x1000: dev_fname = TCU1; break;
+			default    : dev_fname = UNKNOWN; break;
+		}
 	} else {
 
 		//coverity[uninit_use]
