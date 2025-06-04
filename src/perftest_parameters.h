@@ -675,6 +675,9 @@ struct perftest_parameters {
 	int				connectionless;
 	uint16_t			cqe_poll;
 	int				use_cqe_poll;
+	int				tph_mem_type;
+	int				cpu_id;
+	int				processing_hints;
 };
 
 struct report_options {

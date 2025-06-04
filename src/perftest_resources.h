@@ -234,6 +234,9 @@ struct pingpong_context {
 	int 					fd;
 	#endif
 	struct memory_ctx			*memory;
+	#ifdef HAVE_REG_MR_EX
+	struct ibv_dmah				*dmah;
+	#endif
 };
 
  struct pingpong_dest {

@@ -414,6 +414,22 @@ many different options and modes.
  Use Hugepages instead of contig, memalign allocations.
  Not relevant for raw_ethernet_fs_rate.
 .TP
+.B --tph_mem=<memory_type>
+ Set TPH memory type.
+ <memory_type> can be 'persistent'/'pm' or 'volatile'/'vm'.
+ Must be used together with --ph flag.
+ Requires hardware and driver support for TPH functionality.
+.TP
+.B --cpu_id=<cpu_core_id>
+ Specify the CPU core ID that should handle the TPH request.
+ Must be used together with --tph_mem flag.
+ Requires hardware and driver support for TPH functionality.
+.TP
+.B --ph=<processing_hints>
+ Specify processing hints for TPH:
+  0 = Bidirectional, 1 = Requester, 2 = Target (Completer), 3 = Target with priority.
+ Requires hardware and driver support for TPH functionality.
+.TP
 .B --wait_destroy=<seconds>
  Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..).
  Relevant only for bandwidth and raw_ethernet_burst_lat.

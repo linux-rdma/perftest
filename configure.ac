@@ -553,6 +553,13 @@ if [test $HAVE_TD_API = yes]; then
 	AC_DEFINE([HAVE_TD_API], [1], [Have TD API support])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[ibv_reg_mr_ex], [HAVE_REG_MR_EX=yes], [HAVE_REG_MR_EX=no])
+AM_CONDITIONAL([HAVE_REG_MR_EX], [test "x$HAVE_REG_MR_EX" = "xyes"])
+if [test $HAVE_REG_MR_EX = yes]; then
+	AC_DEFINE([HAVE_REG_MR_EX], [1], [Have reg mr extended API support])
+fi
+
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"

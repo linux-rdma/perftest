@@ -1334,6 +1334,15 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->ctrl_wr);
 	}
 
+	#ifdef HAVE_REG_MR_EX
+	if(ctx->dmah) {
+		if (ibv_dealloc_dmah(ctx->dmah)) {
+			fprintf(stderr, "Failed to deallocate DMAH - %s\n", strerror(errno));
+			test_result = 1;
+		}
+	}
+	#endif
+
 	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts){
 		for(i = 0; i < user_param->data_enc_keys_number; i++) {
@@ -1669,36 +1678,15 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 /******************************************************************************
  *
  ******************************************************************************/
-int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
+static int setup_mr_flags(struct perftest_parameters *user_param)
 {
 	int flags = IBV_ACCESS_LOCAL_WRITE;
-	bool can_init_mem = true;
-	int dmabuf_fd = 0;
-	uint64_t dmabuf_offset = 0;
 
-	/* ODP */
 	#ifdef HAVE_EX_ODP
 	if (user_param->use_odp) {
-		if ( !check_odp_support(ctx, user_param) )
-			return FAILURE;
-
 		flags |= IBV_ACCESS_ON_DEMAND;
 	}
 	#endif
-
-	if (user_param->memory_type == MEMORY_MMAP) {
-		#if defined(__FreeBSD__)
-		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
-		#else
-		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
-		#endif
-	}
-
-	if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
-						&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
-						&can_init_mem)) {
-		return FAILURE;
-	}
 
 	if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 		flags |= IBV_ACCESS_REMOTE_WRITE;
@@ -1716,50 +1704,191 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 #endif
 
-#ifdef HAVE_REG_DMABUF_MR
-	/* Allocating Memory region and assigning our buffer to it. */
+	return flags;
+}
+
+static void initialize_buffer_content(struct pingpong_context *ctx,
+				      struct perftest_parameters *user_param,
+				      int qp_index, bool can_init_mem)
+{
+	if (!can_init_mem)
+		return;
+
+	uint32_t rng_state = init_perftest_rand_state();
+	if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) {
+		memset(ctx->buf[qp_index], 0, ctx->buff_size);
+	} else {
+		uint64_t i;
+		if (user_param->has_payload_modification) {
+			for (i = 0; i < ctx->buff_size; i++) {
+				((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
+			}
+		} else {
+			uint32_t *buf_ptr = (uint32_t*)ctx->buf[qp_index];
+			for (i = 0; i < ctx->buff_size/4; i++) {
+				buf_ptr[i] = perftest_rand(&rng_state);
+			}
+		}
+	}
+}
+
+#ifdef HAVE_REG_MR_EX
+static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx, 
+				     struct perftest_parameters *user_param,
+				     int qp_index, int flags, int dmabuf_fd, 
+				     uint64_t dmabuf_offset)
+{
+	struct ibv_mr_init_attr in = {};
+	in.access = flags;
+	in.length = ctx->buff_size;
+
 	if (dmabuf_fd) {
-	#ifdef HAVE_DATA_DIRECT
-	    if (user_param->use_data_direct) {
+		/* DMABUF case: use FD, IOVA and FD_OFFSET instead of ADDR */
+		in.comp_mask = IBV_REG_MR_MASK_FD | IBV_REG_MR_MASK_IOVA | IBV_REG_MR_MASK_FD_OFFSET;
+		in.fd = dmabuf_fd;
+		in.iova = (uint64_t)ctx->buf[qp_index];
+		in.fd_offset = dmabuf_offset;
+		printf("Calling ibv_reg_mr_ex with dmabuf(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+			   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+	} else {
+		in.comp_mask = IBV_REG_MR_MASK_ADDR;
+		in.addr = ctx->buf[qp_index];
+	}
+
+	if (user_param->processing_hints != -1) {
+		/* Add DMAH mask for TPH support */
+		in.comp_mask |= IBV_REG_MR_MASK_DMAH;
+		in.dmah = ctx->dmah;
+	}
+
+	return ibv_reg_mr_ex(ctx->pd, &in);
+}
+#endif
+
+static struct ibv_mr *register_mr(struct pingpong_context *ctx,
+				   struct perftest_parameters *user_param,
+				   int qp_index, int flags, int dmabuf_fd,
+				   uint64_t dmabuf_offset)
+{
+	if (dmabuf_fd) {
+#ifdef HAVE_REG_DMABUF_MR
+		/* DMABUF registration using standard API */
+#ifdef HAVE_DATA_DIRECT
+		if (user_param->use_data_direct) {
 			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
 					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
-			ctx->mr[qp_index] = mlx5dv_reg_dmabuf_mr(
-		        ctx->pd, dmabuf_offset,
-		        ctx->buff_size, (uint64_t)ctx->buf[qp_index],
-		        dmabuf_fd,
-		        flags, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT
-		        );
-	    } else
-	#endif
+			return mlx5dv_reg_dmabuf_mr(
+				ctx->pd, dmabuf_offset,
+				ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+				dmabuf_fd,
+				flags, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT
+				);
+		} else
+#endif
 		{
 			printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
 				   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
-			ctx->mr[qp_index] = ibv_reg_dmabuf_mr(
-                ctx->pd, dmabuf_offset,
-                ctx->buff_size, (uint64_t)ctx->buf[qp_index],
-                dmabuf_fd,
-                flags
-                );
-	    }
-		if (!ctx->mr[qp_index]) {
-			int error = errno;
-			fprintf(stderr, "Couldn't allocate MR with error=%d\n", error);
-			if (error == EOPNOTSUPP)
-				fprintf(stderr, "OFED stack does not support DMA-BUF\n");
-			return FAILURE;
+			return ibv_reg_dmabuf_mr(
+				ctx->pd, dmabuf_offset,
+				ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+				dmabuf_fd,
+				flags
+				);
 		}
-		// MPI immediately closes the fd.
-		// We emulate the behavior here.
+#else
+		fprintf(stderr, "DMABUF requested but not supported in this build\n");
+		return NULL;
+#endif
+	} else {
+		/* Regular memory registration using standard API */
+		return ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
+	}
+}
+
+static int register_memory_region(struct pingpong_context *ctx,
+				  struct perftest_parameters *user_param,
+				  int qp_index, int flags, int dmabuf_fd,
+				  uint64_t dmabuf_offset)
+{
+	struct ibv_mr *mr = NULL;
+
+	/* Select the appropriate registration function */
+	struct ibv_mr *(*register_func)(struct pingpong_context *ctx, 
+					struct perftest_parameters *user_param,
+					int qp_index, int flags, int dmabuf_fd, 
+					uint64_t dmabuf_offset);
+
+#ifdef HAVE_REG_MR_EX
+	/* Use extended API unless data_direct is requested (requires mlx5dv_reg_dmabuf_mr) */
+	if (!(user_param->use_data_direct && dmabuf_fd)) {
+		register_func = register_mr_ex;
+	} else {
+		register_func = register_mr;
+	}
+#else
+	/* Use legacy registration when extended API is not available */
+	register_func = register_mr;
+#endif
+
+	mr = register_func(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset);
+
+	if (!mr && errno == EPROTONOSUPPORT && register_func == register_mr_ex) {
+		/* If extended registration is not supported, fall back to standard registration */
+		register_func = register_mr;
+		mr = register_func(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset);
+	}
+
+	if (!mr) {
+		fprintf(stderr, "Couldn't allocate MR with error=%d\n", errno);
+
+		if (dmabuf_fd && errno == EOPNOTSUPP) {
+			fprintf(stderr, "OFED stack does not support DMA-BUF\n");
+			close(dmabuf_fd);
+		}
+
+		return FAILURE;
+	}
+
+	ctx->mr[qp_index] = mr;
+
+	if (dmabuf_fd) {
 		close(dmabuf_fd);
 	}
-	else
-#endif
-	{
-		ctx->mr[qp_index] = ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
-		if (!ctx->mr[qp_index]) {
-			fprintf(stderr, "Couldn't allocate MR\n");
+
+	return SUCCESS;
+}
+
+int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *user_param, int qp_index)
+{
+	bool can_init_mem = true;
+	int dmabuf_fd = 0;
+	uint64_t dmabuf_offset = 0;
+
+	if (user_param->use_odp) {
+		if ( !check_odp_support(ctx, user_param) )
 			return FAILURE;
-		}
+	}
+
+	if (user_param->memory_type == MEMORY_MMAP) {
+		#if defined(__FreeBSD__)
+		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
+		#else
+		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
+		#endif
+	}
+
+	if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
+						&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
+						&can_init_mem)) {
+		return FAILURE;
+	}
+
+	/* Setup access flags */
+	int flags = setup_mr_flags(user_param);
+
+	/* Register memory region */
+	if (register_memory_region(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset) != SUCCESS) {
+		return FAILURE;
 	}
 
 	if (user_param->use_null_mr) {
@@ -1770,25 +1899,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 	}
 
-	/* Initialize buffer with random numbers except in WRITE_LAT test that it 0's */
-	if (can_init_mem) {
-		uint32_t rng_state = init_perftest_rand_state();
-		if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) {
-			memset(ctx->buf[qp_index], 0, ctx->buff_size);
-		} else {
-			uint64_t i;
-			if (user_param->has_payload_modification) {
-				for (i = 0; i < ctx->buff_size; i++) {
-					((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
-				}
-			} else {
-				uint32_t *buf_ptr = (uint32_t*)ctx->buf[qp_index];
-				for (i = 0; i < ctx->buff_size/4; i++) {
-					buf_ptr[i] = perftest_rand(&rng_state);
-				}
-			}
-		}
-	}
+	/* Initialize buffer content */
+	initialize_buffer_content(ctx, user_param, qp_index, can_init_mem);
+
 	return SUCCESS;
 }
 
@@ -1917,6 +2030,41 @@ destroy_mr:
 
 	return FAILURE;
 }
+
+#ifdef HAVE_REG_MR_EX
+/******************************************************************************
+ *
+ ******************************************************************************/
+int create_dmah(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+{
+	struct ibv_dmah_init_attr attr;
+	memset(&attr, 0, sizeof(attr));
+
+	if (user_param->processing_hints != -1) {
+		attr.ph = user_param->processing_hints;
+		attr.comp_mask = IBV_DMAH_INIT_ATTR_MASK_PH;
+	}
+
+	if (user_param->tph_mem_type != -1) {
+		attr.tph_mem_type = user_param->tph_mem_type;
+		attr.comp_mask |= IBV_DMAH_INIT_ATTR_MASK_TPH_MEM_TYPE;
+	}
+
+	if (user_param->cpu_id != -1) {
+		attr.cpu_id = user_param->cpu_id;
+		attr.comp_mask |= IBV_DMAH_INIT_ATTR_MASK_CPU_ID;
+	}
+
+	ctx->dmah = ibv_alloc_dmah(ctx->context, &attr);
+
+	if (!ctx->dmah) {
+		fprintf(stderr, "Couldn't allocate DMAH: %d\n", errno);
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+#endif
 
 /******************************************************************************
  *
@@ -2153,9 +2301,18 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		goto mkey;
 	}
 
+	#ifdef HAVE_REG_MR_EX
+	if (user_param->tph_mem_type != -1 || user_param->processing_hints != -1) {
+		if (create_dmah(ctx, user_param)) {
+			fprintf(stderr, "Failed to create DMAH\n");
+			goto mkey;
+		}
+	}
+	#endif
+
 	if (create_mr(ctx, user_param)) {
 		fprintf(stderr, "Failed to create MR\n");
-		goto mkey;
+		goto dmah;
 	}
 
 	if (create_cqs(ctx, user_param)) {
@@ -2272,6 +2429,13 @@ mr:
 
 	for (i = 0; i < dereg_counter; i++)
 		ibv_dereg_mr(ctx->mr[i]);
+
+dmah:
+#ifdef HAVE_REG_MR_EX
+	if(ctx->dmah) {
+		ibv_dealloc_dmah(ctx->dmah);
+	}
+#endif
 
 mkey:
 	#ifdef HAVE_AES_XTS

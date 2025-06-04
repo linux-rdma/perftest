@@ -492,6 +492,15 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --cqe_poll ");
 	printf(" Number of CQEs polled per iteration \n");
 
+	#ifdef HAVE_REG_MR_EX
+	printf("      --tph_mem=<memory_type> ");
+	printf(" Use TPH with 'persistent'/'pm' or 'volatile'/'vm' memory type\n");
+	printf("      --cpu_id=<cpu_core_id> ");
+	printf(" Specify the CPU core ID that should handle the request.\n");
+	printf("      --ph=<processing_hints> ");
+	printf(" Specify processing hints: 0=Bidirectional, 1=Requester, 2=Target(Completer), 3=Target with priority.\n");
+	#endif
+
 	#ifdef HAVE_HNSDV
 	printf("      --congest_type=<DCQCN, LDCP, HC3, DIP> ");
 	printf(" Use the hnsdv interface to set congestion control algorithm.\n");
@@ -991,6 +1000,9 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->connectionless		= OFF;
 	user_param->cqe_poll		= CTX_POLL_BATCH;
 	user_param->use_cqe_poll		= OFF;
+	user_param->tph_mem_type	= -1;
+	user_param->cpu_id		= -1;
+	user_param->processing_hints			= -1;
 }
 
 static int open_file_write(const char* file_path)
@@ -2004,6 +2016,32 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		user_param->cqe_poll = CTX_POLL_BATCH_INTENSE;
 	}
 
+	#ifdef HAVE_REG_MR_EX
+	if (user_param->processing_hints != -1 && user_param->use_data_direct) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " data direct is not supported with TPH\n");
+		exit(1);
+	}
+
+	if (user_param->tph_mem_type != -1 && user_param->cpu_id == -1) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --tph_mem requires --cpu_id to be specified\n");
+		exit(1);
+	}
+
+	if (user_param->cpu_id != -1 && user_param->tph_mem_type == -1) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --cpu_id requires --tph_mem to be specified\n");
+		exit(1);
+	}
+
+	if ((user_param->tph_mem_type != -1 || user_param->cpu_id != -1) && user_param->processing_hints == -1) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --tph_mem and --cpu_id can only be used when --ph is specified\n");
+		exit(1);
+	}
+	#endif
+
 	return;
 }
 /******************************************************************************
@@ -2559,6 +2597,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#endif
 	static int connectionless_flag = 0;
 	static int cqe_poll_flag = 0;
+	#ifdef HAVE_REG_MR_EX
+	static int tph_mem_flag = 0;
+	static int cpu_id_flag = 0;
+	static int processing_hints_flag = 0;
+	#endif
 
 	char *server_ip = NULL;
 	char *client_ip = NULL;
@@ -2737,6 +2780,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{.name = "connectionless", .has_arg = 0, .flag = &connectionless_flag, .val = 1 },
 			{.name = "cqe_poll", .has_arg = 1, .flag = &cqe_poll_flag, .val = 1 },
+			#ifdef HAVE_REG_MR_EX
+			{ .name = "tph_mem",		.has_arg = 1, .flag = &tph_mem_flag, .val = 1},
+			{ .name = "cpu_id",		.has_arg = 1, .flag = &cpu_id_flag, .val = 1},
+			{ .name = "ph",		.has_arg = 1, .flag = &processing_hints_flag, .val = 1},
+			#endif
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3497,6 +3545,30 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->use_cqe_poll = ON;
 					cqe_poll_flag = 0;
 				}
+				#ifdef HAVE_REG_MR_EX
+				if (tph_mem_flag) {
+					if (optarg) {
+						if (strcasecmp(optarg, "volatile") == 0 || strcasecmp(optarg, "vm") == 0) {
+							user_param->tph_mem_type = IBV_TPH_MEM_TYPE_VM;
+						} else if (strcasecmp(optarg, "persistent") == 0 || strcasecmp(optarg, "pm") == 0) {
+							user_param->tph_mem_type = IBV_TPH_MEM_TYPE_PM;
+						} else {
+							fprintf(stderr, "Invalid TPH memory type. Use 'volatile'/'vm' or 'persistent'/'pm'\n");
+							free(duplicates_checker);
+							return FAILURE;
+						}
+					}
+					tph_mem_flag = 0;
+				}
+				if (cpu_id_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->cpu_id,int,"cpu_id",not_int_ptr);
+					cpu_id_flag = 0;
+				}
+				if (processing_hints_flag) {
+					CHECK_VALUE_IN_RANGE(user_param->processing_hints,int,0,3,"Processing Hints",not_int_ptr);
+					processing_hints_flag = 0;
+				}
+				#endif
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
