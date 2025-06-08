@@ -1068,7 +1068,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				for (i = 0; i < ne; i++) {
-					qp_index = (int)wc[i].wr_id;
+					qp_index = (int)get_wr_id_qp_index(wc[i].wr_id);
 
 					if (wc[i].status != IBV_WC_SUCCESS) {
 						NOTIFY_COMP_ERROR_RECV(wc[i], totrcnt);
@@ -1087,7 +1087,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-					qp_index = (int)wc[i].wr_id;
+					qp_index = (int)get_wr_id_qp_index(wc[i].wr_id);
 
 					if (wc_tx[i].status != IBV_WC_SUCCESS)
 						NOTIFY_COMP_ERROR_SEND(wc_tx[i], totscnt, totccnt);
