@@ -1,0 +1,10 @@
+Tests: rxe_loopback
+Depends:
+ @,
+ rdma-core,
+ iproute2,
+ psmisc,
+Restrictions:
+ superficial,
+ needs-root,
+ isolation-machine,
