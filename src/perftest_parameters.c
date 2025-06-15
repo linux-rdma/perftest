@@ -2031,6 +2031,14 @@ const int str_link_layer(const char *str)
 		return LINK_FAILURE;
 }
 
+bool is_rxe_heuristic(const struct ibv_context *context)
+{
+	if (context->device == NULL) {
+		return false;
+	}
+	return ! strncmp("rxe", context->device->name, 3);
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2154,6 +2162,11 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 41512 : dev_fname = HNS; break;
 			case 41519 : dev_fname = HNS; break;
 			default	   : dev_fname = UNKNOWN;
+		}
+	}
+	if (dev_fname == UNKNOWN) {
+		if (is_rxe_heuristic(context)) {
+			dev_fname = RXE;
 		}
 	}
 
