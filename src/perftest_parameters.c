@@ -1156,6 +1156,21 @@ int check_intense_polling(struct perftest_parameters *user_param){
 /******************************************************************************
  *
  ******************************************************************************/
+int disable_mlx5_scatter_to_cqe() {
+    const char *var_name = "MLX5_SCATTER_TO_CQE";
+    const char *var_value = "0";
+
+    if (setenv(var_name, var_value, 1)) {
+		fprintf(stderr,"Failed to set environment variable\n");
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 void  get_gbps_str_by_ibv_rate(char *rate_input_value, int *rate)
 {
 	int i;
@@ -1895,6 +1910,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		printf(RESULT_LINE);
 		fprintf(stderr,"Perftest supports CUDA latency tests with read/send verbs only\n");
 		exit(1);
+	}
+
+	if (user_param->memory_type == MEMORY_CUDA && user_param->verb == SEND && (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
+		printf(RESULT_LINE);
+		printf("Scatter2CQE (size <= 64) is not supported with GPUDirect send tests: setting MLX5_SCATTER_TO_CQE=0\n");
+		if (disable_mlx5_scatter_to_cqe())
+			exit(1);
 	}
 
 	if (user_param->memory_type == MEMORY_CUDA && (int)user_param->size <= user_param->inline_size) {
