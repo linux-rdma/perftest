@@ -387,9 +387,10 @@ enum ctx_device {
 	CONNECTX8		= 31,
   	INTEL_GEN2		= 32,
 	CONNECTX9               = 33,
-	YUNSILICON_ANDES		= 34,
-	YUNSILICON_DIAMOND		= 35,
-	YUNSILICON_DIAMOND_NEXT	= 36,
+	TCU1                    = 34,
+	YUNSILICON_ANDES	= 35,
+	YUNSILICON_DIAMOND	= 36,
+	YUNSILICON_DIAMOND_NEXT	= 37,
 };
 
 /* Units for rate limiter */
@@ -602,6 +603,7 @@ struct perftest_parameters {
 	int				use_neuron_dmabuf;
 	char				*hl_device_bus_id;
 	int				mlu_device_id;
+	int				use_mlu_dmabuf;
 	int                             opencl_platform_id;
 	int                             opencl_device_id;
 	int                             gpu_touch;
