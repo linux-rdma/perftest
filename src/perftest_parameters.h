@@ -388,6 +388,9 @@ enum ctx_device {
   	INTEL_GEN2		= 32,
 	CONNECTX9               = 33,
 	TCU1                    = 34,
+	YUNSILICON_ANDES	= 35,
+	YUNSILICON_DIAMOND	= 36,
+	YUNSILICON_DIAMOND_NEXT	= 37,
 };
 
 /* Units for rate limiter */

@@ -1935,7 +1935,10 @@ int verify_params_with_device_context(struct ibv_context *context,
 		current_dev != BLUEFIELD2 &&
 		current_dev != BLUEFIELD3 &&
 		current_dev != EFA &&
-		current_dev != HNS)
+		current_dev != HNS &&
+		current_dev != YUNSILICON_ANDES &&
+		current_dev != YUNSILICON_DIAMOND&&
+		current_dev != YUNSILICON_DIAMOND_NEXT)
 	{
 		if (!user_param->use_old_post_send)
 		{
