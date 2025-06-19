@@ -1558,6 +1558,22 @@ static int check_odp_support(struct pingpong_context *ctx, struct perftest_param
 /******************************************************************************
  *
  ******************************************************************************/
+static uint32_t get_device_vendor(struct ibv_context *context)
+{
+	struct ibv_device_attr device_attr;
+	memset(&device_attr, 0, sizeof(device_attr));
+
+	if (ibv_query_device(context, &device_attr)) {
+		fprintf(stderr, "Failed to query device vendor id\n");
+		return 1;
+	}
+
+	return device_attr.vendor_id;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 int create_reg_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
 		   int tx_buffer_depth, int need_recv_cq)
@@ -2347,6 +2363,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	memset(&attr_dv, 0, sizeof(attr_dv));
 	#ifdef HAVE_OOO_RECV_WRS
 	struct mlx5dv_context ctx_dv;
+	uint32_t is_mlnx_device;
 	memset(&ctx_dv, 0, sizeof(ctx_dv));
 	#endif
 	#endif
@@ -2489,7 +2506,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		{
 			#ifdef HAVE_MLX5DV
 			#ifdef HAVE_OOO_RECV_WRS
-			if (!user_param->no_ddp && user_param->connection_type != UD && user_param->connection_type != UC){
+			// OOO_RECV_WRS is not supported by non-mlnx devices
+			is_mlnx_device = get_device_vendor(ctx->context) == 0x02c9;
+
+			if (!user_param->no_ddp && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
 				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
 				int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
