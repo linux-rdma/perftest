@@ -1958,6 +1958,16 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 		/* DMABUF registration using standard API */
 #ifdef HAVE_DATA_DIRECT
 		if (user_param->use_data_direct) {
+			char data_direct_path[PATH_MAX];
+			int error = 0;
+			error = mlx5dv_get_data_direct_sysfs_path(ctx->context, data_direct_path, PATH_MAX);
+			if (error) {
+				fprintf(stderr, "Couldn't get data direct sysfs path with error=%d\n", error);
+				if (error == ENODEV)
+					fprintf(stderr, "No data direct support\n");
+				return FAILURE;
+			}
+			printf("Using data direct device at /sys%s\n", data_direct_path);
 			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
 					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
 			return mlx5dv_reg_dmabuf_mr(
