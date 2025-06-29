@@ -3202,7 +3202,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			ctx->wr[i*user_param->post_list + j].sg_list = &ctx->sge_list[i*user_param->post_list + j];
 			ctx->wr[i*user_param->post_list + j].num_sge = MAX_SEND_SGE;
-			ctx->wr[i*user_param->post_list + j].wr_id   = i;
+			ctx->wr[i*user_param->post_list + j].wr_id   = i * user_param->post_list + j;
 
 			if (j == (user_param->post_list - 1)) {
 				ctx->wr[i*user_param->post_list + j].next = NULL;
@@ -3355,7 +3355,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 
 			ctx->rwr[i * user_param->recv_post_list + j].sg_list = &ctx->recv_sge_list[i * user_param->recv_post_list + j];
 			ctx->rwr[i * user_param->recv_post_list + j].num_sge = MAX_RECV_SGE;
-			ctx->rwr[i * user_param->recv_post_list + j].wr_id   = i;
+			ctx->rwr[i * user_param->recv_post_list + j].wr_id   = i * user_param->recv_post_list + j;
 
 			if (j == (user_param->recv_post_list - 1))
 				ctx->rwr[i * user_param->recv_post_list + j].next = NULL;
