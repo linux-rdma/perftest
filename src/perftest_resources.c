@@ -3347,7 +3347,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) {
 					increase_loc_addr(&ctx->recv_sge_list[i * user_param->recv_post_list + j],
 							user_param->size,
-							j,
+							j-1,
 							ctx->rx_buffer_addr[i],
 							user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
 				}
