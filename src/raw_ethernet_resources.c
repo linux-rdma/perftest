@@ -979,7 +979,7 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			firstRx = 1;
 	int 			rwqe_sent = user_param->rx_depth;
 	int			return_value = 0;
-	int			wc_id;
+	int			qp_index;
 	ALLOCATE(wc, struct ibv_wc, CTX_POLL_BATCH);
 	ALLOCATE(wc_tx, struct ibv_wc, CTX_POLL_BATCH);
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -1068,13 +1068,13 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				}
 
 				for (i = 0; i < ne; i++) {
-					wc_id = (int)wc[i].wr_id;
+					qp_index = (int)wc[i].wr_id;
 
 					if (wc[i].status != IBV_WC_SUCCESS) {
 						NOTIFY_COMP_ERROR_RECV(wc[i], totrcnt);
 					}
 
-					rcnt_for_qp[wc_id]++;
+					rcnt_for_qp[qp_index]++;
 					totrcnt++;
 				}
 			} else if (ne < 0) {
@@ -1087,13 +1087,13 @@ int run_iter_fw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 			ne = ibv_poll_cq(ctx->send_cq, CTX_POLL_BATCH, wc_tx);
 			if (ne > 0) {
 				for (i = 0; i < ne; i++) {
-					wc_id = (int)wc[i].wr_id;
+					qp_index = (int)wc[i].wr_id;
 
 					if (wc_tx[i].status != IBV_WC_SUCCESS)
 						NOTIFY_COMP_ERROR_SEND(wc_tx[i], totscnt, totccnt);
 
 					totccnt += user_param->cq_mod;
-					ctx->ccnt[wc_id] += user_param->cq_mod;
+					ctx->ccnt[qp_index] += user_param->cq_mod;
 
 					if (user_param->noPeak == OFF) {
 
