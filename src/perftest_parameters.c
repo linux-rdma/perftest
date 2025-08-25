@@ -286,10 +286,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		if (verb == SEND) {
 			printf("  -c, --connection=<RC/XRC/UC/UD/DC/SRD> ");
 			printf(" Connection type RC/XRC/UC/UD/DC/SRD (default RC) (SYMMETRIC)\n");
-		} else 	if (verb == WRITE || verb == WRITE_IMM) {
-			printf("  -c, --connection=<RC/XRC/UC/DC> ");
-			printf(" Connection type RC/XRC/UC/DC (default RC) (SYMMETRIC)\n");
-		} else if (verb == READ || verb == ATOMIC) {
+		} else if (verb == WRITE || verb == WRITE_IMM) {
+			printf("  -c, --connection=<RC/XRC/UC/DC/SRD> ");
+			printf(" Connection type RC/XRC/UC/DC/SRD (default RC) (SYMMETRIC)\n");
+		} else if (verb == READ) {
+			printf("  -c, --connection=<RC/XRC/DC/SRD> ");
+			printf(" Connection type RC/XRC/DC/SRD (default RC) (SYMMETRIC)\n");
+		} else if (verb == ATOMIC) {
 			printf("  -c, --connection=<RC/XRC/DC> ");
 			printf(" Connection type RC/XRC/DC (default RC) (SYMMETRIC)\n");
 		}
