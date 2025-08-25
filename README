@@ -268,6 +268,9 @@ Special feature detailed explanation in tests:
             2- export LIBRARY_PATH.
               e.g: export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
           perform compilation as decribe in the begining of section 4 (GPUDirect usage).
+      
+     To use dma-buf, along with use_cuda , use_cuda_dmabuf flag should be used.
+     e.g: ib_send_bw -d mlx5_0 --use_cuda=0 --use_cuda_dmabuf
 
     CUDA Runtime API support:
       To use the --gpu_touch option in Perftest, you must build Perftest with support for the CUDA Runtime API (libcudart).
