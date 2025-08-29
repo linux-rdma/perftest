@@ -2134,6 +2134,18 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 0x1023 : dev_fname = YUNSILICON_DIAMOND_NEXT; break;
 			default     : dev_fname = YUNSILICON_ANDES; break;
 		}
+	} else if (attr.vendor_id == 0x1f0f) {
+		switch (attr.vendor_part_id) {
+			case 0x340b : dev_fname = NBL_LEONIS; break; /* leonis snic v3r1 pf */
+			case 0x3413 : dev_fname = NBL_LEONIS; break; /* leonis snic v3r1 vf nbl_dev */
+			case 0x1047 : dev_fname = NBL_DF200; break; /* DF200 */
+			case 0x1226 : dev_fname = NBL_DF200; break; /* DF200 */
+			case 0x1227 : dev_fname = NBL_DF200; break; /* DF200 */
+			case 0x3500 : dev_fname = NBL_DRACO; break; /* draco use same inline size with df200 */
+			case 0x3501 : dev_fname = NBL_DRACO; break;
+			case 0x1610 : dev_fname = NBL_RNIC400; break; /* RNIC400 */
+			default     : dev_fname = NBL_LEONIS;
+		}
 	} else {
 
 		//coverity[uninit_use]
@@ -2450,6 +2462,17 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 				user_param->inline_size = 48;
 			else if (current_dev == INTEL_GEN2)
 				user_param->inline_size = 101;
+			else if (current_dev == NBL_LEONIS) {
+				if (user_param->connection_type == UD)
+					user_param->inline_size = 0;
+				else
+					user_param->inline_size = 48;
+			} else if (current_dev == NBL_DF200 || current_dev == NBL_DRACO || current_dev == NBL_RNIC400) {
+                                if (user_param->connection_type == UD)
+                                        user_param->inline_size = 434;
+                                else
+                                        user_param->inline_size = 465;
+			}
 
 		} else {
 			user_param->inline_size = 0;
