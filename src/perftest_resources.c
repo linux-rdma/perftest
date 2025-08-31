@@ -1832,7 +1832,7 @@ static int register_memory_region(struct pingpong_context *ctx,
 
 	mr = register_func(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset);
 
-	if (!mr && errno == EPROTONOSUPPORT && register_func != register_mr) {
+	if (!mr && errno == EOPNOTSUPP && register_func != register_mr) {
 		/* If extended registration is not supported, fall back to standard registration */
 		register_func = register_mr;
 		mr = register_func(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset);
