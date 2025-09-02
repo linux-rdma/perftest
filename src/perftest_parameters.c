@@ -2846,7 +2846,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q': if (user_param->tst != BW) {
-					fprintf(stderr," Multiple QPs only available on bw tests\n");
+					fprintf(stderr," Specify QP number is only available on bw tests\n");
 					free(duplicates_checker);
 					return FAILURE;
 				  }
