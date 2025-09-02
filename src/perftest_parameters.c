@@ -2886,7 +2886,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'x': CHECK_VALUE_IN_RANGE_UNS(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index",not_int_ptr);
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
-			case 'q': if (user_param->tst != BW) {
+			case 'q': if (user_param->tst != BW && user_param->num_of_qps > 1) {
 					fprintf(stderr," Multiple QPs only available on bw tests\n");
 					free(duplicates_checker);
 					return FAILURE;
