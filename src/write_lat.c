@@ -243,6 +243,17 @@ int main(int argc, char *argv[])
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
+	if (user_param.use_event) {
+		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
+			fprintf(stderr, " Couldn't request CQ notification\n");
+			goto destroy_context;
+		}
+		if (ibv_req_notify_cq(ctx.recv_cq, 0)) {
+			fprintf(stderr, " Couldn't request CQ notification\n");
+			goto destroy_context;
+		}
+	}
+
 	/* An additional handshake is required after moving qp to RTR. */
 	if (ctx_hand_shake(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
