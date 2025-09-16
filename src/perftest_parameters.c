@@ -2134,6 +2134,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 0x1023 : dev_fname = YUNSILICON_DIAMOND_NEXT; break;
 			default     : dev_fname = YUNSILICON_ANDES; break;
 		}
+	} else if (attr.vendor_id == 0x1dd8) {
+		dev_fname = PENSANDO_ALL;
 	} else {
 
 		//coverity[uninit_use]
