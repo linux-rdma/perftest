@@ -324,7 +324,7 @@
 } while (0)
 
 /* The Verb of the benchmark. */
-typedef enum { SEND , WRITE, WRITE_IMM, READ, ATOMIC } VerbType;
+typedef enum { SEND, SEND_IMM, WRITE, WRITE_IMM, READ, ATOMIC } VerbType;
 
 /* The type of the test */
 typedef enum { LAT , BW , LAT_BY_BW, FS_RATE } TestType;
@@ -669,6 +669,7 @@ struct perftest_parameters {
 	int 				has_source_ip;
 	int 			ah_allocated;
 	int				use_write_with_imm;
+	int				use_send_with_imm;
 	int				use_unsolicited_write;
 	int				use_ddp;
 	int				no_ddp;
