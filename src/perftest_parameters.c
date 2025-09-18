@@ -321,7 +321,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -D, --duration ");
 	printf(" Run test for a customized period of seconds. (SYMMETRIC)\n");
 
-	if (verb != WRITE && verb != WRITE_IMM && connection_type != RawEth) {
+	if (verb != WRITE && connection_type != RawEth) {
 		printf("  -e, --events ");
 		printf(" Sleep on CQ events (default poll)\n");
 
@@ -2950,7 +2950,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  }
 				  break;
 			case 'e': user_param->use_event = ON;
-				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
+				  if (user_param->verb == WRITE) {
 					  fprintf(stderr," Events feature not available on WRITE verb\n");
 					  free(duplicates_checker);
 					  return FAILURE;
