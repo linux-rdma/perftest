@@ -105,12 +105,14 @@
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
-	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
-	  fprintf(stderr, "scnt=%lu, ccnt=%lu\n",scnt, ccnt); }
+	  fprintf(stderr," Failed status-%s (%d): wr_id %d syndrom 0x%x\n",      								\
+	          ibv_wc_status_str(wc.status),wc.status,(int) wc.wr_id,wc.vendor_err);      					\
+	  fprintf(stderr," scnt=%lu, ccnt=%lu\n",scnt, ccnt); }
 
 #define NOTIFY_COMP_ERROR_RECV(wc,rcnt)                     											    \
 	{ fprintf(stderr," Completion with error at server\n");      											\
-	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
+	  fprintf(stderr," Failed status-%s (%d): wr_id %d syndrom 0x%x\n",      								\
+	          ibv_wc_status_str(wc.status),wc.status,(int) wc.wr_id,wc.vendor_err);      					\
 	  fprintf(stderr," rcnt=%lu\n",rcnt); }
 
 /* Macro to determine packet size in case of UD. The UD addition is for the GRH . */
