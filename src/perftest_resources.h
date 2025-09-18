@@ -145,6 +145,13 @@
 		_a > _b ? _a : _b; \
 	})
 
+#define MIN(a, b) \
+	({ \
+		typeof(a) _a = (a); \
+		typeof(b) _b = (b); \
+		_a < _b ? _a : _b; \
+	})
+
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
@@ -166,6 +173,28 @@ struct cma {
 	int connection_index;
 	int connects_left;
 	int disconnects_left;
+};
+
+/* Dynamic CQE polling configuration */
+struct dyn_cqe_poll_config {
+	uint16_t min;
+	uint16_t max;
+	uint16_t stabilize;
+	double threshold;
+};
+
+/* Dynamic CQE polling state */
+struct dyn_poll_state {
+	uint16_t curr_size;
+	int stable_iters;
+	int last_ne;
+};
+
+/* Helper structure to hold dynamic polling context */
+struct dyn_poll_ctx {
+	struct dyn_cqe_poll_config config;
+	struct dyn_poll_state state;
+	int stabilization_iters;
 };
 
 struct pingpong_context {

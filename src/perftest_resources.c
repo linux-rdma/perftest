@@ -35,6 +35,76 @@ static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV
 #define CPU_UTILITY "/proc/stat"
 #define DC_KEY 0xffeeddcc
 
+/* Initialize dynamic polling context */
+static struct dyn_poll_ctx *init_dyn_poll_ctx(struct perftest_parameters *user_param)
+{
+	struct dyn_poll_ctx *ctx;
+	ALLOCATE(ctx, struct dyn_poll_ctx, 1);
+
+	/* Initialize with const config */
+	ctx->config.min = 16;
+	ctx->config.max = 1024;
+	ctx->config.stabilize = 10;
+	ctx->config.threshold = 0.85;
+
+	ctx->state.curr_size = user_param->dynamic_cqe_poll ? 1024 : user_param->cqe_poll;
+	ctx->state.stable_iters = 0;
+	ctx->state.last_ne = 0;
+
+	ctx->stabilization_iters = (user_param->test_type == ITERATIONS) ?
+		MIN(user_param->iters / 4, MAX_QP_NUM) :
+		MAX(user_param->num_of_qps * 3, 1000);
+
+	return ctx;
+}
+
+static __always_inline int poll_cq_adaptive(
+	struct ibv_cq *cq,
+	struct ibv_wc *wc,
+	const struct dyn_cqe_poll_config *config,
+	struct dyn_poll_state *state,
+	int *dynamic_enabled)
+{
+	int ne = ibv_poll_cq(cq, state->curr_size, wc);
+
+	if (ne == state->curr_size && state->curr_size < config->max) {
+		state->curr_size = (uint16_t)MIN((state->curr_size + ne) / 2, config->max);
+		state->stable_iters = 0;
+	} else if (ne < state->curr_size * config->threshold) {
+		if (state->curr_size > config->min) {
+			state->curr_size = (uint16_t)MAX((state->curr_size + ne) / 2, config->min);
+			state->stable_iters = 0;
+		}
+	} else if (ne == state->last_ne) {
+		if (++state->stable_iters >= config->stabilize) {
+			*dynamic_enabled = 0;
+		}
+	} else {
+		state->stable_iters = 0;
+	}
+	state->last_ne = ne;
+
+	return ne;
+}
+static __always_inline int poll_completions(
+	struct ibv_cq *cq,
+	struct ibv_wc *wc,
+	struct dyn_poll_ctx *dyn_ctx,
+	uint64_t curr_count,
+	int *dynamic_enabled)
+{
+	if (*dynamic_enabled && curr_count < dyn_ctx->stabilization_iters) {
+		return poll_cq_adaptive(
+			cq,
+			wc,
+			&dyn_ctx->config,
+			&dyn_ctx->state,
+			dynamic_enabled
+		);
+	}
+	return ibv_poll_cq(cq, dyn_ctx->state.curr_size, wc);
+}
+
 struct perftest_parameters* duration_param;
 struct check_alive_data check_alive_data;
 
@@ -3774,12 +3844,18 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
 
+	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
+	if (!dyn_ctx) {
+		fprintf(stderr, "Failed to allocate dynamic polling context\n");
+		return FAILURE;
+	}
+
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
+	ALLOCATE(wc ,struct ibv_wc ,dyn_ctx->config.max);
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
 		duration_param->state = START_STATE;
@@ -3932,7 +4008,14 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						goto cleaning;
 					}
 				}
-				ne = ibv_poll_cq(ctx->send_cq, user_param->cqe_poll, wc);
+				/* Dynamic CQE poll size adaptation */
+				ne = poll_completions(
+					ctx->send_cq,
+					wc,
+					dyn_ctx,
+					totccnt,
+					&user_param->dynamic_cqe_poll);
+
 				if (ne > 0) {
 					for (i = 0; i < ne; i++) {
 						wc_id = (int)wc[i].wr_id;
@@ -3975,7 +4058,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		user_param->tcompleted[0] = get_cycles();
 
 cleaning:
-
+	free(dyn_ctx);
 	free(wc);
 	return return_value;
 }
@@ -4026,12 +4109,18 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int			recv_flows_burst = 0;
 	int			address_flows_offset =0;
 
+	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
+	if (!dyn_ctx) {
+		fprintf(stderr, "Failed to allocate dynamic polling context\n");
+		return FAILURE;
+	}
+
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
+	ALLOCATE(wc ,struct ibv_wc ,dyn_ctx->config.max);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -4074,7 +4163,13 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 			if (user_param->test_type == DURATION && user_param->state == END_STATE)
 				break;
 
-			ne = ibv_poll_cq(ctx->recv_cq,user_param->cqe_poll,wc);
+			/* Dynamic CQE poll size adaptation */
+			ne = poll_completions(
+				ctx->recv_cq,
+				wc,
+				dyn_ctx,
+				rcnt,
+				&user_param->dynamic_cqe_poll);
 
 			if (ne > 0) {
 				if (firstRx) {
@@ -4205,7 +4300,7 @@ cleaning:
 		if (clean_scq_credit(tot_scredit, ctx, user_param))
 			return_value = FAILURE;
 	}
-
+	free(dyn_ctx);
 	check_alive_data.last_totrcnt=0;
 	free(wc);
 	free(rcnt_for_qp);
@@ -4245,7 +4340,13 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
+	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
+	if (!dyn_ctx) {
+		fprintf(stderr, "Failed to allocate dynamic polling context\n");
+		return FAILURE;
+	}
+
+	ALLOCATE(wc ,struct ibv_wc ,dyn_ctx->config.max);
 	ALLOCATE(scnt_for_qp,uint64_t,user_param->num_of_qps);
 	memset(scnt_for_qp,0,sizeof(uint64_t)*user_param->num_of_qps);
 
@@ -4307,7 +4408,12 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 			}
 		}
 		if (totccnt < totscnt) {
-			ne = ibv_poll_cq(ctx->send_cq,user_param->cqe_poll,wc);
+			ne = poll_completions(
+				ctx->send_cq,
+				wc,
+				dyn_ctx,
+				totccnt,
+				&user_param->dynamic_cqe_poll);
 
 			if (ne > 0) {
 
@@ -4336,6 +4442,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		}
 	}
 cleaning:
+	free(dyn_ctx);
 	free(scnt_for_qp);
 	free(wc);
 	return return_value;
@@ -4361,7 +4468,13 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
 	#endif
 
-	ALLOCATE(wc ,struct ibv_wc ,user_param->cqe_poll);
+	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
+	if (!dyn_ctx) {
+		fprintf(stderr, "Failed to allocate dynamic polling context\n");
+		return FAILURE;
+	}
+
+	ALLOCATE(wc ,struct ibv_wc ,dyn_ctx->config.max);
 	ALLOCATE(swc ,struct ibv_wc ,user_param->tx_depth);
 
 	ALLOCATE(rcnt_for_qp,uint64_t,user_param->num_of_qps);
@@ -4394,7 +4507,12 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 	while (1) {
 
-		ne = ibv_poll_cq(ctx->recv_cq,user_param->cqe_poll,wc);
+		ne = poll_completions(
+			ctx->recv_cq,
+			wc,
+			dyn_ctx,
+			user_param->iters,
+			&user_param->dynamic_cqe_poll);
 
 		if (ne > 0) {
 
@@ -4475,6 +4593,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	}
 
 cleaning:
+	free(dyn_ctx);
 	free(wc);
 	free(swc);
 	free(rcnt_for_qp);

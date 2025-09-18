@@ -678,6 +678,7 @@ struct perftest_parameters {
 	int				tph_mem_type;
 	int				cpu_id;
 	int				processing_hints;
+	int				dynamic_cqe_poll;
 };
 
 struct report_options {

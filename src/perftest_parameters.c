@@ -470,6 +470,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	if (tst == BW) {
 		printf("  -y, --limit_msgrate=<value> ");
 		printf(" Set verifier limit for Msg Rate\n");
+
+		printf("      --disable_dynamic_polling ");
+		printf(" Disable dynamic CQE polling adaptation (default enabled)\n");
 	}
 
 	if (connection_type != RawEth) {
@@ -1003,6 +1006,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->tph_mem_type	= -1;
 	user_param->cpu_id		= -1;
 	user_param->processing_hints			= -1;
+	user_param->dynamic_cqe_poll = ON;
 }
 
 static int open_file_write(const char* file_path)
@@ -2011,7 +2015,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
-	if (check_intense_polling(user_param)) {
+	/* Disable dynamic polling for small iteration counts, duplex send/write_with_imm, and all LAT tests */
+	if ((user_param->test_type == ITERATIONS && user_param->iters < 3000) ||
+	    (user_param->tst == BW && user_param->duplex &&
+	     (user_param->verb == SEND || user_param->use_write_with_imm)) ||
+	    (user_param->tst == LAT)) {
+		printf("Disabling dynamic polling\n");
+		user_param->dynamic_cqe_poll = OFF;
+	}
+
+	if (user_param->dynamic_cqe_poll == OFF && check_intense_polling(user_param)) {
 		printf("Increasing CQE polling batch to %d\n", CTX_POLL_BATCH_INTENSE);
 		user_param->cqe_poll = CTX_POLL_BATCH_INTENSE;
 	}
@@ -2597,6 +2610,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#endif
 	static int connectionless_flag = 0;
 	static int cqe_poll_flag = 0;
+	static int disable_dynamic_polling_flag = 0;
 	#ifdef HAVE_REG_MR_EX
 	static int tph_mem_flag = 0;
 	static int cpu_id_flag = 0;
@@ -2784,6 +2798,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "tph_mem",		.has_arg = 1, .flag = &tph_mem_flag, .val = 1},
 			{ .name = "cpu_id",		.has_arg = 1, .flag = &cpu_id_flag, .val = 1},
 			{ .name = "ph",		.has_arg = 1, .flag = &processing_hints_flag, .val = 1},
+			{ .name = "disable_dynamic_polling", .has_arg = 0, .flag = &disable_dynamic_polling_flag, .val = 1},
 			#endif
 			{0}
 		};
@@ -3540,9 +3555,15 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					unsolicited_write_flag = 0;
 				}
 				#endif
+				if (disable_dynamic_polling_flag) {
+					user_param->dynamic_cqe_poll = OFF;
+					disable_dynamic_polling_flag = 0;
+				}
+
 				if (cqe_poll_flag) {
 					CHECK_VALUE_IN_RANGE(user_param->cqe_poll,uint16_t,1,65535,"CQE Poll",not_int_ptr);
 					user_param->use_cqe_poll = ON;
+					user_param->dynamic_cqe_poll = OFF;
 					cqe_poll_flag = 0;
 				}
 				#ifdef HAVE_REG_MR_EX
@@ -4017,7 +4038,11 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 
 	if (user_param->tst == BW) {
 		printf(" CQ Moderation   : %d\n", user_param->cq_mod);
-		printf(" CQE Poll Batch  : %hu\n", user_param->cqe_poll);
+		if (user_param->dynamic_cqe_poll == ON) {
+			printf(" CQE Poll Batch  : Dynamic\n");
+		} else {
+			printf(" CQE Poll Batch  : %hu\n", user_param->cqe_poll);
+		}
 	}
 
 	printf(" Mtu             : %lu[B]\n",user_param->connection_type == RawEth ? user_param->curr_mtu : MTU_SIZE(user_param->curr_mtu));
