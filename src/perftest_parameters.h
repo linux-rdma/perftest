@@ -391,6 +391,7 @@ enum ctx_device {
 	YUNSILICON_ANDES	= 35,
 	YUNSILICON_DIAMOND	= 36,
 	YUNSILICON_DIAMOND_NEXT	= 37,
+	PENSANDO_ALL		= 38,
 };
 
 /* Units for rate limiter */
