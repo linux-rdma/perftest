@@ -391,6 +391,10 @@ enum ctx_device {
 	YUNSILICON_ANDES	= 35,
 	YUNSILICON_DIAMOND	= 36,
 	YUNSILICON_DIAMOND_NEXT	= 37,
+	NBL_LEONIS		= 38,
+	NBL_DRACO		= 39,
+	NBL_DF200		= 40,
+	NBL_RNIC400		= 41,
 };
 
 /* Units for rate limiter */
