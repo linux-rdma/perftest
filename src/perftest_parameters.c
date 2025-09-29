@@ -321,7 +321,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("  -D, --duration ");
 	printf(" Run test for a customized period of seconds. (SYMMETRIC)\n");
 
-	if (verb != WRITE && verb != WRITE_IMM && connection_type != RawEth) {
+	if (verb != WRITE && connection_type != RawEth) {
 		printf("  -e, --events ");
 		printf(" Sleep on CQ events (default poll)\n");
 
@@ -1790,6 +1790,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	if (user_param->use_event == ON && user_param->verb == WRITE) {
+		printf(RESULT_LINE);
+		fprintf(stderr," Events feature not available on WRITE verb\n");
+		exit(1);
+	}
+
 	if ((user_param->use_srq && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex == ON)) || user_param->use_xrc)
 		user_param->srq_exists = 1;
 
@@ -2949,12 +2955,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  return FAILURE;
 				  }
 				  break;
-			case 'e': user_param->use_event = ON;
-				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
-					  fprintf(stderr," Events feature not available on WRITE verb\n");
-					  free(duplicates_checker);
-					  return FAILURE;
-				  }
+			case 'e':
+				  user_param->use_event = ON;
 				  break;
 			case 'X':
 				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
