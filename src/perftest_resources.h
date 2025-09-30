@@ -113,6 +113,16 @@
 	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
 	  fprintf(stderr," rcnt=%lu\n",rcnt); }
 
+#define NOTIFY_COMP_FLAGS_MISMATCH_SEND(wc,flag,scnt,ccnt)                     									\
+	{ fprintf(stderr," Completion with wc_flags mismatch at client\n");      									\
+	  fprintf(stderr," Failed wr_id %d flag: 0x%x (should contain 0x%x)\n", (int)wc.wr_id, wc.wc_flags, flag);	\
+	  fprintf(stderr, "scnt=%lu, ccnt=%lu\n",scnt, ccnt); }
+
+#define NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc,flag,rcnt)                     										\
+	{ fprintf(stderr," Completion with wc_flags mismatch at server\n");      									\
+	  fprintf(stderr," Failed wr_id %d flag: 0x%x (should contain 0x%x)\n", (int)wc.wr_id, wc.wc_flags, flag);	\
+	  fprintf(stderr," rcnt=%lu\n",rcnt); }
+
 /* Macro to determine packet size in case of UD. The UD addition is for the GRH . */
 #define SIZE(type,size,valid) ((type == UD && valid) ? (size + UD_ADDITION) : (size))
 
