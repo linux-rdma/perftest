@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2023-2025 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #include <stdio.h>
@@ -96,11 +96,7 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	printf("creating CUDA Ctx\n");
 
 	/* Create context */
-#if CUDA_VER >= 13000
-	error = p_cuCtxCreate(&ctx->cuContext, NULL, CU_CTX_MAP_HOST, ctx->cuDevice);
-#else
 	error = p_cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
-#endif
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxCreate() error=%d\n", error);
 		return FAILURE;

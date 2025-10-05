@@ -10,11 +10,7 @@ CUresult (*p_cuDeviceGetCount)(int *) = NULL;
 CUresult (*p_cuDeviceGet)(CUdevice *, int) = NULL;
 CUresult (*p_cuDeviceGetAttribute)(int *, CUdevice_attribute, CUdevice) = NULL;
 CUresult (*p_cuDeviceGetName)(char *, int, CUdevice) = NULL;
-#if CUDA_VER >= 13000
-CUresult (*p_cuCtxCreate)(CUcontext *, CUctxCreateParams *, unsigned int, CUdevice) = NULL;
-#else
 CUresult (*p_cuCtxCreate)(CUcontext *, unsigned int, CUdevice) = NULL;
-#endif
 CUresult (*p_cuDevicePrimaryCtxRetain)(CUcontext *, CUdevice) = NULL;
 CUresult (*p_cuCtxSetCurrent)(CUcontext) = NULL;
 CUresult (*p_cuCtxDestroy)(CUcontext) = NULL;
