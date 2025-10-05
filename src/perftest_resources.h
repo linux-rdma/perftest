@@ -105,12 +105,12 @@
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
-	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
+	  fprintf(stderr," Failed status %d: qp_num %d wr_id %d syndrom 0x%x\n",wc.status,(int) wc.qp_num,(int) wc.wr_id,wc.vendor_err);	\
 	  fprintf(stderr, "scnt=%lu, ccnt=%lu\n",scnt, ccnt); }
 
 #define NOTIFY_COMP_ERROR_RECV(wc,rcnt)                     											    \
 	{ fprintf(stderr," Completion with error at server\n");      											\
-	  fprintf(stderr," Failed status %d: wr_id %d syndrom 0x%x\n",wc.status,(int) wc.wr_id,wc.vendor_err);	\
+	  fprintf(stderr," Failed status %d: qp_num %d wr_id %d syndrom 0x%x\n",wc.status,(int) wc.qp_num,(int) wc.wr_id,wc.vendor_err);	\
 	  fprintf(stderr," rcnt=%lu\n",rcnt); }
 
 /* Macro to determine packet size in case of UD. The UD addition is for the GRH . */
@@ -151,6 +151,35 @@
 		typeof(b) _b = (b); \
 		_a < _b ? _a : _b; \
 	})
+
+/*
+ * Unique WR ID is of the following format:
+ * |7        6|5        4|3               0|
+ * +----------+----------+-----------------+
+ * | Reserved | QP Index |    WR Index     |
+ * +----------+----------+-----------------+
+ * WR Index: Index of WR in perftest wr arrays.
+ * QP Index: Perftest QP index (not QP num) on which the WR is sent or received.
+ */
+#define WR_INDEX_OFFSET		0
+#define WR_INDEX_MASK		0xFFFFFFFF
+#define WR_ID_QP_INDEX_OFFSET	32
+#define WR_ID_QP_INDEX_MASK	0xFFFF
+
+static inline uint32_t get_wr_index(uint64_t wr_id)
+{
+	return wr_id & WR_INDEX_MASK;
+}
+
+static inline uint16_t get_wr_id_qp_index(uint64_t wr_id)
+{
+	return (wr_id >> WR_ID_QP_INDEX_OFFSET) & WR_ID_QP_INDEX_MASK;
+}
+
+static inline uint64_t build_wr_id(uint32_t wr_index, uint16_t qp_index)
+{
+	return ((uint64_t)wr_index) | ((uint64_t)qp_index << WR_ID_QP_INDEX_OFFSET);
+}
 
 /******************************************************************************
  * Perftest resources Structures and data types.
