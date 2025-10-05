@@ -2162,6 +2162,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 0x1610 : dev_fname = NBL_RNIC400; break; /* RNIC400 */
 			default     : dev_fname = NBL_LEONIS;
 		}
+	} else if (attr.vendor_id == 0x1dd8) {
+		dev_fname = PENSANDO_ALL;
 	} else {
 
 		//coverity[uninit_use]
