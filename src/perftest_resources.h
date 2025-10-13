@@ -72,6 +72,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <string.h>
+#include <errno.h>
 #include "perftest_parameters.h"
 
 #ifdef HAVE_CUDA
@@ -950,7 +952,8 @@ static __inline int ctx_notify_send_recv_events(struct pingpong_context *ctx)
 	if (select(MAX(ctx->recv_channel->fd,
 		       ctx->send_channel->fd) + 1,
 		   &rfds, NULL, NULL, NULL) == -1) {
-		fprintf(stderr, "Failed to get completion events\n");
+		fprintf(stderr, "Failed to get completion events: %s\n",
+			strerror(errno));
 		return FAILURE;
 	}
 
