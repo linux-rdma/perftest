@@ -113,6 +113,7 @@
 #define DEF_CQ_MOD    (100)
 #define DEF_SIZE_ATOMIC (8)
 #define DEF_QKEY      0x11111111
+#define DEF_IMM       (42)
 #define DEF_DURATION  (5)
 #define	DEF_MARGIN    (2)
 #define DEF_INIT_MARGIN (-1)
@@ -672,6 +673,7 @@ struct perftest_parameters {
 	char				*source_ip;
 	int 				has_source_ip;
 	int 			ah_allocated;
+	int 				send_with_imm;
 	int				use_write_with_imm;
 	int				use_unsolicited_write;
 	int				use_ddp;

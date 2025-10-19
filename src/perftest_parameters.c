@@ -618,6 +618,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds (SYMMETRIC)\n");
+
+		printf("      --send_with_imm ");
+		printf(" Use send with immediate\n");
 	}
 
 	if (connection_type != RawEth) {
@@ -997,6 +1000,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->disable_pcir		= 0;
 	user_param->source_ip		= NULL;
 	user_param->has_source_ip	= 0;
+	user_param->send_with_imm	= 0;
 	user_param->use_write_with_imm	= 0;
 	user_param->use_unsolicited_write = 0;
 	user_param->congest_type	= OFF;
@@ -2606,6 +2610,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
 	static int payload_flag = 0;
+	static int send_with_imm_flag = 0;
 	static int use_write_with_imm_flag = 0;
 	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 	static int unsolicited_write_flag = 0;
@@ -2761,6 +2766,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
+			{ .name = "send_with_imm",	.has_arg = 0, .flag = &send_with_imm_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
 			{ .name = "ipv6-addr",		.has_arg = 0, .flag = &ipv6_addr_flag, .val = 1},
 			#ifdef HAVE_IPV6
@@ -3677,6 +3683,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (disable_pcir_flag) {
 		user_param->disable_pcir = 1;
+	}
+
+	if (send_with_imm_flag) {
+		user_param->send_with_imm = 1;
 	}
 
 	if (report_both_flag) {

@@ -413,6 +413,9 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 		case IBV_WR_SEND:
 			ibv_wr_send(ctx->qpx[index]);
 			break;
+		case IBV_WR_SEND_WITH_IMM:
+			ibv_wr_send_imm(ctx->qpx[index], wr->imm_data);
+			break;
 		case IBV_WR_RDMA_WRITE:
 			ibv_wr_rdma_write(
 				ctx->qpx[index],
@@ -657,6 +660,18 @@ static int new_post_send_inl_ud(struct pingpong_context *ctx, int index,
 	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UD, IBV_WR_SEND, UD, 0);
 }
 
+static int new_post_send_sge_ud_imm(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_UD, IBV_WR_SEND_WITH_IMM, UD, 0);
+}
+
+static int new_post_send_inl_ud_imm(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_UD, IBV_WR_SEND_WITH_IMM, UD, 0);
+}
+
 static int new_post_send_sge_uc(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
@@ -691,6 +706,18 @@ static int new_post_send_inl_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
 	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD, 0);
+}
+
+static int new_post_send_sge_srd_imm(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND_WITH_IMM, SRD, 0);
+}
+
+static int new_post_send_inl_srd_imm(struct pingpong_context *ctx, int index,
+	struct perftest_parameters *user_param)
+{
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND_WITH_IMM, SRD, 0);
 }
 
 static int new_post_read_sge_srd(struct pingpong_context *ctx, int index,
@@ -2693,6 +2720,8 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	}
 	else {
 		opcode = opcode_verbs_array[user_param->verb];
+		if (user_param->send_with_imm)
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_SEND_WITH_IMM;
 		if(0);
 		else if (opcode == IBV_WR_SEND)
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_SEND;
@@ -3294,10 +3323,18 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 		switch (user_param->verb) {
 			case SEND:
 				if (use_inl) {
-					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_ud;
+					if (user_param->send_with_imm) {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_ud_imm;
+					} else {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_ud;
+					}
 				}
 				else {
-					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_ud;
+					if (user_param->send_with_imm) {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_ud_imm;
+					} else {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_ud;
+					}
 				}
 				break;
 			default:
@@ -3365,10 +3402,18 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 		switch (user_param->verb) {
 			case SEND:
 				if (use_inl) {
-					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_srd;
+					if (user_param->send_with_imm) {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_srd_imm;
+					} else {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_srd;
+					}
 				}
 				else {
-					ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_srd;
+					if (user_param->send_with_imm) {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_srd_imm;
+					} else {
+						ctx->new_post_send_work_request_func_pointer = &new_post_send_sge_srd;
+					}
 				}
 				break;
 			case READ:
@@ -3459,6 +3504,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			ctx->wr[i*user_param->post_list + j].sg_list = &ctx->sge_list[i*user_param->post_list + j];
 			ctx->wr[i*user_param->post_list + j].num_sge = MAX_SEND_SGE;
+			ctx->wr[i*user_param->post_list + j].imm_data = htobe32(DEF_IMM);
 			ctx->wr[i*user_param->post_list + j].wr_id   = build_wr_id(i * user_param->post_list + j, i);
 
 			if (j == (user_param->post_list - 1)) {
@@ -3476,7 +3522,9 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			if (user_param->verb == ATOMIC) {
 				ctx->wr[i*user_param->post_list + j].opcode = opcode_atomic_array[user_param->atomicType];
 			}
-			else {
+			else if (user_param->send_with_imm) {
+				ctx->wr[i*user_param->post_list + j].opcode = IBV_WR_SEND_WITH_IMM;
+			} else {
 				ctx->wr[i*user_param->post_list + j].opcode = opcode_verbs_array[user_param->verb];
 			}
 			if (user_param->verb == WRITE || user_param->verb == WRITE_IMM || user_param->verb == READ) {
@@ -4186,6 +4234,19 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						return_value = FAILURE;
 						goto cleaning;
 					}
+
+					if (user_param->send_with_imm) {
+						if ((wc[i].wc_flags & IBV_WC_WITH_IMM) == 0) {
+							fprintf(stderr, "No immediate data.\n");
+							return_value = FAILURE;
+							goto cleaning;
+						} else if (be32toh(wc[i].imm_data) != DEF_IMM) {
+							fprintf(stderr, "Bad immediate data value[%u] expected[%u].\n", be32toh(wc[i].imm_data), DEF_IMM);
+							return_value = FAILURE;
+							goto cleaning;
+						}
+					}
+
 					rcnt_for_qp[qp_index]++;
 					rcnt++;
 					unused_recv_for_qp[qp_index]++;
