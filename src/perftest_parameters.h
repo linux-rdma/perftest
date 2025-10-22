@@ -674,8 +674,8 @@ struct perftest_parameters {
 	int 			ah_allocated;
 	int				use_write_with_imm;
 	int				use_unsolicited_write;
-	int				use_ddp;
-	int				no_ddp;
+	int				use_enhanced_reorder;
+	int				no_enhanced_reorder;
 	int				connectionless;
 	uint16_t			cqe_poll;
 	int				use_cqe_poll;

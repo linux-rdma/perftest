@@ -2766,7 +2766,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			// OOO_RECV_WRS is not supported by non-mlnx devices
 			is_mlnx_device = get_device_vendor(ctx->context) == 0x02c9;
 
-			if (!user_param->no_ddp && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
+			if (!user_param->no_enhanced_reorder && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
 				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
 				int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
@@ -2783,7 +2783,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 						fprintf(stderr, "RX Depth=%d  must not exceed the maximal OOO receive WR's\n", user_param->rx_depth);
 						return NULL;
 						}
-					user_param->use_ddp = ON;
+					user_param->use_enhanced_reorder = ON;
 					attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
 					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
 				}
