@@ -396,6 +396,7 @@ enum ctx_device {
 	NBL_DF200		= 40,
 	NBL_RNIC400		= 41,
 	PENSANDO_ALL		= 42,
+	CONNECTX10		= 43,
 };
 
 /* Units for rate limiter */
