@@ -2028,7 +2028,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 					return FAILURE;
 				}
 			}
-		} else if (user_param->verb == READ || user_param->verb == WRITE) {
+		} else if (user_param->verb == READ || user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 #ifdef HAVE_SRD
 			struct efadv_device_attr efa_device_attr = {0};
 
@@ -2047,7 +2047,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 				fprintf(stderr, "SRD connection not possible in READ verb\n");
 				exit(1);
 #endif
-			} else if (user_param->verb == WRITE) {
+			} else if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 #ifdef HAVE_SRD_WITH_RDMA_WRITE
 				if (!(efa_device_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE)) {
 					fprintf(stderr, "Write verb is not supported with this EFA device\n");
