@@ -684,6 +684,7 @@ struct perftest_parameters {
 	int				cpu_id;
 	int				processing_hints;
 	int				dynamic_cqe_poll;
+	int				sig_offload;
 };
 
 struct report_options {

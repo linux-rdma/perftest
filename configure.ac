@@ -202,6 +202,14 @@ if [test $HAVE_AES_XTS = yes] && [test $HAVE_MLX5DV = yes];  then
             AC_DEFINE([HAVE_AES_XTS], [1], [Have AES XTS support])
 fi
 
+AC_TRY_LINK([
+#include <infiniband/mlx5dv.h>],
+        [int x = MLX5DV_CONTEXT_MASK_SIGNATURE_OFFLOAD;],[HAVE_SIG_OFFLOAD=yes], [HAVE_SIG_OFFLOAD=no])
+AM_CONDITIONAL([HAVE_SIG_OFFLOAD],[test "x$HAVE_SIG_OFFLOAD" = "xyes"])
+if [test $HAVE_SIG_OFFLOAD = yes] && [test $HAVE_MLX5DV = yes];  then
+            AC_DEFINE([HAVE_SIG_OFFLOAD], [1], [Have signutre offload support])
+fi
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
         [int c = IBV_GID_TYPE_ROCE_V1;],[HAVE_GID_TYPE_DECLARED=yes], [HAVE_GID_TYPE_DECLARED=no])
 AM_CONDITIONAL([HAVE_GID_TYPE_DECLARED],[test "x$HAVE_GID_TYPE_DECLARED" = "xyes"])

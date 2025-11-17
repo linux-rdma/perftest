@@ -102,6 +102,8 @@
 #define CLIENT_FD "/tmp/xrc_domain_client"
 #endif
 
+/* Vendors IDs */
+#define MLNX_VENDOR_ID 0x02c9
 
 #define NOTIFY_COMP_ERROR_SEND(wc,scnt,ccnt)                     											\
 	{ fprintf(stderr," Completion with error at client\n");      											\
@@ -233,8 +235,11 @@ struct pingpong_context {
 	struct rdma_cm_id			*cm_id;
 	struct ibv_context			*context;
 	#ifdef HAVE_AES_XTS
-	struct mlx5dv_mkey			**mkey;
 	struct mlx5dv_dek			**dek;
+	#endif
+	#ifdef HAVE_SIG_OFFLOAD
+	struct mlx5dv_sig_block_domain *domain;
+	struct mlx5dv_sig_t10dif *t10dif_sig;
 	#endif
 	struct ibv_comp_channel			*recv_channel;
 	struct ibv_comp_channel			*send_channel;
@@ -254,6 +259,7 @@ struct pingpong_context {
 	struct ibv_qp_ex			**qpx;
 	#ifdef HAVE_MLX5DV
 	struct mlx5dv_qp_ex			**dv_qp;
+	struct mlx5dv_mkey			**mkey;
 	#endif
 	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
 		struct perftest_parameters *user_param);

@@ -311,6 +311,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("	  --credentials_path path to the credentials file\n");
 		printf("	  --data_enc_key_app_path path to the data encryption key app\n");
 		#endif
+		#ifdef HAVE_SIG_OFFLOAD
+		printf("	  --sig_offload Enable T10-DIF signature offload (data integrity) feature\n");
+		#endif
 	}
 
 	if (tst == LAT) {
@@ -1378,6 +1381,22 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 #endif
 
+#ifdef HAVE_SIG_OFFLOAD
+	if (user_param->sig_offload) {
+		if (user_param->connection_type != RC) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Signature offload supported only on RC\n");
+			exit(1);
+		}
+
+		if (user_param->size % 512 != 0) {
+			printf(RESULT_LINE);
+			printf(" Signature offload requires message size to be a multiple of 512 bytes.\n");
+			exit (1);
+		}
+	}
+#endif
+
 	if (user_param->dualport == ON) {
 
 		user_param->num_of_qps *= 2;
@@ -1735,6 +1754,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		if((int)user_param->size <= user_param->inline_size) {
 			printf(RESULT_LINE);
 			fprintf(stderr," aes_xts doesn't support Inline messages\n");
+			exit(1);
+		}
+		if(user_param->sig_offload) {
+			printf(RESULT_LINE);
+			fprintf(stderr," aes_xts cannot be used with signature offload\n");
 			exit(1);
 		}
 		#else
@@ -2645,6 +2669,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int processing_hints_flag = 0;
 	#endif
 
+	#ifdef HAVE_SIG_OFFLOAD
+	static int sig_offload_flag = 0;
+	#endif
+
 	char *server_ip = NULL;
 	char *client_ip = NULL;
 	char *local_ip = NULL;
@@ -2826,7 +2854,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "tph_mem",		.has_arg = 1, .flag = &tph_mem_flag, .val = 1},
 			{ .name = "cpu_id",		.has_arg = 1, .flag = &cpu_id_flag, .val = 1},
 			{ .name = "ph",		.has_arg = 1, .flag = &processing_hints_flag, .val = 1},
+			#endif
 			{ .name = "disable_dynamic_polling", .has_arg = 0, .flag = &disable_dynamic_polling_flag, .val = 1},
+			#ifdef HAVE_SIG_OFFLOAD
+			{.name = "sig_offload", .has_arg = 0, .flag = &sig_offload_flag, .val = 1 },
 			#endif
 			{0}
 		};
@@ -3616,6 +3647,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (processing_hints_flag) {
 					CHECK_VALUE_IN_RANGE(user_param->processing_hints,int,0,3,"Processing Hints",not_int_ptr);
 					processing_hints_flag = 0;
+				}
+				#endif
+				#ifdef HAVE_SIG_OFFLOAD
+				if (sig_offload_flag) {
+					user_param->sig_offload = 1;
 				}
 				#endif
 				break;

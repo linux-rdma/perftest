@@ -223,6 +223,24 @@ int set_valid_cred(char *dst, struct perftest_parameters *user_param)
 }
 #endif
 
+#ifdef HAVE_SIG_OFFLOAD
+static void set_sig_domain(struct pingpong_context *ctx){
+	memset(ctx->t10dif_sig, 0, sizeof(struct mlx5dv_sig_t10dif));
+	ctx->t10dif_sig->bg_type = MLX5DV_SIG_T10DIF_CRC;
+	ctx->t10dif_sig->bg = 0xffff;
+	ctx->t10dif_sig->app_tag = 0x5678;
+	ctx->t10dif_sig->ref_tag = 0xabcdef90;
+	ctx->t10dif_sig->flags = MLX5DV_SIG_T10DIF_FLAG_REF_REMAP |
+		     MLX5DV_SIG_T10DIF_FLAG_APP_ESCAPE;
+
+	memset(ctx->domain, 0, sizeof(struct mlx5dv_sig_block_domain));
+	ctx->domain->sig.dif = ctx->t10dif_sig;
+	ctx->domain->sig_type = MLX5DV_SIG_TYPE_T10DIF;
+	ctx->domain->block_size = MLX5DV_BLOCK_SIZE_512;
+}
+
+#endif
+
 static uint32_t perftest_rand(uint32_t *state) {
     uint32_t x = *state;
     *state = x * 747796405 + 2891336453;
@@ -400,7 +418,42 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 	}
 #endif
 
+#ifdef HAVE_SIG_OFFLOAD
+	if (user_param->sig_offload){
+		struct mlx5dv_sig_block_attr sig_attr = {
+			.mem = NULL,
+			.wire = ctx->domain,
+			.check_mask = MLX5DV_SIG_MASK_T10DIF_GUARD |
+						MLX5DV_SIG_MASK_T10DIF_APPTAG |
+						MLX5DV_SIG_MASK_T10DIF_REFTAG
+		};
 
+		struct mlx5dv_mkey_conf_attr conf_attr = {};
+		uint32_t access_flags = IBV_ACCESS_LOCAL_WRITE |
+					IBV_ACCESS_REMOTE_READ |
+					IBV_ACCESS_REMOTE_WRITE;
+		struct ibv_sge sgl;
+
+		ibv_wr_start(ctx->qpx[index]);
+		ctx->qpx[index]->wr_flags = IBV_SEND_INLINE;
+
+		mlx5dv_wr_mkey_configure(ctx->dv_qp[index], ctx->mkey[index], 3, &conf_attr);
+		mlx5dv_wr_set_mkey_access_flags(ctx->dv_qp[index], access_flags);
+
+		sgl.addr = (uintptr_t)ctx->mr[index]->addr;
+		sgl.lkey = ctx->mr[index]->lkey;
+		sgl.length = user_param->buff_size;
+
+		mlx5dv_wr_set_mkey_layout_list(ctx->dv_qp[index], 1, &sgl);
+
+		mlx5dv_wr_set_mkey_sig_block(ctx->dv_qp[index], &sig_attr);
+
+		if(ibv_wr_complete(ctx->qpx[index])) {
+			fprintf(stderr, "MKEY T10DIF configuration failed: ibv_wr_complete failed.\n");
+			return -1;
+		}
+	}
+#endif
 
 	ibv_wr_start(ctx->qpx[index]);
 	while (wr)
@@ -1119,6 +1172,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	ALLOC(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
 	#ifdef HAVE_MLX5DV
 	ALLOC(ctx->dv_qp, struct mlx5dv_qp_ex*, user_param->num_of_qps);
+	ALLOC(ctx->mkey, struct mlx5dv_mkey*, user_param->num_of_qps);
 	#endif
 	ALLOC(ctx->r_dctn, uint32_t, user_param->num_of_qps);
 	#ifdef HAVE_DCS
@@ -1127,7 +1181,10 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	#endif
 	#ifdef HAVE_AES_XTS
 	ALLOC(ctx->dek, struct mlx5dv_dek*, user_param->data_enc_keys_number);
-	ALLOC(ctx->mkey, struct mlx5dv_mkey*, user_param->num_of_qps);
+	#endif
+	#ifdef HAVE_SIG_OFFLOAD
+	ALLOC(ctx->domain, struct mlx5dv_sig_block_domain, 1);
+	ALLOC(ctx->t10dif_sig, struct mlx5dv_sig_t10dif, 1);
 	#endif
 	#endif
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
@@ -1226,6 +1283,8 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	#ifdef HAVE_MLX5DV
 	if (ctx->dv_qp != NULL)
 		free(ctx->dv_qp);
+	if (ctx->mkey != NULL)
+		free(ctx->mkey);
 	#endif
 	if (ctx->r_dctn != NULL)
 		free(ctx->r_dctn);
@@ -1236,8 +1295,12 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	#ifdef HAVE_AES_XTS
 	if (ctx->dek != NULL)
 		free(ctx->dek);
-	if (ctx->mkey != NULL)
-		free(ctx->mkey);
+	#endif
+	#ifdef HAVE_SIG_OFFLOAD
+	if (ctx->domain != NULL)
+		free(ctx->domain);
+	if (ctx->t10dif_sig != NULL)
+		free(ctx->t10dif_sig);
 	#endif
 	#endif
 	if (ctx->mr != NULL)
@@ -1420,6 +1483,15 @@ int destroy_ctx(struct pingpong_context *ctx,
 				fprintf(stderr, "Failed to destroy data encryption key.\n");
 		}
 
+		for(i = 0; i < user_param->num_of_qps; i++) {
+			if (mlx5dv_destroy_mkey(ctx->mkey[i]))
+				fprintf(stderr, "Failed to destroy MKey.\n");
+		}
+	}
+	#endif
+
+	#ifdef HAVE_SIG_OFFLOAD
+	if(user_param->sig_offload){
 		for(i = 0; i < user_param->num_of_qps; i++) {
 			if (mlx5dv_destroy_mkey(ctx->mkey[i]))
 				fprintf(stderr, "Failed to destroy MKey.\n");
@@ -1653,6 +1725,32 @@ static uint32_t get_device_vendor(struct ibv_context *context)
 /******************************************************************************
  *
  ******************************************************************************/
+static int is_sig_offload_supported(struct ibv_context *ibv_ctx)
+{
+	uint32_t is_mlnx_device = get_device_vendor(ibv_ctx) == MLNX_VENDOR_ID;
+
+	if (!is_mlnx_device)
+		return 0;
+
+	struct mlx5dv_context ctx = {
+		.comp_mask = MLX5DV_CONTEXT_MASK_SIGNATURE_OFFLOAD,
+	};
+
+	if (mlx5dv_query_device(ibv_ctx, &ctx)) {
+		fprintf(stderr, "Failed to query device capabilities\n");
+		return 0;
+	}
+
+	if (!(ctx.sig_caps.t10dif_bg & MLX5DV_SIG_T10DIF_BG_CAP_CRC))
+		return 0;
+
+	return 1;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+
 int create_reg_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
 		   int tx_buffer_depth, int need_recv_cq)
@@ -2233,7 +2331,7 @@ static int verify_ooo_settings(struct pingpong_context *ctx,
 
 void check_bf_support(struct pingpong_context *ctx)
 {
-	if (get_device_vendor(ctx->context) != 0x02c9)
+	if (get_device_vendor(ctx->context) != MLNX_VENDOR_ID)
 		return;
 
 	#ifdef HAVE_MLX5DV_BF_FLAG
@@ -2257,7 +2355,7 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	int i;
 	int dct_only = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
 	int qp_index = 0, dereg_counter;
-	#ifdef HAVE_AES_XTS
+	#ifdef HAVE_MLX5DV
 	int mkey_index = 0, dek_index = 0;
 	#endif
 
@@ -2364,6 +2462,34 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 			mkey_index++;
 		}
+	}
+	#endif
+
+	#ifdef HAVE_SIG_OFFLOAD
+	if(user_param->sig_offload){
+		struct mlx5dv_mkey_init_attr mkey_init_attr = {};
+		mkey_init_attr.pd = ctx->pd;
+		mkey_init_attr.max_entries = 1;
+		mkey_init_attr.create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT |
+					MLX5DV_MKEY_INIT_ATTR_FLAGS_BLOCK_SIGNATURE;
+
+		if (!is_sig_offload_supported(ctx->context)) {
+			fprintf(stderr, "T10DIF signature offload is not supported by the device\n");
+			goto mkey;
+		}
+
+		for(i = 0; i < user_param->num_of_qps; i++) {
+			ctx->mkey[i] = mlx5dv_create_mkey(&mkey_init_attr);
+
+			if(!ctx->mkey[i]) {
+				fprintf(stderr, "Failed to create mkey\n");
+				goto mkey;
+			}
+
+			mkey_index++;
+		}
+
+		set_sig_domain(ctx);
 	}
 	#endif
 
@@ -2513,12 +2639,19 @@ mkey:
 	if(user_param->aes_xts)
 		for (i = 0; i < mkey_index; i++)
 			mlx5dv_destroy_mkey(ctx->mkey[i]);
+	#endif
+	#ifdef HAVE_SIG_OFFLOAD
+	if(user_param->sig_offload)
+		for (i = 0; i < mkey_index; i++)
+			mlx5dv_destroy_mkey(ctx->mkey[i]);
+	#endif
 
+#ifdef HAVE_AES_XTS
 dek:
 	if(user_param->aes_xts)
 		for (i = 0; i < dek_index; i++)
 			mlx5dv_dek_destroy(ctx->dek[i]);
-	#endif
+#endif
 
 #ifdef HAVE_TD_API
 	if (user_param->no_lock)
@@ -2582,6 +2715,11 @@ int create_reg_qp_main(struct pingpong_context *ctx,
 		}
 		#ifdef HAVE_AES_XTS
 		if (user_param->aes_xts){
+			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
+		}
+		#endif
+		#ifdef HAVE_SIG_OFFLOAD
+		if (user_param->sig_offload) {
 			ctx->dv_qp[i] = mlx5dv_qp_ex_from_ibv_qp_ex(ctx->qpx[i]);
 		}
 		#endif
@@ -2764,7 +2902,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			#ifdef HAVE_MLX5DV
 			#ifdef HAVE_OOO_RECV_WRS
 			// OOO_RECV_WRS is not supported by non-mlnx devices
-			is_mlnx_device = get_device_vendor(ctx->context) == 0x02c9;
+			is_mlnx_device = get_device_vendor(ctx->context) == MLNX_VENDOR_ID;
 
 			if (!user_param->no_enhanced_reorder && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
 				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
@@ -2819,6 +2957,17 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			else if (user_param->aes_xts) {
 				attr_ex.cap.max_send_wr = user_param->tx_depth * 2;
 				attr_ex.cap.max_inline_data = AES_XTS_INLINE;
+				attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_SEND_OPS_FLAGS;
+				attr_dv.send_ops_flags = MLX5DV_QP_EX_WITH_MKEY_CONFIGURE;
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+				qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+			}
+			#endif // HAVE_AES_XTS
+			#ifdef HAVE_SIG_OFFLOAD
+			else if (user_param->sig_offload) {
+				/* 1 RDMA + 1 UMR + 1 SET_PSV */
+				attr_ex.cap.max_send_wr = user_param->tx_depth * 3;
+				attr_ex.cap.max_inline_data = 512;
 				attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_SEND_OPS_FLAGS;
 				attr_dv.send_ops_flags = MLX5DV_QP_EX_WITH_MKEY_CONFIGURE;
 				attr_dv.create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
