@@ -161,7 +161,7 @@ static int post_one_recv_wqe(struct pingpong_context *ctx)
 	struct ibv_sge list;
 
 	list.addr   = (uintptr_t)ctx->buf[0];
-	list.length = sizeof(struct pingpong_dest);
+	list.length = MAX(sizeof(struct pingpong_dest), sizeof(struct perftest_parameters_negotiate));
 	list.lkey   = ctx->mr[0]->lkey;
 
 	wr.next = NULL;
@@ -950,6 +950,106 @@ int set_up_connection(struct pingpong_context *ctx,
 		}
 	}
 	return 0;
+}
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+
+int negotiate_params(struct pingpong_context *ctx,
+		struct perftest_comm *comm,
+		struct perftest_parameters *user_param)
+{
+	/* Fill local parameters */
+	struct perftest_parameters_negotiate local_params = {
+		.test_method = hton_int(user_param->test_method),
+		.connection_type = hton_int(user_param->connection_type),
+		.verb = hton_int(user_param->verb),
+		.tst = hton_int(user_param->tst),
+		.atomicType = hton_int(user_param->atomicType),
+		.test_type = hton_int(user_param->test_type),
+		.report_fmt = hton_int(user_param->report_fmt),
+		.size = hton_64(user_param->size),
+		.iters = hton_64(user_param->iters),
+		.aes_xts = hton_int((int)user_param->aes_xts),
+		.num_of_qps = hton_int(user_param->num_of_qps),
+		.duration = hton_int(user_param->duration),
+		.use_rdma_cm = hton_int(user_param->use_rdma_cm),
+		.use_write_with_imm = hton_int(user_param->use_write_with_imm),
+		.no_enhanced_reorder = hton_int(user_param->no_enhanced_reorder),
+		.sig_offload = hton_int(user_param->sig_offload),
+	};
+
+	if (ibv_query_device(ctx->context, &local_params.attr)) {
+		fprintf(stderr, " Failed to query device attributes\n");
+		return FAILURE;
+	}
+
+	#ifdef HAVE_MLX5DV
+	if (local_params.attr.vendor_id == MLNX_VENDOR_ID) {
+		struct mlx5dv_context ctx_dv;
+		#ifdef HAVE_OOO_RECV_WRS
+		ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
+		#endif
+
+		if (mlx5dv_query_device(ctx->context, &ctx_dv)){
+			fprintf(stderr, " Failed to query device capabilities\n");
+			return FAILURE;
+		}
+		local_params.mlx5dv_comp_mask = hton_64(ctx_dv.comp_mask);
+	}
+	#endif
+
+	struct perftest_parameters_negotiate remote_params;
+	/* Exchange parameters */
+	if (ctx_xchg_data(comm, &local_params, &remote_params, sizeof(local_params))) {
+		fprintf(stderr, " Failed to exchange negotiation parameters between server and client\n");
+		return FAILURE;
+	}
+
+	#define COMPARE(func, name, values, type) \
+		{ func, #name, &local_params.name, &remote_params.name, values, type }
+
+	CompareFunction compare_functions[] = {
+	//  COMPARE(compare_func, name, values, type) -> { compare_func, name, local_value, remote_value, return_values, type }
+		COMPARE(compare, test_method, ((char*[]){"RUN_REGULAR", "RUN_ALL", "RUN_INFINITELY"}), INT),
+		COMPARE(compare, connection_type, ((char*[]){"RC", "UC", "UD", "RawEth", "XRC", "DC", "SRD"}), INT),
+		COMPARE(compare, verb, ((char*[]){"SEND", "SEND_IMM", "WRITE", "WRITE_IMM", "READ", "ATOMIC"}), INT),
+		COMPARE(compare, tst, ((char*[]){"LAT", "BW", "LAT_BY_BW", "FS_RATE"}), INT),
+		COMPARE(compare, atomicType, ((char*[]){"CMP_AND_SWAP", "FETCH_AND_ADD"}), INT),
+		COMPARE(compare, test_type, ((char*[]){"ITERATIONS", "DURATION"}), INT),
+		COMPARE(compare, report_fmt, ((char*[]){"GBS", "MBS"}), INT),
+		COMPARE(compare, size, NULL, UINT64),
+		COMPARE(compare, iters, NULL, UINT64),
+		COMPARE(compare, aes_xts, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare, num_of_qps, NULL, INT),
+		COMPARE(compare, duration, NULL, INT),
+		COMPARE(compare, use_rdma_cm, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare, use_write_with_imm, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare, no_enhanced_reorder, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare, sig_offload, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare_ibv_device, attr, NULL, NONE),
+	};
+	#undef COMPARE
+
+	for (int i = 0; i < sizeof(compare_functions)/sizeof(compare_functions[0]); i++) {
+		if (compare_functions[i].compare_func(compare_functions[i].name,
+											  compare_functions[i].local_value,
+											  compare_functions[i].remote_value,
+											  compare_functions[i].return_values,
+											  user_param, compare_functions[i].type) == FAILURE){
+			return FAILURE;
+		}
+	}
+
+	#ifdef HAVE_MLX5DV
+	if (local_params.attr.vendor_id == MLNX_VENDOR_ID) {
+		compare_mlx5dv("mlx5dv_comp_mask", &local_params.mlx5dv_comp_mask, &remote_params.mlx5dv_comp_mask, NULL, user_param, NONE);
+	}
+	#endif
+
+	return SUCCESS;
 }
 
 /******************************************************************************

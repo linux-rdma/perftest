@@ -4845,6 +4845,72 @@ void print_report_fs_rate (struct perftest_parameters *user_param)
 
 	free(delta);
 }
+
+int compare(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type)
+{
+	uint64_t local_value_int, remote_value_int;
+	const char *type_str = (type >= 0 && type <= 2) ? ((char*[]){"INT", "UINT64", "NONE"})[type] : "UNKNOWN";
+
+	switch (type) {
+		case UINT64:
+			local_value_int = ntoh_64(*(uint64_t*)local_value);
+			remote_value_int = ntoh_64(*(uint64_t*)remote_value);
+			break;
+		case INT:
+			local_value_int = ntoh_int(*(int*)local_value);
+			remote_value_int = ntoh_int(*(int*)remote_value);
+			break;
+		default:
+			fprintf(stderr, " Unexpected compare type %s for %s\n", type_str, name);
+			return FAILURE;
+	}
+
+	if (local_value_int == remote_value_int)
+		return SUCCESS;
+
+	if (return_values) {
+		fprintf(stderr, " %s mismatch: local=%s, remote=%s\n", name,
+				return_values[local_value_int], return_values[remote_value_int]);
+	} else {
+		fprintf(stderr, " %s mismatch: local=%lu, remote=%lu\n", name, local_value_int, remote_value_int);
+	}
+
+	return FAILURE;
+}
+
+int compare_ibv_device(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type)
+{
+	struct ibv_device_attr remote_attr = *(struct ibv_device_attr*)remote_value;
+
+	if (user_param->out_reads > remote_attr.max_qp_rd_atom) {  //  0 < user_param->out_reads <= local_attr.max_qp_rd_atom
+		printf(" out_reads is greater than remote max_qp_rd_atom, using remote max_qp_rd_atom\n");
+		user_param->out_reads = remote_attr.max_qp_rd_atom;
+	}
+
+	return SUCCESS;
+}
+
+#ifdef HAVE_MLX5DV
+int compare_mlx5dv(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type)
+{
+	#ifdef HAVE_OOO_RECV_WRS
+	uint64_t local_value_uint64 = ntoh_64(*(uint64_t*)local_value);
+	uint64_t remote_value_uint64 = ntoh_64(*(uint64_t*)remote_value);
+
+	if ( user_param->no_enhanced_reorder != ON &&
+		(local_value_uint64 & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) != (remote_value_uint64 & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS)) {
+		user_param->no_enhanced_reorder = ON;
+		printf(" OOO_RECV_WRS mismatch, disabling enhanced reorder\n");
+	}
+
+	#endif
+	return SUCCESS;
+}
+#endif
+
 /******************************************************************************
  * End
  ******************************************************************************/

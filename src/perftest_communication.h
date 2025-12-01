@@ -44,6 +44,10 @@
 #include <rdma/rdma_cma.h>
 #include "perftest_resources.h"
 
+#if defined(HAVE_MLX5DV)
+#include <infiniband/mlx5dv.h>
+#endif
+
 /* Macro for 64 bit variables to switch to/from net */
 #if BYTE_ORDER == BIG_ENDIAN
 #define ntoh_64(x) (x)
@@ -160,6 +164,24 @@ void dealloc_comm_struct(struct perftest_comm *comm,
 int set_up_connection(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *my_dest);
+
+
+/* negotiate_params .
+ *
+ * Description : Negotiates parameters and capabilities between server and client.
+ *
+ * Parameters :
+ *  ctx - Pingpong context.
+ *  comm - Communication struct.
+ *  user_param - Perftest parameters.
+ *  rem_params - Remote parameters and capabilities.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int negotiate_params(struct pingpong_context *ctx,
+		struct perftest_comm *comm,
+		struct perftest_parameters *user_param);
+
 
 /* establish_connection .
  *
@@ -857,7 +879,6 @@ int rdma_cm_client_connection(struct pingpong_context *ctx,
 int create_rdma_cm_connection(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct perftest_comm *comm,
 		struct pingpong_dest *my_dest, struct pingpong_dest *rem_dest);
-
 
 #endif /* PERFTEST_COMMUNICATION_H */
 

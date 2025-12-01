@@ -272,6 +272,13 @@ int main(int argc, char *argv[])
 		goto free_mem;
 	}
 
+	/* Negotiate parameters. */
+	if (negotiate_params(&ctx, &user_comm, &user_param)) {
+		fprintf(stderr, " Failed to negotiate parameters\n");
+		dealloc_ctx(&ctx, &user_param);
+		goto free_mem;
+	}
+
 	/* Create RDMA CM resources and connect through CM. */
 	if (user_param.work_rdma_cm == ON) {
 		rc = create_rdma_cm_connection(&ctx, &user_param, &user_comm,

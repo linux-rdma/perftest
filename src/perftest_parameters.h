@@ -323,6 +323,8 @@
 	} \
 } while (0)
 
+typedef enum { INT, UINT64, NONE } CompareType;
+
 /* The Verb of the benchmark. */
 typedef enum { SEND, SEND_IMM, WRITE, WRITE_IMM, READ, ATOMIC } VerbType;
 
@@ -708,6 +710,39 @@ struct bw_report_data {
 	int sl;
 };
 
+struct perftest_parameters_negotiate   {
+	enum ctx_test_method 		test_method;
+	int					connection_type;
+	VerbType 			verb;
+	TestType 			tst;
+	AtomicType 			atomicType;
+	TestMethod 			test_type;
+	enum ctx_report_fmt		report_fmt;
+	uint64_t 		size;
+	uint64_t 			iters;
+	int 				aes_xts;
+	int 				num_of_qps;
+	int					duration;
+	int 				use_rdma_cm;
+	int					use_write_with_imm;
+	int					no_enhanced_reorder;
+	int					sig_offload;
+	struct ibv_device_attr attr;
+
+	#ifdef HAVE_MLX5DV
+	uint64_t mlx5dv_comp_mask;
+	#endif
+};
+
+typedef struct {
+	int (*compare_func)(const char *, void*, void*, char**, struct perftest_parameters*, CompareType type);
+	const char *name;
+	void* local_value;
+	void* remote_value;
+	char** return_values;
+	CompareType type;
+} CompareFunction;
+
 struct rate_gbps_string {
 	enum ibv_rate rate_gbps_enum;
 	char* rate_gbps_str;
@@ -910,4 +945,23 @@ int set_eth_mtu(struct perftest_parameters *user_param);
  ******************************************************************************/
 enum ctx_device ib_dev_name(struct ibv_context *context);
 
+/********************************************************************************
+ *
+ *********************************************************************************/
+int compare(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type);
+
+/********************************************************************************
+ *
+ *********************************************************************************/
+int compare_ibv_device(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type);
+
+/********************************************************************************
+ *
+ *********************************************************************************/
+#ifdef HAVE_MLX5DV
+int compare_mlx5dv(const char *name, void* local_value, void* remote_value, char** return_values,
+		struct perftest_parameters* user_param, CompareType type);
+#endif
 #endif /* PERFTEST_RESOURCES_H */
