@@ -206,6 +206,7 @@ AC_TRY_LINK([
 #include <infiniband/mlx5dv.h>],
         [int x = MLX5DV_CONTEXT_MASK_SIGNATURE_OFFLOAD;],[HAVE_SIG_OFFLOAD=yes], [HAVE_SIG_OFFLOAD=no])
 AM_CONDITIONAL([HAVE_SIG_OFFLOAD],[test "x$HAVE_SIG_OFFLOAD" = "xyes"])
+HAVE_SIG_OFFLOAD=no
 if [test $HAVE_SIG_OFFLOAD = yes] && [test $HAVE_MLX5DV = yes];  then
             AC_DEFINE([HAVE_SIG_OFFLOAD], [1], [Have signutre offload support])
 fi

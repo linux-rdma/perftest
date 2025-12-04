@@ -1739,6 +1739,7 @@ static uint32_t get_device_vendor(struct ibv_context *context)
 /******************************************************************************
  *
  ******************************************************************************/
+#ifdef HAVE_SIG_OFFLOAD
 static int is_sig_offload_supported(struct ibv_context *ibv_ctx)
 {
 	uint32_t is_mlnx_device = get_device_vendor(ibv_ctx) == MLNX_VENDOR_ID;
@@ -1760,7 +1761,7 @@ static int is_sig_offload_supported(struct ibv_context *ibv_ctx)
 
 	return 1;
 }
-
+#endif
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1965,7 +1966,7 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 				fprintf(stderr, "Couldn't get data direct sysfs path with error=%d\n", error);
 				if (error == ENODEV)
 					fprintf(stderr, "No data direct support\n");
-				return FAILURE;
+				return NULL;
 			}
 			printf("Using data direct device at /sys%s\n", data_direct_path);
 			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
