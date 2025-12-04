@@ -1182,6 +1182,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		ALLOC(user_param->tcompleted, cycles_t, 1);
 
 	ALLOC(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
+	memset(ctx->qp, 0, user_param->num_of_qps * sizeof (struct ibv_qp*));
 	#ifdef HAVE_IBV_WR_API
 	ALLOC(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
 	#ifdef HAVE_MLX5DV
@@ -1418,6 +1419,22 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	}
 }
 
+void rdma_cm_destroy_master(struct pingpong_context *ctx)
+{
+	if (ctx->cma_master.channel) {
+		rdma_destroy_event_channel(ctx->cma_master.channel);
+		ctx->cma_master.channel = NULL;
+	}
+	if (ctx->cma_master.rai) {
+		rdma_freeaddrinfo(ctx->cma_master.rai);
+		ctx->cma_master.rai = NULL;
+	}
+	if (ctx->cma_master.nodes) {
+		free(ctx->cma_master.nodes);
+		ctx->cma_master.nodes = NULL;
+	}
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -1445,7 +1462,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		rdma_cm_destroy_qps(ctx, user_param);
 	}
 
-	if (user_param->work_rdma_cm == ON)
+	if (user_param->work_rdma_cm == ON && ctx->cm_id)
 		rdma_disconnect(ctx->cm_id);
 
 	/* in dc with bidirectional,
@@ -1464,13 +1481,13 @@ int destroy_ctx(struct pingpong_context *ctx,
 				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
 				(user_param->connection_type == SRD && (user_param->verb == READ || user_param->verb == WRITE || user_param->verb == WRITE_IMM))) {
 
-			if (user_param->ah_allocated == 1 && ibv_destroy_ah(ctx->ah[i])) {
+			if (user_param->ah_allocated == 1 && ctx->ah && ctx->ah[i] && ibv_destroy_ah(ctx->ah[i])) {
 				fprintf(stderr, "Failed to destroy AH\n");
 				test_result = 1;
 			}
 		}
 		if (user_param->work_rdma_cm == OFF) {
-			if (ibv_destroy_qp(ctx->qp[i])) {
+			if (ctx->qp && ctx->qp[i] && ibv_destroy_qp(ctx->qp[i])) {
 				fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
 				test_result = 1;
 			}
@@ -1579,12 +1596,14 @@ int destroy_ctx(struct pingpong_context *ctx,
 		fprintf(stderr, "Failed to deallocate PD - %s\n", strerror(errno));
 		test_result = 1;
 	}
+	ctx->pd = NULL;
 
 	if (ctx->send_channel) {
 		if (ibv_destroy_comp_channel(ctx->send_channel)) {
 			fprintf(stderr, "Failed to close send event channel\n");
 			test_result = 1;
 		}
+		ctx->send_channel = NULL;
 	}
 
 	if (ctx->recv_channel) {
@@ -1592,6 +1611,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 			fprintf(stderr, "Failed to close receive event channel\n");
 			test_result = 1;
 		}
+		ctx->recv_channel = NULL;
 	}
 
 	if (user_param->use_rdma_cm == OFF) {
@@ -1657,6 +1677,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 
 	if (user_param->work_rdma_cm == ON) {
 		rdma_cm_destroy_cma(ctx, user_param);
+		rdma_cm_destroy_master(ctx);
 	}
 
 	if (user_param->counter_ctx) {
@@ -2819,11 +2840,14 @@ pd:
 #endif
 
 	ibv_dealloc_pd(ctx->pd);
+	ctx->pd = NULL;
 
 comp_channel:
 	if (user_param->use_event) {
 		ibv_destroy_comp_channel(ctx->send_channel);
 		ibv_destroy_comp_channel(ctx->recv_channel);
+		ctx->send_channel = NULL;
+		ctx->recv_channel = NULL;
 	}
 
 	return FAILURE;
@@ -6768,10 +6792,10 @@ cleaning:
 *
 ******************************************************************************/
 int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
-	struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+	struct perftest_parameters *user_param, struct rdma_addrinfo *hints, bool retry)
 {
 	int rc = SUCCESS, i = 0;
-	char *error_message;
+	char error_message[ERROR_MSG_SIZE] = "";
 
 	if (user_param->connection_type == UD
 		|| user_param->connection_type == RawEth)
@@ -6779,28 +6803,38 @@ int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 	else
 		hints->ai_port_space = RDMA_PS_TCP;
 
-	ALLOCATE(ctx->cma_master.nodes, struct cma_node, user_param->num_of_qps);
-	if (!ctx->cma_master.nodes) {
-		error_message = "Failed to allocate memory for RDMA CM nodes.";
-		goto error;
+	if(!retry){
+		ALLOCATE(ctx->cma_master.nodes, struct cma_node, user_param->num_of_qps);
+		if (!ctx->cma_master.nodes) {
+			sprintf(error_message, "Failed to allocate memory for RDMA CM nodes.");
+			goto error;
+		}
+
+		memset(ctx->cma_master.nodes, 0,
+			(sizeof *ctx->cma_master.nodes) * user_param->num_of_qps);
 	}
 
-	memset(ctx->cma_master.nodes, 0,
-		(sizeof *ctx->cma_master.nodes) * user_param->num_of_qps);
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (ctx->cma_master.nodes[i].cma_id) {
+			continue;
+		}
 		ctx->cma_master.nodes[i].id = i;
 		if (user_param->machine == CLIENT) {
 			rc = rdma_create_id(ctx->cma_master.channel,
 				&ctx->cma_master.nodes[i].cma_id, NULL, hints->ai_port_space);
 			if (rc) {
-				error_message = "Failed to create RDMA CM ID.";
+				sprintf(error_message, "Failed to create RDMA CM ID on cm_node %d.", i);
 				goto error;
 			}
 		}
 	}
 
 	if (user_param->has_source_ip) {
+		 if (retry && hints->ai_src_addr) {
+			free(hints->ai_src_addr);
+			hints->ai_src_addr = NULL;
+		}
 		if (AF_INET == user_param->ai_family) {
 			struct sockaddr_in *source_addr;
 			source_addr = calloc(1, sizeof(*source_addr));
@@ -6840,12 +6874,15 @@ error:
 	while (--i >= 0) {
 		rc = rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
 		if (rc) {
-			error_message = "Failed to destroy RDMA CM ID.";
+			sprintf(error_message, "Failed to destroy RDMA CM ID for node %d.", i);
 			break;
 		}
 	}
 
-	free(ctx->cma_master.nodes);
+	if (!retry && ctx->cma_master.nodes) {
+		free(ctx->cma_master.nodes);
+		ctx->cma_master.nodes = NULL;
+	}
 	return error_handler(error_message);
 }
 
@@ -6877,20 +6914,28 @@ int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
 		cm_node = &ctx->cma_master.nodes[i];
-		rc = rdma_destroy_id(cm_node->cma_id);
-		if (rc) {
-			sprintf(error_message,
-				"Failed to destroy RDMA CM ID number %d.", i);
-			goto error;
+		if(cm_node && cm_node->cma_id)
+		{
+			if (cm_node->connected) {
+				continue;
+			}
+			rc = rdma_destroy_id(cm_node->cma_id);
+			if (rc) {
+				sprintf(error_message,
+					"Failed to destroy RDMA CM ID number %d.", i);
+				goto error;
+			}
+			cm_node->cma_id = NULL;
 		}
 	}
 
-	rdma_destroy_event_channel(ctx->cma_master.channel);
-	if (ctx->cma_master.rai) {
-		rdma_freeaddrinfo(ctx->cma_master.rai);
+	int connected_count = 0;
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (ctx->cma_master.nodes[i].connected) {
+			connected_count++;
+		}
 	}
-
-	free(ctx->cma_master.nodes);
+	ctx->cma_master.connects_left = user_param->num_of_qps - connected_count;
 	return rc;
 
 error:
