@@ -2416,7 +2416,7 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 	connection_index = ctx->cma_master.connection_index;
 
 	// Initialization of client contexts in case of first connection:
-	if (connection_index == 0) {
+	if ((user_param->use_event && !ctx->send_channel)|| !ctx->pd) {
 		rc = ctx_init(ctx, user_param);
 		if (rc) {
 			error_message = "Failed to initialize RDMA contexts.";
@@ -2425,10 +2425,15 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 	}
 
 	ctx->cm_id = cma_id;
-	rc = create_qp_main(ctx, user_param, connection_index);
-	if (rc) {
-		error_message = "Failed to create QP.";
-		goto error;
+
+	/* Only create qp when it's not available
+	 * (i.e. avoid recreating qp during retry) */
+	if(!ctx->qp[connection_index]) {
+		rc = create_qp_main(ctx, user_param, connection_index);
+		if (rc) {
+			error_message = "Failed to create QP.";
+			goto error;
+		}
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
@@ -2446,6 +2451,10 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 	rc = rdma_connect(cma_id, &conn_param);
 	if (rc) {
 		error_message = "Failed to connect through RDMA CM.";
+		/* IB core will destroy cm id if failed.
+		 * Set cma_id to NULL to avoid double free.*/
+		ctx->cm_id = NULL;
+		ctx->cma_master.nodes[connection_index].cma_id = NULL;
 		goto error;
 	}
 
@@ -2484,7 +2493,7 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 
 	ctx->context = cma_id->verbs;
 	// Initialization of server contexts in case of first connection:
-	if (connection_index == 0) {
+	if ((user_param->use_event && !ctx->send_channel)|| !ctx->pd) {
 		rc = ctx_init(ctx, user_param);
 		if (rc) {
 			error_message = "Failed to initialize RDMA contexts.";
@@ -2493,10 +2502,15 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 	}
 
 	ctx->cm_id = cm_node->cma_id;
-	rc = create_qp_main(ctx, user_param, connection_index);
-	if (rc) {
-		error_message = "Failed to create QP.";
-		goto error_2;
+
+	/* Only create qp when it's not available
+	 * (i.e. avoid recreating qp during retry) */
+	if(!ctx->qp[connection_index]) {
+		rc = create_qp_main(ctx, user_param, connection_index);
+		if (rc) {
+			error_message = "Failed to create QP.";
+			goto error_2;
+		}
 	}
 
 	memset(&conn_param, 0, sizeof(conn_param));
@@ -2819,19 +2833,24 @@ int _rdma_cm_client_connection(struct pingpong_context *ctx,
 	int i, rc;
 	char error_message[ERROR_MSG_SIZE] = "";
 
-	rc = rdma_cm_get_rdma_address(user_param, hints, &ctx->cma_master.rai);
-	if (rc) {
-		sprintf(error_message,
-			"Failed to get RDMA CM address - Error: %s.", gai_strerror(rc));
-		goto error;
+	 if (!ctx->cma_master.rai) {
+		rc = rdma_cm_get_rdma_address(user_param, hints, &ctx->cma_master.rai);
+		if (rc) {
+			sprintf(error_message,
+				"Failed to get RDMA CM address - Error: %s.", gai_strerror(rc));
+			goto error;
+		}
 	}
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
+		 if (ctx->cma_master.nodes[i].connected) {
+			continue;
+		}
 		rc = rdma_resolve_addr(ctx->cma_master.nodes[i].cma_id,
 			ctx->cma_master.rai->ai_src_addr,
 			ctx->cma_master.rai->ai_dst_addr, 2000);
 		if (rc) {
-			sprintf(error_message, "Failed to resolve RDMA CM address.");
+			sprintf(error_message, "Failed to resolve RDMA CM address for cm node %d.", i);
 			rdma_cm_connect_error(ctx);
 			goto error;
 		}
@@ -2859,6 +2878,14 @@ int rdma_cm_client_connection(struct pingpong_context *ctx,
 	char error_message[ERROR_MSG_SIZE] = "";
 
 	for (i = 0; i < max_retries; i++) {
+		if (i > 0) {
+			rc = rdma_cm_allocate_nodes(ctx, user_param, hints, true);
+			if (rc) {
+				sprintf(error_message,
+					"Failed to reallocate RDMA CM nodes during retry.");
+				goto error;
+			}
+		}
 		rc = _rdma_cm_client_connection(ctx, user_param, hints);
 		if (!rc) {
 			return rc;
@@ -2899,7 +2926,7 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 		goto error;
 	}
 
-	rc = rdma_cm_allocate_nodes(ctx, user_param, &hints);
+	rc = rdma_cm_allocate_nodes(ctx, user_param, &hints, false);
 	if (rc) {
 		error_message = "Failed to allocate RDMA CM nodes.";
 		goto destroy_event_channel;
@@ -2921,7 +2948,7 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 	if (rc) {
 		error_message = "Failed to create RDMA CM connection.";
 		free(hints.ai_src_addr);
-		goto destroy_event_channel;
+		goto destroy_rdma_id;
 	}
 
 	rc = ctx_hand_shake(comm, &my_dest[0], &rem_dest[0]);
@@ -2938,14 +2965,37 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 
 destroy_rdma_id:
 	if (user_param->machine == CLIENT) {
-		for (i = 0; i < user_param->num_of_qps; i++)
-			rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
+		for (i = 0; i < user_param->num_of_qps; i++) {
+			struct cma_node * cm_node = &ctx->cma_master.nodes[i];
+			if(cm_node && cm_node->cma_id)
+			{
+				if (ctx->qp && ctx->qp[i]) {
+					ibv_destroy_qp(ctx->qp[i]);
+					ctx->qp[i] = NULL;
+				}
+				if (user_param->ah_allocated && ctx->ah && ctx->ah[i]) {
+					ibv_destroy_ah(ctx->ah[i]);
+					ctx->ah[i] = NULL;
+				}
+				rc = rdma_destroy_id(cm_node->cma_id);
+				if (rc) {
+					sprintf(error_message,
+						"Failed to destroy RDMA CM ID number %d.",
+						i);
+					goto error;
+				}
+				cm_node->cma_id = NULL;
+			}
+		}
 	}
 	free(ctx->cma_master.nodes);
 	free(hints.ai_src_addr);
 
 destroy_event_channel:
-	rdma_destroy_event_channel(ctx->cma_master.channel);
+	if (ctx->cma_master.channel) {
+		rdma_destroy_event_channel(ctx->cma_master.channel);
+		ctx->cma_master.channel = NULL;
+	}
 
 error:
 	return error_handler(error_message);
