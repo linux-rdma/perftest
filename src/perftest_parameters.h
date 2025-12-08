@@ -405,6 +405,9 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 /*Types rate limit*/
 enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RATE_LIMIT};
 
+/*Types data validation*/
+enum data_validation_types {NONE, RANDOM};
+
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
 
@@ -686,6 +689,7 @@ struct perftest_parameters {
 	int				processing_hints;
 	int				dynamic_cqe_poll;
 	int				sig_offload;
+	enum data_validation_types 	data_validation;
 };
 
 struct report_options {
