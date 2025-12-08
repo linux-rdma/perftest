@@ -472,9 +472,13 @@ many different options and modes.
  Use write-with-immediate verb instead of write.
  Write tests only.
 .TP
-.B --data_validation=<random>
+.B --data_validation=<random|serial>
 Perform data validation on transferred packets.
  random: Data is randomized.
+ serial: Data is filled with sequential numeric series. Use --data_start_value=<N> to set starting point.
+.TP
+.B --data_start_value
+Starting value for serial data validation. Set to 0 by default.
 .SS RawEth only options
 .TP
 .B -B, --source_mac
