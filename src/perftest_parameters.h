@@ -406,7 +406,7 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RATE_LIMIT};
 
 /*Types data validation*/
-enum data_validation_types {NONE, RANDOM, SERIAL};
+enum data_validation_types {NONE, RANDOM, SERIAL, PATTERN};
 
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };

@@ -36,7 +36,7 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
-static const char *dataValidationTypesStr[] = {"none","random", "serial"};
+static const char *dataValidationTypesStr[] = {"none","random", "serial", "pattern"};
 #ifdef HAVE_HNSDV
 static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
 #endif
@@ -623,10 +623,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds (SYMMETRIC)\n");
 
-		printf("      --data_validation=<random|serial> ");
+		printf("      --data_validation=<random|serial|pattern> ");
 		printf(" Perform data validation on transferred packets\n");
 		printf("  random: Data is randomized.\n");
 		printf("  serial: Data is filled with sequential numeric series. Use --data_start_value=<N> to set starting point.\n");
+		printf("  pattern: Data is filled using contents of file provided by --payload_file_path=<file>.\n");
 
 		printf("      --data_start_value ");
 		printf(" Starting value for serial data validation. Set to 0 by default.\n");
@@ -2113,7 +2114,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->has_payload_modification) {
+		if (user_param->has_payload_modification && user_param->data_validation != PATTERN) {
 			printf(RESULT_LINE);
 			fprintf(stderr, "Payload modification input is not supported with random or serial data validation.\n");
 			exit(1);
@@ -2122,6 +2123,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		if (user_param->mr_per_qp) {
 			printf(RESULT_LINE);
 			fprintf(stderr, "MR per QP is not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->data_validation == PATTERN && !user_param->has_payload_modification) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is required for pattern data validation.\n");
 			exit(1);
 		}
 	}
@@ -3668,7 +3675,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 
 					if (i == types_array_size) {
-						fprintf(stderr, " Invalid data validation type flag. Please use random or serial.\n");
+						fprintf(stderr, " Invalid data validation type flag. Please use random, serial or pattern.\n");
 						return FAILURE;
 					}
 
