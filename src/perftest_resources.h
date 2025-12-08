@@ -303,6 +303,8 @@ struct pingpong_context {
 	#ifdef HAVE_REG_MR_EX
 	struct ibv_dmah				*dmah;
 	#endif
+	uint32_t	 			data_validation_hint;
+	void					**validation_buf;
 };
 
  struct pingpong_dest {
@@ -315,6 +317,7 @@ struct pingpong_context {
 	union ibv_gid			gid;
 	unsigned			srqn;
 	int				gid_index;
+	uint32_t			data_validation_hint;
  };
 
 /******************************************************************************
@@ -986,6 +989,23 @@ int create_single_mr(struct pingpong_context *ctx,
  */
 int create_mr(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param);
+
+/* create_data_validation_reference_buffer
+ *
+ * Description :
+ *
+ *	Creates a memory buffer to be used for data validation scenarios.
+ *	Takes into consideration all user parameters and test type.
+ *
+ *	Parameters :
+ *			ctx - Resources sructure.
+ *			user_param - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ *
+ */
+int create_data_validation_reference_buffer(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param);
 
 /* alloc_hugapage_region
  *

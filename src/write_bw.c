@@ -222,10 +222,22 @@ int main(int argc, char *argv[])
 		ctx_print_pingpong_data(&rem_dest[i],&user_comm);
 	}
 
+	if (user_param.machine == CLIENT && user_param.data_validation) {
+		my_dest->data_validation_hint = ctx.data_validation_hint;
+	}
+
 	/* An additional handshake is required after moving qp to RTR. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr," Failed to exchange data between server and clients\n");
 		goto destroy_context;
+	}
+
+	if (user_param.machine == SERVER && user_param.data_validation) {
+		ctx.data_validation_hint = rem_dest->data_validation_hint;
+		if (create_data_validation_reference_buffer(&ctx, &user_param)) {
+			fprintf(stderr," Failed to allocate and randomize data validation buffer at server side\n");
+			goto free_mem;
+		}
 	}
 
 	if (user_param.output == FULL_VERBOSITY) {

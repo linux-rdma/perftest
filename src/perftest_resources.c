@@ -476,7 +476,8 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			ibv_wr_rdma_write_imm(
 				ctx->qpx[index],
 				wr->wr.rdma.rkey,
-				wr->wr.rdma.remote_addr, 0);
+				wr->wr.rdma.remote_addr,
+				wr->imm_data);
 			break;
 		case IBV_WR_RDMA_READ:
 			ibv_wr_rdma_read(
@@ -1156,7 +1157,6 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 {
 	uint64_t tarr_size;
 	int num_of_qps_factor;
-	ctx->cycle_buffer = user_param->cycle_buffer;
 	ctx->cache_line_size = user_param->cache_line_size;
 
 	ALLOC(user_param->port_by_qp, uint64_t, user_param->num_of_qps);
@@ -1189,6 +1189,9 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	#endif
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOC(ctx->buf, void*, user_param->num_of_qps);
+	if (user_param->data_validation && user_param->machine == SERVER) {
+		ALLOC(ctx->validation_buf, void*, user_param->num_of_qps);
+	}
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 
@@ -1231,8 +1234,17 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 			 user_param->num_of_qps * user_param->recv_post_list);
 		ALLOC(ctx->rx_buffer_addr, uint64_t, user_param->num_of_qps);
 	}
-	if (user_param->mac_fwd == ON )
+
+	if (user_param->mac_fwd == ON ) {
 		ctx->cycle_buffer = user_param->size * user_param->rx_depth;
+	} else if (user_param->data_validation) {
+		if (user_param->machine == CLIENT)
+			ctx->cycle_buffer = INC(user_param->size, ctx->cache_line_size) * user_param->post_list;
+		else
+			ctx->cycle_buffer = INC(user_param->size, ctx->cache_line_size) * user_param->recv_post_list;
+	} else {
+		ctx->cycle_buffer = user_param->cycle_buffer;
+	}
 
 	ctx->size = user_param->size;
 
@@ -1307,6 +1319,11 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		free(ctx->mr);
 	if (ctx->buf != NULL)
 		free(ctx->buf);
+	if (user_param->machine == SERVER && ctx->validation_buf != NULL) {
+		if (ctx->validation_buf[0])
+			ctx->memory->free_buffer(ctx->memory, 0, ctx->validation_buf[0], ctx->buff_size);
+		free(ctx->validation_buf);
+	}
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 		if (ctx->my_addr != NULL)
 			free(ctx->my_addr);
@@ -1875,28 +1892,57 @@ static int setup_mr_flags(struct perftest_parameters *user_param)
 	return flags;
 }
 
+static void generate_buffer_data(struct pingpong_context *ctx,
+				 struct perftest_parameters *user_param,
+				 void* buf)
+{
+	uint64_t i;
+	uint32_t *buf_ptr = (uint32_t*)buf;
+	uint32_t current_data;
+
+	if (user_param->data_validation) {
+		if (user_param->machine == SERVER) {
+			current_data = ctx->data_validation_hint;
+		} else {
+			if (user_param->data_validation == SERIAL) {
+				current_data = user_param->data_start_value;
+			} else {
+				current_data = init_perftest_rand_state();
+			}
+			ctx->data_validation_hint = current_data;
+		}
+	} else {
+		current_data = init_perftest_rand_state();
+	}
+
+	if (user_param->has_payload_modification) {
+		for (i = 0; i < ctx->buff_size; i++) {
+			((char*)buf)[i] = user_param->payload_content[i % user_param->payload_length];
+		}
+	} else {
+		for (i = 0; i < ctx->buff_size/4; i++) {
+			if (user_param->data_validation == SERIAL) {
+				buf_ptr[i] = htonl(current_data);
+				current_data++;
+			} else {
+				buf_ptr[i] = htonl(perftest_rand(&current_data));
+			}
+		}
+	}
+}
+
 static void initialize_buffer_content(struct pingpong_context *ctx,
 				      struct perftest_parameters *user_param,
-				      int qp_index, bool can_init_mem)
+				      void* buf, bool can_init_mem)
 {
 	if (!can_init_mem)
 		return;
 
-	uint32_t rng_state = init_perftest_rand_state();
-	if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) {
-		memset(ctx->buf[qp_index], 0, ctx->buff_size);
+	if (((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) ||
+	    (user_param->data_validation && user_param->machine == SERVER)) {
+		memset(buf, 0, ctx->buff_size);
 	} else {
-		uint64_t i;
-		if (user_param->has_payload_modification) {
-			for (i = 0; i < ctx->buff_size; i++) {
-				((char*)ctx->buf[qp_index])[i] = user_param->payload_content[i % user_param->payload_length];
-			}
-		} else {
-			uint32_t *buf_ptr = (uint32_t*)ctx->buf[qp_index];
-			for (i = 0; i < ctx->buff_size/4; i++) {
-				buf_ptr[i] = perftest_rand(&rng_state);
-			}
-		}
+		generate_buffer_data(ctx, user_param, buf);
 	}
 }
 
@@ -2069,7 +2115,7 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	}
 
 	/* Initialize buffer content */
-	initialize_buffer_content(ctx, user_param, qp_index, can_init_mem);
+	initialize_buffer_content(ctx, user_param, ctx->buf[qp_index], can_init_mem);
 
 	return SUCCESS;
 }
@@ -2155,6 +2201,27 @@ static int create_payload(struct perftest_parameters *user_param)
 	return 0;
 }
 
+int create_data_validation_reference_buffer(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
+	bool can_init_mem = true;
+	int dmabuf_fd = 0;
+	uint64_t dmabuf_offset;
+
+	if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
+					 &dmabuf_fd, &dmabuf_offset, &ctx->validation_buf[0],
+					 &can_init_mem)) {
+		return FAILURE;
+	}
+
+	generate_buffer_data(ctx, user_param, ctx->validation_buf[0]);
+
+	for (int i = 1; i < user_param->num_of_qps; i++) {
+		ctx->validation_buf[i] = ctx->validation_buf[0] + (i * INC(user_param->size, ctx->cache_line_size) * user_param->tx_depth);
+	}
+
+	return SUCCESS;
+}
+
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2186,8 +2253,13 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 			mr_index++;
 		} else {
 			ctx->mr[i] = ctx->mr[0];
-			// cppcheck-suppress arithOperationsOnVoidPointer
-			ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
+			if (user_param->machine == CLIENT || !user_param->data_validation) {
+				// cppcheck-suppress arithOperationsOnVoidPointer
+				ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
+			} else {
+				// cppcheck-suppress arithOperationsOnVoidPointer
+				ctx->buf[i] = ctx->buf[0] + (user_param->num_of_qps + i) * ctx->send_qp_buff_size;
+			}
 		}
 	}
 
@@ -3602,7 +3674,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 				ctx->sge_list[i*user_param->post_list +j].addr = ctx->sge_list[i*user_param->post_list + (j-1)].addr;
 
-				if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2))
+				if (((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) ||
+						user_param->data_validation)
 					increase_loc_addr(&ctx->sge_list[i*user_param->post_list +j],user_param->size,
 							j-1,ctx->my_addr[i],0,ctx->cache_line_size,ctx->cycle_buffer);
 			}
@@ -3610,6 +3683,14 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->wr[i*user_param->post_list + j].sg_list = &ctx->sge_list[i*user_param->post_list + j];
 			ctx->wr[i*user_param->post_list + j].num_sge = MAX_SEND_SGE;
 			ctx->wr[i*user_param->post_list + j].wr_id   = build_wr_id(i * user_param->post_list + j, i);
+
+			/* In data validation the immediate field is used to send the address offset
+			 * from the beginning of the QP buffer for the receiver to know where to start
+			 * to validate from in the validation reference buffer.
+			 */
+			if (user_param->data_validation) {
+				ctx->wr[i*user_param->post_list + j].imm_data = ctx->sge_list[i*user_param->post_list +j].addr - (uintptr_t)ctx->buf[i];
+			}
 
 			if (j == (user_param->post_list - 1)) {
 				ctx->wr[i*user_param->post_list + j].next = NULL;
@@ -3639,7 +3720,8 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 					ctx->wr[i*user_param->post_list + j].wr.rdma.remote_addr =
 						ctx->wr[i*user_param->post_list + (j-1)].wr.rdma.remote_addr;
 
-					if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && user_param->size <= (ctx->cycle_buffer / 2))
+					if (((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && user_param->size <= (ctx->cycle_buffer / 2)) ||
+							user_param->data_validation)
 						increase_rem_addr(&ctx->wr[i*user_param->post_list + j],user_param->size,
 								j-1,ctx->rem_addr[i],WRITE,ctx->cache_line_size,ctx->cycle_buffer);
 				}
@@ -3751,7 +3833,8 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 			if (j > 0) {
 				ctx->recv_sge_list[i * user_param->recv_post_list + j].addr = ctx->recv_sge_list[i * user_param->recv_post_list + j - 1].addr;
 
-				if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) {
+				if (((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) ||
+						user_param->data_validation) {
 					increase_loc_addr(&ctx->recv_sge_list[i * user_param->recv_post_list + j],
 							user_param->size,
 							j-1,
@@ -4259,6 +4342,10 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
 	int			recv_flows_burst = 0;
 	int			address_flows_offset =0;
+	uint32_t		recv_offset;
+	uint32_t		data_length;
+	uint64_t		expected_data_addr;
+	uint64_t		actual_data_addr;
 
 	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
 	if (!dyn_ctx) {
@@ -4336,6 +4423,20 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						return_value = FAILURE;
 						goto cleaning;
 					}
+
+					if (user_param->data_validation) {
+							recv_offset = wc[i].imm_data;
+							data_length = wc[i].byte_len;
+							expected_data_addr = (uint64_t)ctx->validation_buf[qp_index] + recv_offset;
+							actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
+
+							if (memcmp((void*)expected_data_addr, (void*)actual_data_addr, data_length)) {
+								fprintf(stderr, "Data validation comparison failed.\n");
+								return_value = FAILURE;
+								goto cleaning;
+							}
+					}
+
 					rcnt_for_qp[qp_index]++;
 					rcnt++;
 					unused_recv_for_qp[qp_index]++;

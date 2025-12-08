@@ -308,7 +308,7 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 	} else {
 		char msg[KEY_MSG_SIZE_GID];
 		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
-				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
+				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr, my_dest->data_validation_hint,
 				my_dest->gid.raw[0],my_dest->gid.raw[1],
 				my_dest->gid.raw[2],my_dest->gid.raw[3],
 				my_dest->gid.raw[4],my_dest->gid.raw[5],
@@ -403,6 +403,12 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		tmp[term - pstr] = 0;
 
 		rem_dest->vaddr = strtoull(tmp, NULL, 16); /*VA*/
+
+		pstr += term - pstr + 1;
+		term = strpbrk(pstr, ":");
+		memcpy(tmp, pstr, term - pstr);
+		tmp[term - pstr] = 0;
+		rem_dest->data_validation_hint = (uint32_t)strtoul(tmp, NULL, 16); /*DATA_VALIDATION_HINT*/
 
 		for (i = 0; i < 15; ++i) {
 			pstr += term - pstr + 1;

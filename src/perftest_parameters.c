@@ -36,6 +36,7 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
+static const char *dataValidationTypesStr[] = {"none","random", "serial", "pattern"};
 #ifdef HAVE_HNSDV
 static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
 #endif
@@ -621,6 +622,16 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds (SYMMETRIC)\n");
+
+		printf("      --data_validation=<random|serial|pattern> ");
+		printf(" Perform data validation on transferred packets\n");
+		printf("  random: Data is randomized.\n");
+		printf("  serial: Data is filled with sequential numeric series. Use --data_start_value=<N> to set starting point.\n");
+		printf("  pattern: Data is filled using contents of file provided by --payload_file_path=<file>.\n");
+
+		printf("      --data_start_value ");
+		printf(" Starting value for serial data validation. Set to 0 by default.\n");
+
 	}
 
 	if (connection_type != RawEth) {
@@ -1013,6 +1024,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_id		= -1;
 	user_param->processing_hints			= -1;
 	user_param->dynamic_cqe_poll = ON;
+	user_param->data_validation 		= NONE;
+	user_param->data_start_value		= 0;
 }
 
 static int open_file_write(const char* file_path)
@@ -2082,6 +2095,44 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
+	if (user_param->data_validation) {
+		if (user_param->post_list != user_param->tx_depth || user_param->recv_post_list != user_param->rx_depth) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Invalid data validation qps configuration. Post list size should be equal to corresponding queue depth.\n");
+			exit(1);
+		}
+
+		if (user_param->tst != BW || user_param->verb != WRITE_IMM) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Data validation can only be used with write with immediate BW test.\n");
+			exit(1);
+		}
+
+		if (user_param->duplex) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Bidirectional mode not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->has_payload_modification && user_param->data_validation != PATTERN) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is not supported with random or serial data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->mr_per_qp) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "MR per QP is not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->data_validation == PATTERN && !user_param->has_payload_modification) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is required for pattern data validation.\n");
+			exit(1);
+		}
+	}
+
 	return;
 }
 /******************************************************************************
@@ -2634,6 +2685,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int recv_post_list_flag = 0;
 	static int payload_flag = 0;
 	static int use_write_with_imm_flag = 0;
+	static int data_validation_flag = 0;
+	static int data_start_value_flag = 0;
 	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 	static int unsolicited_write_flag = 0;
 	#endif
@@ -2860,6 +2913,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SIG_OFFLOAD
 			{.name = "sig_offload", .has_arg = 0, .flag = &sig_offload_flag, .val = 1 },
 			#endif
+			{.name = "data_validation", .has_arg = 1, .flag = &data_validation_flag, .val = 1},
+			{.name = "data_start_value", .has_arg = 1, .flag = &data_start_value_flag, .val = 1},
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3608,6 +3663,27 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					user_param->verb = WRITE_IMM;
 					use_write_with_imm_flag = 0;
+				}
+				if (data_validation_flag) {
+
+					int i, types_array_size = GET_ARRAY_SIZE(dataValidationTypesStr);
+					for (i = 1; i < types_array_size; i++) {
+						if (strcmp(dataValidationTypesStr[i],optarg) == 0) {
+							user_param->data_validation = i;
+							break;
+						}
+					}
+
+					if (i == types_array_size) {
+						fprintf(stderr, " Invalid data validation type flag. Please use random, serial or pattern.\n");
+						return FAILURE;
+					}
+
+					data_validation_flag = 0;
+				}
+				if (data_start_value_flag) {
+					user_param->data_start_value = (uint32_t)strtoul(optarg, NULL, 10);
+					data_start_value_flag = 0;
 				}
 				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 				if (unsolicited_write_flag) {
