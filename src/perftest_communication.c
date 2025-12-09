@@ -553,13 +553,24 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	struct ibv_wc wc;
 	int ne;
 
+	unsigned long timeout_counter = 0;
+
 	do {
-		ne = ibv_poll_cq(comm->rdma_ctx->recv_cq,1,&wc);
+		ne = ibv_poll_cq(comm->rdma_ctx->recv_cq, 1, &wc);
+		if (ne == 0) {
+			timeout_counter++;
+			usleep(2000); /* sleep 2ms before polling cq again */
+			if (timeout_counter > MAX_TIMEOUT_ITER) {
+				fprintf(stderr,
+					"Error: Timeout waiting for remote data.\n");
+				return 1;
+			}
+		}
 	} while (ne == 0);
 
 	if (wc.status || !(wc.opcode & IBV_WC_RECV) || wc.wr_id != SYNC_SPEC_ID) {
 		//coverity[uninit_use_in_call]
-		fprintf(stderr, "Bad wc status -- %d -- %d \n",(int)wc.status,(int)wc.wr_id);
+		fprintf(stderr, "Bad wc status -- %d -- %d\n", (int)wc.status, (int)wc.wr_id);
 		return 1;
 	}
 
