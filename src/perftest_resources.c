@@ -2889,6 +2889,9 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		if (user_param->use_unsolicited_write)
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 		#endif
+		#ifdef HAVE_SRD_QP_SL
+		efa_attr.sl = user_param->sl;
+		#endif
 		qp = efadv_create_qp_ex(ctx->context, &attr_ex,
 					&efa_attr, sizeof(efa_attr));
 		#else
