@@ -4062,6 +4062,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		gap_cycles = cpu_mhz * gap_time;
 	}
 
+	gap_deadline = get_cycles();
+
 	/* main loop for posting */
 	while (totscnt < tot_iters  || totccnt < tot_iters ||
 		(user_param->test_type == DURATION && user_param->state != END_STATE) ) {
@@ -4073,7 +4075,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					/* Go right to cq polling until gap time is over. */
 					continue;
 				}
-				gap_deadline = get_cycles() + gap_cycles;
+				gap_deadline = gap_deadline + gap_cycles;
 				is_sending_burst = 1;
 				burst_iter = 0;
 			}
