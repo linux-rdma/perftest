@@ -5220,7 +5220,7 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 	uint64_t                scnt = 0;
 	uint64_t                ccnt = 0;
 	uint64_t                rcnt = 0;
-	int                     ne;
+	int                     ne = 0;
 	int			err = 0;
 	volatile char           *post_buf = NULL;
 
@@ -5267,8 +5267,15 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 		if ((rcnt < user_param->iters || user_param->test_type == DURATION) && !(scnt < 1 && user_param->machine == SERVER)) {
 			rcnt++;
 
+			if (user_param->use_event) {
+				if (ctx_notify_events(ctx->recv_channel)) {
+					fprintf(stderr , " Failed to notify events to CQ\n");
+					return 1;
+				}
+			}
+
 			/* Poll for a completion */
-			do { ne = ibv_poll_cq(ctx->recv_cq, 1, &wc); } while (ne == 0 && !(user_param->test_type == DURATION && user_param->state == END_STATE));
+			do { ne = ibv_poll_cq(ctx->recv_cq, 1, &wc); } while (!user_param->use_event && ne == 0 && !(user_param->test_type == DURATION && user_param->state == END_STATE));
 			if (ne > 0) {
 				if (wc.status != IBV_WC_SUCCESS) {
 					//coverity[uninit_use_in_call]
@@ -5327,6 +5334,13 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 			break;
 
 		if (ccnt < user_param->iters || user_param->test_type == DURATION) {
+
+			if (user_param->use_event && ne == 0) {
+				if (ctx_notify_events(ctx->send_channel)) {
+					fprintf(stderr, "Couldn't request CQ notification\n");
+					return 1;
+				}
+			}
 
 			do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0);
 
