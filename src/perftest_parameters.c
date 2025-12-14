@@ -4039,8 +4039,10 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 {
 	int temp = 0;
 
-	if (user_param->output != FULL_VERBOSITY)
+	if (user_param->output != FULL_VERBOSITY){
+		usleep(1); /* Yield CPU to prevent interrupt starvation on the local socket before the test starts */
 		return;
+	}
 
 	printf(RESULT_LINE);
 	printf("                    ");
