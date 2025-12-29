@@ -1801,6 +1801,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, " SRD does not support RDMA_CM\n");
 			exit(1);
 		}
+#ifndef HAVE_SRD_QP_SL
+		if (user_param->sl != DEF_SL) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " SRD does not support non-default SL\n");
+			exit(1);
+		}
+#endif
 		user_param->cq_mod = 1;
 	}
 
