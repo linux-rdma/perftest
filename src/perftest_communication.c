@@ -526,7 +526,7 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	rem_dest->vaddr         = be64toh(a_rem_dest.vaddr);
 	memcpy(rem_dest->gid.raw, &(a_rem_dest.gid), 16*sizeof(uint8_t));
 	#else
-	memcpy(&rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
+	memcpy(rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
 	#endif
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
