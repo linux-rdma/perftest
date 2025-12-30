@@ -72,6 +72,9 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <string.h>
+#include <errno.h>
+#include <signal.h>
 #include "perftest_parameters.h"
 
 #define NUM_OF_RETRIES		(10)
@@ -195,6 +198,7 @@ static inline uint64_t build_wr_id(uint32_t wr_index, uint16_t qp_index)
 	return ((uint64_t)wr_index) | ((uint64_t)qp_index << WR_ID_QP_INDEX_OFFSET);
 }
 
+extern volatile sig_atomic_t g_sigalarm_fired;
 /******************************************************************************
  * Perftest resources Structures and data types.
  ******************************************************************************/
@@ -875,15 +879,31 @@ static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t 
 static __inline int ctx_notify_send_recv_events(struct pingpong_context *ctx)
 {
 	fd_set rfds;
+	int ret;
 
-	FD_ZERO(&rfds);
-	FD_SET(ctx->recv_channel->fd, &rfds);
-	FD_SET(ctx->send_channel->fd, &rfds);
+	do {
+		FD_ZERO(&rfds);
+		FD_SET(ctx->recv_channel->fd, &rfds);
+		FD_SET(ctx->send_channel->fd, &rfds);
 
-	if (select(MAX(ctx->recv_channel->fd,
-		       ctx->send_channel->fd) + 1,
-		   &rfds, NULL, NULL, NULL) == -1) {
-		fprintf(stderr, "Failed to get completion events\n");
+		g_sigalarm_fired = 0;
+
+		ret = select(MAX(ctx->recv_channel->fd,
+			ctx->send_channel->fd) + 1,
+			&rfds, NULL, NULL, NULL);
+
+		if (ret == -1 && errno == EINTR) {
+			if (g_sigalarm_fired) {
+				fprintf(stderr, "Confirmed: select() was interrupted by SIGALARM. Retrying...\n");
+			} else {
+				fprintf(stderr, "Warning: select() interrupted by another signal. Retrying...\n");
+			}
+		}
+
+	} while (ret == -1 && errno == EINTR);
+
+	if (ret == -1) {
+		fprintf(stderr, "Failed to get completion events: %s\n", strerror(errno));
 		return FAILURE;
 	}
 
