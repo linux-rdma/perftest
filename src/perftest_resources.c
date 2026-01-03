@@ -4528,6 +4528,10 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	struct ibv_wc 		*wc = NULL;
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
+	int			send_flows_index = 0;
+	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
+	int			address_offset = 0;
+	int			flows_burst_iter = 0;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -4583,15 +4587,41 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
 				}
 
-				err = post_send_method(ctx, index, user_param);
-				if (err) {
-					fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
-					return_value = FAILURE;
-					goto cleaning;
+			err = post_send_method(ctx, index, user_param);
+			if (err) {
+				fprintf(stderr,"Couldn't post send: %d scnt=%lu \n",index,ctx->scnt[index]);
+				return_value = FAILURE;
+				goto cleaning;
+			}
+
+			/* if we have more than single flow and the burst iter is the last one */
+			if (user_param->flows != DEF_FLOWS) {
+				if (++flows_burst_iter == user_param->flows_burst) {
+					flows_burst_iter = 0;
+					/* inc the send_flows_index and update the address */
+					if (++send_flows_index == user_param->flows)
+						send_flows_index = 0;
+					address_offset = send_flows_index * ctx->flow_buff_size;
+					ctx->sge_list[0].addr = primary_send_addr + address_offset;
 				}
-				ctx->scnt[index] += user_param->post_list;
-				scnt_for_qp[index] += user_param->post_list;
-				totscnt += user_param->post_list;
+			}
+
+			/* in multiple flow scenarios we will go to next cycle buffer address in the main buffer*/
+			if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
+					increase_loc_addr(ctx->wr[index].sg_list,user_param->size, ctx->scnt[index],
+							ctx->my_addr[index] + address_offset , 0, ctx->cache_line_size,
+							ctx->cycle_buffer);
+
+				if (user_param->verb != SEND && user_param->verb != SEND_IMM) {
+					increase_rem_addr(&ctx->wr[index], user_param->size,
+							ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
+							ctx->cache_line_size, ctx->cycle_buffer);
+				}
+			}
+
+			ctx->scnt[index] += user_param->post_list;
+			scnt_for_qp[index] += user_param->post_list;
+			totscnt += user_param->post_list;
 
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
@@ -4658,6 +4688,11 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	int 			return_value = 0;
 	int 			qp_index;
 	bool			with_imm_data = false;
+	uint64_t                *posted_per_qp = NULL;
+	int			recv_flows_index = 0;
+	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
+	int			recv_flows_burst = 0;
+	int			address_flows_offset = 0;
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -4691,6 +4726,10 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 	ALLOCATE(scredit_for_qp,int,user_param->num_of_qps);
 	memset(scredit_for_qp,0,sizeof(int)*user_param->num_of_qps);
+
+	ALLOCATE(posted_per_qp, uint64_t, user_param->num_of_qps);
+	for (i = 0; i < user_param->num_of_qps; i++)
+		posted_per_qp[i] = ctx->rposted;
 
 	duration_param=user_param;
 	pthread_t print_thread;
@@ -4748,6 +4787,25 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 						}
 					}
 					unused_recv_for_qp[qp_index] -= user_param->recv_post_list;
+
+					if (user_param->flows != DEF_FLOWS) {
+						if (++recv_flows_burst == user_param->flows_burst) {
+							recv_flows_burst = 0;
+							if (++recv_flows_index == user_param->flows)
+								recv_flows_index = 0;
+							address_flows_offset = recv_flows_index * ctx->cycle_buffer;
+							ctx->recv_sge_list[0].addr = primary_recv_addr + address_flows_offset;
+						}
+					}
+					if (SIZE(user_param->connection_type,user_param->size,!(int)user_param->machine) <= (ctx->cycle_buffer / 2) &&
+							user_param->recv_post_list == 1) {
+						increase_loc_addr(ctx->rwr[(int)get_wr_index(wc[i].wr_id)].sg_list,
+								user_param->size,
+								posted_per_qp[qp_index],
+								ctx->rx_buffer_addr[qp_index] + address_flows_offset,
+								user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
+					}
+					posted_per_qp[qp_index] += user_param->recv_post_list;
 				}
 
 				if (!user_param->use_srq && ctx->send_rcredit) {
@@ -4808,6 +4866,7 @@ cleaning:
 	free(ccnt_for_qp);
 	free(unused_recv_for_qp);
 	free(scredit_for_qp);
+	free(posted_per_qp);
 	return return_value;
 }
 
