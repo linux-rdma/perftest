@@ -1348,6 +1348,9 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->use_old_post_send	= user_param->use_old_post_send;
 	comm->rdma_params->source_ip		= user_param->source_ip;
 	comm->rdma_params->has_source_ip	= user_param->has_source_ip;
+	comm->rdma_params->tph_mem_type	= user_param->tph_mem_type;
+	comm->rdma_params->processing_hints	= user_param->processing_hints;
+	comm->rdma_params->cpu_id		= user_param->cpu_id;
 	comm->rdma_params->memory_type		= MEMORY_HOST;
 	comm->rdma_params->memory_create	= host_memory_create;
 
