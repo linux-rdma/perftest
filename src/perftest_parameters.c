@@ -2949,12 +2949,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'x': CHECK_VALUE_IN_RANGE_UNS(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index",not_int_ptr);
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
-			case 'q': if (user_param->tst != BW && user_param->num_of_qps > 1) {
+			case 'q':CHECK_VALUE_IN_RANGE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps",not_int_ptr);
+				  if (user_param->tst != BW && user_param->num_of_qps > 1) {
 					fprintf(stderr," Multiple QPs only available on bw tests\n");
 					free(duplicates_checker);
 					return FAILURE;
 				  }
-				  CHECK_VALUE_IN_RANGE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps",not_int_ptr);
 				  break;
 			case 'I': CHECK_VALUE_IN_RANGE(user_param->inline_size,int,0,MAX_INLINE,"Max inline",not_int_ptr);
 				  if (user_param->verb == READ || user_param->verb ==ATOMIC) {
