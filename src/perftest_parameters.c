@@ -1358,6 +1358,13 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->connection_type == DC && !user_param->use_srq)
 		user_param->use_srq = ON;
 
+	/* For DC, SRQ max_wr is set to rx_depth. If num_of_qps > rx_depth,
+	 * there won't be enough receive WRs for all DCTs, causing backpressure.
+	 * Automatically adjust rx_depth to avoid this issue.
+	 */
+	if (user_param->connection_type == DC && user_param->rx_depth < user_param->num_of_qps)
+		user_param->rx_depth = user_param->num_of_qps;
+
 	if (user_param->use_srq
 	    && (user_param->verb == SEND || user_param->verb == SEND_IMM)
 	    && (user_param->num_of_qps > user_param->rx_depth)) {
