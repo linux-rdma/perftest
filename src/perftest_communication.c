@@ -1125,9 +1125,10 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
-		fprintf(stderr, "Unexpected CM event bl blka %d\n", event->event);
+		fprintf(stderr, "Unexpected CM event bl blka %s; error: %d.\n",
+		rdma_event_str(event->event), event->status);
 		rdma_ack_cm_event(event);
-                return FAILURE;
+		return FAILURE;
 	}
 
 	if (user_param->connection_type == UD) {
