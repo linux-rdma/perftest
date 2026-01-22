@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 		if (user_param.output == FULL_VERBOSITY) {
 			if (user_param.report_per_port)
@@ -302,7 +302,7 @@ int main(int argc, char *argv[])
 	if (user_param.use_event) {
 		if (ibv_req_notify_cq(ctx.send_cq, 0)) {
 			fprintf(stderr, "Couldn't request CQ notification\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 	}
 
@@ -316,26 +316,26 @@ int main(int argc, char *argv[])
 			if (user_param.perform_warm_up) {
 				if(perform_warm_up(&ctx, &user_param)) {
 					fprintf(stderr, "Problems with warm up\n");
-					goto free_mem;
+					goto destroy_context;
 				}
 			}
 
 			if(user_param.duplex) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-					goto free_mem;
+					goto destroy_context;
 				}
 			}
 
 			if(run_iter_bw(&ctx,&user_param)) {
 				error = 17;
-				goto free_mem;
+				goto destroy_context;
 			}
 
 			if (user_param.duplex && (atof(user_param.version) >= 4.6)) {
 				if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-					goto free_mem;
+					goto destroy_context;
 				}
 			}
 
@@ -353,20 +353,20 @@ int main(int argc, char *argv[])
 		if (user_param.perform_warm_up) {
 			if(perform_warm_up(&ctx, &user_param)) {
 				fprintf(stderr, "Problems with warm up\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 
 		if(user_param.duplex) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 
 		if(run_iter_bw(&ctx,&user_param)) {
 			fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -397,7 +397,7 @@ int main(int argc, char *argv[])
 
 		if(run_iter_bw_infinitely(&ctx,&user_param)) {
 			fprintf(stderr," Error occurred while running! aborting ...\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 	}
 
@@ -413,7 +413,7 @@ int main(int argc, char *argv[])
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
 
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
-		goto free_mem;
+		goto destroy_context;
 	}
 
 	if (!user_param.is_bw_limit_passed && (user_param.is_limit_bw == ON ) ) {

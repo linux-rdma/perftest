@@ -434,13 +434,13 @@ int main(int argc, char *argv[])
 			if (user_param.machine == SERVER || user_param.duplex) {
 				if (ctx_set_recv_wqes(&ctx,&user_param)) {
 					fprintf(stderr," Failed to post receive recv_wqes\n");
-					goto free_mem;
+					goto destroy_context;
 				}
 			}
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 
 			if (ctx.send_rcredit) {
@@ -452,19 +452,19 @@ int main(int argc, char *argv[])
 			if (user_param.duplex) {
 				if(run_iter_bi(&ctx,&user_param)){
 					error = 17;
-					goto free_mem;
+					goto destroy_context;
 				}
 
 			} else if (user_param.machine == CLIENT) {
 				if(run_iter_bw(&ctx,&user_param)) {
 					error = 17;
-					goto free_mem;
+					goto destroy_context;
 				}
 
 			} else	{
 				if(run_iter_bw_server(&ctx,&user_param)) {
 					error = 17;
-					goto free_mem;
+					goto destroy_context;
 				}
 			}
 
@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
 
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 
 			/* Check if last iteration ended well in UC/UD */
@@ -493,31 +493,31 @@ int main(int argc, char *argv[])
 		if (user_param.machine == SERVER || user_param.duplex) {
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr,"Failed to exchange data between server and clients\n");
-			goto free_mem;
+			goto destroy_context;
 		}
 
 		if (user_param.duplex) {
 
 			if(run_iter_bi(&ctx,&user_param)){
 				error = 17;
-				goto free_mem;
+				goto destroy_context;
 			}
 		} else if (user_param.machine == CLIENT) {
 
 			if(run_iter_bw(&ctx,&user_param)) {
 				error = 17;
-				goto free_mem;
+				goto destroy_context;
 			}
 
 		} else if(run_iter_bw_server(&ctx,&user_param)) {
 			error = 17;
-			goto free_mem;
+			goto destroy_context;
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -550,27 +550,27 @@ int main(int argc, char *argv[])
 		else if (user_param.machine == SERVER) {
 			if (ctx_set_recv_wqes(&ctx,&user_param)) {
 				fprintf(stderr," Failed to post receive recv_wqes\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 
 		if (!user_param.connectionless){
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to exchange data between server and clients\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 
 		if (user_param.machine == CLIENT) {
 			if(run_iter_bw_infinitely(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 
 		} else if (user_param.machine == SERVER) {
 			if(run_iter_bw_infinitely_server(&ctx,&user_param)) {
 				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
-				goto free_mem;
+				goto destroy_context;
 			}
 		}
 	}
