@@ -79,6 +79,10 @@
 struct ValidationContext;
 #endif
 
+#ifdef HAVE_LIBNUMA
+#include <numa.h>
+#endif
+
 #define NUM_OF_RETRIES		(10)
 
 /* Outstanding reads for "read" verb only. */
@@ -388,6 +392,20 @@ int sockaddr_set_port(struct sockaddr *sin,int port);
  * Return Value : the device or NULL in case of failure.
  */
 struct ibv_device* ctx_find_dev(char **ib_devname);
+
+/* set_process_affinity
+ *
+ * Description : Set the affinity to specific CPU cores or NUMA node.
+ *               Sets user_param->current_numa to the NUMA node we bound to.
+ *
+ * Parameters :
+ *
+ *	dev_path    - The path to the device (for auto-detect).
+ *	user_param  - the perftest parameters.
+ *
+ * Return Value : SUCCESS, FAILURE.
+ */
+int set_process_affinity(const char *dev_path, struct perftest_parameters *user_param);
 
 /* ctx_open_device
  *

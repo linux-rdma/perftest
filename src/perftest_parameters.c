@@ -27,6 +27,9 @@
 #include <stdbool.h>
 #include <pci/pci.h>
 #endif
+#ifdef HAVE_LIBNUMA
+#include <numa.h>
+#endif
 #define MAC_LEN (17)
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
@@ -178,6 +181,88 @@ int parse_ip_from_str(char *ip, u_int32_t *addr)
 int parse_ip6_from_str(char *ip6, struct in6_addr *addr)
 {
 	return inet_pton(AF_INET6, ip6, addr);
+}
+
+/******************************************************************************
+ * parse_cpu_list
+ *
+ * Description: Parse a CPU list string (e.g., "0-3,8,12-15") into a cpu_set_t.
+ *              Supports single values, comma-separated lists, and ranges.
+ *              No allocations - populates the cpu_set_t directly.
+ *
+ * Parameters:
+ *   cpu_str   - Input string like "0", "0,1,2", "0-3", or "0-3,8,12-15"
+ *   cpuset    - Output cpu_set_t to populate
+ *
+ * Return Value: SUCCESS, FAILURE.
+ ******************************************************************************/
+static int parse_cpu_list(const char *cpu_str, cpu_set_t *cpuset)
+{
+	long num_cpus = sysconf(_SC_NPROCESSORS_CONF);
+	if (num_cpus < 0) {
+		fprintf(stderr, " Failed to get number of CPUs\n");
+		return FAILURE;
+	}
+
+	CPU_ZERO(cpuset);
+	int count = 0;
+	const char *p = cpu_str;
+
+	while (*p) {
+		char *endptr;
+		long start = strtol(p, &endptr, 10);
+
+		if (endptr == p || start < 0) {
+			fprintf(stderr, " Invalid CPU number\n");
+			return FAILURE;
+		}
+
+		if (*endptr == '-') {
+			/* Range: start-end */
+			long end = strtol(endptr + 1, &endptr, 10);
+			if (end < 0) {
+				fprintf(stderr, " Invalid CPU range end\n");
+				return FAILURE;
+			}
+			if (start > end) {
+				fprintf(stderr, " Invalid CPU range: %ld-%ld (start > end)\n", start, end);
+				return FAILURE;
+			}
+			if (end >= num_cpus) {
+				fprintf(stderr, " CPU %ld out of range. System has %ld cores (0-%ld).\n",
+					end, num_cpus, num_cpus - 1);
+				return FAILURE;
+			}
+			for (long i = start; i <= end; i++) {
+				CPU_SET((int)i, cpuset);
+				count++;
+			}
+		} else {
+			/* Single CPU */
+			if (start >= num_cpus) {
+				fprintf(stderr, " CPU %ld out of range. System has %ld cores (0-%ld).\n",
+					start, num_cpus, num_cpus - 1);
+				return FAILURE;
+			}
+			CPU_SET((int)start, cpuset);
+			count++;
+		}
+
+		if (*endptr == ',')
+			endptr++;
+		else if (*endptr != '\0') {
+			fprintf(stderr, " Invalid character in CPU list: '%c'\n", *endptr);
+			return FAILURE;
+		}
+		p = endptr;
+	}
+
+	if (count == 0) {
+		fprintf(stderr, " Invalid CPU list format\n");
+		return FAILURE;
+	}
+
+	return SUCCESS;
 }
 
 /******************************************************************************
@@ -523,6 +608,20 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf("      --congest_type=<DCQCN, LDCP, HC3, DIP> ");
 	printf(" Use the hnsdv interface to set congestion control algorithm.\n");
 	#endif
+
+	if (connection_type != RawEth) {
+		printf("      --pin_cores=<cpu_list> ");
+		printf("Set CPU affinity. Accepts: single (0), list (0, 1, 2), range (0-3), or mixed (0-3,8,12-15).\n");
+
+		#ifdef HAVE_LIBNUMA
+		if (numa_available() >= 0) {
+			printf("      --numa_node=<numa_node_id> ");
+			printf("Specify the NUMA node ID that should run the test.\n");
+			printf("      --disable_numa ");
+			printf("Disable NUMA auto-detection and binding.\n");
+		}
+		#endif
+	}
 
 	if (tst != FS_RATE) {
 		printf("      --dlid ");
@@ -1040,6 +1139,9 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->dynamic_cqe_poll = ON;
 	user_param->data_validation = OFF;
 	user_param->data_validation_debug = OFF;
+	user_param->numa_node		= -1;
+	user_param->disable_numa	= 0;
+	CPU_ZERO(&user_param->cpu_affinity);
 }
 
 static int open_file_write(const char* file_path)
@@ -2264,6 +2366,30 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
+	#ifdef HAVE_LIBNUMA
+	if (user_param->numa_node != -1 && CPU_COUNT(&user_param->cpu_affinity) > 0) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --numa_node and --pin_cores cannot be used together\n");
+		exit(1);
+	}
+	#endif
+
+	/* --pin_cores and --numa_node are only supported for non-RawEth benchmarks */
+	if (user_param->connection_type == RawEth) {
+		if (CPU_COUNT(&user_param->cpu_affinity) > 0) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --pin_cores is not supported for raw Ethernet tests\n");
+			exit(1);
+		}
+		#ifdef HAVE_LIBNUMA
+		if (user_param->numa_node != -1) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --numa_node is not supported for raw Ethernet tests\n");
+			exit(1);
+		}
+		#endif
+	}
+
 	return;
 }
 /******************************************************************************
@@ -2866,6 +2992,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int processing_hints_flag = 0;
 	#endif
 
+	static int pin_cores_flag = 0;
+	#ifdef HAVE_LIBNUMA
+	static int numa_node_flag = 0;
+	static int disable_numa_flag = 0;
+	#endif
+
 	#ifdef HAVE_SIG_OFFLOAD
 	static int sig_offload_flag = 0;
 	#endif
@@ -3063,6 +3195,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#endif
 			{.name = "data_validation", .has_arg = 0, .flag = &data_validation_flag, .val = 1 },
 			{.name = "data_validation_debug", .has_arg = 0, .flag = &data_validation_debug_flag, .val = 1 },
+			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
+			#ifdef HAVE_LIBNUMA
+			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
+			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
+			#endif
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3872,6 +4009,32 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->sig_offload = 1;
 				}
 				#endif
+				if (pin_cores_flag) {
+					if (parse_cpu_list(optarg, &user_param->cpu_affinity)) {
+						free(duplicates_checker);
+						return FAILURE;
+					}
+				pin_cores_flag = 0;
+				}
+				#ifdef HAVE_LIBNUMA
+				if (numa_node_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->numa_node,int,"numa_node",not_int_ptr);
+
+					if (numa_available() < 0) {
+						fprintf(stderr, " Kernel support for NUMA is not available\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					int max_node = numa_max_node();
+					if (user_param->numa_node > max_node) {
+						fprintf(stderr, " NUMA node %d does not exist (available: 0-%d)\n",
+							user_param->numa_node, max_node);
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					numa_node_flag = 0;
+				}
+				#endif
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
@@ -3886,6 +4049,21 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	}
 	free(duplicates_checker);
+
+	#ifdef HAVE_LIBNUMA
+	if (disable_numa_flag) {
+		user_param->disable_numa = 1;
+	}
+
+	if (!disable_numa_flag && user_param->numa_node < 0 && CPU_COUNT(&user_param->cpu_affinity) == 0) {
+		cpu_set_t cur;
+		if (sched_getaffinity(0, sizeof(cpu_set_t), &cur) == 0) {
+			long online = sysconf(_SC_NPROCESSORS_ONLN);
+			if (online > 0 && CPU_COUNT(&cur) < online)
+				user_param->disable_numa = 1;
+		}
+	}
+	#endif
 
 #ifdef HAVE_DCS
 	if (!log_active_dci_streams_flag_was_ever_set) {
@@ -4381,6 +4559,9 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 		}
 	}
 	putchar('\n');
+
+	if (user_param->numa_node >= 0)
+		printf(" NUMA node       : %d\n", user_param->numa_node);
 
 	printf(RESULT_LINE);
 

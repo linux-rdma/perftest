@@ -697,6 +697,14 @@ if [test $HAVE_OPENCL = yes]; then
 	AC_CHECK_LIB([OpenCL], [clGetDeviceIDs], [], [AC_MSG_ERROR([libOpenCL not found])])
 fi
 
+AC_CHECK_LIB([numa], [numa_available], [HAVE_LIBNUMA=yes LIBNUMA=-lnuma], [HAVE_LIBNUMA=no])
+AM_CONDITIONAL([HAVE_LIBNUMA], [test "x$HAVE_LIBNUMA" = "xyes"])
+if test $HAVE_LIBNUMA = yes; then
+	AC_DEFINE([HAVE_LIBNUMA], [1], [libnuma support])
+	AC_CHECK_HEADERS([numa.h])
+fi
+AC_SUBST(LIBNUMA)
+
 AC_SUBST([LIBUMAD])
 AC_SUBST([LIBMATH])
 AC_CONFIG_FILES([Makefile])

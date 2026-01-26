@@ -356,7 +356,59 @@ Special feature detailed explanation in tests:
           2) The feature available for ib_write_bw, ib_read_bw, ib_send_bw, ib_read_lat and ib_send_lat.
           3) 0 size pattern is not allow.
 
-  7. Data Validation (--data_validation)
+  7. CPU/NUMA Affinity (--pin_cores, --numa_node, --disable_numa)
+        Perftest automatically detects the NUMA node of the IB device and binds
+        the benchmark thread and memory allocations to that node. This ensures
+        CPU, memory buffers, and NIC are co-located, eliminating cross-node
+        memory access penalties. The active NUMA node is reported in the test
+        output header.
+
+      Behavior:
+          - By default, perftest reads the NIC's NUMA node from sysfs and binds
+            to it automatically. No flags needed.
+          - If the NIC's NUMA node cannot be determined, perftest continues without binding.
+          - Use --pin_cores to pin to specific CPU core(s) instead.
+          - Use --numa_node to bind to a specific NUMA node instead.
+          - Use --disable_numa to disable automatic NUMA binding entirely,
+            restoring the original behavior (OS scheduler decides placement).
+          - --pin_cores and --numa_node are mutually exclusive.
+          - Perftest respects pre-existing CPU affinity set by external tools
+            (e.g. taskset or numactl). If an external restriction is detected,
+            automatic NUMA binding is skipped. Passing --pin_cores or
+            --numa_node explicitly overrides any external binding.
+
+      Requirements:
+          - --numa_node and automatic detection require libnuma.
+          - --pin_cores works on any Linux system.
+          - Not supported for raw Ethernet benchmarks.
+
+      Command-line Examples:
+
+          # Automatic NUMA binding (default, no flags needed)
+          Server: ./ib_write_bw -d mlx5_0
+          Client: ./ib_write_bw -d mlx5_0 <server_ip>
+
+          # Pin to specific CPU core
+          Server: ./ib_write_bw --pin_cores=5 -d mlx5_0
+          Client: ./ib_write_bw --pin_cores=5 -d mlx5_0 <server_ip>
+
+          # Pin to a range of cores
+          Server: ./ib_write_bw --pin_cores=0-3,8 -d mlx5_0
+          Client: ./ib_write_bw --pin_cores=0-3,8 -d mlx5_0 <server_ip>
+
+          # Bind to NUMA node 1
+          Server: ./ib_write_bw --numa_node=1 -d mlx5_0
+          Client: ./ib_write_bw --numa_node=1 -d mlx5_0 <server_ip>
+
+          # External tool respected automatically (no perftest flag needed)
+          Server: numactl --cpunodebind=1 ./ib_write_bw -d mlx5_0
+          Client: numactl --cpunodebind=1 ./ib_write_bw -d mlx5_0 <server_ip>
+
+          # Explicitly disable NUMA binding
+          Server: ./ib_write_bw --disable_numa -d mlx5_0
+          Client: ./ib_write_bw --disable_numa -d mlx5_0 <server_ip>
+
+  8. Data Validation (--data_validation)
           Real-time validation of RDMA data transfers during ib_write_bw and ib_read_bw.
           The receiver verifies that every byte matches the expected pattern, detecting
           corruption, DMA races, and stale data during RDMA WRITE or READ operations.

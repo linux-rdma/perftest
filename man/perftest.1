@@ -455,6 +455,25 @@ SIMD path selection, and mismatch classification details.
  Use Hugepages instead of contig, memalign allocations.
  Not relevant for raw_ethernet_fs_rate.
 .TP
+.B --pin_cores=<cpu_list>
+ Set CPU affinity for the benchmark thread. Accepts taskset-like syntax:
+ single core (0), comma-separated list (0,2,4), range (0-3), or mixed (0-3,8,12-15).
+ Mutually exclusive with --numa_node.
+ Not relevant for RawEth.
+.TP
+.B --numa_node=<numa_node_id>
+ Bind the benchmark thread and memory allocations to the specified NUMA node.
+ Mutually exclusive with --cpu_cores. Requires libnuma.
+ Not relevant for RawEth.
+.TP
+.B --disable_numa
+ Disable automatic NUMA node detection and binding.
+ By default, perftest detects the NIC's NUMA node via sysfs and binds to it.
+ If an external tool (e.g. taskset or numactl) has already restricted CPU affinity,
+ perftest detects this and skips automatic binding automatically.
+ Use this flag to explicitly disable all NUMA binding.
+ Not relevant for RawEth.
+.TP
 .B --tph_mem=<memory_type>
  Set TPH memory type.
  <memory_type> can be 'persistent'/'pm' or 'volatile'/'vm'.

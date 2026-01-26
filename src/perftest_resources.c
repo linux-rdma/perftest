@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <dirent.h>
 #include <string.h>
 #include <ctype.h>
 #include <sys/mman.h>
@@ -1116,6 +1117,128 @@ struct ibv_device* ctx_find_dev(char **ib_devname)
 
 	GET_STRING(*ib_devname, ibv_get_device_name(ib_dev));
 	return ib_dev;
+}
+
+/******************************************************************************
+ * get_cpu_numa_node
+ *
+ * Description : Get the NUMA node of a CPU
+ *
+ * Parameters :
+ *	cpu - The CPU to get the NUMA node of
+ *
+ * Return Value : The NUMA node of the CPU, -1 on failure
+ ******************************************************************************/
+static int get_cpu_numa_node(int cpu) {
+
+	DIR *dir;
+	struct dirent *entry;
+	char path[256];
+	int node;
+
+	snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d", cpu);
+	dir = opendir(path);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (sscanf(entry->d_name, "node%d", &node) == 1) {
+			closedir(dir);
+			return node;
+		}
+	}
+	closedir(dir);
+	return -1;
+}
+
+/******************************************************************************
+ * run_on_node
+ *
+ * Description : Run on a specific NUMA node
+ *
+ * Parameters :
+ *	node - The NUMA node to run on
+ *	user_param - The user parameters
+ *	user_requested - Whether the user requested this
+ *
+ * Return Value : SUCCESS, FAILURE.
+ ******************************************************************************/
+#ifdef HAVE_LIBNUMA
+static int run_on_node(int node, struct perftest_parameters *user_param, bool user_requested) {
+
+	// Bind to the target NUMA node.
+	if (numa_run_on_node(node)) {
+		if (user_requested)
+			fprintf(stderr, "Failed to run on node %d\n", node);
+		return FAILURE;
+	}
+
+	struct bitmask *to_nodes = numa_allocate_nodemask();
+	if (!to_nodes) {
+		if (user_param->output == FULL_VERBOSITY) {
+			fprintf(stderr, "Warning: Bound to node %d but could not set memory policy\n", node);
+		}
+		return SUCCESS;
+	}
+	numa_bitmask_setbit(to_nodes, node);
+
+	// Force future allocations onto the target node.
+	numa_set_membind(to_nodes);
+
+	// Migrate already-allocated pages to the target node
+	int ret = numa_migrate_pages(0, numa_all_nodes_ptr, to_nodes);
+	numa_free_nodemask(to_nodes);
+
+	if (ret < 0 && user_param->output == FULL_VERBOSITY) {
+		fprintf(stderr, "Warning: Failed to migrate memory to node %d\n", node);
+	} else if (ret > 0 && user_param->output == FULL_VERBOSITY) {
+		fprintf(stderr, "Warning: %d pages could not be migrated to node %d\n", ret, node);
+	}
+
+	return SUCCESS;
+}
+#endif
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int set_process_affinity(const char *dev_path, struct perftest_parameters *user_param) {
+
+	if (CPU_COUNT(&user_param->cpu_affinity) > 0) {
+		if (sched_setaffinity(0, sizeof(cpu_set_t), &user_param->cpu_affinity)) {
+			fprintf(stderr, "Failed to set CPU affinity\n");
+			return FAILURE;
+		}
+		user_param->numa_node = get_cpu_numa_node(sched_getcpu());
+		return SUCCESS;
+	}
+
+	#ifdef HAVE_LIBNUMA
+	if (!user_param->disable_numa) {
+
+		if (user_param->numa_node >= 0) {
+			return run_on_node(user_param->numa_node, user_param, true);
+
+		} else {
+			int node = -1;
+			char path[256];
+			snprintf(path, sizeof(path), "%s/device/numa_node", dev_path);
+			FILE *f = fopen(path, "r");
+
+			if (f) {
+				if (fscanf(f, "%d", &node) != 1)
+					node = -1;
+				fclose(f);
+			}
+
+			if (node >= 0 && run_on_node(node, user_param, false) && user_param->output == FULL_VERBOSITY)
+				fprintf(stderr, "Warning: Continuing without NUMA binding\n");
+		}
+	}
+	#endif
+
+	user_param->numa_node = get_cpu_numa_node(sched_getcpu());
+	return SUCCESS;
 }
 
 /******************************************************************************

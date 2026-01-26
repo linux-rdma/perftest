@@ -81,6 +81,11 @@ int main(int argc, char *argv[])
 	if (!ib_dev)
 		return 7;
 
+	/* Set the affinity to the CPU cores or NUMA node */
+	if (set_process_affinity(ib_dev->ibdev_path, &user_param)) {
+		goto return_error;
+	}
+
 	/* Getting the relevant context from the device */
 	ctx.context = ctx_open_device(ib_dev, &user_param);
 	if (!ctx.context) {

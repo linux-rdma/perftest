@@ -56,6 +56,7 @@
 #include <infiniband/verbs.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <sched.h>
 #include <stdbool.h>
 #if !defined(__FreeBSD__)
 #include <malloc.h>
@@ -705,6 +706,9 @@ struct perftest_parameters {
 	int				validation_chunks_per_qp; /* Dynamic buffer depth */
 	uint32_t			validation_chunk_size;    /* Operations per validation chunk (may differ from tx_depth) */
 	enum validation_mode		validation_mode;
+	cpu_set_t			cpu_affinity;     /* CPU mask for affinity */
+	int				numa_node;
+	int				disable_numa;
 };
 
 struct report_options {
