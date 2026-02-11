@@ -117,11 +117,11 @@ static inline cycles_t get_cycles()
 #elif defined(__riscv)
 typedef unsigned long cycles_t;
 
-cycles_t perf_get_cycles();
-
 static inline cycles_t get_cycles()
 {
-	return perf_get_cycles();
+	cycles_t val;
+	asm volatile("rdtime %0" : "=r"(val));
+	return val;
 }
 
 #elif defined(__hppa__)
