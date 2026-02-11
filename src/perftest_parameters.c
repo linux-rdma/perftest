@@ -4891,7 +4891,7 @@ int compare_ibv_device(const char *name, void* local_value, void* remote_value, 
 {
 	struct ibv_device_attr remote_attr = *(struct ibv_device_attr*)remote_value;
 
-	if (user_param->out_reads > remote_attr.max_qp_rd_atom) {  //  0 < user_param->out_reads <= local_attr.max_qp_rd_atom
+	if (user_param->connection_type != DC && user_param->out_reads > remote_attr.max_qp_rd_atom) {  //  0 < user_param->out_reads <= local_attr.max_qp_rd_atom
 		printf(" out_reads is greater than remote max_qp_rd_atom, using remote max_qp_rd_atom\n");
 		user_param->out_reads = remote_attr.max_qp_rd_atom;
 	}
