@@ -56,6 +56,7 @@
 #include <infiniband/verbs.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #if !defined(__FreeBSD__)
 #include <malloc.h>
 #endif
@@ -909,5 +910,10 @@ int set_eth_mtu(struct perftest_parameters *user_param);
  *
  ******************************************************************************/
 enum ctx_device ib_dev_name(struct ibv_context *context);
+
+static inline bool has_recv_comp(VerbType verb)
+{
+	return verb == SEND || verb == SEND_IMM || verb == WRITE_IMM;
+}
 
 #endif /* PERFTEST_RESOURCES_H */

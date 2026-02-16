@@ -888,7 +888,7 @@ static int ctx_xrc_srq_create(struct pingpong_context *ctx,
 	srq_init_attr.srq_type = IBV_SRQT_XRC;
 	srq_init_attr.xrcd = ctx->xrc_domain;
 
-	if (user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
+	if (has_recv_comp(user_param->verb))
 		srq_init_attr.cq = ctx->recv_cq;
 	else
 		srq_init_attr.cq = ctx->send_cq;
@@ -1209,7 +1209,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		memset(ctx->ccnt, 0, user_param->num_of_qps * sizeof (uint64_t));
 
 	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW)
-		   && (user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
+		   && has_recv_comp(user_param->verb)
 		   && user_param->machine == SERVER) {
 
 		ALLOC(ctx->my_addr, uint64_t, user_param->num_of_qps);
@@ -1232,8 +1232,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		ALLOC(ctx->ah, struct ibv_ah*, user_param->num_of_qps);
 	}
 
-	if ((user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
-	    && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
+	if (has_recv_comp(user_param->verb) && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
 		ALLOC(ctx->recv_sge_list, struct ibv_sge,
 			 user_param->num_of_qps * user_param->recv_post_list);
 		ALLOC(ctx->rwr, struct ibv_recv_wr,
@@ -1350,8 +1349,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			free(ctx->ah);
 	}
 
-	if ((user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
-	    && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
+	if (has_recv_comp(user_param->verb) && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
 		if (ctx->recv_sge_list != NULL)
 			free(ctx->recv_sge_list);
 		if (ctx->rwr != NULL)
@@ -1453,8 +1451,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		test_result = 1;
 	}
 
-	if ((user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
-	    || (user_param->connection_type == DC && !dct_only)){
+	if (has_recv_comp(user_param->verb) || (user_param->connection_type == DC && !dct_only)){
 		if (ibv_destroy_cq(ctx->recv_cq)) {
 				fprintf(stderr, "Failed to destroy CQ - %s\n", strerror(errno));
 				test_result = 1;
@@ -1593,7 +1590,7 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->wr);
 	}
 
-	if ((user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
+	if (has_recv_comp(user_param->verb)
 	    && (user_param->tst == LAT || user_param->machine == SERVER || user_param->duplex)) {
 
 		free(ctx->rx_buffer_addr);
@@ -1849,8 +1846,7 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 	if (dct_only)
 		tx_buffer_depth = user_param->rx_depth;
 
-	if ((user_param->connection_type == DC && !dct_only)
-	    || (user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM))
+	if ((user_param->connection_type == DC && !dct_only) || has_recv_comp(user_param->verb))
 		need_recv_cq = 1;
 
 	ret = create_reg_cqs(ctx, user_param, tx_buffer_depth, need_recv_cq);
@@ -2633,8 +2629,7 @@ xrc_srq:
 cqs:
 	ibv_destroy_cq(ctx->send_cq);
 
-	if ((user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM)
-	    || (user_param->connection_type == DC && !dct_only)){
+	if (has_recv_comp(user_param->verb) || (user_param->connection_type == DC && !dct_only)) {
 		ibv_destroy_cq(ctx->recv_cq);
 	}
 
@@ -2788,7 +2783,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	#endif
 
 	attr.send_cq = ctx->send_cq;
-	attr.recv_cq = (user_param->verb == SEND || user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) ? ctx->recv_cq : ctx->send_cq;
+	attr.recv_cq = has_recv_comp(user_param->verb) ? ctx->recv_cq : ctx->send_cq;
 
 	is_dc_server_side = ((!(user_param->duplex || user_param->tst == LAT) &&
 						  (user_param->machine == SERVER)) ||
@@ -4554,7 +4549,7 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 		return FAILURE;
 	}
 
-	if (!user_param->duplex && user_param->verb != WRITE_IMM && user_param->verb != SEND && user_param->verb != SEND_IMM) {
+	if (!user_param->duplex && !has_recv_comp(user_param->verb)) {
 		signal(SIGINT, handle_sigint);
 	}
 
