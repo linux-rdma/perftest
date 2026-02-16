@@ -56,6 +56,7 @@
 #include <infiniband/verbs.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #if !defined(__FreeBSD__)
 #include <malloc.h>
 #endif
@@ -980,4 +981,10 @@ int compare_ibv_device(const char *name, void* local_value, void* remote_value, 
 int compare_mlx5dv(const char *name, void* local_value, void* remote_value, char** return_values,
 		struct perftest_parameters* user_param, CompareType type);
 #endif
+
+static inline bool has_recv_comp(VerbType verb)
+{
+	return verb == SEND || verb == SEND_IMM || verb == WRITE_IMM;
+}
+
 #endif /* PERFTEST_RESOURCES_H */
