@@ -1,0 +1,55 @@
+name: Build and Test perftest on Ubuntu 24.04 with CUDA 13.1
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install CUDA repository
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libibverbs-dev \
+            librdmacm-dev \
+            libibumad-dev \
+            libpci-dev \
+            cuda-toolkit-13-1 \
+            cuda-drivers
+
+      - name: Set up CUDA environment
+        run: |
+          echo 'export PATH=/usr/local/cuda-13.1/bin:${PATH}' >> $GITHUB_ENV
+          echo 'export LD_LIBRARY_PATH=/usr/local/cuda-13.1/lib64:${LD_LIBRARY_PATH}' >> $GITHUB_ENV
+
+      - name: Run autogen.sh
+        run: ./autogen.sh
+
+      - name: Configure the build
+        run: ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h
+
+      - name: Build perftest
+        run: make
+
+      - name: Install perftest
+        run: sudo make install
