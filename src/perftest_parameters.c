@@ -20,6 +20,7 @@
 #include "hl_memory.h"
 #include "mlu_memory.h"
 #include "opencl_memory.h"
+#include "dm_memory.h"
 #include<math.h>
 #ifdef HAVE_RO
 #include <stdbool.h>
@@ -700,6 +701,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			printf(" Use OpenCl specific platform ID\n");
 		}
 
+		if (dm_memory_dmabuf_supported()) {
+			printf("      --use_ib_dm_dmabuf=<ib_device>");
+			printf(" Use device memory with DMA-BUF export for RDMA testing\n");
+		}
+
 		if (cuda_memory_supported() ||
 		    opencl_memory_supported()) {
 			printf("      --gpu_touch=<once\\infinite> ");
@@ -947,6 +953,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->use_mlu_dmabuf	= 0;
 	user_param->opencl_platform_id	= 0;
 	user_param->opencl_device_id	= 0;
+	user_param->dm_ib_devname	= NULL;
+	user_param->use_ib_dm_dmabuf	= 0;
 	user_param->gpu_touch		= GPU_NO_TOUCH;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
@@ -1987,9 +1995,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_CUDA && user_param->verb == SEND && (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
+	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_DM) &&
+	    user_param->verb == SEND && (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
 		printf(RESULT_LINE);
-		printf("Scatter2CQE (size <= 64) is not supported with GPUDirect send tests: setting MLX5_SCATTER_TO_CQE=0\n");
+		printf("Scatter2CQE (size <= 64) is not supported with device memory send tests: setting MLX5_SCATTER_TO_CQE=0\n");
 		if (disable_mlx5_scatter_to_cqe())
 			exit(1);
 	}
@@ -2009,6 +2018,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (user_param->memory_type == MEMORY_MLU && (int)user_param->size <= user_param->inline_size) {
 		printf(RESULT_LINE);
 		fprintf(stderr,"Perftest doesn't support MLU tests with inline messages\n");
+		exit(1);
+	}
+
+	if (user_param->memory_type == MEMORY_DM && user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
+		printf(RESULT_LINE);
+		fprintf(stderr,"Perftest doesn't support device memory latency test with write verb\n");
 		exit(1);
 	}
 
@@ -2517,6 +2532,11 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 			return;
 		}
 
+		if (user_param->memory_type == MEMORY_DM){
+			user_param->inline_size = 0;
+			return;
+		}
+
 		if (user_param->tst == LAT) {
 			switch(user_param->verb) {
 				case WRITE_IMM:
@@ -2633,6 +2653,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_mlu_dmabuf_flag = 0;
 	static int use_opencl_flag = 0;
 	static int opencl_platform_id_flag = 0;
+	static int use_ib_dm_dmabuf_flag = 0;
 	static int gpu_touch_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
@@ -2825,6 +2846,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_mlu_dmabuf",	.has_arg = 0, .flag = &use_mlu_dmabuf_flag, .val = 1},
 			{ .name = "use_opencl",         .has_arg = 1, .flag = &use_opencl_flag, .val = 1},
 			{ .name = "opencl_platform_id", .has_arg = 1, .flag = &opencl_platform_id_flag, .val = 1},
+			{ .name = "use_ib_dm_dmabuf",	.has_arg = 1, .flag = &use_ib_dm_dmabuf_flag, .val = 1},
 			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -3278,7 +3300,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_hl_flag && !hl_memory_supported()) ||
 				    (use_mlu_flag && !mlu_memory_supported()) ||
 				    (use_mlu_dmabuf_flag && !mlu_memory_dmabuf_supported()) ||
-				    (use_opencl_flag && !opencl_memory_supported())) {
+				    (use_opencl_flag && !opencl_memory_supported()) ||
+				    (use_ib_dm_dmabuf_flag && !dm_memory_dmabuf_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -3289,6 +3312,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
 				    (mmap_file_flag || use_mlu_flag || use_neuron_flag || use_hl_flag ||
+						use_ib_dm_dmabuf_flag ||
 					 (use_rocm_flag && user_param->memory_type != MEMORY_ROCM) ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
 					fprintf(stderr, " Can't use multiple memory types\n");
@@ -3421,6 +3445,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					opencl_platform_id_flag = 0;
+				}
+				if (use_ib_dm_dmabuf_flag) {
+					user_param->dm_ib_devname = strdup(optarg);
+					user_param->use_ib_dm_dmabuf = 1;
+					user_param->memory_type = MEMORY_DM;
+					user_param->memory_create = dm_memory_create;
+					use_ib_dm_dmabuf_flag = 0;
 				}
 				if (gpu_touch_flag) {
 					if (!cuda_gpu_touch_supported()) {

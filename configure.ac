@@ -77,6 +77,12 @@ if test $HAVE_REG_DMABUF_MR = yes; then
 	AC_DEFINE([HAVE_REG_DMABUF_MR], [1], [Enable HAVE_REG_DMABUF_MR])
 fi
 
+AC_CHECK_LIB([ibverbs], [ibv_dm_export_dmabuf_fd], [HAVE_IB_DM_DMABUF=yes], [HAVE_IB_DM_DMABUF=no])
+AM_CONDITIONAL([IB_DM_DMABUF], [test "x$HAVE_IB_DM_DMABUF" = "xyes"])
+if test "x$HAVE_IB_DM_DMABUF" = "xyes"; then
+	AC_DEFINE([HAVE_IB_DM_DMABUF], [1], [Enable IB DM DMABUF export])
+fi
+
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_flow *t = ibv_create_flow(NULL,NULL);],[HAVE_RAW_ETH_REG=yes], [HAVE_RAW_ETH_REG=no])
 

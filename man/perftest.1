@@ -402,6 +402,13 @@ many different options and modes.
  Use MLU DMA-BUF for HW accelerator direct RDMA testing.
  System support required.
 .TP
+.B --use_ib_dm_dmabuf=<ib_device>
+ Use IB device memory (allocated via ibv_alloc_dm) with DMA-BUF export
+ (via ibv_dm_export_dmabuf_fd) for RDMA testing. The <ib_device> argument
+ specifies the IB device name (e.g. mlx5_0). The requested message size
+ must fit within the device's max_dm_size.
+ System support required (rdma-core with ibv_dm_export_dmabuf_fd).
+.TP
 .B --use_opencl=<opencl device id>
  Use OpenCl specific device for GPUDirect RDMA testing
  Not relevant for raw_ethernet_fs_rate.

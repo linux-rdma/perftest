@@ -457,7 +457,8 @@ enum memory_type {
 	MEMORY_NEURON,
 	MEMORY_HL,
 	MEMORY_MLU,
-	MEMORY_OPENCL
+	MEMORY_OPENCL,
+	MEMORY_DM
 };
 
 enum cuda_mem_type {
@@ -616,6 +617,8 @@ struct perftest_parameters {
 	int                             opencl_platform_id;
 	int                             opencl_device_id;
 	int                             gpu_touch;
+	char				*dm_ib_devname;
+	int				use_ib_dm_dmabuf;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	/* New test params format pilot. will be used in all flags soon,. */

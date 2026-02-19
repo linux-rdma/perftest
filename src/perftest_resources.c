@@ -1932,8 +1932,9 @@ static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 		in.fd = dmabuf_fd;
 		in.iova = (uint64_t)ctx->buf[qp_index];
 		in.fd_offset = dmabuf_offset;
-		printf("Calling ibv_reg_mr_ex with dmabuf(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-			   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+		if (user_param->output == FULL_VERBOSITY)
+			printf("Calling ibv_reg_mr_ex with dmabuf(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+				dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
 	} else {
 		in.comp_mask = IBV_REG_MR_MASK_ADDR;
 		in.addr = ctx->buf[qp_index];
@@ -1968,9 +1969,11 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 					fprintf(stderr, "No data direct support\n");
 				return NULL;
 			}
-			printf("Using data direct device at /sys%s\n", data_direct_path);
-			printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			if (user_param->output == FULL_VERBOSITY) {
+				printf("Using data direct device at /sys%s\n", data_direct_path);
+				printf("Calling mlx5dv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+						dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			}
 			return mlx5dv_reg_dmabuf_mr(
 				ctx->pd, dmabuf_offset,
 				ctx->buff_size, (uint64_t)ctx->buf[qp_index],
@@ -1980,8 +1983,9 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 		} else
 #endif
 		{
-			printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
-				   dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+			if (user_param->output == FULL_VERBOSITY)
+				printf("Calling ibv_reg_dmabuf_mr(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
+					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
 			return ibv_reg_dmabuf_mr(
 				ctx->pd, dmabuf_offset,
 				ctx->buff_size, (uint64_t)ctx->buf[qp_index],

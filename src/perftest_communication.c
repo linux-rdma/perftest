@@ -1033,7 +1033,8 @@ int negotiate_params(struct pingpong_context *ctx,
 	};
 	#undef COMPARE
 
-	for (int i = 0; i < sizeof(compare_functions)/sizeof(compare_functions[0]); i++) {
+	int i;
+	for (i = 0; i < sizeof(compare_functions)/sizeof(compare_functions[0]); i++) {
 		if (compare_functions[i].compare_func(compare_functions[i].name,
 											  compare_functions[i].local_value,
 											  compare_functions[i].remote_value,
