@@ -1334,6 +1334,11 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOC(ctx->buf, void*, user_param->num_of_qps);
 
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	if (user_param->use_cc_unprotected)
+		ALLOC(ctx->ibv_buf, struct ibv_buf *, user_param->num_of_qps);
+	#endif
+
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 
 		ALLOC(user_param->tcompleted,cycles_t,tarr_size);
@@ -1493,6 +1498,10 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		free(ctx->mr);
 	if (ctx->buf != NULL)
 		free(ctx->buf);
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	if (user_param->use_cc_unprotected && ctx->ibv_buf != NULL)
+		free(ctx->ibv_buf);
+	#endif
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) {
 		if (ctx->my_addr != NULL)
 			free(ctx->my_addr);
@@ -1672,7 +1681,12 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	for (i = 0; i < dereg_counter; i++) {
-		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
+		#ifdef HAVE_CC_UNPROTECTED_ALLOC
+		if (user_param->use_cc_unprotected)
+			ibv_free_buf(ctx->ibv_buf[i]);
+		else
+		#endif
+			ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
 	}
 
 	if (ctx->send_rcredit) {
@@ -1762,6 +1776,10 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	if (user_param->use_cc_unprotected)
+		free(ctx->ibv_buf);
+	#endif
 	free(ctx->qp);
 	ctx->qp = NULL;
 
@@ -2206,6 +2224,12 @@ static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 		if (user_param->output == FULL_VERBOSITY)
 			printf("Calling ibv_reg_mr_ex with dmabuf(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
 				dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
+#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	} else if (user_param->use_cc_unprotected) {
+		in.comp_mask = IBV_REG_MR_MASK_BUF | IBV_REG_MR_MASK_ADDR;
+		in.addr = ctx->buf[qp_index];
+		in.buf = ctx->ibv_buf[qp_index];
+#endif
 	} else {
 		in.comp_mask = IBV_REG_MR_MASK_ADDR;
 		in.addr = ctx->buf[qp_index];
@@ -2339,18 +2363,31 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 			return FAILURE;
 	}
 
-	if (user_param->memory_type == MEMORY_MMAP) {
-		#if defined(__FreeBSD__)
-		posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
-		#else
-		ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
-		#endif
-	}
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	if (user_param->use_cc_unprotected) {
+		ctx->buf[qp_index] = ibv_alloc_buf(ctx->pad, ctx->buff_size,
+						   &ctx->ibv_buf[qp_index]);
+		if (!ctx->buf[qp_index]) {
+			fprintf(stderr, "ibv_alloc_buf failed\n");
+			return FAILURE;
+		}
+		memset(ctx->buf[qp_index], 0, ctx->buff_size);
+	} else
+	#endif
+	{
+		if (user_param->memory_type == MEMORY_MMAP) {
+			#if defined(__FreeBSD__)
+			posix_memalign(ctx->buf, user_param->cycle_buffer, ctx->buff_size);
+			#else
+			ctx->buf = memalign(user_param->cycle_buffer, ctx->buff_size);
+			#endif
+		}
 
-	if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
-						&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
-						&can_init_mem)) {
-		return FAILURE;
+		if (ctx->memory->allocate_buffer(ctx->memory, user_param->cycle_buffer, ctx->buff_size,
+							&dmabuf_fd, &dmabuf_offset, &ctx->buf[qp_index],
+							&can_init_mem)) {
+			return FAILURE;
+		}
 	}
 
 	/* Setup access flags */
@@ -2358,6 +2395,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 
 	/* Register memory region */
 	if (register_memory_region(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset) != SUCCESS) {
+		#ifdef HAVE_CC_UNPROTECTED_ALLOC
+		if (user_param->use_cc_unprotected)
+			ibv_free_buf(ctx->ibv_buf[qp_index]);
+		#endif
 		return FAILURE;
 	}
 
@@ -2497,8 +2538,13 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 	return 0;
 
 destroy_mr:
-	for (i = 0; i < mr_index; i++)
+	for (i = 0; i < mr_index; i++) {
 		ibv_dereg_mr(ctx->mr[i]);
+		#ifdef HAVE_CC_UNPROTECTED_ALLOC
+		if (user_param->use_cc_unprotected)
+			ibv_free_buf(ctx->ibv_buf[i]);
+		#endif
+	}
 
 	return FAILURE;
 }
@@ -2699,6 +2745,9 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 	#ifdef HAVE_TD_API
 	need_parent_domain |= user_param->no_lock;
 	#endif
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	need_parent_domain |= user_param->use_cc_unprotected;
+	#endif
 
 	if (need_parent_domain) {
 		struct ibv_parent_domain_init_attr pad_attr = {
@@ -2715,6 +2764,12 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 				goto pd;
 			}
 			pad_attr.td = ctx->td;
+		}
+		#endif
+
+		#ifdef HAVE_CC_UNPROTECTED_ALLOC
+		if (user_param->use_cc_unprotected) {
+			pad_attr.comp_mask |= IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC;
 		}
 		#endif
 
@@ -2945,8 +3000,13 @@ cqs:
 mr:
 	dereg_counter = (user_param->mr_per_qp) ? user_param->num_of_qps : 1;
 
-	for (i = 0; i < dereg_counter; i++)
+	for (i = 0; i < dereg_counter; i++) {
 		ibv_dereg_mr(ctx->mr[i]);
+		#ifdef HAVE_CC_UNPROTECTED_ALLOC
+		if (user_param->use_cc_unprotected)
+			ibv_free_buf(ctx->ibv_buf[i]);
+		#endif
+	}
 
 dmah:
 #ifdef HAVE_REG_MR_EX

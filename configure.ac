@@ -98,6 +98,14 @@ if test "x$HAVE_IB_DM_DMABUF" = "xyes"; then
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[int x = IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC;],
+	[HAVE_CC_UNPROTECTED_ALLOC=yes], [HAVE_CC_UNPROTECTED_ALLOC=no])
+AM_CONDITIONAL([HAVE_CC_UNPROTECTED_ALLOC], [test "x$HAVE_CC_UNPROTECTED_ALLOC" = "xyes"])
+if test $HAVE_CC_UNPROTECTED_ALLOC = yes; then
+	AC_DEFINE([HAVE_CC_UNPROTECTED_ALLOC], [1], [Enable CoCo unprotected allocation support])
+fi
+
+AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[struct ibv_flow *t = ibv_create_flow(NULL,NULL);],[HAVE_RAW_ETH_REG=yes], [HAVE_RAW_ETH_REG=no])
 
 AM_CONDITIONAL([HAVE_RAW_ETH_REG],[test "x$HAVE_RAW_ETH_REG" = "xyes"])

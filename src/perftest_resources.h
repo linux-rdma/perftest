@@ -328,6 +328,9 @@ struct pingpong_context {
 	uint64_t				tail_markers_offset;    /* Offset to tail markers (64-byte aligned) */
 	uint64_t				recv_slots_offset;      /* Offset to recv slots (64-byte aligned) */
 	uint64_t				atomic_returns_offset;  /* Offset to atomic return values area (64-byte aligned) */
+	#ifdef HAVE_CC_UNPROTECTED_ALLOC
+	struct ibv_buf				**ibv_buf;
+	#endif
 };
 
  struct pingpong_dest {

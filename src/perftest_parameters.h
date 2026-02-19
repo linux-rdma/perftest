@@ -634,6 +634,7 @@ struct perftest_parameters {
 	int				use_ib_dm_dmabuf;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
+	int				use_cc_unprotected;
 	/* New test params format pilot. will be used in all flags soon,. */
 	enum ctx_test_method 		test_method;
 	enum ibv_transport_type 	transport_type;
