@@ -1536,6 +1536,10 @@ int destroy_ctx(struct pingpong_context *ctx,
 		}
 	}
 
+	for (i = 0; i < dereg_counter; i++) {
+		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
+	}
+
 	if (ctx->send_rcredit) {
 		if (ibv_dereg_mr(ctx->credit_mr)) {
 			fprintf(stderr, "Failed to deregister send credit MR\n");
@@ -1578,13 +1582,15 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 	#endif
 
-	#ifdef HAVE_TD_API
-	if (user_param->no_lock) {
+	if (ctx->pad && ctx->pad != ctx->pd) {
 		if (ibv_dealloc_pd(ctx->pad)) {
 			fprintf(stderr, "Failed to deallocate PAD - %s\n", strerror(errno));
 			test_result = 1;
 		}
+	}
 
+	#ifdef HAVE_TD_API
+	if (user_param->no_lock && ctx->td) {
 		if (ibv_dealloc_td(ctx->td)) {
 			fprintf(stderr, "Failed to deallocate TD - %s\n", strerror(errno));
 			test_result = 1;
@@ -1620,10 +1626,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 			fprintf(stderr, "Failed to close device context\n");
 			test_result = 1;
 		}
-	}
-
-	for (i = 0; i < dereg_counter; i++) {
-		ctx->memory->free_buffer(ctx->memory, 0, ctx->buf[i], ctx->buff_size);
 	}
 
 	free(ctx->qp);
@@ -1853,15 +1855,13 @@ int create_reg_cqs(struct pingpong_context *ctx,
 		.comp_vector = user_param->eq_num,
 	};
 
-	#ifdef HAVE_TD_API
-	if (user_param->no_lock) {
+	if (ctx->pad != ctx->pd) {
 		send_cq_attr.parent_domain = ctx->pad;
 		send_cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_PD;
 	}
-	#endif
 	ctx->send_cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ctx->context, &send_cq_attr));
 	if (!ctx->send_cq) {
-		if (!user_param->no_lock && errno == EOPNOTSUPP)
+		if (ctx->pad == ctx->pd && errno == EOPNOTSUPP)
 			goto cq_ex_not_supported;
 		fprintf(stderr, "Couldn't create CQ\n");
 		return FAILURE;
@@ -1874,12 +1874,10 @@ int create_reg_cqs(struct pingpong_context *ctx,
 			.channel = ctx->recv_channel,
 			.comp_vector = user_param->eq_num,
 		};
-		#ifdef HAVE_TD_API
-		if (user_param->no_lock) {
+		if (ctx->pad != ctx->pd) {
 			recv_cq_attr.parent_domain = ctx->pad;
 			recv_cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_PD;
 		}
-		#endif
 		ctx->recv_cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ctx->context, &recv_cq_attr));
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
@@ -2076,7 +2074,7 @@ static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 		in.dmah = ctx->dmah;
 	}
 
-	return ibv_reg_mr_ex(ctx->pd, &in);
+	return ibv_reg_mr_ex(ctx->pad, &in);
 }
 #endif
 
@@ -2129,7 +2127,7 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 #endif
 	} else {
 		/* Regular memory registration using standard API */
-		return ibv_reg_mr(ctx->pd, ctx->buf[qp_index], ctx->buff_size, flags);
+		return ibv_reg_mr(ctx->pad, ctx->buf[qp_index], ctx->buff_size, flags);
 	}
 }
 
@@ -2554,21 +2552,28 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 		goto comp_channel;
 	}
 
+	int need_parent_domain = 0;
 	#ifdef HAVE_TD_API
-	/* Allocating the Thread domain, Parent domain. */
-	if (user_param->no_lock) {
-		struct ibv_td_init_attr td_attr = {0};
-		ctx->td = ibv_alloc_td(ctx->context, &td_attr);
-		if (!ctx->td) {
-			fprintf(stderr, "Couldn't allocate TD\n");
-			goto pd;
-		}
+	need_parent_domain |= user_param->no_lock;
+	#endif
 
+	if (need_parent_domain) {
 		struct ibv_parent_domain_init_attr pad_attr = {
 			.pd = ctx->pd,
-			.td = ctx->td,
 			.comp_mask = 0,
 		};
+
+		#ifdef HAVE_TD_API
+		if (user_param->no_lock) {
+			struct ibv_td_init_attr td_attr = {0};
+			ctx->td = ibv_alloc_td(ctx->context, &td_attr);
+			if (!ctx->td) {
+				fprintf(stderr, "Couldn't allocate TD\n");
+				goto pd;
+			}
+			pad_attr.td = ctx->td;
+		}
+		#endif
 
 		ctx->pad = ibv_alloc_parent_domain(ctx->context, &pad_attr);
 		if (!ctx->pad) {
@@ -2576,11 +2581,8 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 			goto td;
 		}
 	} else {
-	#endif
 		ctx->pad = ctx->pd;
-	#ifdef HAVE_TD_API
 	}
-	#endif
 
 
 	#ifdef HAVE_AES_XTS
@@ -2829,16 +2831,15 @@ dek:
 			mlx5dv_dek_destroy(ctx->dek[i]);
 #endif
 
-#ifdef HAVE_TD_API
-	if (user_param->no_lock)
+	if (ctx->pad && ctx->pad != ctx->pd)
 		ibv_dealloc_pd(ctx->pad);
 
 td:
-	if (user_param->no_lock)
+#ifdef HAVE_TD_API
+	if (user_param->no_lock && ctx->td)
 		ibv_dealloc_td(ctx->td);
-pd:
 #endif
-
+pd:
 	ibv_dealloc_pd(ctx->pd);
 	ctx->pd = NULL;
 
