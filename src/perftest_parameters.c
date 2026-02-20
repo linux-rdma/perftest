@@ -4435,25 +4435,75 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 	dprintf(out_json_fds, "\n},\n");
 }
 
-static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters *user_param, int inc_accuracy,
-		double bw_avg, double msgRate_avg, unsigned long size, int sl, uint64_t iters, double bw_peak) {
+static struct bw_report_data sum_bw_reports(struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep) {
+	struct bw_report_data merged_bw_rep = *my_bw_rep;
 
-	dprintf(out_json_fd, "\"results\": {\n");
+	if (rem_bw_rep != NULL) {
+		merged_bw_rep.bw_peak        += rem_bw_rep->bw_peak;
+		merged_bw_rep.bw_avg         += rem_bw_rep->bw_avg;
+		merged_bw_rep.bw_avg_p1      += rem_bw_rep->bw_avg_p1;
+		merged_bw_rep.bw_avg_p2      += rem_bw_rep->bw_avg_p2;
+		merged_bw_rep.msgRate_avg    += rem_bw_rep->msgRate_avg;
+		merged_bw_rep.msgRate_avg_p1 += rem_bw_rep->msgRate_avg_p1;
+		merged_bw_rep.msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
+	}
+
+	return merged_bw_rep;
+}
+
+static void write_bw_report_data_to_file(int out_json_fd, struct perftest_parameters *user_param, int inc_accuracy,
+	struct bw_report_data *bw_rep) {
 
 	if (user_param->output == OUTPUT_BW)
-		dprintf(out_json_fd, "\"bw_avg\": %lf,\n", bw_avg);
+		dprintf(out_json_fd, "\"bw_avg\": %lf,\n", bw_rep->bw_avg);
 	else if (user_param->output == OUTPUT_MR)
-		dprintf(out_json_fd, "\"msgRate_avg\": %lf,\n", msgRate_avg);
+		dprintf(out_json_fd, "\"msgRate_avg\": %lf,\n", bw_rep->msgRate_avg);
 	else if (user_param->raw_qos)
-		dprintf(out_json_fd, REPORT_FMT_QOS_JSON, size, sl, iters, bw_peak, bw_avg, msgRate_avg);
+		dprintf(out_json_fd, REPORT_FMT_QOS_JSON,
+			bw_rep->size, bw_rep->sl, bw_rep->iters, bw_rep->bw_peak, bw_rep->bw_avg, bw_rep->msgRate_avg);
 	else
 		dprintf(out_json_fd, inc_accuracy ? REPORT_FMT_EXT_JSON : REPORT_FMT_JSON,
-								   size, iters, bw_peak, bw_avg, msgRate_avg);
+			bw_rep->size, bw_rep->iters, bw_rep->bw_peak, bw_rep->bw_avg, bw_rep->msgRate_avg);
 
 	dprintf(out_json_fd, user_param->cpu_util_data.enable ?
 							REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON, calc_cpu_util(user_param));
+}
 
-	dprintf(out_json_fd, "}\n");
+static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters *user_param,
+	struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
+{
+	struct bw_report_data sum_bw_report = sum_bw_reports(my_bw_rep, rem_bw_rep);
+	int inc_accuracy = ((sum_bw_report.bw_avg < 0.1) && (user_param->report_fmt == GBS));
+
+	dprintf(out_json_fd, "\"results\": {\n");
+	write_bw_report_data_to_file(out_json_fd, user_param, inc_accuracy, &sum_bw_report);
+
+	if (user_param->report_both && rem_bw_rep != NULL) {
+		dprintf(out_json_fd, "},\n");
+	} else {
+		dprintf(out_json_fd, "}\n");
+	}
+
+	if (user_param->report_both && rem_bw_rep != NULL) {
+		dprintf(out_json_fd, "\"results_local\": {\n");
+		write_bw_report_data_to_file(out_json_fd, user_param, inc_accuracy, my_bw_rep);
+		dprintf(out_json_fd, "},\n");
+
+		dprintf(out_json_fd, "\"results_remote\": {\n");
+		write_bw_report_data_to_file(out_json_fd, user_param, inc_accuracy, rem_bw_rep);
+		dprintf(out_json_fd, "}\n");
+	}
+}
+
+void print_full_bw_report_to_file(struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep) {
+	int out_json_fd = open_file_write(user_param->out_json_file_name);
+	if(out_json_fd >= 0){
+		dprintf(out_json_fd,"{\n");
+		write_test_info_to_file(out_json_fd, user_param);
+		write_bw_report_to_file(out_json_fd, user_param, my_bw_rep, rem_bw_rep);
+		dprintf(out_json_fd,"}\n");
+		close(out_json_fd);
+	}
 }
 
 /******************************************************************************
@@ -4462,62 +4512,33 @@ static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters 
 
 void print_full_bw_report (struct perftest_parameters *user_param, struct bw_report_data *my_bw_rep, struct bw_report_data *rem_bw_rep)
 {
-
-	double bw_peak     = my_bw_rep->bw_peak;
-	double bw_avg      = my_bw_rep->bw_avg;
-	double bw_avg_p1      = my_bw_rep->bw_avg_p1;
-	double bw_avg_p2      = my_bw_rep->bw_avg_p2;
-	double msgRate_avg = my_bw_rep->msgRate_avg;
-	double msgRate_avg_p1 = my_bw_rep->msgRate_avg_p1;
-	double msgRate_avg_p2 = my_bw_rep->msgRate_avg_p2;
-	int inc_accuracy = ((bw_avg < 0.1) && (user_param->report_fmt == GBS));
-
-	if (rem_bw_rep != NULL) {
-		bw_peak     += rem_bw_rep->bw_peak;
-		bw_avg      += rem_bw_rep->bw_avg;
-		bw_avg_p1      += rem_bw_rep->bw_avg_p1;
-		bw_avg_p2      += rem_bw_rep->bw_avg_p2;
-		msgRate_avg += rem_bw_rep->msgRate_avg;
-		msgRate_avg_p1 += rem_bw_rep->msgRate_avg_p1;
-		msgRate_avg_p2 += rem_bw_rep->msgRate_avg_p2;
-	}
+	struct bw_report_data sum_bw_report = sum_bw_reports(my_bw_rep, rem_bw_rep);
+	int inc_accuracy = ((sum_bw_report.bw_avg < 0.1) && (user_param->report_fmt == GBS));
 
 	if ((user_param->duplex && rem_bw_rep != NULL) ||  (!user_param->duplex && rem_bw_rep == NULL)
 	    || (user_param->duplex && (user_param->verb == SEND || user_param->verb == SEND_IMM))) {
 		/* Verify Limits */
-		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > bw_avg)) )
+		if ( ((user_param->is_limit_bw == ON )&& (user_param->limit_bw > sum_bw_report.bw_avg)) )
 			user_param->is_bw_limit_passed |= 0;
 		else
 			user_param->is_bw_limit_passed |= 1;
 
-		if ( (user_param->is_limit_msgrate) && (user_param->limit_msgrate > msgRate_avg) )
+		if ( (user_param->is_limit_msgrate) && (user_param->limit_msgrate > sum_bw_report.msgRate_avg) )
 			user_param->is_msgrate_limit_passed |= 0;
 		else
 			user_param->is_msgrate_limit_passed |= 1;
 	}
 
-	if(user_param->out_json) {
-		int out_json_fd = open_file_write(user_param->out_json_file_name);
-		if(out_json_fd >= 0){
-			dprintf(out_json_fd,"{\n");
-			write_test_info_to_file(out_json_fd, user_param);
-			write_bw_report_to_file(out_json_fd, user_param, inc_accuracy,
-					bw_avg, msgRate_avg, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak);
-			dprintf(out_json_fd,"}\n");
-			close(out_json_fd);
-		}
-	}
-
 	if (user_param->output == OUTPUT_BW)
-		printf("%lf\n",bw_avg);
+		printf("%lf\n",sum_bw_report.bw_avg);
 	else if (user_param->output == OUTPUT_MR)
-		printf("%lf\n",msgRate_avg);
+		printf("%lf\n",sum_bw_report.msgRate_avg);
 	else if (user_param->raw_qos)
-		printf( REPORT_FMT_QOS, my_bw_rep->size, my_bw_rep->sl, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		printf( REPORT_FMT_QOS, sum_bw_report.size, sum_bw_report.sl, sum_bw_report.iters, sum_bw_report.bw_peak, sum_bw_report.bw_avg, sum_bw_report.msgRate_avg);
 	else if (user_param->report_per_port)
-		printf(REPORT_FMT_PER_PORT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg, bw_avg_p1, msgRate_avg_p1, bw_avg_p2, msgRate_avg_p2);
+		printf(REPORT_FMT_PER_PORT, sum_bw_report.size, sum_bw_report.iters, sum_bw_report.bw_peak, sum_bw_report.bw_avg, sum_bw_report.msgRate_avg, sum_bw_report.bw_avg_p1, sum_bw_report.msgRate_avg_p1, sum_bw_report.bw_avg_p2, sum_bw_report.msgRate_avg_p2);
 	else
-		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
+		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, sum_bw_report.size, sum_bw_report.iters, sum_bw_report.bw_peak, sum_bw_report.bw_avg, sum_bw_report.msgRate_avg);
 	if (user_param->output == FULL_VERBOSITY) {
 		fflush(stdout);
 		fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
