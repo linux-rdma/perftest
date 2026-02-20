@@ -1175,6 +1175,7 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		ALLOC(user_param->tcompleted, cycles_t, 1);
 
 	ALLOC(ctx->qp, struct ibv_qp*, user_param->num_of_qps);
+	memset(ctx->qp, 0, user_param->num_of_qps * sizeof (struct ibv_qp*));
 	#ifdef HAVE_IBV_WR_API
 	ALLOC(ctx->qpx, struct ibv_qp_ex*, user_param->num_of_qps);
 	#ifdef HAVE_MLX5DV
@@ -2693,11 +2694,14 @@ pd:
 #endif
 
 	ibv_dealloc_pd(ctx->pd);
+	ctx->pd = NULL;
 
 comp_channel:
 	if (user_param->use_event) {
 		ibv_destroy_comp_channel(ctx->send_channel);
 		ibv_destroy_comp_channel(ctx->recv_channel);
+		ctx->send_channel = NULL;
+		ctx->recv_channel = NULL;
 	}
 
 	return FAILURE;
@@ -6173,10 +6177,10 @@ cleaning:
 *
 ******************************************************************************/
 int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
-	struct perftest_parameters *user_param, struct rdma_addrinfo *hints)
+	struct perftest_parameters *user_param, struct rdma_addrinfo *hints, bool retry)
 {
 	int rc = SUCCESS, i = 0;
-	char *error_message;
+	char error_message[ERROR_MSG_SIZE] = "";
 
 	if (user_param->connection_type == UD
 		|| user_param->connection_type == RawEth)
@@ -6184,28 +6188,38 @@ int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 	else
 		hints->ai_port_space = RDMA_PS_TCP;
 
-	ALLOCATE(ctx->cma_master.nodes, struct cma_node, user_param->num_of_qps);
-	if (!ctx->cma_master.nodes) {
-		error_message = "Failed to allocate memory for RDMA CM nodes.";
-		goto error;
+	if(!retry){
+		ALLOCATE(ctx->cma_master.nodes, struct cma_node, user_param->num_of_qps);
+		if (!ctx->cma_master.nodes) {
+			sprintf(error_message, "Failed to allocate memory for RDMA CM nodes.");
+			goto error;
+		}
+
+		memset(ctx->cma_master.nodes, 0,
+			(sizeof *ctx->cma_master.nodes) * user_param->num_of_qps);
 	}
 
-	memset(ctx->cma_master.nodes, 0,
-		(sizeof *ctx->cma_master.nodes) * user_param->num_of_qps);
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (ctx->cma_master.nodes[i].cma_id) {
+			continue;
+		}
 		ctx->cma_master.nodes[i].id = i;
 		if (user_param->machine == CLIENT) {
 			rc = rdma_create_id(ctx->cma_master.channel,
 				&ctx->cma_master.nodes[i].cma_id, NULL, hints->ai_port_space);
 			if (rc) {
-				error_message = "Failed to create RDMA CM ID.";
+				sprintf(error_message, "Failed to create RDMA CM ID on cm_node %d.", i);
 				goto error;
 			}
 		}
 	}
 
 	if (user_param->has_source_ip) {
+		 if (retry && hints->ai_src_addr) {
+			free(hints->ai_src_addr);
+			hints->ai_src_addr = NULL;
+		}
 		if (AF_INET == user_param->ai_family) {
 			struct sockaddr_in *source_addr;
 			source_addr = calloc(1, sizeof(*source_addr));
@@ -6245,7 +6259,7 @@ error:
 	while (--i >= 0) {
 		rc = rdma_destroy_id(ctx->cma_master.nodes[i].cma_id);
 		if (rc) {
-			error_message = "Failed to destroy RDMA CM ID.";
+			sprintf(error_message, "Failed to destroy RDMA CM ID for node %d.", i);
 			break;
 		}
 	}
@@ -6282,20 +6296,38 @@ int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
 		cm_node = &ctx->cma_master.nodes[i];
-		rc = rdma_destroy_id(cm_node->cma_id);
-		if (rc) {
-			sprintf(error_message,
-				"Failed to destroy RDMA CM ID number %d.", i);
-			goto error;
+		if(cm_node && cm_node->cma_id)
+		{
+			if (cm_node->connected) {
+				continue;
+			}
+
+			if (ctx->qp && ctx->qp[i]) {
+				ibv_destroy_qp(ctx->qp[i]);
+				ctx->qp[i] = NULL;
+			}
+			if (user_param->ah_allocated && ctx->ah && ctx->ah[i]) {
+				ibv_destroy_ah(ctx->ah[i]);
+				ctx->ah[i] = NULL;
+			}
+			rc = rdma_destroy_id(cm_node->cma_id);
+			if (rc) {
+				sprintf(error_message,
+					"Failed to destroy RDMA CM ID number %d.",
+					i);
+				goto error;
+			}
+			cm_node->cma_id = NULL;
 		}
 	}
 
-	rdma_destroy_event_channel(ctx->cma_master.channel);
-	if (ctx->cma_master.rai) {
-		rdma_freeaddrinfo(ctx->cma_master.rai);
+	int connected_count = 0;
+	for (i = 0; i < user_param->num_of_qps; i++) {
+		if (ctx->cma_master.nodes[i].connected) {
+			connected_count++;
+		}
 	}
-
-	free(ctx->cma_master.nodes);
+	ctx->cma_master.connects_left = user_param->num_of_qps - connected_count;
 	return rc;
 
 error:
