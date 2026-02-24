@@ -961,6 +961,9 @@ int negotiate_params(struct pingpong_context *ctx,
 		struct perftest_comm *comm,
 		struct perftest_parameters *user_param)
 {
+	if (atof(user_param->rem_version) < 6.28)
+		return SUCCESS;
+
 	/* Fill local parameters */
 	struct perftest_parameters_negotiate local_params = {
 		.test_method = hton_int(user_param->test_method),
