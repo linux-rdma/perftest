@@ -30,7 +30,11 @@ extern CUresult (*p_cuDeviceGetCount)(int *);
 extern CUresult (*p_cuDeviceGet)(CUdevice *, int);
 extern CUresult (*p_cuDeviceGetAttribute)(int *, CUdevice_attribute, CUdevice);
 extern CUresult (*p_cuDeviceGetName)(char *, int, CUdevice);
+#if CUDA_VERSION >= 13000
+extern CUresult (*p_cuCtxCreate)(CUcontext *, CUctxCreateParams *, unsigned int, CUdevice);
+#else
 extern CUresult (*p_cuCtxCreate)(CUcontext *, unsigned int, CUdevice);
+#endif
 extern CUresult (*p_cuDevicePrimaryCtxRetain)(CUcontext *, CUdevice);
 extern CUresult (*p_cuCtxSetCurrent)(CUcontext);
 extern CUresult (*p_cuCtxDestroy)(CUcontext);
@@ -47,7 +51,7 @@ extern CUresult (*p_cuMemGetHandleForAddressRange)(void *, void *, size_t, CUmem
 extern CUresult (*p_cuDriverGetVersion)(int* driverVersion);
 extern CUresult (*p_cuCtxSynchronize) (void);
 extern CUresult (*p_cuMemAllocManaged)(CUdeviceptr* dptr, size_t bytesize, unsigned int  flags);
-#if CUDA_VER >= 12000
+#if CUDA_VERSION >= 12000
 extern CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags, CUdriverProcAddressQueryResult* symbolStatus);
 #else
 extern CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags);

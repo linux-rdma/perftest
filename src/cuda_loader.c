@@ -10,7 +10,11 @@ CUresult (*p_cuDeviceGetCount)(int *) = NULL;
 CUresult (*p_cuDeviceGet)(CUdevice *, int) = NULL;
 CUresult (*p_cuDeviceGetAttribute)(int *, CUdevice_attribute, CUdevice) = NULL;
 CUresult (*p_cuDeviceGetName)(char *, int, CUdevice) = NULL;
+#if CUDA_VERSION >= 13000
+CUresult (*p_cuCtxCreate)(CUcontext *, CUctxCreateParams *, unsigned int, CUdevice) = NULL;
+#else
 CUresult (*p_cuCtxCreate)(CUcontext *, unsigned int, CUdevice) = NULL;
+#endif
 CUresult (*p_cuDevicePrimaryCtxRetain)(CUcontext *, CUdevice) = NULL;
 CUresult (*p_cuCtxSetCurrent)(CUcontext) = NULL;
 CUresult (*p_cuCtxDestroy)(CUcontext) = NULL;
@@ -25,7 +29,7 @@ CUresult (*p_cuMemcpyDtoD)(CUdeviceptr, CUdeviceptr, size_t) = NULL;
 CUresult (*p_cuMemGetHandleForAddressRange)(void *, void *, size_t, CUmemRangeHandleType, unsigned int) = NULL;
 #endif
 CUresult (*p_cuDriverGetVersion)(int* driverVersion) = NULL;
-#if CUDA_VER >= 12000
+#if CUDA_VERSION >= 12000
 CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags, CUdriverProcAddressQueryResult* symbolStatus) = NULL;
 #else
 CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags) = NULL;
@@ -35,7 +39,7 @@ CUresult (*p_cuCtxSynchronize) (void) = NULL;
 
 
 int load_cuda_function(void **func_ptr, const char *func_name, int version) {
-    #if CUDA_VER >= 12000
+    #if CUDA_VERSION >= 12000
     CUresult res = p_cuGetProcAddress(func_name, func_ptr, version, 0, NULL);
     #else
     CUresult res = p_cuGetProcAddress(func_name, func_ptr, version, 0);
