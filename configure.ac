@@ -573,6 +573,11 @@ if [test $HAVE_IBV_WR_API = yes]; then
 	if [test $HAVE_SRD_QP_SL_SUPPORT = yes]; then
 		AC_DEFINE([HAVE_SRD_QP_SL], [1], [Have SRD QP SL support])
 	fi
+	AC_TRY_LINK([#include <infiniband/efadv.h>],
+		    [int x = EFADV_QP_FLAGS_INLINE_WRITE;], [HAVE_WRITE_INLINE_SRD=yes], [HAVE_WRITE_INLINE_SRD=no])
+	if [test $HAVE_WRITE_INLINE_SRD = yes]; then
+		AC_DEFINE([HAVE_SRD_WRITE_INLINE], [1], [Have SRD with RDMA write inline support])
+	fi
 else
 	AC_CHECK_LIB([efa], [efadv_create_driver_qp], [HAVE_SRD=yes], [HAVE_SRD=no])
 fi

@@ -3091,6 +3091,12 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_SRD_QP_SL
 		efa_attr.sl = user_param->sl;
 		#endif
+		#ifdef HAVE_SRD_WRITE_INLINE
+		if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->inline_size) {
+			efa_attr.flags |= EFADV_QP_FLAGS_INLINE_WRITE;
+		}
+		#endif
+
 		qp = efadv_create_qp_ex(ctx->context, &attr_ex,
 					&efa_attr, sizeof(efa_attr));
 		#else
