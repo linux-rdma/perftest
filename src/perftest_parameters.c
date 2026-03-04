@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #endif
 #include "perftest_parameters.h"
+#include "validation_common.h"
 #include "mlx5_devx.h"
 #include "raw_ethernet_resources.h"
 #include "host_memory.h"
@@ -480,6 +481,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --disable_dynamic_polling ");
 		printf(" Disable dynamic CQE polling adaptation (default enabled)\n");
+
+		printf("      --data_validation ");
+		printf(" Enable data validation (tx_depth must be same on both sides)\n");
+		printf("                         ");
+		printf(" In DURATION mode, bytes_validated = duration/(duration-2*margin) * iters * size\n");
+		printf("      --data_validation_debug ");
+		printf(" Enable verbose debug output for data validation\n");
 	}
 
 	if (connection_type != RawEth) {
@@ -1030,6 +1038,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_id		= -1;
 	user_param->processing_hints			= -1;
 	user_param->dynamic_cqe_poll = ON;
+	user_param->data_validation = OFF;
+	user_param->data_validation_debug = OFF;
 }
 
 static int open_file_write(const char* file_path)
@@ -1226,6 +1236,7 @@ void  get_gbps_str_by_ibv_rate(char *rate_input_value, int *rate)
 /******************************************************************************
  *
  ******************************************************************************/
+
 void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 {
 	if (user_param->flows != DEF_FLOWS) {
@@ -1350,6 +1361,132 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		printf(RESULT_LINE);
 		printf(" Using Connectionless server only avavilible in Multicast, UD BW with RUN INFINITELY tests.\n");
 		exit (1);
+	}
+
+	if (user_param->data_validation) {
+#if !defined(HAVE_AVX512) && !defined(HAVE_AVX2) && !defined(HAVE_SSE42) && !defined(HAVE_NEON)
+		if (user_param->memory_type != MEMORY_CUDA) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires SIMD support (AVX2/SSE4.2/NEON) for host validation\n");
+			exit(1);
+		}
+#endif
+		/* Require CUDA or HOST memory */
+		// cppcheck-suppress knownConditionTrueFalse
+		if (user_param->memory_type != MEMORY_CUDA &&
+		    user_param->memory_type != MEMORY_HOST) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires --use_cuda or host memory\n");
+			exit(1);
+		}
+
+		/* Require WRITE or READ verb */
+		if (user_param->verb != WRITE && user_param->verb != READ) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is only supported with WRITE or READ verb\n");
+			exit(1);
+		}
+
+		/* Set validation mode based on verb */
+		user_param->validation_mode = (user_param->verb == READ) ?
+			VALIDATION_MODE_READ : VALIDATION_MODE_WRITE;
+
+		/* Require BW test type */
+		if (user_param->tst != BW) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is only supported in bandwidth tests\n");
+			exit(1);
+		}
+
+		/* Incompatible with post_list > 1 */
+		if (user_param->post_list > 1) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with --post_list > 1\n");
+			exit(1);
+		}
+
+		/* Incompatible with run_infinitely */
+		if (user_param->test_method == RUN_INFINITELY) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with --run_infinitely\n");
+			exit(1);
+		}
+
+		/* Require RC connection (RDMA atomics needed) */
+		if (user_param->connection_type != RC) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires RC connection type\n");
+			exit(1);
+		}
+
+		/* Incompatible with mr_per_qp */
+		if (user_param->mr_per_qp) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with --mr_per_qp\n");
+			exit(1);
+		}
+
+		/* Incompatible with payload modification */
+		if (user_param->has_payload_modification) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with payload modification\n");
+			exit(1);
+		}
+
+		/* Incompatible with run_all (-a) */
+		if (user_param->test_method == RUN_ALL) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with -a (run all sizes)\n");
+			exit(1);
+		}
+
+		/* Incompatible with gpu_touch */
+		if (user_param->gpu_touch != GPU_NO_TOUCH) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with --gpu_touch\n");
+			exit(1);
+		}
+
+		/* Incompatible with null_mr */
+		if (user_param->use_null_mr) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation is incompatible with --use-null-mr\n");
+			exit(1);
+		}
+
+		/* Require tx_depth >= 32 */
+		if (user_param->tx_depth < 32) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires tx_depth >= 32 (use -t)\n");
+			exit(1);
+		}
+
+		user_param->validation_chunk_size =
+			derive_validation_chunk_size(
+				(uint64_t)user_param->size,
+				user_param->tx_depth);
+
+		{
+			uint64_t chunk_bytes = (uint64_t)user_param->size
+					       * user_param->validation_chunk_size;
+			user_param->validation_chunks_per_qp =
+				derive_validation_chunks_per_qp(
+					chunk_bytes,
+					user_param->num_of_qps,
+					user_param->verb == READ);
+		}
+
+		if (user_param->data_validation_debug) {
+			uint64_t eff_chunk_bytes = (uint64_t)user_param->size * user_param->validation_chunk_size;
+			printf(VALIDATION_LOG_PREFIX " validation_chunk_size=%u (tx_depth=%d), "
+			       "chunk_bytes=%lu, chunks_per_qp=%d, "
+			       "ring_size=%lu bytes\n",
+			       user_param->validation_chunk_size,
+			       user_param->tx_depth,
+			       (unsigned long)eff_chunk_bytes,
+			       user_param->validation_chunks_per_qp,
+			       (unsigned long)(eff_chunk_bytes * user_param->validation_chunks_per_qp));
+		}
 	}
 
 	/* XRC Part */
@@ -2731,6 +2868,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int sig_offload_flag = 0;
 	#endif
 
+	static int data_validation_flag = 0;
+	static int data_validation_debug_flag = 0;
+
 	char *server_ip = NULL;
 	char *client_ip = NULL;
 	char *local_ip = NULL;
@@ -2919,6 +3059,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SIG_OFFLOAD
 			{.name = "sig_offload", .has_arg = 0, .flag = &sig_offload_flag, .val = 1 },
 			#endif
+			{.name = "data_validation", .has_arg = 0, .flag = &data_validation_flag, .val = 1 },
+			{.name = "data_validation_debug", .has_arg = 0, .flag = &data_validation_debug_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3775,6 +3917,16 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->connectionless = 1;
 	}
 
+	if (data_validation_flag) {
+		user_param->data_validation = 1;
+		data_validation_flag = 0;
+	}
+
+	if (data_validation_debug_flag) {
+		user_param->data_validation_debug = 1;
+		data_validation_debug_flag = 0;
+	}
+
 	if (use_null_mr_flag) {
 		user_param->use_null_mr = 1;
 	}
@@ -3994,7 +4146,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;
@@ -4060,7 +4212,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;

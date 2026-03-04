@@ -74,6 +74,11 @@
 #include <fcntl.h>
 #include "perftest_parameters.h"
 
+#ifdef HAVE_CUDA
+/* Forward declaration for GPU validation context */
+struct ValidationContext;
+#endif
+
 #define NUM_OF_RETRIES		(10)
 
 /* Outstanding reads for "read" verb only. */
@@ -87,6 +92,7 @@
 #define ATOMIC_ADD_VALUE	(1)
 #define ATOMIC_SWAP_VALUE	(0)
 #define MIN_RNR_TIMER		(12)
+
 
 /* Space for GRH when we scatter the packet in UD. */
 #define PINGPONG_SEND_WRID	(60)
@@ -279,6 +285,7 @@ struct pingpong_context {
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;
 	struct ibv_sge				*recv_sge_list;
+	struct ibv_sge				*atomic_sge_list;
 	struct ibv_send_wr			*wr;
 	struct ibv_recv_wr			*rwr;
 	uint64_t				size;
@@ -313,6 +320,12 @@ struct pingpong_context {
 	#ifdef HAVE_REG_MR_EX
 	struct ibv_dmah				*dmah;
 	#endif
+	uint64_t					payload_size;
+	int					*current_send_buffer_offset;
+	int					*current_remote_recv_offset;
+	uint64_t				tail_markers_offset;    /* Offset to tail markers (64-byte aligned) */
+	uint64_t				recv_slots_offset;      /* Offset to recv slots (64-byte aligned) */
+	uint64_t				atomic_returns_offset;  /* Offset to atomic return values area (64-byte aligned) */
 };
 
  struct pingpong_dest {
@@ -322,6 +335,7 @@ struct pingpong_context {
 	int 				psn;
 	unsigned			rkey;
 	unsigned long long		vaddr;
+	unsigned long long		tail_markers_vaddr;
 	union ibv_gid			gid;
 	unsigned			srqn;
 	int				gid_index;
@@ -583,6 +597,42 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 					   struct perftest_parameters *user_param,
 					   struct pingpong_dest *rem_dest);
 
+					   /* ctx_set_send_wqes_data_val_write.
+ *
+ * Description :
+ *
+ *  Prepare send work request templates for WRITE data validation.
+ *  Sets up Data WR (RDMA WRITE) and Atomic WR (FETCH_AND_ADD).
+ *
+ * Parameters :
+ *
+ *  ctx        - Test Context.
+ *  user_param - user_parameters struct for this test.
+ *  rem_dest   - pingpong_dest struct of the remote side.
+ *
+ */
+void ctx_set_send_wqes_data_val_write(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param,
+	struct pingpong_dest *rem_dest);
+
+/* ctx_set_send_wqes_data_val_read.
+*
+* Description :
+*
+*  Prepare send work request templates for READ data validation.
+*  Sets up Data WR (RDMA READ) and Atomic WR (FETCH_AND_ADD).
+*
+* Parameters :
+*
+*  ctx        - Test Context.
+*  user_param - user_parameters struct for this test.
+*  rem_dest   - pingpong_dest struct of the remote side.
+*
+*/
+void ctx_set_send_wqes_data_val_read(struct pingpong_context *ctx,
+   struct perftest_parameters *user_param,
+   struct pingpong_dest *rem_dest);
+
 /* ctx_set_send_wqes.
  *
  * Description :
@@ -653,6 +703,22 @@ int ctx_alloc_credit(struct pingpong_context *ctx,
 int ctx_set_credit_wqes(struct pingpong_context *ctx,
 				struct perftest_parameters *user_param,
 				struct pingpong_dest *rem_dest);
+
+/* validate_data
+ *
+ * Description :
+ *
+ * Data validation thread function that runs in parallel with the main test.
+ * Validates received data against sent buffers continuously.
+ *
+ * Parameters :
+ *
+ *	arg - Pointer to pingpong_context (passed as void* for pthread)
+ *
+ * Return Value : NULL
+ */
+ void* validate_data(void* arg);
+
 /* run_iter_bw.
  *
  * Description :
@@ -666,6 +732,7 @@ int ctx_set_credit_wqes(struct pingpong_context *ctx,
  *
  */
 int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+int run_iter_bw_dv(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
 /* run_iter_bw_infinitely
  *
@@ -1101,5 +1168,16 @@ int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 int error_handler(char *error_message);
 
 void check_bf_support(struct pingpong_context *ctx);
+
+/* Data validation helpers */
+int data_validation_init(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param);
+int data_validation_start(struct pingpong_context *ctx,
+	 struct perftest_parameters *user_param,
+	 const char *role);
+int data_validation_stop_and_report(struct pingpong_context *ctx,
+			   struct perftest_parameters *user_param,
+			   const char *role);
+void data_validation_destroy(struct pingpong_context *ctx);
 
 #endif /* PERFTEST_RESOURCES_H */

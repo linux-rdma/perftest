@@ -27,6 +27,11 @@ chmod -x runme
 %install
 rm -rf $RPM_BUILD_ROOT
 make DESTDIR=%{buildroot} install
+# Install CUDA kernel plugin if it was built
+if [ -f libperftest_kernels.so ]; then
+    install -d %{buildroot}%{_libdir}
+    install -m 755 libperftest_kernels.so %{buildroot}%{_libdir}/
+fi
 
 %clean
 rm -rf ${RPM_BUILD_ROOT}
@@ -36,6 +41,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %doc README COPYING runme
 %_bindir/*
 %_mandir/man1/*.1*
+# CUDA kernel plugin (optional, only present if built with CUDA)
+%{_libdir}/libperftest_kernels.so*
 
 %changelog
 * Wed Jan 09 2013 - idos@mellanox.com

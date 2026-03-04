@@ -34,8 +34,11 @@ ACLOCAL_AMFLAGS= -I m4
 AUTOMAKE_OPTIONS= subdir-objects
 
 noinst_LIBRARIES = libperftest.a
-libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/mmap_memory.c
-noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/dm_memory.h
+libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c
+noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h
+
+# SIMD flags for host validation (detected by configure)
+AM_CFLAGS = @SIMD_CFLAGS@
 
 if CUDA
 libperftest_a_SOURCES += src/cuda_memory.c src/cuda_loader.h src/cuda_loader.c
@@ -98,6 +101,7 @@ $(generated_mans): $(top_builddir)/man/%.1: man/perftest.1
 
 clean-local:
 	-rm -f man/[ir]*.1
+	-rm -f libperftest_kernels.so src/cuda_kernels.cu.o
 
 if HAVE_RAW_ETH
 libperftest_a_SOURCES += src/raw_ethernet_resources.c
@@ -116,13 +120,28 @@ LIBMLX4=
 endif
 
 if HAVE_CUDART
-libperftest_a_SOURCES += src/cuda_utils.cu
-libperftest_a_LIBADD = src/cuda_utils.cu.o src/cuda_utils.cu.lo
+
 SUFFIXES= .cu
-%.cu.lo: %.cu.o
-	$(NVCC) -dlink -o $@ $< -L$(CUDA_LIB_DIR) -lcudadevrt -lcudart
-%.cu.o: %.cu
-	$(NVCC) -DHAVE_CONFIG_H $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) -o $@ -c $< $(NVCCFLAGS)
+
+# Validation kernels + GPU touch compiled into a separate shared library (plugin)
+# This allows perftest to run on systems without CUDA installed
+src/cuda_kernels.cu.o: src/cuda_kernels.cu
+	$(NVCC) -DHAVE_CONFIG_H $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) -Xcompiler -fPIC -o $@ -c $< $(NVCCFLAGS)
+
+libperftest_kernels.so: src/cuda_kernels.cu.o
+	$(NVCC) -shared -o $@ $< -L$(CUDA_LIB_DIR) -lcudart
+
+# Build the kernel plugin alongside the main binary
+all-local: libperftest_kernels.so
+
+# Install the kernel plugin
+install-exec-local: libperftest_kernels.so
+	$(INSTALL) -d $(DESTDIR)$(libdir)
+	$(INSTALL) libperftest_kernels.so $(DESTDIR)$(libdir)/
+
+# Clean up kernel plugin
+clean-local-cuda:
+	-rm -f libperftest_kernels.so src/cuda_kernels.cu.o
 endif
 
 

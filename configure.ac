@@ -43,10 +43,10 @@ AC_ARG_VAR(HAVE_OPENCL, opencl support)
 AC_ARG_VAR(CUDA_H_PATH, help-string)
 AC_ARG_ENABLE([cudart],
               [AS_HELP_STRING([--enable-cudart],
-                              [Enable CUDA runtime support])
+                              [Enable CUDA runtime support (default: auto-detect)])
               ],
               [],
-              [enable_cudart=no])
+              [enable_cudart=check])
 AC_ARG_VAR(RANLIB, ranlib tool)
 
 AC_ARG_ENABLE([ibv_wr_api],
@@ -373,11 +373,36 @@ if test "$cuda_found" = "yes"; then
 		AC_DEFINE([HAVE_DMABUF_MAPPING_TYPE_PCIE], [1], [Enable CUDA DMABUF handle mapping via PCIe BAR1])
 	fi
 
+	if [test "x$enable_cudart" != "xno"]; then
+		CUDA_TOOLKIT_PATH=$(dirname $(dirname $cuda_h_path))
+		CUDA_LIB_DIR=$(dirname $(dirname $cuda_h_path))/lib64
+		if [test ! -d "$CUDA_LIB_DIR"]; then
+			CUDA_LIB_DIR=$(dirname $(dirname $cuda_h_path))/lib
+		fi
+
+		# Probe for libcudart (don't pollute LIBS — only the plugin links it)
+		save_LIBS="$LIBS"
+		save_LDFLAGS="$LDFLAGS"
+		LDFLAGS="-L$CUDA_LIB_DIR $LDFLAGS"
+		AC_CHECK_LIB([cudart], [cudaMalloc], [have_cudart_lib=yes], [have_cudart_lib=no])
+		LIBS="$save_LIBS"
+		LDFLAGS="$save_LDFLAGS"
+
+		if [test "x$have_cudart_lib" = "xyes"]; then
+			enable_cudart=yes
+		elif [test "x$enable_cudart" = "xyes"]; then
+			AC_MSG_ERROR([--enable-cudart was given but libcudart not found])
+		else
+			AC_MSG_NOTICE([libcudart not found — GPU validation kernel will not be built])
+			enable_cudart=no
+		fi
+	fi
+
 	if [test "x$enable_cudart" = "xyes"]; then
 		AC_DEFINE([HAVE_CUDART], [1], [Enable CUDART features])
-		LIBS=$LIBS" -lcudart -lstdc++"
+		LIBS=$LIBS" -lstdc++"
 		CPPFLAGS="-I$(dirname $cuda_h_path)/include $CPPFLAGS"
-		LDFLAGS="-L$(dirname $(dirname $cuda_h_path))/lib -L$(dirname $(dirname $cuda_h_path))/lib64 $LDFLAGS"
+		LDFLAGS="-L$CUDA_LIB_DIR $LDFLAGS"
 
 		if [test "x${gpu_arch}" != "x"]; then
 			NVCCFLAGS="${NVCCFLAGS} -arch compute_${gpu_arch} -code compute_${gpu_arch},sm_${gpu_arch}"
@@ -394,13 +419,17 @@ if test "$cuda_found" = "yes"; then
 			fi
 		fi
 
-		CUDA_TOOLKIT_PATH=$(dirname $(dirname $cuda_h_path))
 		AC_DEFINE_UNQUOTED([CUDA_TOOLKIT_PATH], "$CUDA_TOOLKIT_PATH", [Path to the CUDA Toolkit])
 		AC_SUBST([NVCCFLAGS], ["${NVCCFLAGS}"])
 		AC_SUBST([NVCC], ["$CUDA_TOOLKIT_PATH/bin/nvcc"])
-
-		AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_ERROR([libcudart not found])])
+		AC_SUBST([CUDA_LIB_DIR], ["$CUDA_LIB_DIR"])
+		AC_MSG_NOTICE([CUDA runtime support enabled — will build GPU validation kernel])
 	fi
+else
+	if [test "x$enable_cudart" = "xyes"]; then
+		AC_MSG_ERROR([--enable-cudart was given but CUDA headers not found])
+	fi
+	enable_cudart=no
 fi
 AM_CONDITIONAL([CUDA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$CUDA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
 AM_CONDITIONAL([CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"])
@@ -579,6 +608,65 @@ AM_CONDITIONAL([HAVE_REG_MR_EX], [test "x$HAVE_REG_MR_EX" = "xyes"])
 if [test $HAVE_REG_MR_EX = yes]; then
 	AC_DEFINE([HAVE_REG_MR_EX], [1], [Have reg mr extended API support])
 fi
+
+# Check for SIMD support (for host data validation)
+AC_MSG_CHECKING([for AVX2 support])
+save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -mavx2"
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <immintrin.h>
+int main() {
+    __m256i v = _mm256_setzero_si256();
+    __m256i r = _mm256_cmpeq_epi8(v, v);
+    (void)r;
+    return 0;
+}]])],
+[HAVE_AVX2=yes
+ AC_DEFINE([HAVE_AVX2], [1], [Have AVX2 SIMD support])
+ SIMD_CFLAGS="-mavx2"
+ AC_MSG_RESULT([yes])],
+[HAVE_AVX2=no
+ AC_MSG_RESULT([no])])
+CFLAGS="$save_CFLAGS"
+
+if test "$HAVE_AVX2" = "no"; then
+    AC_MSG_CHECKING([for SSE4.2 support])
+    save_CFLAGS="$CFLAGS"
+    CFLAGS="$CFLAGS -msse4.2"
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <nmmintrin.h>
+int main() {
+    __m128i v = _mm_setzero_si128();
+    __m128i r = _mm_cmpeq_epi8(v, v);
+    (void)r;
+    return 0;
+}]])],
+    [HAVE_SSE42=yes
+     AC_DEFINE([HAVE_SSE42], [1], [Have SSE4.2 SIMD support])
+     SIMD_CFLAGS="-msse4.2"
+     AC_MSG_RESULT([yes])],
+    [HAVE_SSE42=no
+     AC_MSG_RESULT([no])])
+    CFLAGS="$save_CFLAGS"
+fi
+
+# Check for ARM NEON support
+AC_MSG_CHECKING([for ARM NEON support])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <arm_neon.h>
+int main() {
+    uint8x16_t v = vdupq_n_u8(0);
+    uint8x16_t r = vceqq_u8(v, v);
+    (void)r;
+    return 0;
+}]])],
+[HAVE_NEON=yes
+ AC_DEFINE([HAVE_NEON], [1], [Have ARM NEON SIMD support])
+ AC_MSG_RESULT([yes])],
+[HAVE_NEON=no
+ AC_MSG_RESULT([no])])
+
+AC_SUBST([SIMD_CFLAGS])
 
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"

@@ -477,6 +477,12 @@ enum gpu_touch_type {
 	GPU_TOUCH_TYPES
 };
 
+/* Data validation mode */
+enum validation_mode {
+	VALIDATION_MODE_WRITE,  /* Receiver validates incoming WRITEs */
+	VALIDATION_MODE_READ    /* Initiator validates data it READ */
+};
+
 struct perftest_parameters {
 
 	int				port;
@@ -693,6 +699,11 @@ struct perftest_parameters {
 	int				processing_hints;
 	int				dynamic_cqe_poll;
 	int				sig_offload;
+	int				data_validation;
+	int				data_validation_debug;
+	int				validation_chunks_per_qp; /* Dynamic buffer depth */
+	uint32_t			validation_chunk_size;    /* Operations per validation chunk (may differ from tx_depth) */
+	enum validation_mode		validation_mode;
 };
 
 struct report_options {
@@ -731,6 +742,7 @@ struct perftest_parameters_negotiate   {
 	int					use_write_with_imm;
 	int					no_enhanced_reorder;
 	int					sig_offload;
+	int					data_validation;
 	struct ibv_device_attr attr;
 
 	#ifdef HAVE_MLX5DV

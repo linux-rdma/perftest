@@ -422,6 +422,35 @@ many different options and modes.
  Set GPU touch mode to test memory accesses during the testing process.
  Relevant only for CUDA and OpenCL memory types
 .TP
+.B --data_validation
+Enable real-time data validation for RDMA transfers.
+Validates that received data matches expected byte patterns.
+Works with both host memory (SIMD-accelerated: AVX-512/AVX2/SSE4.2/NEON)
+and GPU memory (CUDA kernel plugin, auto-detected at build time).
+tx_depth (-t) must be the same on both server and client (minimum 32).
+.br
+Requirements:
+.br
+  \- Host memory or --use_cuda
+.br
+  \- RC connection type only
+.br
+  \- WRITE or READ verb only (ib_write_bw, ib_read_bw)
+.br
+  \- Bandwidth tests only (not latency)
+.br
+Incompatible with: -a, --post_list>1, --run_infinitely, --mr_per_qp,
+.br
+                   --gpu_touch, --use-null-mr, --payload_file_path
+.br
+Note: some bandwidth degradation is expected (mainly in READ mode).
+Using 2MB or 1GB huge pages will improve bandwidth in most cases.
+.TP
+.B --data_validation_debug
+Enable verbose debug output for data validation.
+Shows per-validator thread stats, marker distribution, CPU pinning,
+SIMD path selection, and mismatch classification details.
+.TP
 .B --use_hugepages
  Use Hugepages instead of contig, memalign allocations.
  Not relevant for raw_ethernet_fs_rate.

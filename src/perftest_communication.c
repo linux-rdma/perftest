@@ -292,32 +292,56 @@ static int create_ah_from_wc_recv(struct pingpong_context *ctx,
 static int ethernet_write_keys(struct pingpong_dest *my_dest,
 		struct perftest_comm *comm)
 {
+	int dv = comm->rdma_params->data_validation;
+
 	if (my_dest->gid_index == -1) {
+		int msg_size = dv ? KEY_MSG_SIZE_DV : KEY_MSG_SIZE;
+		char msg[msg_size];
+		if (dv)
+			sprintf(msg, KEY_PRINT_FMT_DV, my_dest->lid, my_dest->out_reads,
+				my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
+				my_dest->tail_markers_vaddr, my_dest->srqn);
+		else
+			sprintf(msg, KEY_PRINT_FMT, my_dest->lid, my_dest->out_reads,
+					my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
+					my_dest->srqn);
 
-		char msg[KEY_MSG_SIZE];
-
-		sprintf(msg,KEY_PRINT_FMT,my_dest->lid,my_dest->out_reads,
-				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr, my_dest->srqn);
-
-		if (write(comm->rdma_params->sockfd,msg,sizeof msg) != sizeof msg) {
+		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
 			fprintf(stderr, "Couldn't send local address\n");
 			return 1;
 		}
 
 	} else {
-		char msg[KEY_MSG_SIZE_GID];
-		sprintf(msg,KEY_PRINT_FMT_GID, my_dest->lid,my_dest->out_reads,
-				my_dest->qpn,my_dest->psn, my_dest->rkey, my_dest->vaddr,
-				my_dest->gid.raw[0],my_dest->gid.raw[1],
-				my_dest->gid.raw[2],my_dest->gid.raw[3],
-				my_dest->gid.raw[4],my_dest->gid.raw[5],
-				my_dest->gid.raw[6],my_dest->gid.raw[7],
-				my_dest->gid.raw[8],my_dest->gid.raw[9],
-				my_dest->gid.raw[10],my_dest->gid.raw[11],
-				my_dest->gid.raw[12],my_dest->gid.raw[13],
-				my_dest->gid.raw[14],my_dest->gid.raw[15],
+		int msg_size = dv ? KEY_MSG_SIZE_GID_DV : KEY_MSG_SIZE_GID;
+		char msg[msg_size];
+
+		if (dv) {
+			sprintf(msg, KEY_PRINT_FMT_GID_DV, my_dest->lid, my_dest->out_reads,
+				my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
+				my_dest->tail_markers_vaddr,
+				my_dest->gid.raw[0], my_dest->gid.raw[1],
+				my_dest->gid.raw[2], my_dest->gid.raw[3],
+				my_dest->gid.raw[4], my_dest->gid.raw[5],
+				my_dest->gid.raw[6], my_dest->gid.raw[7],
+				my_dest->gid.raw[8], my_dest->gid.raw[9],
+				my_dest->gid.raw[10], my_dest->gid.raw[11],
+				my_dest->gid.raw[12], my_dest->gid.raw[13],
+				my_dest->gid.raw[14], my_dest->gid.raw[15],
 				my_dest->srqn);
+		} else {
+			sprintf(msg, KEY_PRINT_FMT_GID, my_dest->lid, my_dest->out_reads,
+					my_dest->qpn, my_dest->psn, my_dest->rkey, my_dest->vaddr,
+					my_dest->gid.raw[0], my_dest->gid.raw[1],
+					my_dest->gid.raw[2], my_dest->gid.raw[3],
+					my_dest->gid.raw[4], my_dest->gid.raw[5],
+					my_dest->gid.raw[6], my_dest->gid.raw[7],
+					my_dest->gid.raw[8], my_dest->gid.raw[9],
+					my_dest->gid.raw[10], my_dest->gid.raw[11],
+					my_dest->gid.raw[12], my_dest->gid.raw[13],
+					my_dest->gid.raw[14], my_dest->gid.raw[15],
+					my_dest->srqn);
+		}
 
 		if (write(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
 			perror("client write");
@@ -336,34 +360,53 @@ static int ethernet_write_keys(struct pingpong_dest *my_dest,
 static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		struct perftest_comm *comm)
 {
+	int dv = comm->rdma_params->data_validation;
+
 	if (rem_dest->gid_index == -1) {
 
 		int parsed;
-		char msg[KEY_MSG_SIZE];
+		int msg_size = dv ? KEY_MSG_SIZE_DV : KEY_MSG_SIZE;
+		char msg[msg_size];
 
-		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
+		if (read(comm->rdma_params->sockfd, msg, msg_size) != msg_size) {
 			fprintf(stderr, "ethernet_read_keys: Couldn't read remote address\n");
 			return 1;
 		}
 
-		parsed = sscanf(msg,KEY_PRINT_FMT,(unsigned int*)&rem_dest->lid,
+		if (dv) {
+			parsed = sscanf(msg,KEY_PRINT_FMT_DV,(unsigned int*)&rem_dest->lid,
 				(unsigned int*)&rem_dest->out_reads,(unsigned int*)&rem_dest->qpn,
-				(unsigned int*)&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,&rem_dest->srqn);
+				(unsigned int*)&rem_dest->psn, &rem_dest->rkey,&rem_dest->vaddr,
+				&rem_dest->tail_markers_vaddr,&rem_dest->srqn);
 
-		if (parsed != 7) {
+		if (parsed != 8) {
 			//coverity[string_null]
 			fprintf(stderr, "Couldn't parse line <%.*s>\n",(int)sizeof msg, msg);
 			return 1;
 		}
+		} else {
+			parsed = sscanf(msg, KEY_PRINT_FMT,
+					(unsigned int*)&rem_dest->lid,
+					(unsigned int*)&rem_dest->out_reads,
+					(unsigned int*)&rem_dest->qpn,
+					(unsigned int*)&rem_dest->psn,
+					&rem_dest->rkey, &rem_dest->vaddr,
+					&rem_dest->srqn);
+			if (parsed != 7) {
+				fprintf(stderr, "Couldn't parse line <%.*s>\n", msg_size, msg);
+				return 1;
+			}
+		}
 
 	} else {
 
-		char msg[KEY_MSG_SIZE_GID];
+		char msg[KEY_MSG_SIZE_GID_DV];
+		int msg_size = dv ? KEY_MSG_SIZE_GID_DV : KEY_MSG_SIZE_GID;
 		char *pstr = msg, *term;
 		char tmp[120];
 		int i;
 
-		if (read(comm->rdma_params->sockfd, msg, sizeof msg) != sizeof msg) {
+		if (read(comm->rdma_params->sockfd, msg, msg_size) != msg_size) {
 			fprintf(stderr, "ethernet_read_keys: Couldn't read remote address\n");
 			return 1;
 		}
@@ -401,26 +444,30 @@ static int ethernet_read_keys(struct pingpong_dest *rem_dest,
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
-
 		rem_dest->vaddr = strtoull(tmp, NULL, 16); /*VA*/
+
+		if (dv) {
+			pstr += term - pstr + 1;
+			term = strpbrk(pstr, ":");
+			memcpy(tmp, pstr, term - pstr);
+			tmp[term - pstr] = 0;
+
+			rem_dest->tail_markers_vaddr = strtoull(tmp, NULL, 16); /*TAIL_MARKERS_VA*/
+		}
 
 		for (i = 0; i < 15; ++i) {
 			pstr += term - pstr + 1;
 			term = strpbrk(pstr, ":");
 			memcpy(tmp, pstr, term - pstr);
 			tmp[term - pstr] = 0;
-
 			rem_dest->gid.raw[i] = (unsigned char)strtoll(tmp, NULL, 16);
 		}
 
 		pstr += term - pstr + 1;
-
 		strcpy(tmp, pstr);
 		rem_dest->gid.raw[15] = (unsigned char)strtoll(tmp, NULL, 16);
 
-
 		pstr += term - pstr + 4;
-
 		term = strpbrk(pstr, ":");
 		memcpy(tmp, pstr, term - pstr);
 		tmp[term - pstr] = 0;
@@ -454,14 +501,15 @@ static int rdma_write_keys(struct pingpong_dest *my_dest,
 	m_my_dest.srqn		= htobe32(my_dest->srqn);
 	m_my_dest.gid_index	= htobe32(my_dest->gid_index);
 	m_my_dest.vaddr		= htobe64(my_dest->vaddr);
+	m_my_dest.tail_markers_vaddr = htobe64(my_dest->tail_markers_vaddr);
 
 	for(i=0; i<16; i++) {
 		m_my_dest.gid.raw[i] = my_dest->gid.raw[i];
 	}
 
-	memcpy(comm->rdma_ctx->buf[0], &m_my_dest, sizeof(struct pingpong_dest));
+	memcpy(comm->rdma_ctx->buf[0], &m_my_dest, sizeof(m_my_dest));
 	#else
-	memcpy(comm->rdma_ctx->buf[0], &my_dest, sizeof(struct pingpong_dest));
+	memcpy(comm->rdma_ctx->buf[0], my_dest, sizeof(*my_dest));
 	#endif
 	list.addr   = (uintptr_t)comm->rdma_ctx->buf[0];
 	list.length = sizeof(struct pingpong_dest);
@@ -516,17 +564,19 @@ static int rdma_read_keys(struct pingpong_dest *rem_dest,
 	}
 
 	#ifdef HAVE_ENDIAN
-	memcpy(&a_rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
+	memcpy(&a_rem_dest, comm->rdma_ctx->buf[0], sizeof(a_rem_dest));
 	rem_dest->lid   = ntohl(a_rem_dest.lid);
 	rem_dest->out_reads     = ntohl(a_rem_dest.out_reads);
 	rem_dest->qpn   = ntohl(a_rem_dest.qpn);
 	rem_dest->psn   = ntohl(a_rem_dest.psn);
 	rem_dest->rkey  = ntohl(a_rem_dest.rkey);
-
 	rem_dest->vaddr         = be64toh(a_rem_dest.vaddr);
+	rem_dest->tail_markers_vaddr = be64toh(a_rem_dest.tail_markers_vaddr);
 	memcpy(rem_dest->gid.raw, &(a_rem_dest.gid), 16*sizeof(uint8_t));
+	rem_dest->srqn  = ntohl(a_rem_dest.srqn);
+	rem_dest->gid_index = ntohl(a_rem_dest.gid_index);
 	#else
-	memcpy(rem_dest,comm->rdma_ctx->buf[0],sizeof(struct pingpong_dest));
+	memcpy(rem_dest, comm->rdma_ctx->buf[0], sizeof(*rem_dest));
 	#endif
 
 	if (post_one_recv_wqe(comm->rdma_ctx)) {
@@ -908,9 +958,22 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		/* Each qp gives his receive buffer address.*/
 		my_dest[i].out_reads = user_param->out_reads;
+		my_dest[i].tail_markers_vaddr = 0;  /* Default: not used */
 		if (user_param->mr_per_qp)
 			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
-		else
+		else if (user_param->data_validation == ON) {
+			if (user_param->verb == READ) {
+			/* READ: Publish Pattern Buffers address (offset 0).
+				* Peer will RDMA READ from here. */
+				my_dest[i].vaddr = (uintptr_t)ctx->buf[0];
+			} else {
+				/* WRITE: Publish recv_slots address (64-byte aligned).
+					* Peer will RDMA WRITE to here. */
+				my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + ctx->recv_slots_offset + i * (user_param->validation_chunks_per_qp*user_param->validation_chunk_size*ctx->payload_size);
+			}
+			/* Publish tail_markers address (64-byte aligned) for both READ and WRITE */
+			my_dest[i].tail_markers_vaddr = (uintptr_t)ctx->buf[0] + ctx->tail_markers_offset;
+		} else
 			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->dualport==ON) {
@@ -982,6 +1045,7 @@ int negotiate_params(struct pingpong_context *ctx,
 		.use_write_with_imm = hton_int(user_param->use_write_with_imm),
 		.no_enhanced_reorder = hton_int(user_param->no_enhanced_reorder),
 		.sig_offload = hton_int(user_param->sig_offload),
+		.data_validation = hton_int(user_param->data_validation),
 	};
 
 	if (ibv_query_device(ctx->context, &local_params.attr)) {
@@ -1032,6 +1096,7 @@ int negotiate_params(struct pingpong_context *ctx,
 		COMPARE(compare, use_write_with_imm, ((char*[]){"OFF", "ON"}), INT),
 		COMPARE(compare, no_enhanced_reorder, ((char*[]){"OFF", "ON"}), INT),
 		COMPARE(compare, sig_offload, ((char*[]){"OFF", "ON"}), INT),
+		COMPARE(compare, data_validation, ((char*[]){"OFF", "ON"}), INT),
 		COMPARE(compare_ibv_device, attr, NULL, NONE),
 	};
 	#undef COMPARE
@@ -1202,7 +1267,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -1363,7 +1428,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -1455,6 +1520,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->tph_mem_type	= user_param->tph_mem_type;
 	comm->rdma_params->processing_hints	= user_param->processing_hints;
 	comm->rdma_params->cpu_id		= user_param->cpu_id;
+	comm->rdma_params->data_validation = user_param->data_validation;
 	comm->rdma_params->memory_type		= MEMORY_HOST;
 	comm->rdma_params->memory_create	= host_memory_create;
 
@@ -2540,7 +2606,7 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 
 	memset(&conn_param, 0, sizeof conn_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -2608,13 +2674,11 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 
 	memset(&conn_param, 0, sizeof(conn_param));
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC) {
-		/* Clamp responder depth based on initiator resources on the peer */
+	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
 		conn_param.responder_resources =
 			(user_param->out_reads > event->param.conn.initiator_depth)
 			? event->param.conn.initiator_depth : user_param->out_reads;
 
-		/* Clamp initiator depth based on responder resources on the peer */
 		conn_param.initiator_depth =
 			(user_param->out_reads > event->param.conn.responder_resources)
 			? event->param.conn.responder_resources : user_param->out_reads;

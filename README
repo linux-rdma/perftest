@@ -356,6 +356,134 @@ Special feature detailed explanation in tests:
           2) The feature available for ib_write_bw, ib_read_bw, ib_send_bw, ib_read_lat and ib_send_lat.
           3) 0 size pattern is not allow.
 
+  7. Data Validation (--data_validation)
+          Real-time validation of RDMA data transfers during ib_write_bw and ib_read_bw.
+          The receiver verifies that every byte matches the expected pattern, detecting
+          corruption, DMA races, and stale data during RDMA WRITE or READ operations.
+
+      Supported memory backends:
+          - Host memory: Uses SIMD-accelerated validators (AVX-512, AVX2, SSE4.2,
+            or ARM NEON, selected at compile time). Multiple NUMA-aware validator
+            threads poll markers and scan data in parallel.
+          - GPU memory (--use_cuda): Uses a CUDA kernel plugin (libperftest_kernels.so)
+            that is auto-detected and built when the CUDA Toolkit is present.
+            Use --disable-cudart at configure time to skip it explicitly.
+
+      Build:
+          - Host validation is always built (no extra dependencies).
+          - GPU validation is auto-detected: if cuda.h and libcudart are found,
+            configure builds libperftest_kernels.so automatically.
+          - Runtime: perftest loads the GPU plugin via dlopen — binaries run on
+            systems without CUDA.
+
+      Requirements:
+          - Host memory or --use_cuda
+          - RC connection type (uses RDMA FETCH_AND_ADD for signaling)
+          - Bandwidth tests only (ib_write_bw, ib_read_bw)
+          - tx_depth >= 32 (-t), must be the same on both sides
+          - HW with SIMD support (AVX2/NEON/SSE42)
+
+      Memory Layout:
+          The feature allocates a unified validation buffer:
+
+          Total = 3 * payload_size                                 (pattern buffers)
+                + num_qps * chunks_per_qp * 8                     (tail markers)
+                + num_qps * chunks_per_qp * chunk_size * payload   (receive slots)
+                + num_qps * chunks_per_qp * 8                     (atomic returns, READ mode)
+
+          chunk_size and chunks_per_qp are derived automatically from tx_depth.
+
+      Performance Notes:
+          - Some bandwidth degradation is expected when data validation is enabled,
+            particularly in READ mode, due to overhead inherent from the feature design.
+            Configuring 2MB or 1GB huge pages on the system will improve bandwidth
+            in most of these cases by reducing TLB pressure.
+            For example, to allocate huge pages (2MB) on your system, run:
+              echo 2048 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+          - ARM-based servers may experience lower bandwidth with data validation
+            enabled; improvements are planned for upcoming versions.
+          - Unaligned payload sizes (not a power of 2 or not a multiple of the
+            cache line) may cause minor bandwidth degradations.
+          - Running multiple perftest processes simultaneously (multi-stream) may
+            reduce both validation rate and throughput, as validator threads
+            from different processes compete for the same CPU cores. Improvements
+            for multi-stream scenarios are planned for future versions.
+
+      Command-line Examples:
+
+          # Host memory WRITE validation
+          Server: ./ib_write_bw -d mlx5_0 --data_validation -t 128
+          Client: ./ib_write_bw -d mlx5_0 --data_validation -t 128 <server_ip>
+
+          # Host memory READ validation with multiple QPs
+          Server: ./ib_read_bw -d mlx5_0 --data_validation -t 128 -q 4
+          Client: ./ib_read_bw -d mlx5_0 --data_validation -t 128 -q 4 <server_ip>
+
+          # Bidirectional WRITE validation
+          Server: ./ib_write_bw -d mlx5_0 --data_validation -t 128 -b
+          Client: ./ib_write_bw -d mlx5_0 --data_validation -t 128 -b <server_ip>
+
+          # GPU memory WRITE validation
+          Server: ./ib_write_bw -d mlx5_0 --use_cuda=0 --data_validation -t 128
+          Client: ./ib_write_bw -d mlx5_0 --use_cuda=0 --data_validation -t 128 <server_ip>
+
+          # With debug output (shows per-thread stats, marker distribution, SIMD path)
+          Server: ./ib_write_bw -d mlx5_0 --data_validation --data_validation_debug -t 128
+          Client: ./ib_write_bw -d mlx5_0 --data_validation --data_validation_debug -t 128 <server_ip>
+
+      Incompatible Options:
+          --data_validation cannot be used with:
+            - -a (run all sizes)
+            - --post_list > 1
+            - --run_infinitely
+            - --mr_per_qp
+            - --gpu_touch
+            - --use-null-mr
+            - --payload_file_path (payload modification)
+            - Non-RC connection types
+
+      Troubleshooting:
+
+          Problem: "Failed to load kernel plugin library" (GPU mode only)
+          Solution: Ensure libperftest_kernels.so is in a standard library path
+                    (/usr/lib, /usr/local/lib) or set LD_LIBRARY_PATH.
+
+          Problem: "Failed to create validation context"
+          Solution: For GPU — ensure CUDA is initialized and the GPU has enough memory.
+                    For host — check that the buffer allocation succeeded (memory pressure).
+
+      Output Counters:
+          When validation completes, a summary line is printed. If any notable events
+          occurred during the run, they appear in brackets after the byte count.
+          Use --data_validation_debug for a detailed per-thread breakdown.
+
+          errors   - Actual data corruption detected. The received data did not match
+                     what was expected. Any non-zero value means something went wrong
+                     with the RDMA transfer. The location and byte values of the first
+                     error are reported.
+
+          races    - The checker found a temporary mismatch because new data arrived
+                     while the previous data was still being verified. This is expected
+                     under normal operation and does not indicate corruption.
+
+          skips    - Some data chunks completed faster than the checker could verify
+                     them, so they were skipped. This is normal under high throughput
+                     and does not indicate errors — it simply means the transfer rate
+                     exceeded the verification rate.
+
+          retries  - A brief inconsistency was detected at the tail end of a data
+                     chunk, but a quick re-check confirmed the data was correct.
+                     This happens because the network adapter writes data over PCIe
+                     in order, so the tail marker may arrive before the last payload
+                     bytes are fully flushed to host memory. The checker detects this
+                     and retries automatically. Not an error.
+
+          In summary: only "errors" indicates a real problem. The races, skips, and
+          retries counters are informational and reflect normal behavior at high speed.
+
+          Example output:
+              VALIDATION: PASSED - 12500 chunks, 102400000 bytes [races=3, retries=7, skips=42]
 
 ===============================================================================
 7. Known Issues

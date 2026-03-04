@@ -29,6 +29,7 @@
 
 #include "perftest_resources.h"
 #include "raw_ethernet_resources.h"
+#include "host_validation.h"
 
 static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_SEND_WITH_IMM,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_WRITE_WITH_IMM,IBV_WR_RDMA_READ};
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
@@ -457,12 +458,17 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 #endif
 
 	ibv_wr_start(ctx->qpx[index]);
+	struct ibv_sge curr_sge = {
+		.lkey = wr->sg_list->lkey,
+		.addr = wr->sg_list->addr,
+		.length = user_param->size
+	};
 	while (wr)
 	{
 		ctx->qpx[index]->wr_id = wr->wr_id;
 		ctx->qpx[index]->wr_flags = wr->send_flags;
 
-		switch (op)
+		switch (wr->opcode)
 		{
 		case IBV_WR_SEND:
 			ibv_wr_send(ctx->qpx[index]);
@@ -495,6 +501,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 				wr->wr.atomic.rkey,
 				wr->wr.atomic.remote_addr,
 				wr->wr.atomic.compare_add);
+			curr_sge = *wr->sg_list;
 			break;
 		case IBV_WR_ATOMIC_CMP_AND_SWP:
 			ibv_wr_atomic_cmp_swp(
@@ -572,9 +579,9 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			#endif
 			ibv_wr_set_sge(
 				ctx->qpx[index],
-				wr->sg_list->lkey,
-				wr->sg_list->addr,
-				user_param->size);
+				curr_sge.lkey,
+				curr_sge.addr,
+				curr_sge.length);
 		}
 		wr = wr->next;
 	}
@@ -1221,8 +1228,28 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
-		ALLOC(ctx->sge_list, struct ibv_sge,user_param->num_of_qps * user_param->post_list);
-		ALLOC(ctx->wr, struct ibv_send_wr, user_param->num_of_qps * user_param->post_list);
+		ALLOC(ctx->current_send_buffer_offset, int, user_param->num_of_qps);
+		ALLOC(ctx->current_remote_recv_offset, int, user_param->num_of_qps);
+		memset(ctx->current_send_buffer_offset, 0, sizeof(int) * user_param->num_of_qps);
+		memset(ctx->current_remote_recv_offset, 0, sizeof(int) * user_param->num_of_qps);
+		if (user_param->data_validation) {
+			if (user_param->verb == READ) {
+				/* READ: sge_list has one entry per recv_slot (validation_chunk_size * chunks_per_qp * num_qps) */
+				ALLOC(ctx->sge_list, struct ibv_sge,
+				      user_param->validation_chunk_size * user_param->validation_chunks_per_qp * user_param->num_of_qps);
+				/* READ: atomic_sge_list has chunks_per_qp entries per QP (one per chunk) */
+				ALLOC(ctx->atomic_sge_list, struct ibv_sge, user_param->num_of_qps * user_param->validation_chunks_per_qp);
+			} else {
+				/* WRITE: sge_list has 3 entries (one per pattern buffer) */
+				ALLOC(ctx->sge_list, struct ibv_sge, 3);
+				/* WRITE: atomic_sge_list has 1 entry per QP (trash area) */
+				ALLOC(ctx->atomic_sge_list, struct ibv_sge, user_param->num_of_qps);
+			}
+			ALLOC(ctx->wr, struct ibv_send_wr, user_param->num_of_qps*2); // 2 WR lists for data validation - one for the data, one for atomic
+		} else {
+			ALLOC(ctx->sge_list, struct ibv_sge,user_param->num_of_qps * user_param->post_list);
+			ALLOC(ctx->wr, struct ibv_send_wr, user_param->num_of_qps * user_param->post_list);
+		}
 		ALLOC(ctx->rem_qpn, uint32_t, user_param->num_of_qps);
 		if (((user_param->verb == SEND || user_param->verb == SEND_IMM) && user_param->connection_type == UD) ||
 				user_param->connection_type == DC || user_param->connection_type == SRD) {
@@ -1260,6 +1287,27 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	if (user_param->connection_type == UD)
 		ctx->buff_size += ctx->cache_line_size;
 
+	if (user_param->data_validation) {
+		ctx->payload_size = ctx->size;
+
+		struct validation_buffer_layout layout;
+		if (compute_validation_layout(
+			ctx->payload_size,
+			user_param->validation_chunk_size,
+			user_param->num_of_qps,
+			user_param->validation_chunks_per_qp,
+			(user_param->verb == READ),
+			&layout) != 0) {
+			fprintf(stderr, "Data validation: buffer layout "
+				"computation failed (overflow?)\n");
+			return FAILURE;
+		}
+
+		ctx->tail_markers_offset = layout.markers_offset;
+		ctx->recv_slots_offset = layout.recv_slots_offset;
+		ctx->atomic_returns_offset = layout.atomic_returns_offset;
+		ctx->buff_size = layout.total_size;
+	}
 	ctx->memory = user_param->memory_create(user_param);
 
 	return SUCCESS;
@@ -1335,6 +1383,12 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 		if (ctx->sge_list != NULL)
 			free(ctx->sge_list);
+		if (ctx->current_send_buffer_offset != NULL)
+			free(ctx->current_send_buffer_offset);
+		if (ctx->current_remote_recv_offset != NULL)
+			free(ctx->current_remote_recv_offset);
+		if (ctx->atomic_sge_list != NULL)
+			free(ctx->atomic_sge_list);
 		if (ctx->wr != NULL)
 			free(ctx->wr);
 		if (ctx->rem_qpn != NULL)
@@ -1590,6 +1644,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	if (user_param->machine == CLIENT || user_param->tst == LAT || user_param->duplex) {
 
 		free(ctx->sge_list);
+		free(ctx->current_send_buffer_offset);
+		free(ctx->current_remote_recv_offset);
+		free(ctx->atomic_sge_list);
 		free(ctx->wr);
 	}
 
@@ -1841,7 +1898,7 @@ int create_cqs(struct pingpong_context *ctx, struct perftest_parameters *user_pa
 {
 	int ret;
 	int dct_only = 0, need_recv_cq = 0;
-	int tx_buffer_depth = user_param->tx_depth;
+	int tx_buffer_depth = (user_param->data_validation) ? user_param->tx_depth * 3 : user_param->tx_depth;
 
 	if (user_param->connection_type == DC) {
 		dct_only = (user_param->machine == SERVER && !(user_param->duplex || user_param->tst == LAT));
@@ -1874,8 +1931,14 @@ static int setup_mr_flags(struct perftest_parameters *user_param)
 
 	if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 		flags |= IBV_ACCESS_REMOTE_WRITE;
+		if (user_param->data_validation) {
+			flags |= IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_READ;
+		}
 	} else if (user_param->verb == READ) {
 		flags |= IBV_ACCESS_REMOTE_READ;
+		if (user_param->data_validation) {
+			flags |= IBV_ACCESS_REMOTE_ATOMIC;  /* For FETCH_AND_ADD on tail_markers */
+		}
 		if (user_param->transport_type == IBV_TRANSPORT_IWARP)
 			flags |= IBV_ACCESS_REMOTE_WRITE;
 	} else if (user_param->verb == ATOMIC) {
@@ -1891,12 +1954,60 @@ static int setup_mr_flags(struct perftest_parameters *user_param)
 	return flags;
 }
 
-static void initialize_buffer_content(struct pingpong_context *ctx,
-				      struct perftest_parameters *user_param,
-				      int qp_index, bool can_init_mem)
+static int initialize_buffer_content(struct pingpong_context *ctx,
+				     struct perftest_parameters *user_param,
+				     int qp_index, bool can_init_mem)
 {
+	/* Data validation: fill patterns on host, then copy to device */
+	if (user_param->data_validation) {
+		uint64_t payload_size = ctx->size;
+		uint64_t i;
+
+		char *host_buf = (char *)malloc(ctx->buff_size);
+		if (!host_buf) {
+			fprintf(stderr, "Failed to allocate host buffer for data validation init\n");
+			return -1;
+		}
+
+		memset(host_buf, 0, ctx->buff_size);
+
+		for (i = 0; i < VALIDATION_PATTERNS_COUNT; i++) {
+			uint8_t value = validation_cycle_to_pattern(i);
+			memset(host_buf + i * payload_size, value, payload_size);
+		}
+
+		/* READ: seed tail_markers to 1 so first FETCH_AND_ADD returns non-zero */
+		if (user_param->verb == READ) {
+			uint64_t *markers = (uint64_t*)(host_buf + ctx->tail_markers_offset);
+			for (i = 0; i < user_param->num_of_qps * user_param->validation_chunks_per_qp; i++)
+				markers[i] = 1;
+		}
+
+		if (user_param->data_validation_debug) {
+			printf("Data validation: Initialized patterns (0x01, 0x02, 0x03), payload_size=%lu\n",
+			       (unsigned long)payload_size);
+			printf("Data validation: tail_markers at offset %lu, "
+			       "recv_slots at offset %lu, total buffer %lu "
+			       "(64-byte aligned)\n",
+			       (unsigned long)ctx->tail_markers_offset,
+			       (unsigned long)ctx->recv_slots_offset,
+			       (unsigned long)ctx->buff_size);
+		}
+
+		if (ctx->memory && ctx->memory->copy_host_to_buffer) {
+			ctx->memory->copy_host_to_buffer(ctx->buf[qp_index], host_buf, ctx->buff_size);
+			if (user_param->data_validation_debug)
+				printf("Data validation: Copied %lu bytes to device memory\n", ctx->buff_size);
+		} else {
+			memcpy(ctx->buf[qp_index], host_buf, ctx->buff_size);
+		}
+
+		free(host_buf);
+		return 0;
+	}
+
 	if (!can_init_mem)
-		return;
+		return 0;
 
 	uint32_t rng_state = init_perftest_rand_state();
 	if ((user_param->verb == WRITE || user_param->verb == WRITE_IMM) && user_param->tst == LAT) {
@@ -1914,6 +2025,8 @@ static void initialize_buffer_content(struct pingpong_context *ctx,
 			}
 		}
 	}
+
+	return 0;
 }
 
 #ifdef HAVE_REG_MR_EX
@@ -2098,8 +2211,10 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		}
 	}
 
-	/* Initialize buffer content */
-	initialize_buffer_content(ctx, user_param, qp_index, can_init_mem);
+	if (!user_param->data_validation || qp_index == 0) {
+		if (initialize_buffer_content(ctx, user_param, qp_index, can_init_mem))
+			return FAILURE;
+	}
 
 	return SUCCESS;
 }
@@ -2619,6 +2734,18 @@ int ctx_init(struct pingpong_context *ctx, struct perftest_parameters *user_para
 
 		if (user_param->work_rdma_cm == OFF) {
 			modify_qp_to_init(ctx, user_param, i);
+		} else if (user_param->data_validation) {
+			struct ibv_qp_attr attr = {0};
+			int flags = IBV_QP_ACCESS_FLAGS;
+			attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC;
+			if (user_param->verb == WRITE)
+				attr.qp_access_flags |= IBV_ACCESS_REMOTE_WRITE;
+			attr.qp_access_flags |= IBV_ACCESS_REMOTE_READ;
+
+			if (ibv_modify_qp(ctx->qp[i], &attr, flags)) {
+				fprintf(stderr, "Failed to add DV access flags to rdma_cm QP %d\n", i);
+				goto qps;
+			}
 		}
 
 		qp_index++;
@@ -2814,7 +2941,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	attr.cap.max_inline_data = user_param->inline_size;
 	if (!(user_param->connection_type == DC &&
 			is_dc_server_side)) {
-		attr.cap.max_send_wr  = user_param->tx_depth;
+		attr.cap.max_send_wr  = (user_param->data_validation) ? user_param->tx_depth * 3 : user_param->tx_depth;
 		attr.cap.max_send_sge = MAX_SEND_SGE;
 	}
 
@@ -2875,6 +3002,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 		else if (opcode == IBV_WR_RDMA_READ)
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+
+		if (user_param->data_validation) {
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_ATOMIC_FETCH_AND_ADD;
+		}
 	}
 
 	attr_ex.pd = ctx->pad;
@@ -3106,10 +3237,19 @@ int ctx_modify_qp_to_init(struct ibv_qp *qp,struct perftest_parameters *user_par
 			!is_dc_server_side)) {
 		switch (user_param->verb) {
 			case ATOMIC: attr.qp_access_flags = IBV_ACCESS_REMOTE_ATOMIC; break;
-			case READ  : attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;  break;
+			case READ  :
+					attr.qp_access_flags = IBV_ACCESS_REMOTE_READ;
+					if (user_param->data_validation) {
+						attr.qp_access_flags |= IBV_ACCESS_REMOTE_ATOMIC;  /* For FETCH_AND_ADD */
+					}
+					break;
 			case WRITE_IMM:
 			case WRITE :
-				     attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE; break;
+				    attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
+					 if (user_param->data_validation) {
+						attr.qp_access_flags |= IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_READ;
+					 }
+					 break;
 			case SEND_IMM:
 			case SEND  : attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE; break;
 			default: break;
@@ -3375,7 +3515,14 @@ void ctx_set_send_wqes(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *rem_dest)
 {
-	ctx_set_send_reg_wqes(ctx,user_param,rem_dest);
+	if (user_param->data_validation && rem_dest != NULL) {
+		if (user_param->verb == READ)
+			ctx_set_send_wqes_data_val_read(ctx, user_param, rem_dest);
+		else
+			ctx_set_send_wqes_data_val_write(ctx, user_param, rem_dest);
+	} else {
+		ctx_set_send_reg_wqes(ctx,user_param,rem_dest);
+	}
 }
 
 /* ctx_post_send_work_request_func_pointer.
@@ -3734,6 +3881,119 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 				ctx->wr[i*user_param->post_list + j].qp_type.xrc.remote_srqn = rem_dest[xrc_offset + i].srqn;
 			#endif
 		}
+	}
+}
+
+/* Setup WRs for WRITE data validation (data WR + atomic WR per QP) */
+void ctx_set_send_wqes_data_val_write(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param,
+	struct pingpong_dest *rem_dest)
+{
+	int i;
+	int num_of_qps = user_param->num_of_qps;
+
+	for (i = 0; i < 3; i++) {
+		ctx->sge_list[i].addr = (uintptr_t)ctx->buf[0] + i*ctx->payload_size;
+		ctx->sge_list[i].length = ctx->payload_size;
+		ctx->sge_list[i].lkey = ctx->mr[0]->lkey;
+	}
+
+	/* Atomic returns go to a dedicated trash area (not recv_slots) */
+	for (i = 0; i < num_of_qps; i++) {
+		ctx->atomic_sge_list[i].addr = (uintptr_t)ctx->buf[0] + ctx->atomic_returns_offset + i * sizeof(uint64_t);
+		ctx->atomic_sge_list[i].length = 8;
+		ctx->atomic_sge_list[i].lkey = ctx->mr[0]->lkey;
+	}
+
+	uint64_t remote_tail_markers_address = rem_dest[0].tail_markers_vaddr;
+	memset(ctx->wr, 0, sizeof(struct ibv_send_wr) * 2*num_of_qps);
+	for (i = 0; i < num_of_qps ; i++) {
+		ctx->wr[i].wr.rdma.remote_addr  = rem_dest[i].vaddr;
+		ctx->wr[i+num_of_qps].wr.rdma.remote_addr = remote_tail_markers_address;
+		ctx->wr[i+num_of_qps].wr.atomic.remote_addr = remote_tail_markers_address;
+		ctx->scnt[i] = 0;
+		ctx->ccnt[i] = 0;
+		ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+		ctx->rem_addr[i] = rem_dest[i].vaddr;
+
+		ctx->wr[i].sg_list = &ctx->sge_list[0];
+		ctx->wr[i].num_sge = MAX_SEND_SGE;
+		ctx->wr[i].wr_id   = build_wr_id(i, i);
+		ctx->wr[i].send_flags = IBV_SEND_SIGNALED;
+		ctx->wr[i].next = NULL;
+		ctx->wr[i].opcode = opcode_verbs_array[user_param->verb];
+		ctx->wr[i].wr.rdma.rkey = rem_dest[i].rkey;
+
+		ctx->wr[i+num_of_qps].sg_list = &ctx->atomic_sge_list[i];
+		ctx->wr[i+num_of_qps].num_sge = MAX_SEND_SGE;
+		ctx->wr[i+num_of_qps].wr_id   = build_wr_id(i+1000, i);
+		ctx->wr[i+num_of_qps].send_flags &= ~IBV_SEND_SIGNALED;
+		ctx->wr[i+num_of_qps].next = NULL;
+		ctx->wr[i+num_of_qps].opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		ctx->wr[i+num_of_qps].wr.rdma.rkey = rem_dest[i].rkey;
+		ctx->wr[i+num_of_qps].wr.atomic.rkey = rem_dest[i].rkey;
+		ctx->wr[i+num_of_qps].wr.atomic.compare_add = 1;
+	}
+}
+
+/* Setup WRs for READ data validation (data WR + atomic WR per QP) */
+void ctx_set_send_wqes_data_val_read(struct pingpong_context *ctx,
+	struct perftest_parameters *user_param,
+	struct pingpong_dest *rem_dest)
+{
+	int i, qp, slot;
+	int num_of_qps = user_param->num_of_qps;
+	uint32_t slots_per_qp = user_param->validation_chunk_size * user_param->validation_chunks_per_qp;
+	uint64_t per_qp_recv_size = slots_per_qp * ctx->payload_size;
+	uint64_t recv_slots_base = (uintptr_t)ctx->buf[0] + ctx->recv_slots_offset;
+	uint64_t atomic_returns_base = (uintptr_t)ctx->buf[0] + ctx->atomic_returns_offset;
+
+	for (qp = 0; qp < num_of_qps; qp++) {
+		uint64_t qp_recv_base = recv_slots_base + qp * per_qp_recv_size;
+		for (slot = 0; slot < (int)slots_per_qp; slot++) {
+			int idx = qp * slots_per_qp + slot;
+			ctx->sge_list[idx].addr = qp_recv_base + slot * ctx->payload_size;
+			ctx->sge_list[idx].length = ctx->payload_size;
+			ctx->sge_list[idx].lkey = ctx->mr[0]->lkey;
+		}
+	}
+
+	for (qp = 0; qp < num_of_qps; qp++) {
+		for (i = 0; i < user_param->validation_chunks_per_qp; i++) {
+			int idx = qp * user_param->validation_chunks_per_qp + i;
+			ctx->atomic_sge_list[idx].addr = atomic_returns_base + idx * sizeof(uint64_t);
+			ctx->atomic_sge_list[idx].length = 8;
+			ctx->atomic_sge_list[idx].lkey = ctx->mr[0]->lkey;
+		}
+	}
+
+	uint64_t remote_tail_markers_base = rem_dest[0].tail_markers_vaddr;
+	memset(ctx->wr, 0, sizeof(struct ibv_send_wr) * 2 * num_of_qps);
+
+	for (i = 0; i < num_of_qps; i++) {
+		ctx->scnt[i] = 0;
+		ctx->ccnt[i] = 0;
+		ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+		ctx->rem_addr[i] = rem_dest[i].vaddr;
+
+		ctx->wr[i].opcode = IBV_WR_RDMA_READ;
+		ctx->wr[i].sg_list = &ctx->sge_list[i * slots_per_qp];
+		ctx->wr[i].num_sge = 1;
+		ctx->wr[i].wr_id = build_wr_id(i, i);
+		ctx->wr[i].send_flags = IBV_SEND_SIGNALED;
+		ctx->wr[i].next = NULL;
+		ctx->wr[i].wr.rdma.remote_addr = rem_dest[i].vaddr;
+		ctx->wr[i].wr.rdma.rkey = rem_dest[i].rkey;
+
+		ctx->wr[i + num_of_qps].opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		ctx->wr[i + num_of_qps].sg_list = &ctx->atomic_sge_list[i * user_param->validation_chunks_per_qp];
+		ctx->wr[i + num_of_qps].num_sge = 1;
+		ctx->wr[i + num_of_qps].wr_id = build_wr_id(i + 1000, i);
+		ctx->wr[i + num_of_qps].send_flags = 0;
+		ctx->wr[i + num_of_qps].next = NULL;
+		ctx->wr[i + num_of_qps].wr.atomic.remote_addr = remote_tail_markers_base;
+		ctx->wr[i + num_of_qps].wr.atomic.rkey = rem_dest[i].rkey;
+		ctx->wr[i + num_of_qps].wr.atomic.compare_add = 1;
 	}
 }
 
@@ -4145,40 +4405,39 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 				if (user_param->test_type == DURATION && user_param->state == END_STATE)
 					break;
 
-				err = post_send_method(ctx, index, user_param);
-				if (err) {
-					fprintf(stderr,"Couldn't post send: qp %d scnt=%lu \n",index,ctx->scnt[index]);
-					return_value = FAILURE;
-					goto cleaning;
+			err = post_send_method(ctx, index, user_param);
+			if (err) {
+				fprintf(stderr,"Couldn't post send: qp %d scnt=%lu || err=%d tx_depth=%d\n",index,ctx->scnt[index],err,user_param->tx_depth	);
+				return_value = FAILURE;
+				goto cleaning;
+			}
+
+			/* if we have more than single flow and the burst iter is the last one */
+			if (user_param->flows != DEF_FLOWS) {
+				if (++flows_burst_iter == user_param->flows_burst) {
+					flows_burst_iter = 0;
+					/* inc the send_flows_index and update the address */
+					if (++send_flows_index == user_param->flows)
+						send_flows_index = 0;
+					address_offset = send_flows_index * ctx->flow_buff_size;
+					ctx->sge_list[0].addr = primary_send_addr + address_offset;
 				}
+			}
 
-				/* if we have more than single flow and the burst iter is the last one */
-				if (user_param->flows != DEF_FLOWS) {
-					if (++flows_burst_iter == user_param->flows_burst) {
-						flows_burst_iter = 0;
-						/* inc the send_flows_index and update the address */
-						if (++send_flows_index == user_param->flows)
-							send_flows_index = 0;
-						address_offset = send_flows_index * ctx->flow_buff_size;
-						ctx->sge_list[0].addr = primary_send_addr + address_offset;
-					}
+			if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
+					increase_loc_addr(ctx->wr[index].sg_list,user_param->size, ctx->scnt[index],
+							ctx->my_addr[index] + address_offset , 0, ctx->cache_line_size,
+							ctx->cycle_buffer);
+
+				if (user_param->verb != SEND) {
+					increase_rem_addr(&ctx->wr[index], user_param->size,
+							ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
+							ctx->cache_line_size, ctx->cycle_buffer);
 				}
+			}
 
-				/* in multiple flow scenarios we will go to next cycle buffer address in the main buffer*/
-				if (user_param->post_list == 1 && user_param->size <= (ctx->cycle_buffer / 2)) {
-						increase_loc_addr(ctx->wr[index].sg_list,user_param->size, ctx->scnt[index],
-								ctx->my_addr[index] + address_offset , 0, ctx->cache_line_size,
-								ctx->cycle_buffer);
-
-					if (user_param->verb != SEND && user_param->verb != SEND_IMM) {
-						increase_rem_addr(&ctx->wr[index], user_param->size,
-								ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
-								ctx->cache_line_size, ctx->cycle_buffer);
-					}
-				}
-
-				ctx->scnt[index] += user_param->post_list;
-				totscnt += user_param->post_list;
+			ctx->scnt[index] += user_param->post_list;
+			totscnt += user_param->post_list;
 
 				/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
@@ -4206,6 +4465,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						goto cleaning;
 					}
 				}
+
 				/* Dynamic CQE poll size adaptation */
 				ne = poll_completions(
 					ctx->send_cq,
@@ -4245,17 +4505,294 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						}
 					}
 
-				} else if (ne < 0) {
-					fprintf(stderr, "poll CQ failed %d\n",ne);
-					return_value = FAILURE;
-					goto cleaning;
+					} else if (ne < 0) {
+						fprintf(stderr, "poll CQ failed %d\n",ne);
+						return_value = FAILURE;
+						goto cleaning;
 					}
+
 		}
 	}
 	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
 		user_param->tcompleted[0] = get_cycles();
 
 cleaning:
+	free(dyn_ctx);
+	free(wc);
+	return return_value;
+}
+
+struct dv_slot_lut_entry {
+	uint64_t addr_offset;
+	uint64_t atomic_target_offset;
+	uint32_t chunk_id;
+	uint8_t  chain_atomic;
+};
+
+int run_iter_bw_dv(struct pingpong_context *ctx, struct perftest_parameters *user_param)
+{
+	uint64_t		totscnt = 0;
+	uint64_t		totccnt = 0;
+	int			i = 0;
+	int			index;
+	int			ne = 0;
+	uint64_t		tot_iters;
+	int			err = 0;
+	struct ibv_wc		*wc = NULL;
+	int			num_of_qps = user_param->num_of_qps;
+	int			rate_limit_pps = 0;
+	double			gap_time = 0;
+	cycles_t		gap_cycles = 0;
+	cycles_t		gap_deadline = 0;
+	double			number_of_bursts = 0;
+	int			burst_iter = 0;
+	int			is_sending_burst = 0;
+	int			cpu_mhz = 0;
+	int			return_value = 0;
+	int			qp_index;
+	uint32_t		validation_slots_per_qp =
+		user_param->validation_chunk_size * user_param->validation_chunks_per_qp;
+	uint64_t		atomic_base_addr;
+	struct dv_slot_lut_entry *dv_lut = NULL;
+
+	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
+	if (!dyn_ctx) {
+		fprintf(stderr, "Failed to allocate dynamic polling context\n");
+		return FAILURE;
+	}
+
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
+	ALLOCATE(wc, struct ibv_wc, dyn_ctx->config.max);
+
+	/* Build per-slot lookup table: replaces multiply/divide/modulo in hot loop */
+	dv_lut = malloc(validation_slots_per_qp * sizeof(*dv_lut));
+	if (!dv_lut) {
+		fprintf(stderr, "Failed to allocate DV slot lookup table\n");
+		return_value = FAILURE;
+		goto cleaning;
+	}
+	for (uint32_t s = 0; s < validation_slots_per_qp; s++) {
+		dv_lut[s].addr_offset = (uint64_t)s * ctx->payload_size;
+		dv_lut[s].chunk_id = s / user_param->validation_chunk_size;
+		dv_lut[s].atomic_target_offset = (uint64_t)dv_lut[s].chunk_id * sizeof(uint64_t);
+		dv_lut[s].chain_atomic = ((s + 1) % user_param->validation_chunk_size == 0) ? 1 : 0;
+	}
+
+	if (user_param->test_type == DURATION) {
+		duration_param = user_param;
+		duration_param->state = START_STATE;
+		signal(SIGALRM, catch_alarm);
+		if (user_param->margin > 0)
+			alarm(user_param->margin);
+		else
+			catch_alarm(0);
+
+		user_param->iters = 0;
+	}
+
+	if (user_param->duplex && (user_param->use_xrc || user_param->connection_type == DC))
+		num_of_qps /= 2;
+
+	tot_iters = (uint64_t)user_param->iters * num_of_qps;
+
+	if (user_param->test_type == DURATION && user_param->state != START_STATE && user_param->margin > 0) {
+		fprintf(stderr, "Failed: margin is not long enough (taking samples before warmup ends)\n");
+		fprintf(stderr, "Please increase margin or decrease tx_depth\n");
+		return_value = FAILURE;
+		goto cleaning;
+	}
+
+	if (user_param->test_type == ITERATIONS && user_param->noPeak == ON)
+		user_param->tposted[0] = get_cycles();
+
+	if (user_param->rate_limit_type == SW_RATE_LIMIT) {
+		switch (user_param->rate_units) {
+			case MEGA_BYTE_PS:
+				rate_limit_pps = ((double)(user_param->rate_limit) / user_param->size) * 1048576;
+				break;
+			case GIGA_BIT_PS:
+				rate_limit_pps = ((double)(user_param->rate_limit) / (user_param->size * 8)) * 1000000000;
+				break;
+			case PACKET_PS:
+				rate_limit_pps = user_param->rate_limit;
+				break;
+			default:
+				fprintf(stderr, " Failed: Unknown rate limit units\n");
+				return_value = FAILURE;
+				goto cleaning;
+		}
+		cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+		if (cpu_mhz <= 0) {
+			fprintf(stderr, "Failed: couldn't acquire cpu frequency for rate limiter.\n");
+		}
+		number_of_bursts = (double)rate_limit_pps / (double)user_param->burst_size;
+		gap_time = 1000000 * (1.0 / number_of_bursts);
+		gap_cycles = cpu_mhz * gap_time;
+	}
+
+	gap_deadline = get_cycles();
+	atomic_base_addr = ctx->wr[num_of_qps].wr.atomic.remote_addr;
+
+	while (totscnt < tot_iters || totccnt < tot_iters ||
+		(user_param->test_type == DURATION && user_param->state != END_STATE)) {
+
+		for (index = 0; index < num_of_qps; index++) {
+			if (user_param->rate_limit_type == SW_RATE_LIMIT && is_sending_burst == 0) {
+				if (gap_deadline > get_cycles())
+					continue;
+				gap_deadline = gap_deadline + gap_cycles;
+				is_sending_burst = 1;
+				burst_iter = 0;
+			}
+
+			int recv_off = ctx->current_remote_recv_offset[index];
+			int send_off = ctx->current_send_buffer_offset[index];
+			uint64_t send_addr_offset = (uint64_t)send_off * ctx->payload_size;
+			uint32_t qp_tail_base = index * user_param->validation_chunks_per_qp;
+			int qp_sge_base = index * validation_slots_per_qp;
+
+			while ((ctx->scnt[index] < user_param->iters || user_param->test_type == DURATION) &&
+					(ctx->scnt[index] + user_param->post_list) <= (user_param->tx_depth + ctx->ccnt[index]) &&
+					!((user_param->rate_limit_type == SW_RATE_LIMIT) && is_sending_burst == 0)) {
+
+				if (ctx->send_rcredit) {
+					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
+					if (swindow >= user_param->rx_depth)
+						break;
+				}
+				if (user_param->post_list == 1 && (ctx->scnt[index] % user_param->cq_mod == 0 && user_param->cq_mod > 1)
+					&& !(ctx->scnt[index] == (user_param->iters - 1) && user_param->test_type == ITERATIONS)) {
+
+					ctx->wr[index].send_flags &= ~IBV_SEND_SIGNALED;
+				}
+
+				if (user_param->noPeak == OFF)
+					user_param->tposted[totscnt] = get_cycles();
+
+				if (user_param->test_type == DURATION && user_param->state == END_STATE)
+					break;
+
+				struct dv_slot_lut_entry *slot = &dv_lut[recv_off];
+
+				if (user_param->verb == WRITE) {
+					ctx->wr[index].wr.rdma.remote_addr = ctx->rem_addr[index] + slot->addr_offset;
+					ctx->wr[index].sg_list = &ctx->sge_list[send_off];
+				} else {
+					ctx->wr[index].sg_list = &ctx->sge_list[qp_sge_base + recv_off];
+					ctx->wr[index].wr.rdma.remote_addr = ctx->rem_addr[index] + send_addr_offset;
+				}
+
+				if (slot->chain_atomic) {
+					struct ibv_send_wr *atomic_wr = &ctx->wr[index + num_of_qps];
+					uint64_t tail_idx = qp_tail_base + slot->chunk_id;
+					atomic_wr->wr.atomic.remote_addr =
+						atomic_base_addr + tail_idx * sizeof(uint64_t);
+					if (user_param->verb == READ)
+						atomic_wr->sg_list = &ctx->atomic_sge_list[tail_idx];
+					else
+						atomic_wr->sg_list = &ctx->atomic_sge_list[index];
+					ctx->wr[index].next = atomic_wr;
+				} else {
+					ctx->wr[index].next = NULL;
+				}
+
+				err = post_send_method(ctx, index, user_param);
+				if (err) {
+					fprintf(stderr, "Couldn't post send: qp %d scnt=%lu || err=%d tx_depth=%d\n",
+						index, ctx->scnt[index], err, user_param->tx_depth);
+					return_value = FAILURE;
+					goto cleaning;
+				}
+
+				ctx->scnt[index] += user_param->post_list;
+				totscnt += user_param->post_list;
+
+				if (++recv_off == (int)validation_slots_per_qp) {
+					recv_off = 0;
+					if (++send_off == 3)
+						send_off = 0;
+					send_addr_offset = (uint64_t)send_off * ctx->payload_size;
+				}
+
+				if (user_param->post_list == 1 &&
+						(ctx->scnt[index] % user_param->cq_mod == user_param->cq_mod - 1 ||
+							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {
+					ctx->wr[index].send_flags |= IBV_SEND_SIGNALED;
+				}
+
+				if (user_param->rate_limit_type == SW_RATE_LIMIT) {
+					burst_iter += user_param->post_list;
+					if (burst_iter >= user_param->burst_size)
+						is_sending_burst = 0;
+				}
+			}
+
+			ctx->current_remote_recv_offset[index] = recv_off;
+			ctx->current_send_buffer_offset[index] = send_off;
+		}
+
+		if (totccnt < tot_iters || (user_param->test_type == DURATION && totccnt < totscnt)) {
+			if (user_param->use_event && ne == 0) {
+				if (ctx_notify_events(ctx->send_channel)) {
+					fprintf(stderr, "Couldn't request CQ notification\n");
+					return_value = FAILURE;
+					goto cleaning;
+				}
+			}
+
+			ne = poll_completions(
+				ctx->send_cq,
+				wc,
+				dyn_ctx,
+				totccnt,
+				&user_param->dynamic_cqe_poll);
+
+			if (ne > 0) {
+				for (i = 0; i < ne; i++) {
+					qp_index = (int)get_wr_id_qp_index(wc[i].wr_id);
+
+					if (wc[i].status != IBV_WC_SUCCESS) {
+						NOTIFY_COMP_ERROR_SEND(wc[i], totscnt, totccnt);
+						return_value = FAILURE;
+						goto cleaning;
+					}
+					int fill = user_param->cq_mod;
+					if (user_param->fill_count && ctx->ccnt[qp_index] + user_param->cq_mod > user_param->iters) {
+						fill = user_param->iters - ctx->ccnt[qp_index];
+					}
+					ctx->ccnt[qp_index] += fill;
+					totccnt += fill;
+
+					if (user_param->noPeak == OFF) {
+						if (totccnt > tot_iters)
+							user_param->tcompleted[user_param->iters * num_of_qps - 1] = get_cycles();
+						else
+							user_param->tcompleted[totccnt - 1] = get_cycles();
+					}
+
+					if (user_param->test_type == DURATION && user_param->state == SAMPLE_STATE) {
+						if (user_param->report_per_port) {
+							user_param->iters_per_port[user_param->port_by_qp[qp_index]] += user_param->cq_mod;
+						}
+						user_param->iters += user_param->cq_mod;
+					}
+				}
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return_value = FAILURE;
+				goto cleaning;
+			}
+		}
+	}
+	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
+		user_param->tcompleted[0] = get_cycles();
+
+cleaning:
+	free(dv_lut);
 	free(dyn_ctx);
 	free(wc);
 	return return_value;
@@ -4410,7 +4947,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 					    unused_recv_for_qp[qp_index] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[qp_index * user_param->recv_post_list], &bad_wr_recv)) {
-								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc[i].qp_num,rcnt);
+								fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n", (int)wc[i].qp_num,rcnt);
 								return_value = FAILURE;
 								goto cleaning;
 							}
@@ -5248,7 +5785,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	uint64_t                scnt = 0;
 	uint64_t                ccnt = 0;
 	uint64_t                rcnt = 0;
-	int                     ne;
+	int                     ne = 0;
 	int			err = 0;
 	int 			poll_buf_offset = 0;
 	volatile char           *poll_buf = NULL;
@@ -6371,6 +6908,140 @@ int error_handler(char *error_message)
 	return FAILURE;
 }
 
-/******************************************************************************
- * End
- ******************************************************************************/
+/* --- Data Validation Helpers --- */
+
+int data_validation_init(struct pingpong_context *ctx,
+			 struct perftest_parameters *user_param)
+{
+	uint64_t markers_offset;
+	uint32_t chunks_per_qp = user_param->validation_chunks_per_qp;
+
+	if (!ctx->memory) {
+		fprintf(stderr, "Data validation requested but no memory context available\n");
+		return FAILURE;
+	}
+
+	if (!ctx->memory->validation_init) {
+		fprintf(stderr, "Data validation requested but memory type does not support it\n");
+		return FAILURE;
+	}
+
+	if (user_param->validation_mode == VALIDATION_MODE_READ)
+		markers_offset = ctx->atomic_returns_offset;  /* F&A return values */
+	else
+		markers_offset = ctx->tail_markers_offset;    /* NIC-written atomics */
+
+	{
+		struct validation_config vcfg = {
+			.buffer_base = ctx->buf[0],
+			.markers_offset = markers_offset,
+			.recv_slots_offset = ctx->recv_slots_offset,
+			.payload_size = ctx->payload_size,
+			.ops_per_chunk = user_param->validation_chunk_size,
+			.num_qps = user_param->num_of_qps,
+			.chunks_per_qp = chunks_per_qp,
+			.validation_mode = user_param->validation_mode,
+			.debug_enabled = user_param->data_validation_debug,
+			.numa_node = host_validation_get_numa_node(user_param->ib_devname),
+		};
+		if (ctx->memory->validation_init(ctx->memory, &vcfg) != 0) {
+			fprintf(stderr, "Failed to create validation context\n");
+			return FAILURE;
+		}
+	}
+	return SUCCESS;
+}
+
+int data_validation_start(struct pingpong_context *ctx,
+			  struct perftest_parameters *user_param,
+			  const char *role)
+{
+	if (!ctx->memory || !ctx->memory->validation_start) {
+		fprintf(stderr, "Data validation: cannot start - not initialized\n");
+		return FAILURE;
+	}
+
+	if (ctx->memory->validation_start(ctx->memory) != 0) {
+		fprintf(stderr, "Failed to start validation kernel\n");
+		return FAILURE;
+	}
+	return SUCCESS;
+}
+
+int data_validation_stop_and_report(struct pingpong_context *ctx,
+				    struct perftest_parameters *user_param,
+				    const char *role)
+{
+	struct data_validation_result result = {0};
+
+	if (!ctx->memory || !ctx->memory->validation_stop) {
+		fprintf(stderr, "VALIDATION: ERROR - not initialized\n");
+		return FAILURE;
+	}
+
+	if (ctx->memory->validation_stop(ctx->memory, &result) != 0) {
+		fprintf(stderr, "VALIDATION: ERROR - validation_stop() failed\n");
+		return FAILURE;
+	}
+
+	if (!result.passed) {
+		fprintf(stderr, "VALIDATION: FAILED%s%s%s - %lu error(s), "
+			"first at QP %u, Chunk %u, Offset %lu "
+			"(expected 0x%02x, got 0x%02x)\n",
+			role ? " (" : "", role ? role : "", role ? ")" : "",
+			(unsigned long)result.errors_found,
+			result.error_qp_id, result.error_chunk_id, result.error_byte_offset,
+			result.error_expected, result.error_actual);
+		return FAILURE;
+	}
+
+	if (result.chunks_validated == 0) {
+		fprintf(stderr, "VALIDATION: WARNING%s%s%s - no data validated\n",
+			role ? " (" : "", role ? role : "", role ? ")" : "");
+		return FAILURE;
+	}
+
+	printf("VALIDATION: PASSED%s%s%s - %lu chunks, %lu bytes",
+	       role ? " (" : "", role ? role : "", role ? ")" : "",
+	       (unsigned long)result.chunks_validated,
+	       (unsigned long)result.bytes_validated);
+
+	if (result.race_overwrites || result.dma_stale_retries ||
+	    result.skipped_steps) {
+		printf(" [races=%lu, retries=%lu, skips=%lu]",
+		       (unsigned long)result.race_overwrites,
+		       (unsigned long)result.dma_stale_retries,
+		       (unsigned long)result.skipped_steps);
+	}
+	printf("\n");
+
+	if (user_param->data_validation_debug) {
+		printf("  Markers: %lu scanned, %lu hit",
+		       (unsigned long)result.markers_scanned,
+		       (unsigned long)result.markers_hit);
+		if (result.markers_scanned > 0) {
+			printf(" (%.4f%% hit rate)",
+			       100.0 * result.markers_hit /
+			       result.markers_scanned);
+		}
+		printf("\n");
+
+		if (result.skipped_steps)
+			printf("  Skipped steps: %lu (marker jumps > 1)\n",
+			       (unsigned long)result.skipped_steps);
+		if (result.race_overwrites)
+			printf("  Race overwrites: %lu (epoch guard suppressions)\n",
+			       (unsigned long)result.race_overwrites);
+		if (result.dma_stale_retries)
+			printf("  DMA stale retries: %lu (tail flush resolved)\n",
+			       (unsigned long)result.dma_stale_retries);
+	}
+
+	return SUCCESS;
+}
+
+void data_validation_destroy(struct pingpong_context *ctx)
+{
+	if (ctx->memory && ctx->memory->validation_destroy)
+		ctx->memory->validation_destroy(ctx->memory);
+}

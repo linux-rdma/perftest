@@ -76,15 +76,18 @@
 #define ntoh_int(x) (int) ntohl((uint32_t) (x))
 #define hton_int(x) (int) htonl((uint32_t) (x))
 
-#define KEY_MSG_SIZE 	 (59)   /* Message size without gid. */
-#define KEY_MSG_SIZE_GID (108)   /* Message size with gid (MGID as well). */
+#define KEY_MSG_SIZE         (59)
+#define KEY_MSG_SIZE_GID     (108)
+#define KEY_MSG_SIZE_DV      (76)
+#define KEY_MSG_SIZE_GID_DV  (125)
+
 #define SYNC_SPEC_ID	 (5)
 
-/* The Format of the message we pass through sockets , without passing Gid. */
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016llx:%08x"
+#define KEY_PRINT_FMT_DV "%04x:%04x:%06x:%06x:%08x:%016llx:%016llx:%08x"
 
-/* The Format of the message we pass through sockets (With Gid). */
 #define KEY_PRINT_FMT_GID "%04x:%04x:%06x:%06x:%08x:%016llx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%08x:"
+#define KEY_PRINT_FMT_GID_DV "%04x:%04x:%06x:%06x:%08x:%016llx:%016llx:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%08x:"
 
 /* The Basic print format for all verbs. */
 #define BASIC_ADDR_FMT " %s address: LID %#04x QPN %#06x PSN %#06x"

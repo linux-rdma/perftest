@@ -172,6 +172,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* Initialize data validation for receiver side */
+	if (user_param.data_validation &&
+		(user_param.machine == SERVER || user_param.duplex) &&
+		data_validation_init(&ctx, &user_param)) {
+		goto destroy_context;
+	}
+
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -262,6 +269,10 @@ int main(int argc, char *argv[])
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
 
+		if (user_param.data_validation &&
+			data_validation_start(&ctx, &user_param, NULL))
+			goto free_mem;
+
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto destroy_context;
@@ -287,7 +298,12 @@ int main(int argc, char *argv[])
 				printf(RESULT_LINE);
 		}
 
+		if (user_param.data_validation)
+			data_validation_stop_and_report(&ctx, &user_param, NULL);
+
 		if (user_param.work_rdma_cm == ON) {
+			if (user_param.data_validation)
+				data_validation_destroy(&ctx);
 			if (destroy_ctx(&ctx,&user_param)) {
 				fprintf(stderr, "Failed to destroy resources\n");
 				goto destroy_cm_context;
@@ -306,6 +322,8 @@ int main(int argc, char *argv[])
 			return SUCCESS;
 		}
 
+		if (user_param.data_validation)
+			data_validation_destroy(&ctx);
 		free(my_dest);
 		free(rem_dest);
 		free(user_param.ib_devname);
@@ -317,6 +335,10 @@ int main(int argc, char *argv[])
 		return SUCCESS;
 	}
 
+	/* In unidir WRITE with data_validation, client waits for server to start validation kernel */
+	if (user_param.data_validation) {
+		sleep(2);
+	}
 	if (user_param.test_method == RUN_ALL) {
 
 		for (i = 1; i < 24 ; ++i) {
@@ -361,7 +383,7 @@ int main(int argc, char *argv[])
 
 			} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
 
-				if(run_iter_bw(&ctx,&user_param)) {
+				if ((user_param.data_validation ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
 					fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 					goto destroy_context;
 				}
@@ -411,6 +433,12 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		/* Start validation for duplex mode */
+		if (user_param.data_validation && user_param.duplex &&
+			data_validation_start(&ctx, &user_param,
+				user_param.machine == SERVER ? "SERVER" : "CLIENT"))
+			goto free_mem;
+
 		if(user_param.duplex || user_param.verb == WRITE_IMM) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
@@ -427,7 +455,7 @@ int main(int argc, char *argv[])
 
 		} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
 
-			if(run_iter_bw(&ctx,&user_param)) {
+			if ((user_param.data_validation ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
 				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 				goto destroy_context;
 			}
@@ -438,6 +466,15 @@ int main(int argc, char *argv[])
 				fprintf(stderr," Failed to complete run_iter_bw_server function successfully\n");
 				goto destroy_context;
 			}
+		}
+
+		/* Sync before stopping validation for duplex mode */
+		if (user_param.data_validation && user_param.duplex) {
+			if (ctx_hand_shake(&user_comm, &my_dest[0], &rem_dest[0])) {
+				fprintf(stderr, "Failed to sync before stopping validation\n");
+				goto free_mem;
+			}
+			usleep(100000);  /* 100ms delay for validator to drain */
 		}
 
 		print_report_bw(&user_param,&my_bw_rep);
@@ -501,6 +538,12 @@ int main(int argc, char *argv[])
 			printf(RESULT_LINE);
 	}
 
+	/* Stop validation for duplex mode (after result line) */
+	if (user_param.data_validation && user_param.duplex) {
+		data_validation_stop_and_report(&ctx, &user_param,
+				user_param.machine == SERVER ? "SERVER" : "CLIENT");
+	}
+
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == CLIENT && user_param.verb == WRITE && !user_param.duplex) {
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -527,6 +570,8 @@ int main(int argc, char *argv[])
 		goto destroy_context;
 	}
 	if (user_param.work_rdma_cm == ON) {
+		if (user_param.data_validation)
+			data_validation_destroy(&ctx);
 		if (destroy_ctx(&ctx,&user_param)) {
 			fprintf(stderr, "Failed to destroy resources\n");
 			goto destroy_cm_context;
@@ -546,6 +591,7 @@ int main(int argc, char *argv[])
 		return SUCCESS;
 	}
 
+	data_validation_destroy(&ctx);
 	free(rem_dest);
 	free(my_dest);
 	free(user_param.ib_devname);
@@ -557,6 +603,8 @@ int main(int argc, char *argv[])
 	return SUCCESS;
 
 destroy_context:
+	if (user_param.data_validation)
+		data_validation_destroy(&ctx);
 	if (destroy_ctx(&ctx,&user_param))
 		fprintf(stderr, "Failed to destroy resources\n");
 destroy_cm_context:

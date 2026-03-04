@@ -9,6 +9,10 @@
 #include "cuda_memory.h"
 #include "perftest_parameters.h"
 #include "cuda_loader.h"
+#include "validation_common.h"
+
+static int kernel_plugin_initialized = 0;
+static void cuda_validation_destroy(struct memory_ctx *ctx);
 
 #define CUCHECK(stmt) \
 	do { \
@@ -27,25 +31,20 @@ static const char *cuda_mem_type_str[] = {
 	"CUDA_MEM_TYPES"
 };
 
-#ifdef HAVE_CUDART
-int touch_gpu_pages(uint8_t *addr, int buf_size, int is_infinitely, volatile int **stop_flag);
-int init_gpu_stop_flag(volatile int **stop_flag);
-#endif
-
 struct cuda_memory_ctx {
 	struct memory_ctx base;
 	int mem_type;
 	int gpu_touch;
 	int device_id;
 	char *device_bus_id;
-	volatile int *stop_touch_gpu_kernel_flag; // used for stopping cuda gpu_touch kernel
+	volatile int *stop_touch_gpu_kernel_flag;
 	CUdevice cuDevice;
 	CUcontext cuContext;
 	bool use_dmabuf;
 	bool use_pcie_mapping;
 	int driver_version;
+	int validation_active; /* 1 if plugin validation is active */
 };
-
 
 static int init_gpu(struct cuda_memory_ctx *ctx)
 {
@@ -95,7 +94,6 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), ctx->cuDevice, name);
 	printf("creating CUDA Ctx\n");
 
-	/* Create context */
 	error = p_cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
 	if (error != CUDA_SUCCESS) {
 		printf("cuCtxCreate() error=%d\n", error);
@@ -110,8 +108,16 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	}
 
 	#ifdef HAVE_CUDART
-	if (ctx->gpu_touch != GPU_NO_TOUCH){
-		error = init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
+	if (ctx->gpu_touch != GPU_NO_TOUCH) {
+		if (load_kernel_plugin() != 0) {
+			printf("Failed to load kernel plugin for GPU touch\n");
+			return FAILURE;
+		}
+		if (!p_init_gpu_stop_flag) {
+			printf("GPU touch not available in kernel plugin\n");
+			return FAILURE;
+		}
+		error = p_init_gpu_stop_flag(&ctx->stop_touch_gpu_kernel_flag);
 		if (error != 0) {
 			printf("init_gpu_stop_flag() error=%d\n", error);
 			return FAILURE;
@@ -182,9 +188,23 @@ int cuda_memory_init(struct memory_ctx *ctx) {
 int cuda_memory_destroy(struct memory_ctx *ctx) {
 	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 
-	free_gpu(cuda_ctx);
-	free(cuda_ctx);
+	if (cuda_ctx->validation_active) {
+		cuda_validation_destroy(ctx);
+	}
+
+	if (cuda_ctx->cuContext) {
+		free_gpu(cuda_ctx);
+	}
+
+	if (cuda_ctx) {
+		free(cuda_ctx);
+	}
+
+	unload_kernel_plugin();
+	unload_cudart_library();
 	unload_cuda_library();
+	kernel_plugin_initialized = 0;
+
 	return SUCCESS;
 }
 
@@ -193,7 +213,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 	int error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 
-	// Check if discrete or integrated GPU (tegra), for allocating memory where adequate
+	/* Check if discrete or integrated GPU (tegra) */
 	int cuda_device_integrated;
 	p_cuDeviceGetAttribute(&cuda_device_integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
 	printf("CUDA device integrated: %X\n", (unsigned int)cuda_device_integrated);
@@ -227,7 +247,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 				size_t aligned_size;
 				int cu_flags = 0;
 
-				// Round down to host page size
+				/* Round down to host page size */
 				aligned_ptr = d_A & ~(host_page_size - 1);
 				offset = d_A - aligned_ptr;
 				aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
@@ -245,7 +265,7 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 						return FAILURE;
 					}
 				#else
-					// this may happen with binaries built with a CUDA toolkit older than 12.8
+				/* may happen with CUDA toolkit older than 12.8 */
 					printf("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
 					return FAILURE;
 				#endif
@@ -293,7 +313,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 		case CUDA_MEM_MALLOC:
 			*can_init = false;
-			// Fall through
+			/* Fall through */
 
 			printf("Host allocation selected, calling memalign allocator for %lu bytes with %d page size\n", size, alignment);
 			*addr = memalign(alignment, size);
@@ -318,8 +338,14 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 	#ifdef HAVE_CUDART
 	if (cuda_ctx->gpu_touch != GPU_NO_TOUCH) {
+		if (!p_touch_gpu_pages) {
+			printf("GPU touch not available in kernel plugin\n");
+			return FAILURE;
+		}
 		printf("Starting GPU touching process\n");
-		return touch_gpu_pages((uint8_t *)*addr, size, cuda_ctx->gpu_touch == GPU_TOUCH_INFINITE, &cuda_ctx->stop_touch_gpu_kernel_flag);
+		return p_touch_gpu_pages((uint8_t *)*addr, size,
+		                         cuda_ctx->gpu_touch == GPU_TOUCH_INFINITE,
+		                         &cuda_ctx->stop_touch_gpu_kernel_flag);
 	}
 	#endif
 
@@ -383,7 +409,6 @@ bool cuda_memory_dmabuf_supported() {
 #endif
 }
 
-
 bool data_direct_supported() {
 #ifdef HAVE_DATA_DIRECT
 	return true;
@@ -391,7 +416,6 @@ bool data_direct_supported() {
 	return false;
 #endif
 }
-
 
 bool cuda_gpu_touch_supported() {
 #ifdef HAVE_CUDART
@@ -402,10 +426,136 @@ bool cuda_gpu_touch_supported() {
 }
 
 
+static int ensure_kernel_plugin_loaded(void)
+{
+	if (kernel_plugin_initialized)
+		return 0;
+
+	if (load_cudart_library() != 0) {
+		fprintf(stderr, "Failed to load CUDA runtime library\n");
+		return -1;
+	}
+
+	if (load_kernel_plugin() != 0) {
+		fprintf(stderr, "Failed to load validation kernel plugin (libperftest_kernels.so)\n");
+		fprintf(stderr, "Data validation requires the kernel plugin to be installed.\n");
+		return -1;
+	}
+
+	kernel_plugin_initialized = 1;
+	return 0;
+}
+
+static int cuda_validation_init(struct memory_ctx *ctx,
+				const struct validation_config *cfg)
+{
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+
+	if (ensure_kernel_plugin_loaded() != 0)
+		return -1;
+
+	if (!p_validation_init) {
+		fprintf(stderr, "Validation plugin not properly loaded\n");
+		return -1;
+	}
+
+	int ret = p_validation_init(cfg->buffer_base,
+	                                   cfg->markers_offset,
+	                                   cfg->recv_slots_offset,
+	                                   cfg->payload_size,
+	                                   cfg->ops_per_chunk,
+	                                   cfg->num_qps,
+	                                   cfg->chunks_per_qp,
+	                                   cfg->validation_mode,
+	                                   cuda_ctx->device_id,
+	                                   cfg->debug_enabled);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to initialize validation context via plugin\n");
+		return -1;
+	}
+
+	cuda_ctx->validation_active = 1;
+	return 0;
+}
+
+static int cuda_validation_start(struct memory_ctx *ctx)
+{
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+
+	if (!cuda_ctx->validation_active || !p_validation_start)
+		return -1;
+
+	int ret = p_validation_start(NULL, 0, 0);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to launch validation kernel via plugin\n");
+		return -1;
+	}
+	return 0;
+}
+
+static int cuda_validation_stop(struct memory_ctx *ctx,
+                                struct data_validation_result *result)
+{
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+
+	if (!cuda_ctx->validation_active || !result)
+		return -1;
+
+	if (!p_validation_stop || !p_validation_get_stats || !p_validation_get_error) {
+		fprintf(stderr, "Validation plugin functions not available\n");
+		return -1;
+	}
+
+	p_validation_stop();
+
+	uint64_t chunks_validated = 0, bytes_validated = 0, errors_found = 0;
+	uint64_t race_overwrites = 0, dma_stale_retries = 0;
+	p_validation_get_stats(&chunks_validated, &bytes_validated, &errors_found,
+			       &race_overwrites, &dma_stale_retries);
+
+	result->chunks_validated = chunks_validated;
+	result->bytes_validated = bytes_validated;
+	result->errors_found = errors_found;
+	result->passed = (errors_found == 0) ? 1 : 0;
+
+	result->markers_scanned = 0;
+	result->markers_hit = 0;
+	result->skipped_steps = 0;
+	result->race_overwrites = race_overwrites;
+	result->dma_stale_retries = dma_stale_retries;
+
+	if (!result->passed) {
+		uint32_t qp_id = 0, chunk_id = 0;
+		uint64_t byte_offset = 0;
+		uint8_t expected = 0, actual = 0;
+		p_validation_get_error(&qp_id, &chunk_id, &byte_offset, &expected, &actual);
+		result->error_qp_id = qp_id;
+		result->error_chunk_id = chunk_id;
+		result->error_byte_offset = byte_offset;
+		result->error_expected = expected;
+		result->error_actual = actual;
+	}
+
+	return 0;
+}
+
+static void cuda_validation_destroy(struct memory_ctx *ctx)
+{
+	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
+
+	if (cuda_ctx->validation_active) {
+		if (p_validation_destroy) {
+			p_validation_destroy();
+		}
+		cuda_ctx->validation_active = 0;
+	}
+}
+
 struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	struct cuda_memory_ctx *ctx;
 
 	ALLOCATE(ctx, struct cuda_memory_ctx, 1);
+	memset(ctx, 0, sizeof(struct cuda_memory_ctx));
 	ctx->base.init = cuda_memory_init;
 	ctx->base.destroy = cuda_memory_destroy;
 	ctx->base.allocate_buffer = cuda_memory_allocate_buffer;
@@ -413,6 +563,10 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->base.copy_host_to_buffer = cuda_memory_copy_host_buffer;
 	ctx->base.copy_buffer_to_host = cuda_memory_copy_host_buffer;
 	ctx->base.copy_buffer_to_buffer = cuda_memory_copy_buffer_to_buffer;
+	ctx->base.validation_init = cuda_validation_init;
+	ctx->base.validation_start = cuda_validation_start;
+	ctx->base.validation_stop = cuda_validation_stop;
+	ctx->base.validation_destroy = cuda_validation_destroy;
 	ctx->device_id = params->cuda_device_id;
 	ctx->device_bus_id = params->cuda_device_bus_id;
 	ctx->use_dmabuf = params->use_cuda_dmabuf;
@@ -420,6 +574,7 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->gpu_touch = params->gpu_touch;
 	ctx->stop_touch_gpu_kernel_flag = NULL;
 	ctx->mem_type = params->cuda_mem_type;
+	ctx->validation_active = 0;
 
 	return &ctx->base;
 }
