@@ -275,12 +275,12 @@ struct pingpong_context {
 	struct ibv_qp				**qp;
 	#ifdef HAVE_IBV_WR_API
 	struct ibv_qp_ex			**qpx;
-	#ifdef HAVE_MLX5DV
-	struct mlx5dv_qp_ex			**dv_qp;
-	struct mlx5dv_mkey			**mkey;
-	#endif
 	int (*new_post_send_work_request_func_pointer) (struct pingpong_context *ctx, int index,
 		struct perftest_parameters *user_param);
+	#endif
+	#ifdef HAVE_MLX5DV
+	struct mlx5dv_mkey			**mkey;
+	struct mlx5dv_qp_ex			**dv_qp;
 	#endif
 	struct ibv_srq				*srq;
 	struct ibv_sge				*sge_list;

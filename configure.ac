@@ -57,6 +57,14 @@ AS_IF([test "x$enable_ibv_wr_api" = "xno"],
       [USE_IBV_WR_API=no],
         [USE_IBV_WR_API=yes])
 
+AC_ARG_ENABLE([cq_ex],
+	[AS_HELP_STRING([--disable-cq_ex],
+	[Disable cq ex API])])
+
+AS_IF([test "x$enable_cq_ex" = "xno"],
+      [USE_CQ_EX=no],
+        [USE_CQ_EX=yes])
+
 AC_PREFIX_DEFAULT("/usr")
 
 AC_PROG_CC
@@ -591,8 +599,10 @@ fi
 AC_TRY_LINK([#include <infiniband/verbs.h>],
 	[ibv_cq_ex_to_cq], [HAVE_CQ_EX=yes], [HAVE_CQ_EX=no])
 AM_CONDITIONAL([HAVE_CQ_EX], [test "x$HAVE_CQ_EX" = "xyes"])
-if [test $HAVE_CQ_EX = yes]; then
+if [test $HAVE_CQ_EX = yes] && [test $USE_CQ_EX = yes]; then
 	AC_DEFINE([HAVE_CQ_EX], [1], [Have CQ EX API support])
+else
+	HAVE_CQ_EX=no
 fi
 
 AC_TRY_LINK([#include <infiniband/verbs.h>],
