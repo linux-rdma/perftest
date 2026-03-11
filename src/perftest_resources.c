@@ -6806,6 +6806,65 @@ cleaning:
 /******************************************************************************
 *
 ******************************************************************************/
+static int gid_is_v4mapped(const union ibv_gid *gid)
+{
+	return (gid->raw[10] == 0xff && gid->raw[11] == 0xff &&
+		!gid->raw[0] && !gid->raw[1] && !gid->raw[2] &&
+		!gid->raw[3] && !gid->raw[4] && !gid->raw[5] &&
+		!gid->raw[6] && !gid->raw[7] && !gid->raw[8] &&
+		!gid->raw[9]);
+}
+
+/******************************************************************************
+*
+******************************************************************************/
+static int gid_to_sockaddr(const union ibv_gid *gid, int ai_family,
+			   struct sockaddr **addr, socklen_t *len)
+{
+	if (ai_family == AF_INET && gid_is_v4mapped(gid)) {
+		struct sockaddr_in *s4;
+
+		/* Skip 0.0.0.0 */
+		if (!gid->raw[12] && !gid->raw[13] &&
+		    !gid->raw[14] && !gid->raw[15])
+			return -1;
+
+		s4 = (struct sockaddr_in *)calloc(1, sizeof(*s4));
+		s4->sin_family = AF_INET;
+		memcpy(&s4->sin_addr, &gid->raw[12], 4);
+		*addr = (struct sockaddr *)s4;
+		*len = sizeof(*s4);
+		return 0;
+	}
+
+	if (ai_family == AF_INET6 && !gid_is_v4mapped(gid)) {
+		struct sockaddr_in6 *s6;
+		int j, all_zero = 1;
+
+		for (j = 0; j < 16; j++) {
+			if (gid->raw[j]) { all_zero = 0; break; }
+		}
+		if (all_zero)
+			return -1;
+
+		/* Skip link-local (fe80::/10) — not routable across subnets */
+		if (gid->raw[0] == 0xfe && (gid->raw[1] & 0xc0) == 0x80)
+			return -1;
+
+		s6 = (struct sockaddr_in6 *)calloc(1, sizeof(*s6));
+		s6->sin6_family = AF_INET6;
+		memcpy(&s6->sin6_addr, gid->raw, 16);
+		*addr = (struct sockaddr *)s6;
+		*len = sizeof(*s6);
+		return 0;
+	}
+
+	return -1;
+}
+
+/******************************************************************************
+*
+******************************************************************************/
 int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param, struct rdma_addrinfo *hints, bool retry)
 {
@@ -6880,6 +6939,30 @@ int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
 
 			hints->ai_src_addr = (struct sockaddr *)(source_addr);
 			hints->ai_src_len = sizeof(*source_addr);
+		}
+	} else if (user_param->ib_devname) {
+		/* No --bind_source_ip, but --ib-dev was specified.
+		* rdma_cm ignores --ib-dev when resolving routes, so find an IP
+		* on that device and pass it as the source address to bind the interface. */
+		struct ibv_port_attr port_attr;
+		union ibv_gid gid;
+
+		if (!ibv_query_port(ctx->context, user_param->ib_port,
+				    &port_attr)) {
+			int idx;
+
+			for (idx = 0; idx < port_attr.gid_tbl_len; idx++) {
+				if (ibv_query_gid(ctx->context,
+						  user_param->ib_port,
+						  idx, &gid))
+					continue;
+
+				if (!gid_to_sockaddr(&gid,
+						     user_param->ai_family,
+						     &hints->ai_src_addr,
+						     &hints->ai_src_len))
+					break;
+			}
 		}
 	}
 

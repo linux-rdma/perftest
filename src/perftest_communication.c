@@ -3098,6 +3098,100 @@ error:
 }
 
 /******************************************************************************
+ * Convert a sockaddr (IPv4 or IPv6) to a 16-byte GID suitable for
+ * comparison against the device's GID table.  Returns 0 on success.
+ ******************************************************************************/
+static int sockaddr_to_gid(const struct sockaddr *addr, union ibv_gid *gid)
+{
+	memset(gid, 0, sizeof(*gid));
+
+	if (addr->sa_family == AF_INET) {
+		const struct sockaddr_in *s4 = (const struct sockaddr_in *)addr;
+		gid->raw[10] = 0xff;
+		gid->raw[11] = 0xff;
+		memcpy(&gid->raw[12], &s4->sin_addr, 4);
+		return 0;
+	}
+
+	if (addr->sa_family == AF_INET6) {
+		const struct sockaddr_in6 *s6 = (const struct sockaddr_in6 *)addr;
+		memcpy(gid->raw, &s6->sin6_addr, 16);
+		return 0;
+	}
+
+	return -1;
+}
+
+/******************************************************************************
+ * Scan the GID table on the given device/port and return the index whose
+ * entry matches 'target'.  Returns the index (>= 0) or -1 if not found.
+ ******************************************************************************/
+static int find_gid_index(struct ibv_context *context, uint8_t port,
+			  const union ibv_gid *target)
+{
+	struct ibv_port_attr port_attr;
+	union ibv_gid entry;
+	int i;
+
+	if (ibv_query_port(context, port, &port_attr))
+		return -1;
+
+	for (i = 0; i < port_attr.gid_tbl_len; i++) {
+		if (ibv_query_gid(context, port, i, &entry))
+			continue;
+		if (!memcmp(entry.raw, target->raw, sizeof(entry.raw)))
+			return i;
+	}
+
+	return -1;
+}
+
+/******************************************************************************
+ * After rdma_cm connection is established, the actual device, port, and GID
+ * may differ from what the user requested via --ib-dev / -x.  Refresh
+ * user_param so that subsequent header prints reflect reality.
+ ******************************************************************************/
+static void update_rdma_cm_params(struct pingpong_context *ctx,
+				  struct perftest_parameters *user_param,
+				  struct perftest_comm *comm)
+{
+	struct rdma_cm_id *cm_id;
+	struct sockaddr *src_addr;
+	union ibv_gid src_gid;
+	int idx;
+
+	cm_id = ctx->cma_master.nodes[0].cma_id;
+	if (!cm_id || !cm_id->verbs)
+		return;
+
+	free(user_param->ib_devname);
+	user_param->ib_devname = strdup(ibv_get_device_name(cm_id->verbs->device));
+
+	/* Similarly, the physical port may differ from what the user assumed. */
+	user_param->ib_port = cm_id->port_num;
+
+	/* Find the GID index that matches the source address rdma_cm actually
+	 * used: convert the resolved local sockaddr to a GID, then look it up
+	 * in the device's GID table. */
+	src_addr = rdma_get_local_addr(cm_id);
+	if (!src_addr)
+		return;
+
+	if (sockaddr_to_gid(src_addr, &src_gid))
+		return;
+
+	idx = find_gid_index(ctx->context, user_param->ib_port, &src_gid);
+	if (idx >= 0) {
+		user_param->gid_index = idx;
+		user_param->use_gid_user = 1;
+		/* comm->rdma_params is a separate copy used by
+		 * ctx_print_pingpong_data() — keep it in sync. */
+		if (comm && comm->rdma_params)
+			comm->rdma_params->gid_index = idx;
+	}
+}
+
+/******************************************************************************
 *
 ******************************************************************************/
 int create_rdma_cm_connection(struct pingpong_context *ctx,
@@ -3138,7 +3232,6 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 
 	if (rc) {
 		error_message = "Failed to create RDMA CM connection.";
-		free(hints.ai_src_addr);
 		goto destroy_rdma_id;
 	}
 
@@ -3150,6 +3243,8 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 	}
 
 	free(hints.ai_src_addr);
+
+	update_rdma_cm_params(ctx, user_param, comm);
 
 	return rc;
 
