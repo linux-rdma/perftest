@@ -1523,6 +1523,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	comm->rdma_params->data_validation = user_param->data_validation;
 	comm->rdma_params->memory_type		= MEMORY_HOST;
 	comm->rdma_params->memory_create	= host_memory_create;
+	comm->rdma_params->use_hugepages	= user_param->use_hugepages;
 
 	if (user_param->use_rdma_cm) {
 
