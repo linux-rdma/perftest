@@ -417,7 +417,7 @@ static int64_t validate_neon(const uint8_t *data, uint8_t pattern,
 #elif defined(HAVE_NEON)
   #define VALIDATE_CHUNK_FN validate_neon
 #else
-  #define VALIDATE_CHUNK_FN(...) ((int64_t-1))
+  #define VALIDATE_CHUNK_FN(...) ((int64_t)(-1))
 #endif
 
 /* Read IB device NUMA node from sysfs. Returns node ID or -1. */
