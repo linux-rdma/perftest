@@ -1,14 +1,15 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        26.04.1
+Version:        26.04.8
 Release:        0.0
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
-Source:         http://www.openfabrics.org/downloads/%{name}-%{version}.tar.gz
+Source:         %{name}-%{version}.tar.gz
 Url:            http://www.openfabrics.org
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  libibverbs-devel librdmacm-devel libibumad-devel
 BuildRequires:  pciutils-devel
+BuildRequires:  autoconf automake gcc-c++ libtool
 
 %description
 gen3 uverbs microbenchmarks

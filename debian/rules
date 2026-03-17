@@ -20,10 +20,5 @@ export DH_OPTIONS
 %:
 	dh $@
 
-# Install CUDA kernel plugin if it was built
-override_dh_install:
-	dh_install
-	if [ -f libperftest_kernels.so ]; then \
-		install -d debian/perftest/usr/lib; \
-		install -m 755 libperftest_kernels.so debian/perftest/usr/lib/; \
-	fi
+override_dh_shlibdeps:
+	dh_shlibdeps --exclude=libperftest_kernels.so
