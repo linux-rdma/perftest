@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #endif
 #include "perftest_parameters.h"
+#include "perftest_cluster.h"
 #include "validation_common.h"
 #include "mlx5_devx.h"
 #include "raw_ethernet_resources.h"
@@ -5205,6 +5206,13 @@ void print_report_lat (struct perftest_parameters *user_param)
 		counters_print(user_param->counter_ctx);
 	}
 
+	cluster_capture_lat_iter((unsigned long)user_param->size, user_param->iters,
+				 delta[0] / cycles_rtt_quotient,
+				 delta[measure_cnt] / cycles_rtt_quotient,
+				 latency, average, stdev,
+				 delta[iters_99] / cycles_rtt_quotient,
+				 delta[iters_99_9] / cycles_rtt_quotient);
+
 	free(delta);
 }
 
@@ -5270,6 +5278,9 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 	if (user_param->counter_ctx) {
 		counters_print(user_param->counter_ctx);
 	}
+
+	cluster_capture_lat_duration((unsigned long)user_param->size,
+				     user_param->iters, latency, tps);
 }
 
 void print_report_fs_rate (struct perftest_parameters *user_param)

@@ -45,6 +45,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %doc README COPYING runme
 %_bindir/*
 %_mandir/man1/*.1*
+%_libexecdir/perftest/cluster_mode/*.py
 
 %changelog
 * Wed Jan 09 2013 - idos@mellanox.com

@@ -49,6 +49,8 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 #include "perftest_negotiation.h"
+#include "mpi_loader.h"
+#include "perftest_cluster.h"
 
 /******************************************************************************
  *
@@ -69,6 +71,9 @@ int main(int argc, char *argv[])
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
+
+	if (cluster_init(&argc, &argv))
+		return FAILURE;
 
 	user_param.verb    = ATOMIC;
 	user_param.tst     = LAT;
@@ -129,6 +134,8 @@ int main(int argc, char *argv[])
 		printf("************************************\n");
 	}
 
+	cluster_barrier_pre_handshake(&user_param);
+
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
@@ -184,6 +191,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_RESOURCES);
+
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -224,6 +233,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_CONNECTED);
+
 	if (user_param.connection_type == DC)
 	{
 		/* Set up connection one more time to send qpn properly for DC */
@@ -257,8 +268,15 @@ int main(int argc, char *argv[])
 		goto destroy_context;
 	}
 
+	cluster_barrier(CLUSTER_PHASE_TRAFFIC);
+
 	/* Only Client post read request. */
 	if (user_param.machine == SERVER) {
+
+		/* Server must still participate in the MPI_Gather collective
+		 * with a zeroed report, or it blocks forever - see read_lat.c. */
+		cluster_report_lat(&user_param);
+
 		if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 			fprintf(stderr,"Failed to close connection between server and client\n");
 			goto destroy_context;
@@ -281,6 +299,7 @@ int main(int argc, char *argv[])
 				return FAILURE;
 			}
 			free(user_comm.rdma_params);
+			mpi_finalize();
 			return SUCCESS;
 		}
 		free(my_dest);
@@ -291,6 +310,7 @@ int main(int argc, char *argv[])
 			return FAILURE;
 		}
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -316,6 +336,11 @@ int main(int argc, char *argv[])
 	}
 
 	user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
+
+	/* Send this client's latency result to rank 0 (perftest_cluster_worker) via
+	 * MPI_Gather. print_report_lat[_duration] above already populated
+	 * the cluster_lat_report via store_cluster_lat_report(). */
+	cluster_report_lat(&user_param);
 
 	if (ctx_close_connection(&user_comm,my_dest,rem_dest)) {
 		fprintf(stderr,"Failed to close connection between server and client\n");
@@ -343,6 +368,7 @@ int main(int argc, char *argv[])
 		}
 		free(user_comm.rdma_ctx);
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -355,9 +381,11 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 	free(user_comm.rdma_params);
+	mpi_finalize();
 	return SUCCESS;
 
 destroy_context:
+	mpi_finalize();
 	if (destroy_ctx(&ctx,&user_param))
 		fprintf(stderr, "Failed to destroy resources\n");
 destroy_cm_context:

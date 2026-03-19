@@ -42,6 +42,8 @@
 #include "perftest_resources.h"
 #include "perftest_communication.h"
 #include "perftest_negotiation.h"
+#include "mpi_loader.h"
+#include "perftest_cluster.h"
 
 /******************************************************************************
  *
@@ -62,6 +64,9 @@ int main(int argc, char *argv[])
 	memset(&ctx, 0, sizeof(struct pingpong_context));
 	memset(&user_param, 0, sizeof(struct perftest_parameters));
 	memset(&user_comm, 0, sizeof(struct perftest_comm));
+
+	if (cluster_init(&argc, &argv))
+		return FAILURE;
 
 	user_param.verb    = ATOMIC;
 	user_param.tst     = BW;
@@ -120,6 +125,8 @@ int main(int argc, char *argv[])
 		printf("************************************\n");
 	}
 
+	cluster_barrier_pre_handshake(&user_param);
+
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr, " Unable to init the socket connection\n");
@@ -175,6 +182,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_RESOURCES);
+
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx, &user_param, my_dest)) {
 		fprintf(stderr, " Unable to set up socket connection\n");
@@ -207,6 +216,8 @@ int main(int argc, char *argv[])
 			goto destroy_context;
 		}
 	}
+
+	cluster_barrier(CLUSTER_PHASE_CONNECTED);
 
 	if (user_param.connection_type == DC)
 	{
@@ -242,6 +253,9 @@ int main(int argc, char *argv[])
 
 	/* For half duplex tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && !user_param.duplex) {
+
+		cluster_barrier(CLUSTER_PHASE_TRAFFIC);
+
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
 			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
@@ -255,6 +269,8 @@ int main(int argc, char *argv[])
 
 		xchg_bw_reports(&user_comm, &my_bw_rep, &rem_bw_rep, atof(user_param.rem_version));
 		print_full_bw_report(&user_param, &rem_bw_rep, NULL);
+
+		cluster_report_bw(&user_param, NULL, NULL);
 
 		if (user_param.output == FULL_VERBOSITY) {
 			printf(RESULT_LINE);
@@ -281,6 +297,7 @@ int main(int argc, char *argv[])
 				return FAILURE;
 			}
 			free(user_comm.rdma_params);
+			mpi_finalize();
 			return SUCCESS;
 		}
 		free(my_dest);
@@ -291,6 +308,7 @@ int main(int argc, char *argv[])
 			return FAILURE;
 		}
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -317,6 +335,8 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		cluster_barrier(CLUSTER_PHASE_TRAFFIC);
+
 		if (user_param.duplex) {
 			if (ctx_hand_shake(&user_comm, &my_dest[0], &rem_dest[0])) {
 				fprintf(stderr, "Failed to sync between server and client between different msg sizes\n");
@@ -330,6 +350,8 @@ int main(int argc, char *argv[])
 		}
 
 		print_report_bw(&user_param, &my_bw_rep);
+
+		cluster_report_bw(&user_param, &my_bw_rep, NULL);
 
 		if (user_param.duplex) {
 			xchg_bw_reports(&user_comm, &my_bw_rep, &rem_bw_rep, atof(user_param.rem_version));
@@ -405,6 +427,7 @@ int main(int argc, char *argv[])
 		}
 		free(user_comm.rdma_ctx);
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -417,9 +440,11 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 	free(user_comm.rdma_params);
+	mpi_finalize();
 	return SUCCESS;
 
 destroy_context:
+	mpi_finalize();
 	if (destroy_ctx(&ctx,&user_param))
 		fprintf(stderr, "Failed to destroy resources\n");
 destroy_cm_context:

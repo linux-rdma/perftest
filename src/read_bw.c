@@ -42,6 +42,8 @@
 #include "perftest_parameters.h"
 #include "perftest_communication.h"
 #include "perftest_negotiation.h"
+#include "mpi_loader.h"
+#include "perftest_cluster.h"
 
 /******************************************************************************
  *
@@ -62,6 +64,9 @@ int main(int argc, char *argv[])
 	memset(&ctx,0,sizeof(struct pingpong_context));
 	memset(&user_param , 0 , sizeof(struct perftest_parameters));
 	memset(&user_comm,0,sizeof(struct perftest_comm));
+
+	if (cluster_init(&argc, &argv))
+		return FAILURE;
 
 	user_param.verb    = READ;
 	user_param.tst     = BW;
@@ -118,6 +123,8 @@ int main(int argc, char *argv[])
 		printf("************************************\n");
 	}
 
+	cluster_barrier_pre_handshake(&user_param);
+
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
@@ -173,6 +180,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_RESOURCES);
+
 	/* Initialize data validation for reader side.
 	 * For READ: CLIENT is the reader (validates), or both in duplex mode. */
 	 if (user_param.data_validation &&
@@ -213,6 +222,8 @@ int main(int argc, char *argv[])
 			goto destroy_context;
 		}
 	}
+
+	cluster_barrier(CLUSTER_PHASE_CONNECTED);
 
 	if (user_param.connection_type == DC)
 	{
@@ -259,12 +270,17 @@ int main(int argc, char *argv[])
 	/* For half duplex tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && !user_param.duplex) {
 
+		cluster_barrier(CLUSTER_PHASE_TRAFFIC);
+
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 			fprintf(stderr," Failed to exchange data between server and clients\n");
 			goto destroy_context;
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
+
+		/* Gather after handshake/xchg (avoids A2A/RING deadlock). READ server: no BW/DV. */
+		cluster_report_bw(&user_param, NULL, NULL);
 
 		if (user_param.test_method != RUN_INFINITELY) {
 			print_full_bw_report(&user_param, &rem_bw_rep, NULL);
@@ -300,6 +316,7 @@ int main(int argc, char *argv[])
 			}
 			free(user_comm.rdma_ctx);
 			free(user_comm.rdma_params);
+			mpi_finalize();
 			return SUCCESS;
 		}
 		free(my_dest);
@@ -310,6 +327,7 @@ int main(int argc, char *argv[])
 			return FAILURE;
 		}
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -378,6 +396,8 @@ int main(int argc, char *argv[])
 		        user_param.duplex ? (user_param.machine == SERVER ? "SERVER" : "CLIENT") : NULL))
 			goto free_mem;
 
+		cluster_barrier(CLUSTER_PHASE_TRAFFIC);
+
 		if(user_param.duplex) {
 			if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
@@ -441,13 +461,6 @@ int main(int argc, char *argv[])
 			printf(RESULT_LINE);
 	}
 
-	/* Stop validation for reader (after BW report and result line) */
-	if (user_param.data_validation &&
-	    (user_param.machine == CLIENT || user_param.duplex)) {
-		data_validation_stop_and_report(&ctx, &user_param,
-		    user_param.duplex ? (user_param.machine == SERVER ? "SERVER" : "CLIENT") : NULL);
-	}
-
 	/* For half duplex tests, server just waits for client to exit */
 	if (user_param.machine == CLIENT && !user_param.duplex) {
 
@@ -457,6 +470,22 @@ int main(int argc, char *argv[])
 		}
 
 		xchg_bw_reports(&user_comm, &my_bw_rep,&rem_bw_rep,atof(user_param.rem_version));
+	}
+
+	/* DV + gather after post-traffic TCP exchange (avoids A2A/RING deadlock). */
+	if (g_mpi.available || (user_param.data_validation &&
+	    (user_param.machine == CLIENT || user_param.duplex))) {
+		struct data_validation_result dv_result = {0};
+		int dv_here = user_param.data_validation &&
+			(user_param.machine == CLIENT || user_param.duplex);
+
+		if (dv_here)
+			data_validation_stop_and_report(&ctx, &user_param,
+			    user_param.duplex ? (user_param.machine == SERVER ? "SERVER" : "CLIENT") : NULL,
+			    &dv_result);
+
+		cluster_report_bw(&user_param, &my_bw_rep,
+				  dv_here ? &dv_result : NULL);
 	}
 
 	if (ctx_close_connection(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -493,6 +522,7 @@ int main(int argc, char *argv[])
 		}
 		free(user_comm.rdma_ctx);
 		free(user_comm.rdma_params);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -506,10 +536,12 @@ int main(int argc, char *argv[])
 		return FAILURE;
 	}
 	free(user_comm.rdma_params);
+	mpi_finalize();
 	return SUCCESS;
 
 
 destroy_context:
+	mpi_finalize();
 	if (user_param.data_validation)
 		data_validation_destroy(&ctx);
 	if (destroy_ctx(&ctx,&user_param))

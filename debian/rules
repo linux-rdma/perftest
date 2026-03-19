@@ -22,3 +22,6 @@ export DH_OPTIONS
 
 override_dh_shlibdeps:
 	dh_shlibdeps --exclude=libperftest_kernels.so
+
+override_dh_install:
+	dh_install -Xnic_gpu_discovery.py

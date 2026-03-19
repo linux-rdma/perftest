@@ -7332,9 +7332,13 @@ int data_validation_start(struct pingpong_context *ctx,
 
 int data_validation_stop_and_report(struct pingpong_context *ctx,
 				    struct perftest_parameters *user_param,
-				    const char *role)
+				    const char *role,
+				    struct data_validation_result *out)
 {
 	struct data_validation_result result = {0};
+
+	if (out)
+		memset(out, 0, sizeof(*out));
 
 	if (!ctx->memory || !ctx->memory->validation_stop) {
 		fprintf(stderr, "VALIDATION: ERROR - not initialized\n");
@@ -7345,6 +7349,9 @@ int data_validation_stop_and_report(struct pingpong_context *ctx,
 		fprintf(stderr, "VALIDATION: ERROR - validation_stop() failed\n");
 		return FAILURE;
 	}
+
+	if (out)
+		*out = result;
 
 	if (!result.passed) {
 		fprintf(stderr, "VALIDATION: FAILED%s%s%s - %lu error(s), "

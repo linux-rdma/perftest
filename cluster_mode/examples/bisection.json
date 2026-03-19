@@ -1,0 +1,12 @@
+{
+    "description": "Bisection bandwidth test - first half to second half",
+
+    "testNodes": [
+        {"hostName": "node-[01-08]"}
+    ],
+
+    "trafficPattern": "B",
+    "perftestBinary": "ib_write_bw",
+    "messageSize": 65536,
+    "duration": 60
+}

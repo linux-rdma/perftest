@@ -34,8 +34,8 @@ ACLOCAL_AMFLAGS= -I m4
 AUTOMAKE_OPTIONS= subdir-objects
 
 noinst_LIBRARIES = libperftest.a
-libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_negotiation.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c src/numa_loader.c
-noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_negotiation.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/musa_memory.h src/numa_loader.h
+libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_negotiation.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c src/numa_loader.c src/mpi_loader.c src/perftest_cluster.c
+noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_negotiation.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/musa_memory.h src/numa_loader.h src/mpi_loader.h src/perftest_cluster.h
 
 AM_CFLAGS =
 
@@ -74,8 +74,44 @@ if IB_DM_DMABUF
 libperftest_a_SOURCES += src/dm_memory.c
 endif
 
-bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
-bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices
+bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw perftest_cluster_worker
+bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices perftest_cluster perftest_nic_gpu_discover
+
+# Cluster mode scripts. perftest_cluster substitutes $(libexecdir) at make time;
+# perftest_nic_gpu_discover is an executable copy of nic_gpu_discovery.py for remote SSH use.
+do_subst = sed -e 's,[@]libexecdir[@],$(libexecdir),g'
+
+perftest_cluster: scripts/perftest_cluster.in
+	$(do_subst) < $< > $@
+	chmod +x $@
+
+perftest_nic_gpu_discover: cluster_mode/nic_gpu_discovery.py
+	cp $< $@
+	chmod +x $@
+
+CLEANFILES = perftest_cluster perftest_nic_gpu_discover
+
+EXTRA_DIST = scripts/perftest_cluster.in cluster_mode/nic_gpu_discovery.py
+
+# Install cluster_mode/*.py to $(libexecdir)/perftest/cluster_mode/.
+# These are runtime-loaded by the 'perftest_cluster' wrapper via sys.path injection.
+clustermodedir = $(libexecdir)/perftest/cluster_mode
+dist_clustermode_DATA = \
+	cluster_mode/__init__.py \
+	cluster_mode/__main__.py \
+	cluster_mode/config_model.py \
+	cluster_mode/orchestrator.py \
+	cluster_mode/discovery.py \
+	cluster_mode/json_report.py \
+	cluster_mode/mpi_command.py \
+	cluster_mode/metrics.py \
+	cluster_mode/perftest_output.py \
+	cluster_mode/traffic_patterns.py \
+	cluster_mode/config_parser.py \
+	cluster_mode/remote.py \
+	cluster_mode/rendering.py \
+	cluster_mode/result_schema.py \
+	cluster_mode/mpi_env.py
 
 # Non-source man pages:
 man1_MANS = \
@@ -167,6 +203,10 @@ ib_atomic_lat_SOURCES = src/atomic_lat.c
 ib_atomic_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA) $(LIBHNS)
 ib_atomic_bw_SOURCES = src/atomic_bw.c
 ib_atomic_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA) $(LIBHNS)
+
+perftest_cluster_worker_SOURCES = src/perftest_cluster_worker.c
+perftest_cluster_worker_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA) $(LIBHNS)
+
 if HAVE_RAW_ETH
 raw_ethernet_bw_SOURCES = src/raw_ethernet_send_bw.c
 raw_ethernet_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA) $(LIBHNS)

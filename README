@@ -11,7 +11,8 @@ Table of Contents
 3. Notes on Testing Methodology
 4. Test Descriptions
 5. Running Tests
-6. Known Issues
+6. Cluster Mode (Multi-Host Orchestration)
+7. Known Issues
 
 ===============================================================================
 1. Overview
@@ -564,6 +565,44 @@ Special feature detailed explanation in tests:
 
           Example output:
               VALIDATION: PASSED - 12500 chunks, 102400000 bytes [races=3, retries=7, skips=42]
+
+===============================================================================
+6. Cluster Mode (Multi-Host Orchestration)
+===============================================================================
+
+In addition to the classic two-host server/client benchmarks above, perftest
+includes a "cluster mode" that orchestrates the same benchmarks across many
+hosts/NICs/GPUs at once via MPI, from a single command.
+
+To use cluster mode, do the following on every host that will participate
+(the launcher host and every worker host):
+
+  1. Build and install perftest (see "2. Installation" above):
+       ./autogen.sh && ./configure && make && sudo make install
+
+  2. Open MPI: perftest_cluster run auto-detects a usable Open MPI install
+     on the launcher, so no setup is normally needed there. If you hit an
+     error about mpirun/prted not found, run:
+       source set_mpi.sh
+     (must be "source"d - running "./set_mpi.sh" directly only affects that
+     subprocess). Every WORKER host still needs its own Open MPI install
+     (set_mpi.sh there too, or sudo set_mpi.sh --install-system-wide).
+
+  3. [Only on launcher host] Set up passwordless SSH so the launcher host can reach every other host:
+       ssh-keygen -t rsa          # if no key exists on the launcher
+       ssh-copy-id <remote-host>  # for each participating host
+
+Once all three steps are done on all hosts, run a test from the launcher host:
+       perftest_cluster run --hosts host-a,host-b --binary ib_write_bw
+
+For the full configuration reference, traffic patterns, GPU support, and
+troubleshooting, see cluster_mode/CLUSTER_MODE.md.
+
+IMPORTANT: on multi-NIC hosts, set "mpiSubnet" in your JSON config (or
+--mpi-subnet on the CLI) to the management subnet Open MPI should use for
+its control-plane traffic - NOT the RDMA data subnet used by -d/deviceName.
+Find it with "ip route get <worker-host-ip>", e.g.:
+       "mpiSubnet": "10.220.95.0/24"
 
 ===============================================================================
 7. Known Issues

@@ -1,0 +1,14 @@
+{
+    "description": "GPUDirect RDMA — bisection BW test with explicit per-group GPU device IDs (no Data Direct).",
+
+    "testNodes": [
+        {"hostName": "node-[01-04]", "deviceName": "mlx5_0", "gpuType": "cuda", "gpuDeviceId": 0},
+        {"hostName": "node-[05-08]", "deviceName": "mlx5_0", "gpuType": "cuda", "gpuDeviceId": 1}
+    ],
+
+    "trafficPattern": "B",
+    "perftestBinary": "ib_write_bw",
+    "messageSize": 65536,
+    "duration": 10,
+    "reportGbits": true
+}

@@ -1,0 +1,17 @@
+{
+    "description": "Simple one-to-one test between two nodes",
+
+    "testNodes": [
+        {"hostName": "node-01", "deviceName": "mlx5_0", "qpsPerProcess": 4},
+        {"hostName": "node-02", "deviceName": "mlx5_0", "qpsPerProcess": 4}
+    ],
+    "mpiSubnet": "10.0.0.0/24",
+    "trafficPattern": "O2O",
+    "perftestBinary": "ib_read_bw",
+    "duration": 10,
+    "streams": 1,
+    "qpsPerProcess": 1,
+    "verbose": true,
+    "reportGbits": true,
+    "noEnhancedReorder": false
+}

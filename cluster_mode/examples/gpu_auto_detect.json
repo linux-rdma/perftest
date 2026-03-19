@@ -1,0 +1,16 @@
+{
+    "description": "Auto-detect GPU-RDMA affinity — orchestrator SSH-probes each host before launch.",
+
+    "testNodes": [
+        {"hostName": "node-[01-08]", "deviceName": "mlx5_0"}
+    ],
+
+    "trafficPattern": "B",
+    "perftestBinary": "ib_write_bw",
+    "messageSize": 65536,
+    "duration": 10,
+    "reportGbits": true,
+
+    "autoDetect": true,
+    "dataDirectMode": true
+}

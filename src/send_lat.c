@@ -50,6 +50,8 @@
 #include "multicast_resources.h"
 #include "perftest_communication.h"
 #include "perftest_negotiation.h"
+#include "mpi_loader.h"
+#include "perftest_cluster.h"
 
 /******************************************************************************
  *
@@ -188,6 +190,9 @@ int main(int argc, char *argv[])
 	memset(&user_comm , 0, sizeof(struct perftest_comm));
 	memset(&mcg_params, 0, sizeof(struct mcast_parameters));
 
+	if (cluster_init(&argc, &argv))
+		return FAILURE;
+
 	user_param.verb    = SEND;
 	user_param.tst     = LAT;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
@@ -247,6 +252,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr," Unable to create RDMA_CM resources\n");
 		goto free_devname;
 	}
+
+	cluster_barrier_pre_handshake(&user_param);
 
 	if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
 		printf("\n************************************\n");
@@ -309,6 +316,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_RESOURCES);
+
 	/* Set up the Connection. */
 	if (send_set_up_connection(&ctx,&user_param,my_dest,&mcg_params,&user_comm)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -370,6 +379,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	cluster_barrier(CLUSTER_PHASE_CONNECTED);
+
 	/* shaking hands and gather the other side info. */
 	if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
 		fprintf(stderr,"Failed to exchange data between server and clients\n");
@@ -418,6 +429,8 @@ int main(int argc, char *argv[])
 		printf("%s",(user_param.test_type == ITERATIONS) ? RESULT_FMT_LAT : RESULT_FMT_LAT_DUR);
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
+
+	cluster_barrier(CLUSTER_PHASE_TRAFFIC);
 
 	ctx_set_send_wqes(&ctx,&user_param,rem_dest);
 
@@ -479,6 +492,8 @@ int main(int argc, char *argv[])
 		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
+	cluster_report_lat(&user_param);
+
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 	}
@@ -504,6 +519,7 @@ int main(int argc, char *argv[])
 		}
 		free(user_comm.rdma_params);
 		free(user_comm.rdma_ctx);
+		mpi_finalize();
 		return SUCCESS;
 	}
 
@@ -511,9 +527,11 @@ int main(int argc, char *argv[])
 	free(my_dest);
 	free(user_param.ib_devname);
 
+	mpi_finalize();
 	return send_destroy_ctx(&ctx,&user_param,&mcg_params);
 
 destroy_ctx:
+	mpi_finalize();
 	if (send_destroy_ctx(&ctx,&user_param,&mcg_params))
 		fprintf(stderr, "Failed to destroy resources\n");
 

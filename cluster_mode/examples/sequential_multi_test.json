@@ -1,0 +1,26 @@
+{
+    "description": "Sequential bandwidth then latency test",
+
+    "testNodes": [
+        {"hostName": "node-01", "deviceName": "mlx5_0"},
+        {"hostName": "node-02", "deviceName": "mlx5_0"}
+    ],
+
+    "trafficPattern": "O2O",
+    "mpiSubnet": "10.0.0.0/24",
+    "tests": [
+        {
+            "name": "write-bw",
+            "perftestBinary": "ib_write_bw",
+            "messageSize": 65536,
+            "duration": 10,
+            "iterations": 3
+        },
+        {
+            "name": "write-lat",
+            "perftestBinary": "ib_write_lat",
+            "perftestIters": 10000,
+            "iterations": 2
+        }
+    ]
+}
