@@ -1,6 +1,6 @@
 Name:           perftest
 Summary:        IB Performance tests
-Version:        26.04.8
+Version:        26.04.13
 Release:        0.0
 License:        BSD 3-Clause, GPL v2 or later
 Group:          Productivity/Networking/Diagnostic
@@ -10,6 +10,8 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  libibverbs-devel librdmacm-devel libibumad-devel
 BuildRequires:  pciutils-devel
 BuildRequires:  autoconf automake gcc-c++ libtool
+
+%global __requires_exclude_from ^%{_libdir}/libperftest_kernels\.so$
 
 %description
 gen3 uverbs microbenchmarks
