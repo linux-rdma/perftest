@@ -1481,15 +1481,21 @@ int destroy_ctx(struct pingpong_context *ctx,
 				(user_param->tst == LAT || user_param->machine == CLIENT || user_param->duplex)) ||
 				(user_param->connection_type == SRD && (user_param->verb == READ || user_param->verb == WRITE || user_param->verb == WRITE_IMM))) {
 
-			if (user_param->ah_allocated == 1 && ctx->ah && ctx->ah[i] && ibv_destroy_ah(ctx->ah[i])) {
-				fprintf(stderr, "Failed to destroy AH\n");
-				test_result = 1;
+			if (user_param->ah_allocated == 1 && ctx->ah && ctx->ah[i]) {
+				if (ibv_destroy_ah(ctx->ah[i])) {
+					fprintf(stderr, "Failed to destroy AH\n");
+					test_result = 1;
+				}
+				ctx->ah[i] = NULL;
 			}
 		}
 		if (user_param->work_rdma_cm == OFF) {
-			if (ctx->qp && ctx->qp[i] && ibv_destroy_qp(ctx->qp[i])) {
-				fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
-				test_result = 1;
+			if (ctx->qp && ctx->qp[i]) {
+				if (ibv_destroy_qp(ctx->qp[i])) {
+					fprintf(stderr, "Couldn't destroy QP - %s\n", strerror(errno));
+					test_result = 1;
+				}
+				ctx->qp[i] = NULL;
 			}
 		}
 	}
@@ -1621,7 +1627,6 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	if (user_param->use_rdma_cm == OFF) {
-
 		if (ibv_close_device(ctx->context)) {
 			fprintf(stderr, "Failed to close device context\n");
 			test_result = 1;
@@ -1629,22 +1634,28 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	free(ctx->qp);
+	ctx->qp = NULL;
+
 	#ifdef HAVE_IBV_WR_API
 	free(ctx->qpx);
+	ctx->qpx = NULL;
 	free(ctx->r_dctn);
+	ctx->r_dctn = NULL;
 	#ifdef HAVE_DCS
 	free(ctx->dci_stream_id);
+	ctx->dci_stream_id = NULL;
 	#endif
 	#endif
 	#ifdef HAVE_AES_XTS
 	if(user_param->aes_xts) {
 		free(ctx->dek);
+		ctx->dek = NULL;
 		free(ctx->mkey);
+		ctx->mkey = NULL;
 	}
 	#endif
 
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
-
 		free(user_param->tposted);
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
@@ -1678,6 +1689,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 	}
 
 	if (user_param->work_rdma_cm == ON) {
+		for (i = 0; i < user_param->num_of_qps; i++) {
+			ctx->cma_master.nodes[i].connected = 0;
+		}
 		rdma_cm_destroy_cma(ctx, user_param);
 		rdma_cm_destroy_master(ctx);
 	}
@@ -6897,8 +6911,11 @@ void rdma_cm_destroy_qps(struct pingpong_context *ctx,
 
 	for (i = 0; i < user_param->num_of_qps; i++) {
 		struct cma_node *cm_node = &ctx->cma_master.nodes[i];
-		if (cm_node->cma_id->qp) {
+		if (cm_node->cma_id && cm_node->cma_id->qp) {
 			rdma_destroy_qp(cm_node->cma_id);
+		}
+		if (ctx->qp && ctx->qp[i]) {
+			ctx->qp[i] = NULL;
 		}
 	}
 }
@@ -6920,11 +6937,24 @@ int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 			if (cm_node->connected) {
 				continue;
 			}
+			if (ctx->qp && ctx->qp[i]) {
+				if (cm_node->cma_id->qp) {
+					rdma_destroy_qp(cm_node->cma_id);
+				} else {
+					ibv_destroy_qp(ctx->qp[i]);
+				}
+				ctx->qp[i] = NULL;
+			}
+			if (user_param->ah_allocated && ctx->ah && ctx->ah[i]) {
+				ibv_destroy_ah(ctx->ah[i]);
+				ctx->ah[i] = NULL;
+			}
+
 			rc = rdma_destroy_id(cm_node->cma_id);
 			if (rc) {
 				sprintf(error_message,
 					"Failed to destroy RDMA CM ID number %d.", i);
-				goto error;
+				return error_handler(error_message);
 			}
 			cm_node->cma_id = NULL;
 		}
@@ -6938,9 +6968,6 @@ int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 	}
 	ctx->cma_master.connects_left = user_param->num_of_qps - connected_count;
 	return rc;
-
-error:
-	return error_handler(error_message);
 }
 
 int error_handler(char *error_message)
