@@ -1104,13 +1104,14 @@ int run_iter_fs(struct pingpong_context *ctx, struct perftest_parameters *user_p
 *    ctx - Application contexts.
 *    user_param - User parameters from the parser.
 *    hints - RDMA address information.
+*    retry - Whether this is a retry attempt.
 *
 * Return value:
 *    rc - On success: SUCCESS(0), on failure: FAILURE(1).
 *
 */
 int rdma_cm_allocate_nodes(struct pingpong_context *ctx,
-	struct perftest_parameters *user_param, struct rdma_addrinfo *hints);
+	struct perftest_parameters *user_param, struct rdma_addrinfo *hints, bool retry);
 
 /* rdma_cm_destroy_qps:
 *
@@ -1149,6 +1150,22 @@ void rdma_cm_destroy_qps(struct pingpong_context *ctx,
 */
 int rdma_cm_destroy_cma(struct pingpong_context *ctx,
 	struct perftest_parameters *user_param);
+
+/* rdma_cm_destroy_master:
+*
+* Description:
+*
+*    Cleans up the core global resources for RDMA CM.
+*    Frees the event channel, address information, and nodes array.
+*
+* Parameters:
+*
+*    ctx - Application contexts.
+*
+* Return value:
+*    None.
+*/
+void rdma_cm_destroy_master(struct pingpong_context *ctx);
 
 /* error_handler:
 *
