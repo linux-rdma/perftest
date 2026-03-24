@@ -2694,6 +2694,11 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 				user_param->inline_size = 48;
 			else if (current_dev == INTEL_GEN2)
 				user_param->inline_size = 101;
+			else if (current_dev == YUNSILICON_ANDES)
+				user_param->inline_size = 32;
+			else if (current_dev == YUNSILICON_DIAMOND ||
+				 current_dev == YUNSILICON_DIAMOND_NEXT)
+				user_param->inline_size = 64;
 			else if (current_dev == NBL_LEONIS) {
 				if (user_param->connection_type == UD)
 					user_param->inline_size = 0;
