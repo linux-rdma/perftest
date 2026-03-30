@@ -2816,8 +2816,13 @@ int rdma_cm_event_error_handler(struct pingpong_context *ctx,
 /******************************************************************************
 *
 ******************************************************************************/
-void rdma_cm_disconnect_handler(struct pingpong_context *ctx)
+void rdma_cm_disconnect_handler(struct pingpong_context *ctx,
+				struct rdma_cm_event *event)
 {
+	if(event->status != 0) {
+		fprintf(stderr, "RDMA CM disconnect event received with error status: %d\n", event->status);
+	}
+	fflush(stderr);
 	ctx->cma_master.disconnects_left--;
 }
 
@@ -2851,7 +2856,7 @@ int rdma_cm_events_dispatcher(struct pingpong_context *ctx,
 		rc = rdma_cm_event_error_handler(ctx, event);
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
-		rdma_cm_disconnect_handler(ctx);
+		rdma_cm_disconnect_handler(ctx, event);
 		break;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		/* Cleanup will occur after test completes. */
