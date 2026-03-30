@@ -110,6 +110,7 @@ static __always_inline int poll_completions(
 struct perftest_parameters* duration_param;
 struct check_alive_data check_alive_data;
 
+volatile sig_atomic_t g_sigalarm_fired = 0;
 
 /******************************************************************************
  * Beginning
@@ -6621,6 +6622,7 @@ uint16_t ctx_get_local_lid(struct ibv_context *context,int port)
  ******************************************************************************/
 void catch_alarm(int sig)
 {
+	g_sigalarm_fired = 1;
 	switch (duration_param->state) {
 		case START_STATE:
 			duration_param->state = SAMPLE_STATE;
@@ -6648,6 +6650,7 @@ void catch_alarm(int sig)
 
 void check_alive(int sig)
 {
+	g_sigalarm_fired = 1;
 	if (check_alive_data.current_totrcnt > check_alive_data.last_totrcnt) {
 		check_alive_data.last_totrcnt = check_alive_data.current_totrcnt;
 		alarm(60);
