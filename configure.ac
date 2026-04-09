@@ -681,8 +681,8 @@ AC_SUBST([SIMD_CFLAGS])
 CFLAGS="-g -Wall -D_GNU_SOURCE -O3 $CFLAGS"
 LDFLAGS="$LDFLAGS"
 LIBS=$LIBS" -lpthread"
-AM_CONDITIONAL([OPENCL], [test "$HAVE_OPENCL"])
-if [test $HAVE_OPENCL = yes]; then
+AM_CONDITIONAL([OPENCL], [test "x$HAVE_OPENCL" = "xyes"])
+if [test "x$HAVE_OPENCL" = "xyes"]; then
 	AC_DEFINE([HAVE_OPENCL], [1], [Enable OPENCL feature])
 	AC_CHECK_LIB([OpenCL], [clGetDeviceIDs], [], [AC_MSG_ERROR([libOpenCL not found])])
 fi
