@@ -81,7 +81,7 @@ AC_CHECK_LIB([ibumad], [umad_init], [LIBUMAD=-libumad], AC_MSG_ERROR([libibumad 
 AC_CHECK_LIB([m], [log], [LIBMATH=-lm], AC_MSG_ERROR([libm not found]))
 
 AC_CHECK_LIB([ibverbs], [ibv_reg_dmabuf_mr], [HAVE_REG_DMABUF_MR=yes], [HAVE_REG_DMABUF_MR=no])
-if test $HAVE_REG_DMABUF_MR = yes; then
+if test "x$HAVE_REG_DMABUF_MR" = "xyes"; then
 	AC_DEFINE([HAVE_REG_DMABUF_MR], [1], [Enable HAVE_REG_DMABUF_MR])
 fi
 
