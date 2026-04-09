@@ -591,7 +591,8 @@ int main(int argc, char *argv[])
 		return SUCCESS;
 	}
 
-	data_validation_destroy(&ctx);
+	if (user_param.data_validation)
+		data_validation_destroy(&ctx);
 	free(rem_dest);
 	free(my_dest);
 	free(user_param.ib_devname);
