@@ -82,6 +82,7 @@
 #define KEY_MSG_SIZE_GID_DV  (125)
 
 #define SYNC_SPEC_ID	 (5)
+#define KV_BUF_SIZE	 (2048)
 
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016llx:%08x"
 #define KEY_PRINT_FMT_DV "%04x:%04x:%06x:%06x:%08x:%016llx:%016llx:%08x"
@@ -183,23 +184,6 @@ int set_up_connection(struct pingpong_context *ctx,
  */
 int validate_gid_index(struct pingpong_context *ctx,
 		uint8_t port_num, int gid_index, int gid_tbl_len);
-
-
-/* negotiate_params .
- *
- * Description : Negotiates parameters and capabilities between server and client.
- *
- * Parameters :
- *  ctx - Pingpong context.
- *  comm - Communication struct.
- *  user_param - Perftest parameters.
- *  rem_params - Remote parameters and capabilities.
- *
- * Return Value : SUCCESS,FAILURE.
- */
-int negotiate_params(struct pingpong_context *ctx,
-		struct perftest_comm *comm,
-		struct perftest_parameters *user_param);
 
 
 /* establish_connection .

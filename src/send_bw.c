@@ -42,6 +42,7 @@
 #include "perftest_resources.h"
 #include "multicast_resources.h"
 #include "perftest_communication.h"
+#include "perftest_negotiation.h"
 
 /******************************************************************************
  *
