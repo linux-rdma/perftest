@@ -132,6 +132,16 @@ static inline int ipv6_addr_v4mapped(const struct in6_addr *a)
 			(a->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL));
 }
 
+/* Detect link-local scope in a GID address.
+ * IPv6: fe80::/10 per RFC 4291.
+ * IPv4-mapped: ::ffff:169.254.x.x per RFC 3927. */
+static inline int is_gid_link_local(const struct in6_addr *a, int is_ipv4)
+{
+	if (is_ipv4)
+		return (a->s6_addr[12] == 0xa9) && (a->s6_addr[13] == 0xfe);
+	return (a->s6_addr[0] == 0xfe) && ((a->s6_addr[1] & 0xc0) == 0x80);
+}
+
 
 /******************************************************************************
  *
@@ -600,8 +610,6 @@ int ibv_query_gid_type(struct ibv_context *context, uint8_t port_num,
 
 #endif
 
-enum who_is_better {LEFT_IS_BETTER, EQUAL, RIGHT_IS_BETTER};
-
 struct roce_version_sorted_enum {
 	enum ibv_gid_type type;
 	int rate;
@@ -631,80 +639,87 @@ int find_roce_version_rate(enum ibv_gid_type roce_ver) {
 	}
 	return -1;
 }
-
-/* RoCE V2 > V1
- * other RoCE versions will be ignored until added to roce_versions_sorted array */
-static int check_better_roce_version(enum ibv_gid_type roce_ver, enum ibv_gid_type roce_ver_rival)
-{
-	int roce_ver_rate = find_roce_version_rate(roce_ver);
-	int roce_ver_rate_rival = find_roce_version_rate(roce_ver_rival);
-
-	if (roce_ver_rate < roce_ver_rate_rival)
-		return RIGHT_IS_BETTER;
-	else if (roce_ver_rate > roce_ver_rate_rival)
-		return LEFT_IS_BETTER;
-	else
-		return EQUAL;
-}
 #endif
 
-static int get_best_gid_index (struct pingpong_context *ctx,
-		  struct perftest_parameters *user_param,
-		  struct ibv_port_attr *attr, int port)
+/* Weights for GID scoring — each weight must exceed the maximum
+ * contribution of all lower-priority criteria combined. */
+enum gid_score_weights {
+	GID_SCORE_ROCE_MAX	= 9,
+	GID_SCORE_GLOBAL_SCOPE	= 10,
+	GID_SCORE_ADDR_FAMILY	= 100,
+};
+
+/*
+ * Score a single GID table entry for automatic GID index selection.
+ *
+ * Scoring priorities (highest weight first):
+ *   +GID_SCORE_ADDR_FAMILY   address family matches user preference (--ipv6 / default IPv4)
+ *   +GID_SCORE_GLOBAL_SCOPE  address has global/ULA scope, not link-local
+ *                            (fe80::/10 for IPv6, 169.254.0.0/16 for IPv4-mapped)
+ *   +N                       RoCE version rate (v2=2 > v1=1), clamped to GID_SCORE_ROCE_MAX
+ *
+ * Returns -1 for entries that should be skipped (query failure or empty GID).
+ */
+static int compute_gid_score(struct ibv_context *context, uint8_t port,
+			     int index, int prefer_ipv6)
 {
-	int gid_index = 0, i;
-	union ibv_gid temp_gid, temp_gid_rival;
-	int is_ipv4, is_ipv4_rival;
+	union ibv_gid gid;
+	static const union ibv_gid zero_gid;
+	int score = 0;
+	int is_ipv4;
 
-	for (i = 1; i < attr->gid_tbl_len; i++) {
-		if (ibv_query_gid(ctx->context, port, gid_index, &temp_gid)) {
-			return -1;
-		}
+	if (ibv_query_gid(context, port, index, &gid))
+		return -1;
 
-		if (ibv_query_gid(ctx->context, port, i, &temp_gid_rival)) {
-			return -1;
-		}
+	if (!memcmp(&gid, &zero_gid, sizeof(gid)))
+		return -1;
 
-		is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)temp_gid.raw);
-		is_ipv4_rival = ipv6_addr_v4mapped((struct in6_addr *)temp_gid_rival.raw);
+	is_ipv4 = ipv6_addr_v4mapped((struct in6_addr *)gid.raw);
 
-		if (is_ipv4_rival && !is_ipv4 && !user_param->ipv6)
-			gid_index = i;
-		else if (!is_ipv4_rival && is_ipv4 && user_param->ipv6)
-			gid_index = i;
+	if ((prefer_ipv6 && !is_ipv4) || (!prefer_ipv6 && is_ipv4))
+		score += GID_SCORE_ADDR_FAMILY;
+
+	if (!is_gid_link_local((struct in6_addr *)gid.raw, is_ipv4))
+		score += GID_SCORE_GLOBAL_SCOPE;
+
 #ifdef HAVE_GID_TYPE
-		else {
+	{
+		int roce_rate = 0;
 #ifdef HAVE_GID_TYPE_DECLARED
-			struct ibv_gid_entry roce_version, roce_version_rival;
-
-			if (ibv_query_gid_ex(ctx->context, port, gid_index, &roce_version, 0))
-				continue;
-
-			if (ibv_query_gid_ex(ctx->context, port, i, &roce_version_rival, 0))
-				continue;
-
-			//coverity[uninit_use_in_call]
-			if (check_better_roce_version(roce_version.gid_type, roce_version_rival.gid_type) == RIGHT_IS_BETTER) {
-				gid_index = i;
-			}
-
+		struct ibv_gid_entry gid_entry;
+		if (!ibv_query_gid_ex(context, port, index, &gid_entry, 0))
+			roce_rate = find_roce_version_rate(gid_entry.gid_type);
 #else
-			enum ibv_gid_type roce_version, roce_version_rival;
-
-			if (ibv_query_gid_type(ctx->context, port, gid_index, &roce_version))
-				continue;
-
-			if (ibv_query_gid_type(ctx->context, port, i, &roce_version_rival))
-				continue;
-
-			if (check_better_roce_version(roce_version, roce_version_rival) == RIGHT_IS_BETTER) {
-				gid_index = i;
-			}
+		enum ibv_gid_type gid_type;
+		if (!ibv_query_gid_type(context, port, index, &gid_type))
+			roce_rate = find_roce_version_rate(gid_type);
 #endif
-		}
-#endif
+		if (roce_rate > 0)
+			score += roce_rate < GID_SCORE_ROCE_MAX ? roce_rate : GID_SCORE_ROCE_MAX;
 	}
-	return gid_index;
+#endif
+
+	return score;
+}
+
+static int get_best_gid_index(struct pingpong_context *ctx,
+			      struct perftest_parameters *user_param,
+			      struct ibv_port_attr *attr, uint8_t port)
+{
+	int best_index = -1;
+	int best_score = -1;
+	int i;
+
+	for (i = 0; i < attr->gid_tbl_len; i++) {
+		int score = compute_gid_score(ctx->context, port,
+					      i, user_param->ipv6);
+		if (score > best_score) {
+			best_score = score;
+			best_index = i;
+		}
+	}
+
+	return best_index;
 }
 
 /******************************************************************************
