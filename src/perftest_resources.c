@@ -4099,11 +4099,15 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 			}
 
+#ifdef HAVE_NUM_SGE_ZERO
+// Setting num_sge=0 is supported by the vendor and using it for WRITE_IMM verb.
 			if (user_param->verb == WRITE_IMM) {
 				ctx->rwr[i * user_param->recv_post_list + j].sg_list = NULL;
 				ctx->rwr[i * user_param->recv_post_list + j].num_sge = 0;
 			}
-			else {
+			else 
+#endif
+			{
 				ctx->rwr[i * user_param->recv_post_list + j].sg_list = &ctx->recv_sge_list[i * user_param->recv_post_list + j];
 				ctx->rwr[i * user_param->recv_post_list + j].num_sge = MAX_RECV_SGE;
 			}
