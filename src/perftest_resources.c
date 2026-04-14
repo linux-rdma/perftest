@@ -4105,8 +4105,14 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				}
 			}
 
-			ctx->rwr[i * user_param->recv_post_list + j].sg_list = &ctx->recv_sge_list[i * user_param->recv_post_list + j];
-			ctx->rwr[i * user_param->recv_post_list + j].num_sge = MAX_RECV_SGE;
+			if (user_param->verb == WRITE_IMM) {
+				ctx->rwr[i * user_param->recv_post_list + j].sg_list = NULL;
+				ctx->rwr[i * user_param->recv_post_list + j].num_sge = 0;
+			}
+			else {
+				ctx->rwr[i * user_param->recv_post_list + j].sg_list = &ctx->recv_sge_list[i * user_param->recv_post_list + j];
+				ctx->rwr[i * user_param->recv_post_list + j].num_sge = MAX_RECV_SGE;
+			}
 			ctx->rwr[i * user_param->recv_post_list + j].wr_id   = build_wr_id(i * user_param->recv_post_list + j, i);
 
 			if (j == (user_param->recv_post_list - 1))
