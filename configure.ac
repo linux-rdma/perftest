@@ -65,6 +65,11 @@ AS_IF([test "x$enable_cq_ex" = "xno"],
       [USE_CQ_EX=no],
         [USE_CQ_EX=yes])
 
+AC_ARG_ENABLE([num_sge_zero],
+  [AS_HELP_STRING([--enable-num_sge_zero], [Allows using num_sge=0 with RDMA Write With IMM verb])],
+  [AC_DEFINE([HAVE_NUM_SGE_ZERO], [1], [Use num_sge=0 with RDMA Write With IMM])],
+  [])
+	
 AC_PREFIX_DEFAULT("/usr")
 
 AC_PROG_CC
