@@ -42,6 +42,7 @@ http://www.openib.org.
 git clone <URL>, In our situation its --> git clone https://github.com/linux-rdma/perftest.git
 
 -After cloning, Follow this commands:
+  Note: For CUDA support, refer to the "GPUDirect usage" section under "Special feature detailed explanation in tests" below.
 
 -cd perftest/
 
@@ -256,6 +257,11 @@ Special feature detailed explanation in tests:
 
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
      ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
+
+     If the CUDA libraries are not installed in a standard system path,
+     set the LDFLAGS environment variable before building so the linker
+     can locate them. For example:
+       export LDFLAGS="-L/path/to/your/cuda/lib $LDFLAGS"
 
     CUDA DMA-BUF requierments:
         1) CUDA Toolkit 11.7 or later.
