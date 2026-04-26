@@ -63,23 +63,35 @@ extern "C" const char* validation_strerror(int err)
 	}
 }
 
-/* --- Lock-free work queue (single-producer monitor, multi-consumer validators) --- */
+/* --- Lock-free work queue (monitor threads produce, validator blocks consume) --- */
 
-/* Push a work item (called only by monitor block, no contention on head). */
+/* Push a work item without advancing head on queue-full failure. */
 __device__ bool work_queue_push(struct ValidationWorkQueue *queue,
                                 uint32_t qp_id,
                                 uint16_t chunk_id,
-                                uint8_t pattern)
+                                uint8_t pattern,
+                                uint64_t marker_epoch)
 {
-	uint32_t my_slot_index = atomicAdd((uint32_t*)&queue->head, 1);
+	uint32_t my_slot_index;
 
-	uint32_t tail = *(volatile uint32_t*)&queue->tail;
-	if ((my_slot_index - tail) >= VALIDATION_QUEUE_SIZE)
-		return false;
+	while (true) {
+		uint32_t head = *(volatile uint32_t*)&queue->head;
+		uint32_t tail = *(volatile uint32_t*)&queue->tail;
+
+		if ((head - tail) >= VALIDATION_QUEUE_SIZE)
+			return false;
+
+		uint32_t claimed = atomicCAS((uint32_t*)&queue->head, head, head + 1);
+		if (claimed == head) {
+			my_slot_index = head;
+			break;
+		}
+	}
 
 	uint32_t slot = my_slot_index & (VALIDATION_QUEUE_SIZE - 1);
 
 	queue->items[slot].qp_id = qp_id;
+	queue->items[slot].marker_epoch = marker_epoch;
 	queue->items[slot].chunk_id = chunk_id;
 	queue->items[slot].expected_pattern = pattern;
 
@@ -97,7 +109,7 @@ __device__ bool work_queue_try_pop(struct ValidationWorkQueue *queue,
 	uint32_t tail = *(volatile uint32_t*)&queue->tail;
 	uint32_t head = *(volatile uint32_t*)&queue->head;
 
-	if (tail >= head) {
+	if (tail == head) {
 		item_out->valid = 0;
 		return false;
 	}
@@ -115,6 +127,7 @@ __device__ bool work_queue_try_pop(struct ValidationWorkQueue *queue,
 		__threadfence();
 
 	item_out->qp_id = queue->items[slot].qp_id;
+	item_out->marker_epoch = queue->items[slot].marker_epoch;
 	item_out->chunk_id = queue->items[slot].chunk_id;
 	item_out->expected_pattern = queue->items[slot].expected_pattern;
 	item_out->valid = 1;
@@ -127,6 +140,7 @@ __device__ bool work_queue_try_pop(struct ValidationWorkQueue *queue,
 
 __device__ void monitor_scan_tails(
 	volatile uint64_t *tail_markers,
+	uint64_t *marker_last_seen,
 	uint32_t num_qps,
 	uint32_t chunks_per_qp,
 	struct QpValidationState *qp_state,
@@ -138,28 +152,40 @@ __device__ void monitor_scan_tails(
 	uint32_t tid = threadIdx.x;
 	uint32_t num_threads = blockDim.x;
 	uint32_t total_tails = num_qps * chunks_per_qp;
+	uint32_t scan_passes = 0;
 
 	while (!(*validation_failed) && !(*should_stop)) {
-		for (uint32_t i = tid; i < total_tails; i += num_threads) {
+		if (tid == 0 && (++scan_passes & 0x3FF) == 0)
+			atomicAdd((unsigned long long*)&stats->markers_scanned,
+			          (unsigned long long)total_tails * 1024ULL);
 
-			/* Atomic read-and-reset: eliminates race between read and clear */
-			uint64_t tail_value = atomicExch((unsigned long long*)&tail_markers[i], 0ULL);
+		for (uint32_t i = tid; i < total_tails; i += num_threads) {
+			uint64_t marker_value = *(volatile uint64_t*)&tail_markers[i];
+			uint64_t last_seen = marker_last_seen[i];
+
+			if (marker_value == 0 || marker_value <= last_seen)
+				continue;
 
 			/* Force L2→DRAM writeback for GPUDirect RDMA coherency */
 			__threadfence_system();
 
-			if (tail_value != 0) {
-				uint32_t qp_id = i / chunks_per_qp;
-				uint32_t chunk_id = i % chunks_per_qp;
+			uint32_t qp_id = i / chunks_per_qp;
+			uint32_t chunk_id = i % chunks_per_qp;
 
-				atomicAdd((unsigned long long*)&stats->monitor_detections, 1);
+			atomicAdd((unsigned long long*)&stats->monitor_detections, 1);
 
-				/* atomicAdd returns OLD value — unique sequence per concurrent detection */
-				uint32_t chunks_so_far = atomicAdd(&qp_state[qp_id].chunks_validated, 1);
-				uint8_t expected_pattern = validation_cycle_to_pattern(chunks_so_far / chunks_per_qp);
-
-				bool pushed = work_queue_push(work_queue, qp_id, (uint16_t)chunk_id, expected_pattern);
-				(void)pushed;
+			uint8_t expected_pattern = validation_cycle_to_pattern(marker_value - 1);
+			bool pushed = work_queue_push(work_queue, qp_id, (uint16_t)chunk_id,
+			                              expected_pattern, marker_value);
+			if (pushed) {
+				atomicAdd((unsigned long long*)&stats->markers_hit, 1);
+				if (marker_value - last_seen > 1)
+					atomicAdd((unsigned long long*)&stats->skipped_steps,
+					          (unsigned long long)(marker_value - last_seen - 1));
+				marker_last_seen[i] = marker_value;
+				atomicAdd(&qp_state[qp_id].chunks_validated, 1);
+			} else {
+				atomicAdd((unsigned long long*)&stats->queue_full_drops, 1);
 			}
 		}
 	}
@@ -260,6 +286,7 @@ __device__ uint32_t validate_chunk_portion(
 
 /* Pop work items, validate data, classify mismatches. */
 __device__ void validator_process_work(
+	volatile uint64_t *tail_markers,
 	const uint8_t *recv_slots_base,
 	uint64_t payload_size,
 	uint32_t tx_depth,
@@ -279,6 +306,7 @@ __device__ void validator_process_work(
 	__shared__ uint8_t first_error_actual;
 	__shared__ int have_work;
 	__shared__ int should_exit;
+	__shared__ int stale_work;
 
 	uint32_t tid = threadIdx.x;
 	const uint64_t chunk_size = (uint64_t)tx_depth * payload_size;
@@ -310,6 +338,19 @@ __device__ void validator_process_work(
 		const uint8_t *chunk_data = recv_slots_base +
 		                            work.qp_id * qp_stride +
 		                            work.chunk_id * chunk_size;
+		const uint32_t marker_idx = work.qp_id * chunks_per_qp + work.chunk_id;
+
+		/* Thread 0 snapshots the marker so all threads take the same branch. */
+		if (tid == 0) {
+			uint64_t marker_before = *(volatile uint64_t*)&tail_markers[marker_idx];
+			stale_work = (marker_before > work.marker_epoch) ? 1 : 0;
+			if (stale_work)
+				atomicAdd((unsigned long long*)&stats->stale_work_skips, 1);
+		}
+		__syncthreads();
+
+		if (stale_work)
+			continue;
 
 		/* Ensure RDMA PCIe writes are visible before validation */
 		__threadfence_system();
@@ -394,7 +435,11 @@ __device__ void validator_process_work(
 						payload_size, expected,
 						retry_matched, fwd, fwd_valid);
 
-				if (mtype == VALIDATION_MISMATCH_STALE) {
+				uint64_t marker_after = *(volatile uint64_t*)&tail_markers[marker_idx];
+				if (marker_after > work.marker_epoch) {
+					atomicAdd((unsigned long long *)&stats->stale_work_skips, 1);
+					atomicAdd((unsigned long long *)&stats->race_overwrites, 1);
+				} else if (mtype == VALIDATION_MISMATCH_STALE) {
 					atomicAdd((unsigned long long *)&stats->dma_stale_retries, 1);
 				} else if (mtype == VALIDATION_MISMATCH_RACE) {
 					atomicAdd((unsigned long long *)&stats->race_overwrites, 1);
@@ -425,6 +470,7 @@ __global__ void validation_kernel(
 	uint32_t chunks_per_qp,
 	struct QpValidationState *qp_state,
 	struct ValidationWorkQueue *work_queue,
+	uint64_t *marker_last_seen,
 	volatile uint32_t *validation_failed,
 	volatile uint32_t *should_stop,
 	struct ValidationErrorInfo *error_info,
@@ -432,11 +478,12 @@ __global__ void validation_kernel(
 {
 	/* Block 0 is the monitor, blocks 1..N are validators */
 	if (blockIdx.x == 0) {
-		monitor_scan_tails(tail_markers, num_qps, chunks_per_qp,
+		monitor_scan_tails(tail_markers, marker_last_seen,
+		                   num_qps, chunks_per_qp,
 		                   qp_state, work_queue,
 		                   validation_failed, should_stop, stats);
 	} else {
-		validator_process_work(recv_slots_base, payload_size, tx_depth,
+		validator_process_work(tail_markers, recv_slots_base, payload_size, tx_depth,
 		                       num_qps, chunks_per_qp, work_queue,
 		                       validation_failed, should_stop,
 		                       error_info, stats);
@@ -449,6 +496,7 @@ __global__ void validation_kernel(
 static void free_validation_allocations(void)
 {
 	if (g_ctx.d_work_queue)        cudaFree(g_ctx.d_work_queue);
+	if (g_ctx.d_marker_last_seen)  cudaFree(g_ctx.d_marker_last_seen);
 	if (g_ctx.d_qp_state)          cudaFree(g_ctx.d_qp_state);
 	if (g_ctx.d_error_info)        cudaFree(g_ctx.d_error_info);
 	if (g_ctx.d_stats)             cudaFree(g_ctx.d_stats);
@@ -461,6 +509,8 @@ static void free_validation_allocations(void)
 static void reset_validation_state(void)
 {
 	cudaMemset(g_ctx.d_work_queue, 0, sizeof(struct ValidationWorkQueue));
+	cudaMemset(g_ctx.d_marker_last_seen, 0,
+	           g_ctx.params.num_qps * g_ctx.chunks_per_qp * sizeof(uint64_t));
 	cudaMemset(g_ctx.d_qp_state, 0, g_ctx.params.num_qps * sizeof(struct QpValidationState));
 	cudaMemset(g_ctx.d_error_info, 0, sizeof(struct ValidationErrorInfo));
 	cudaMemset(g_ctx.d_stats, 0, sizeof(struct ValidationStats));
@@ -540,6 +590,10 @@ extern "C" int validation_init(
 	err = cudaMalloc((void**)&g_ctx.d_work_queue, sizeof(struct ValidationWorkQueue));
 	if (err != cudaSuccess) goto alloc_fail;
 
+	err = cudaMalloc((void**)&g_ctx.d_marker_last_seen,
+			 num_qps * chunks_per_qp * sizeof(uint64_t));
+	if (err != cudaSuccess) goto alloc_fail;
+
 	err = cudaMalloc((void**)&g_ctx.d_qp_state,
 			 num_qps * sizeof(struct QpValidationState));
 	if (err != cudaSuccess) goto alloc_fail;
@@ -615,6 +669,7 @@ extern "C" int validation_start(void *params, int num_blocks, int threads_per_bl
 		g_ctx.chunks_per_qp,
 		g_ctx.d_qp_state,
 		g_ctx.d_work_queue,
+		g_ctx.d_marker_last_seen,
 		g_ctx.d_validation_failed,
 		g_ctx.d_should_stop,
 		g_ctx.d_error_info,
@@ -651,11 +706,15 @@ extern "C" int validation_stop(void)
 
 	VDBG("Kernel stopped\n");
 	VDBG("Final stats: chunks=%lu, bytes=%lu, errors=%lu, "
-	     "detections=%lu, races=%lu, retries=%lu\n",
+	     "detections=%lu, skips=%lu, queue_full=%lu, stale_work=%lu, "
+	     "races=%lu, retries=%lu\n",
 	     g_ctx.d_stats->chunks_validated,
 	     g_ctx.d_stats->bytes_validated,
 	     g_ctx.d_stats->errors_found,
 	     g_ctx.d_stats->monitor_detections,
+	     g_ctx.d_stats->skipped_steps,
+	     g_ctx.d_stats->queue_full_drops,
+	     g_ctx.d_stats->stale_work_skips,
 	     g_ctx.d_stats->race_overwrites,
 	     g_ctx.d_stats->dma_stale_retries);
 
@@ -666,15 +725,25 @@ extern "C" int validation_stop(void)
 extern "C" int validation_get_stats(uint64_t *chunks_validated,
 				    uint64_t *bytes_validated,
 				    uint64_t *errors_found,
+				    uint64_t *markers_scanned,
+				    uint64_t *markers_hit,
+				    uint64_t *skipped_steps,
 				    uint64_t *race_overwrites,
-				    uint64_t *dma_stale_retries)
+				    uint64_t *dma_stale_retries,
+				    uint64_t *queue_full_drops,
+				    uint64_t *stale_work_skips)
 {
 	if (!g_initialized) return -1;
 	if (chunks_validated) *chunks_validated = g_ctx.d_stats->chunks_validated;
 	if (bytes_validated) *bytes_validated = g_ctx.d_stats->bytes_validated;
 	if (errors_found) *errors_found = g_ctx.d_stats->errors_found;
+	if (markers_scanned) *markers_scanned = g_ctx.d_stats->markers_scanned;
+	if (markers_hit) *markers_hit = g_ctx.d_stats->markers_hit;
+	if (skipped_steps) *skipped_steps = g_ctx.d_stats->skipped_steps;
 	if (race_overwrites) *race_overwrites = g_ctx.d_stats->race_overwrites;
 	if (dma_stale_retries) *dma_stale_retries = g_ctx.d_stats->dma_stale_retries;
+	if (queue_full_drops) *queue_full_drops = g_ctx.d_stats->queue_full_drops;
+	if (stale_work_skips) *stale_work_skips = g_ctx.d_stats->stale_work_skips;
 	return 0;
 }
 

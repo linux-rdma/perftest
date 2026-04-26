@@ -45,10 +45,12 @@ enum ValidationError {
 #define VALIDATION_MAX_VALIDATOR_BLOCKS 128
 
 /*
- * Work item passed from monitor to validator blocks
- * Size: 8 bytes (aligned for atomic operations)
+ * Work item passed from monitor to validator blocks.
+ * marker_epoch is diagnostic; expected_pattern remains the validator's
+ * authoritative compare value.
  */
 struct ValidationWorkItem {
+	uint64_t marker_epoch;    /* Marker epoch that produced this work */
 	uint32_t qp_id;           /* QP index (0 to num_qps-1) */
 	uint16_t chunk_id;        /* Chunk within QP (0 to chunks_per_qp-1) */
 	uint8_t  expected_pattern; /* Expected byte value (0x01, 0x02, 0x03) */
@@ -70,10 +72,11 @@ struct ValidationWorkQueue {
 
 /*
  * Per-QP validation state
- * Tracks how many chunks have been validated for pattern calculation
+ * Kept for ABI/debug space. Correctness must use marker epochs, not this
+ * local counter, to derive expected patterns.
  */
 struct QpValidationState {
-	uint32_t chunks_validated; /* Total chunks validated for this QP */
+	uint32_t chunks_validated; /* Optional debug counter */
 	uint32_t padding;          /* Align to 8 bytes */
 };
 
@@ -97,6 +100,11 @@ struct ValidationStats {
 	uint64_t bytes_validated;     /* Total bytes validated */
 	uint64_t errors_found;        /* Total mismatches (if not stopping on first) */
 	uint64_t monitor_detections;  /* Total tail detections (by monitor) - for debugging */
+	uint64_t markers_scanned;     /* Total marker poll passes (approximate) */
+	uint64_t markers_hit;         /* Markers that advanced */
+	uint64_t skipped_steps;       /* Marker jumps > 1 (missed epochs) */
+	uint64_t queue_full_drops;    /* Queue push failures, retried later */
+	uint64_t stale_work_skips;    /* Queued epochs superseded before validation */
 	uint64_t race_overwrites;     /* DMA overwrites detected by epoch guard */
 	uint64_t dma_stale_retries;   /* Tail mismatches resolved by DMA flush retry */
 };
@@ -122,6 +130,7 @@ struct ValidationParams {
 struct ValidationContext {
 	/* Device memory pointers */
 	volatile uint64_t *d_tail_markers;    /* [num_qps * chunks_per_qp] */
+	uint64_t *d_marker_last_seen;         /* [num_qps * chunks_per_qp] */
 	struct ValidationWorkQueue *d_work_queue;
 	struct QpValidationState *d_qp_state; /* [num_qps] */
 	struct ValidationErrorInfo *d_error_info;

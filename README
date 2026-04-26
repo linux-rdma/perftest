@@ -464,9 +464,14 @@ Special feature detailed explanation in tests:
           - Unaligned payload sizes (not a power of 2 or not a multiple of the
             cache line) may cause minor bandwidth degradations.
           - Running multiple perftest processes simultaneously (multi-stream) may
-            reduce both validation rate and throughput, as validator threads
-            from different processes compete for the same CPU cores. Improvements
-            for multi-stream scenarios are planned for future versions.
+            reduce validation rate and throughput. Validator threads and/or CUDA
+            kernels from different processes can compete for the same CPU cores,
+            GPU, memory bandwidth, and PCIe resources. If validation falls behind
+            the sender, some completed chunks may be reported as skipped or stale
+            validation work; this reduces validation coverage and can affect the
+            reliability of correctness results. For best correctness coverage and
+            stable performance, avoid sharing the same CPU/GPU resources between
+            concurrent data-validation runs.
 
       Command-line Examples:
 

@@ -103,8 +103,13 @@ typedef int (*validation_get_stats_fn)(
     uint64_t *chunks_validated,
     uint64_t *bytes_validated,
     uint64_t *errors_found,
+    uint64_t *markers_scanned,
+    uint64_t *markers_hit,
+    uint64_t *skipped_steps,
     uint64_t *race_overwrites,
-    uint64_t *dma_stale_retries
+    uint64_t *dma_stale_retries,
+    uint64_t *queue_full_drops,
+    uint64_t *stale_work_skips
 );
 
 typedef int (*validation_get_error_fn)(

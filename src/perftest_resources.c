@@ -7297,11 +7297,14 @@ int data_validation_stop_and_report(struct pingpong_context *ctx,
 	       (unsigned long)result.bytes_validated);
 
 	if (result.race_overwrites || result.dma_stale_retries ||
-	    result.skipped_steps) {
-		printf(" [races=%lu, retries=%lu, skips=%lu]",
+	    result.skipped_steps || result.queue_full_drops ||
+	    result.stale_work_skips) {
+		printf(" [races=%lu, retries=%lu, skips=%lu, queue_full=%lu, stale_work=%lu]",
 		       (unsigned long)result.race_overwrites,
 		       (unsigned long)result.dma_stale_retries,
-		       (unsigned long)result.skipped_steps);
+		       (unsigned long)result.skipped_steps,
+		       (unsigned long)result.queue_full_drops,
+		       (unsigned long)result.stale_work_skips);
 	}
 	printf("\n");
 
@@ -7319,6 +7322,12 @@ int data_validation_stop_and_report(struct pingpong_context *ctx,
 		if (result.skipped_steps)
 			printf("  Skipped steps: %lu (marker jumps > 1)\n",
 			       (unsigned long)result.skipped_steps);
+		if (result.queue_full_drops)
+			printf("  Queue full drops: %lu (retried marker events)\n",
+			       (unsigned long)result.queue_full_drops);
+		if (result.stale_work_skips)
+			printf("  Stale queued work: %lu (marker advanced before validation)\n",
+			       (unsigned long)result.stale_work_skips);
 		if (result.race_overwrites)
 			printf("  Race overwrites: %lu (epoch guard suppressions)\n",
 			       (unsigned long)result.race_overwrites);

@@ -509,18 +509,24 @@ static int cuda_validation_stop(struct memory_ctx *ctx,
 	p_validation_stop();
 
 	uint64_t chunks_validated = 0, bytes_validated = 0, errors_found = 0;
-	uint64_t race_overwrites = 0, dma_stale_retries = 0;
+	uint64_t markers_scanned = 0, markers_hit = 0, skipped_steps = 0;
+	uint64_t race_overwrites = 0, dma_stale_retries = 0, queue_full_drops = 0;
+	uint64_t stale_work_skips = 0;
 	p_validation_get_stats(&chunks_validated, &bytes_validated, &errors_found,
-			       &race_overwrites, &dma_stale_retries);
+			       &markers_scanned, &markers_hit, &skipped_steps,
+			       &race_overwrites, &dma_stale_retries,
+			       &queue_full_drops, &stale_work_skips);
 
 	result->chunks_validated = chunks_validated;
 	result->bytes_validated = bytes_validated;
 	result->errors_found = errors_found;
 	result->passed = (errors_found == 0) ? 1 : 0;
 
-	result->markers_scanned = 0;
-	result->markers_hit = 0;
-	result->skipped_steps = 0;
+	result->markers_scanned = markers_scanned;
+	result->markers_hit = markers_hit;
+	result->skipped_steps = skipped_steps;
+	result->queue_full_drops = queue_full_drops;
+	result->stale_work_skips = stale_work_skips;
 	result->race_overwrites = race_overwrites;
 	result->dma_stale_retries = dma_stale_retries;
 

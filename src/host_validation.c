@@ -1148,6 +1148,8 @@ int host_validation_stop(struct memory_ctx *ctx,
 	result->markers_scanned = total_markers_scanned;
 	result->markers_hit = total_markers_hit;
 	result->skipped_steps = total_skipped_steps;
+	result->queue_full_drops = 0;
+	result->stale_work_skips = 0;
 	result->race_overwrites = total_race_overwrites;
 	result->dma_stale_retries = total_dma_stale_retries;
 

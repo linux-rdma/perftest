@@ -38,6 +38,8 @@ struct data_validation_result {
 	uint64_t markers_scanned;      /* Total marker polls */
 	uint64_t markers_hit;          /* Markers that had new data */
 	uint64_t skipped_steps;        /* Marker jumps > 1 (missed cycles) */
+	uint64_t queue_full_drops;     /* Validation work queue push failures */
+	uint64_t stale_work_skips;     /* Queued validation work superseded by newer marker */
 	uint64_t race_overwrites;      /* Epoch guard: DMA overwrite suppressions */
 	uint64_t dma_stale_retries;    /* Tail retry: stale DMA resolutions */
 };
