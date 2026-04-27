@@ -79,9 +79,7 @@
 struct ValidationContext;
 #endif
 
-#ifdef HAVE_LIBNUMA
-#include <numa.h>
-#endif
+#include "numa_loader.h"
 
 #define NUM_OF_RETRIES		(10)
 

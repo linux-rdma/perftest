@@ -485,7 +485,7 @@ SIMD path selection, and mismatch classification details.
 .TP
 .B --numa_node=<numa_node_id>
  Bind the benchmark thread and memory allocations to the specified NUMA node.
- Mutually exclusive with --cpu_cores. Requires libnuma.
+ Mutually exclusive with --pin_cores and --disable_numa. Requires libnuma.
  Not relevant for RawEth.
 .TP
 .B --disable_numa
@@ -494,6 +494,7 @@ SIMD path selection, and mismatch classification details.
  If an external tool (e.g. taskset or numactl) has already restricted CPU affinity,
  perftest detects this and skips automatic binding automatically.
  Use this flag to explicitly disable all NUMA binding.
+ Mutually exclusive with --numa_node.
  Not relevant for RawEth.
 .TP
 .B --tph_mem=<memory_type>

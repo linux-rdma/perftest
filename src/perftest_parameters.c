@@ -28,9 +28,7 @@
 #include <stdbool.h>
 #include <pci/pci.h>
 #endif
-#ifdef HAVE_LIBNUMA
-#include <numa.h>
-#endif
+#include "numa_loader.h"
 #define MAC_LEN (17)
 #define ETHERTYPE_LEN (6)
 #define MAC_ARR_LEN (6)
@@ -614,14 +612,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --pin_cores=<cpu_list> ");
 		printf("Set CPU affinity. Accepts: single (0), list (0, 1, 2), range (0-3), or mixed (0-3,8,12-15).\n");
 
-		#ifdef HAVE_LIBNUMA
-		if (numa_available() >= 0) {
-			printf("      --numa_node=<numa_node_id> ");
-			printf("Specify the NUMA node ID that should run the test.\n");
-			printf("      --disable_numa ");
-			printf("Disable NUMA auto-detection and binding.\n");
-		}
-		#endif
+		printf("      --numa_node=<numa_node_id> ");
+		printf("Specify the NUMA node ID that should run the test.\n");
+		printf("      --disable_numa ");
+		printf("Disable NUMA auto-detection and binding.\n");
 	}
 
 	if (tst != FS_RATE) {
@@ -2418,13 +2412,16 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 	#endif
 
-	#ifdef HAVE_LIBNUMA
 	if (user_param->numa_node != -1 && CPU_COUNT(&user_param->cpu_affinity) > 0) {
 		printf(RESULT_LINE);
 		fprintf(stderr, " --numa_node and --pin_cores cannot be used together\n");
 		exit(1);
 	}
-	#endif
+	if (user_param->numa_node != -1 && user_param->disable_numa) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --numa_node and --disable_numa cannot be used together\n");
+		exit(1);
+	}
 
 	/* --pin_cores and --numa_node are only supported for non-RawEth benchmarks */
 	if (user_param->connection_type == RawEth) {
@@ -2433,13 +2430,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr, " --pin_cores is not supported for raw Ethernet tests\n");
 			exit(1);
 		}
-		#ifdef HAVE_LIBNUMA
 		if (user_param->numa_node != -1) {
 			printf(RESULT_LINE);
 			fprintf(stderr, " --numa_node is not supported for raw Ethernet tests\n");
 			exit(1);
 		}
-		#endif
 	}
 
 	return;
@@ -3074,10 +3069,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	#endif
 
 	static int pin_cores_flag = 0;
-	#ifdef HAVE_LIBNUMA
 	static int numa_node_flag = 0;
 	static int disable_numa_flag = 0;
-	#endif
 
 	#ifdef HAVE_SIG_OFFLOAD
 	static int sig_offload_flag = 0;
@@ -3281,10 +3274,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "data_validation", .has_arg = 0, .flag = &data_validation_flag, .val = 1 },
 			{.name = "data_validation_debug", .has_arg = 0, .flag = &data_validation_debug_flag, .val = 1 },
 			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
-			#ifdef HAVE_LIBNUMA
 			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
 			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
-			#endif
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -4130,25 +4121,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 				pin_cores_flag = 0;
 				}
-				#ifdef HAVE_LIBNUMA
 				if (numa_node_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->numa_node,int,"numa_node",not_int_ptr);
-
-					if (numa_available() < 0) {
-						fprintf(stderr, " Kernel support for NUMA is not available\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
-					int max_node = numa_max_node();
-					if (user_param->numa_node > max_node) {
-						fprintf(stderr, " NUMA node %d does not exist (available: 0-%d)\n",
-							user_param->numa_node, max_node);
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					numa_node_flag = 0;
 				}
-				#endif
 				break;
 			default:
 				  fprintf(stderr," Invalid Command or flag.\n");
@@ -4164,7 +4140,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 	free(duplicates_checker);
 
-	#ifdef HAVE_LIBNUMA
 	if (disable_numa_flag) {
 		user_param->disable_numa = 1;
 	}
@@ -4177,7 +4152,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				user_param->disable_numa = 1;
 		}
 	}
-	#endif
 
 #ifdef HAVE_DCS
 	if (!log_active_dci_streams_flag_was_ever_set) {

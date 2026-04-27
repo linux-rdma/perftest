@@ -388,7 +388,8 @@ Special feature detailed explanation in tests:
           - Use --numa_node to bind to a specific NUMA node instead.
           - Use --disable_numa to disable automatic NUMA binding entirely,
             restoring the original behavior (OS scheduler decides placement).
-          - --pin_cores and --numa_node are mutually exclusive.
+          - --numa_node is mutually exclusive with both --pin_cores and
+            --disable_numa (rejected at parse time).
           - Perftest respects pre-existing CPU affinity set by external tools
             (e.g. taskset or numactl). If an external restriction is detected,
             automatic NUMA binding is skipped. Passing --pin_cores or
