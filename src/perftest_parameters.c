@@ -1374,6 +1374,35 @@ void flow_rules_force_dependecies(struct perftest_parameters *user_param)
 /******************************************************************************
  *
  ******************************************************************************/
+static int host_validation_runtime_supported(void)
+{
+#if defined(HAVE_AVX512) || defined(HAVE_AVX2) || defined(HAVE_SSE42)
+#if defined(__x86_64__) || defined(__i386__)
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(HAVE_AVX512)
+	return __builtin_cpu_supports("avx512f") &&
+	       __builtin_cpu_supports("avx512bw");
+#elif defined(HAVE_AVX2)
+	return __builtin_cpu_supports("avx2");
+#elif defined(HAVE_SSE42)
+	return __builtin_cpu_supports("sse4.2");
+#endif
+#else
+	return 1;
+#endif
+#else
+	return 0;
+#endif
+#elif defined(HAVE_NEON)
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static void force_dependecies(struct perftest_parameters *user_param)
 {
 	/*Additional configuration and assignments.*/
@@ -1465,19 +1494,19 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->data_validation) {
-#if !defined(HAVE_AVX512) && !defined(HAVE_AVX2) && !defined(HAVE_SSE42) && !defined(HAVE_NEON)
-		if (user_param->memory_type != MEMORY_CUDA) {
-			printf(RESULT_LINE);
-			fprintf(stderr, " --data_validation requires SIMD support (AVX2/SSE4.2/NEON) for host validation\n");
-			exit(1);
-		}
-#endif
 		/* Require CUDA or HOST memory */
-		// cppcheck-suppress knownConditionTrueFalse
 		if (user_param->memory_type != MEMORY_CUDA &&
 		    user_param->memory_type != MEMORY_HOST) {
 			printf(RESULT_LINE);
 			fprintf(stderr, " --data_validation requires --use_cuda or host memory\n");
+			exit(1);
+		}
+
+		if (user_param->memory_type == MEMORY_HOST &&
+		    // cppcheck-suppress knownConditionTrueFalse
+		    !host_validation_runtime_supported()) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires host CPU SIMD support (AVX2/SSE4.2/NEON)\n");
 			exit(1);
 		}
 

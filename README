@@ -429,6 +429,11 @@ Special feature detailed explanation in tests:
 
       Build:
           - Host validation is always built (no extra dependencies).
+          - Host SIMD support is selected when perftest is configured and built.
+            If a binary built on an AVX2-capable system is run on a system that
+            lacks AVX2 but supports SSE4.2, host --data_validation may be
+            unavailable. Rebuild perftest on the target system so configure can
+            select the supported SSE4.2 validation path.
           - GPU validation is auto-detected: if cuda.h and libcudart are found,
             configure builds libperftest_kernels.so automatically.
           - Runtime: perftest loads the GPU plugin via dlopen — binaries run on

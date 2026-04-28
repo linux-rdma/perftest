@@ -37,8 +37,10 @@ noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c
 noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h
 
-# SIMD flags for host validation (detected by configure)
-AM_CFLAGS = @SIMD_CFLAGS@
+AM_CFLAGS =
+
+# SIMD flags for host validation only (detected by configure)
+src/host_validation.$(OBJEXT): CFLAGS += @SIMD_CFLAGS@
 
 if CUDA
 libperftest_a_SOURCES += src/cuda_memory.c src/cuda_loader.h src/cuda_loader.c

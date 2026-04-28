@@ -630,7 +630,7 @@ if [test $HAVE_REG_MR_EX = yes]; then
 fi
 
 # Check for SIMD support (for host data validation)
-AC_MSG_CHECKING([for AVX2 support])
+AC_MSG_CHECKING([for AVX2 compiler support])
 save_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS -mavx2"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
@@ -641,16 +641,38 @@ int main() {
     (void)r;
     return 0;
 }]])],
-[HAVE_AVX2=yes
- AC_DEFINE([HAVE_AVX2], [1], [Have AVX2 SIMD support])
- SIMD_CFLAGS="-mavx2"
- AC_MSG_RESULT([yes])],
-[HAVE_AVX2=no
- AC_MSG_RESULT([no])])
+[HAVE_AVX2_COMPILER=yes],
+[HAVE_AVX2_COMPILER=no])
 CFLAGS="$save_CFLAGS"
+AC_MSG_RESULT([$HAVE_AVX2_COMPILER])
+if test "$HAVE_AVX2_COMPILER" = "yes"; then
+	AC_MSG_CHECKING([for AVX2 runtime CPU support])
+	AC_RUN_IFELSE([AC_LANG_SOURCE([[
+int main() {
+#if defined(__x86_64__) || defined(__i386__)
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_cpu_supports("avx2") ? 0 : 1;
+#else
+    return 1;
+#endif
+#else
+    return 1;
+#endif
+}]])],
+	[HAVE_AVX2=yes],
+	[HAVE_AVX2=no],
+	[HAVE_AVX2=no])
+	AC_MSG_RESULT([$HAVE_AVX2])
+else
+	HAVE_AVX2=no
+fi
+if test "$HAVE_AVX2" = "yes"; then
+	AC_DEFINE([HAVE_AVX2], [1], [Have AVX2 SIMD support])
+	SIMD_CFLAGS="-mavx2"
+fi
 
 if test "$HAVE_AVX2" = "no"; then
-    AC_MSG_CHECKING([for SSE4.2 support])
+    AC_MSG_CHECKING([for SSE4.2 compiler support])
     save_CFLAGS="$CFLAGS"
     CFLAGS="$CFLAGS -msse4.2"
     AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
@@ -661,13 +683,35 @@ int main() {
     (void)r;
     return 0;
 }]])],
-    [HAVE_SSE42=yes
-     AC_DEFINE([HAVE_SSE42], [1], [Have SSE4.2 SIMD support])
-     SIMD_CFLAGS="-msse4.2"
-     AC_MSG_RESULT([yes])],
-    [HAVE_SSE42=no
-     AC_MSG_RESULT([no])])
+    [HAVE_SSE42_COMPILER=yes],
+    [HAVE_SSE42_COMPILER=no])
     CFLAGS="$save_CFLAGS"
+    AC_MSG_RESULT([$HAVE_SSE42_COMPILER])
+    if test "$HAVE_SSE42_COMPILER" = "yes"; then
+        AC_MSG_CHECKING([for SSE4.2 runtime CPU support])
+        AC_RUN_IFELSE([AC_LANG_SOURCE([[
+int main() {
+#if defined(__x86_64__) || defined(__i386__)
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_cpu_supports("sse4.2") ? 0 : 1;
+#else
+    return 1;
+#endif
+#else
+    return 1;
+#endif
+}]])],
+        [HAVE_SSE42=yes],
+        [HAVE_SSE42=no],
+        [HAVE_SSE42=no])
+        AC_MSG_RESULT([$HAVE_SSE42])
+    else
+        HAVE_SSE42=no
+    fi
+    if test "$HAVE_SSE42" = "yes"; then
+        AC_DEFINE([HAVE_SSE42], [1], [Have SSE4.2 SIMD support])
+        SIMD_CFLAGS="-msse4.2"
+    fi
 fi
 
 # Check for ARM NEON support
