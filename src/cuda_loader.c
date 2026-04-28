@@ -10,7 +10,7 @@ CUresult (*p_cuDeviceGetCount)(int *) = NULL;
 CUresult (*p_cuDeviceGet)(CUdevice *, int) = NULL;
 CUresult (*p_cuDeviceGetAttribute)(int *, CUdevice_attribute, CUdevice) = NULL;
 CUresult (*p_cuDeviceGetName)(char *, int, CUdevice) = NULL;
-CUresult (*p_cuCtxCreate)(CUcontext *, unsigned int, CUdevice) = NULL;
+CUresult (*p_cuCtxCreate_v2)(CUcontext *, unsigned int, CUdevice) = NULL;
 CUresult (*p_cuDevicePrimaryCtxRetain)(CUcontext *, CUdevice) = NULL;
 CUresult (*p_cuCtxSetCurrent)(CUcontext) = NULL;
 CUresult (*p_cuCtxDestroy)(CUcontext) = NULL;
@@ -25,7 +25,7 @@ CUresult (*p_cuMemcpyDtoD)(CUdeviceptr, CUdeviceptr, size_t) = NULL;
 CUresult (*p_cuMemGetHandleForAddressRange)(void *, void *, size_t, CUmemRangeHandleType, unsigned int) = NULL;
 #endif
 CUresult (*p_cuDriverGetVersion)(int* driverVersion) = NULL;
-#if CUDA_VER >= 12000
+#if CUDA_VERSION >= 12000
 CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags, CUdriverProcAddressQueryResult* symbolStatus) = NULL;
 #else
 CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags) = NULL;
@@ -34,7 +34,7 @@ CUresult (*p_cuMemAllocManaged)(CUdeviceptr* dptr, size_t bytesize, unsigned int
 CUresult (*p_cuCtxSynchronize) (void) = NULL;
 
 int load_cuda_function(void **func_ptr, const char *func_name, int version) {
-    #if CUDA_VER >= 12000
+    #if CUDA_VERSION >= 12000
     CUresult res = p_cuGetProcAddress(func_name, func_ptr, version, 0, NULL);
     #else
     CUresult res = p_cuGetProcAddress(func_name, func_ptr, version, 0);
@@ -69,7 +69,8 @@ int load_cuda_library(void) {
         { (void**)&p_cuDeviceGet,                 "cuDeviceGet",                  CUDA_VER_2_0  },
         { (void**)&p_cuDeviceGetAttribute,        "cuDeviceGetAttribute",         CUDA_VER_2_0  },
         { (void**)&p_cuDeviceGetName,             "cuDeviceGetName",              CUDA_VER_2_0  },
-        { (void**)&p_cuCtxCreate,                 "cuCtxCreate",                  CUDA_VER_3_2  },
+        /* CUDA_VER_3_2 selects the cuCtxCreate_v2 ABI across CUDA 11-13. */
+        { (void**)&p_cuCtxCreate_v2,              "cuCtxCreate",                  CUDA_VER_3_2  },
         { (void**)&p_cuDevicePrimaryCtxRetain,    "cuDevicePrimaryCtxRetain",     CUDA_VER_7_0  },
         { (void**)&p_cuCtxSetCurrent,             "cuCtxSetCurrent",              CUDA_VER_4_0  },
         { (void**)&p_cuCtxDestroy,                "cuCtxDestroy",                 CUDA_VER_4_0  },
