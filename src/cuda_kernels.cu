@@ -419,9 +419,11 @@ __device__ void validator_process_work(
 				}
 
 				/* Forward-byte snapshot for epoch guard */
+				uint8_t actual_snap = err_actual;
 				uint8_t fwd[4] = {expected, expected, expected, expected};
 				int fwd_valid = 0;
 				if (!retry_matched && (err_off + 4) < chunk_size) {
+					actual_snap = __ldg(&chunk_data[err_off]);
 					fwd[0] = __ldg(&chunk_data[err_off + 1]);
 					fwd[1] = __ldg(&chunk_data[err_off + 2]);
 					fwd[2] = __ldg(&chunk_data[err_off + 3]);
@@ -433,7 +435,8 @@ __device__ void validator_process_work(
 					classify_validation_mismatch(
 						err_off, chunk_size,
 						payload_size, expected,
-						retry_matched, fwd, fwd_valid);
+						actual_snap, retry_matched, fwd,
+						fwd_valid);
 
 				uint64_t marker_after = *(volatile uint64_t*)&tail_markers[marker_idx];
 				if (marker_after > work.marker_epoch) {

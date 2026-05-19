@@ -86,6 +86,12 @@ VALIDATION_INLINE uint8_t validation_cycle_to_pattern(uint64_t cycle)
 			 (cycle % VALIDATION_PATTERNS_COUNT));
 }
 
+VALIDATION_INLINE int validation_is_pattern(uint8_t value)
+{
+	return value >= VALIDATION_PATTERN_0 &&
+	       value < VALIDATION_PATTERN_0 + VALIDATION_PATTERNS_COUNT;
+}
+
 /* -----------------------------------------------------------------------
  * Chunk-size / ring-depth derivation (shared by host and CUDA paths)
  * ----------------------------------------------------------------------- */
@@ -245,6 +251,8 @@ compute_validation_layout(uint64_t payload_size,
  * @param chunk_size     Total chunk size in bytes
  * @param payload_size   Single message payload size in bytes
  * @param expected       Expected pattern byte
+ * @param actual         Actual byte read at the first mismatch; when
+ *                       fwd_valid is set, sample this with fwd[]
  * @param retry_matched  1 if the DMA tail retry re-read matched expected
  *                       (caller only sets this when error is in tail zone)
  * @param fwd            4 forward bytes read from [error+1 .. error+4]
@@ -260,6 +268,7 @@ classify_validation_mismatch(uint64_t error_offset,
 			     uint64_t chunk_size,
 			     uint64_t payload_size,
 			     uint8_t  expected,
+			     uint8_t  actual,
 			     int      retry_matched,
 			     const uint8_t fwd[4],
 			     int      fwd_valid)
@@ -278,12 +287,15 @@ classify_validation_mismatch(uint64_t error_offset,
 
 	/*
 	 * Step 2: Epoch guard.
-	 * If 4 forward bytes are all != expected, a new DMA cycle has
-	 * started overwriting this chunk — race, not corruption.
+	 * If the mismatched byte and the next 4 bytes are the same known
+	 * alternate validation pattern, a new DMA cycle has started
+	 * overwriting this chunk — race, not corruption.
 	 */
 	if (fwd_valid &&
-	    fwd[0] != expected && fwd[1] != expected &&
-	    fwd[2] != expected && fwd[3] != expected)
+	    actual != expected &&
+	    validation_is_pattern(actual) &&
+	    actual == fwd[0] && actual == fwd[1] &&
+	    actual == fwd[2] && actual == fwd[3])
 		return VALIDATION_MISMATCH_RACE;
 
 	return VALIDATION_MISMATCH_REAL;

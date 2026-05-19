@@ -611,6 +611,7 @@ static inline int validate_one_marker(struct host_validator_ctx *vctx,
 	// cppcheck-suppress unmatchedSuppression
 	if (mismatch >= 0) {
 		int retry_matched = 0;
+		uint8_t actual_snap = actual_byte;
 		uint8_t fwd_snap[4] = {expected, expected, expected, expected};
 		int fwd_valid = 0;
 		uint64_t tail_bytes = (uint64_t)ctx->payload_size * 2;
@@ -641,11 +642,12 @@ static inline int validate_one_marker(struct host_validator_ctx *vctx,
 
 		/* Forward-byte snapshot */
 		if (!retry_matched && (uint64_t)(mismatch + 4) < chunk_bytes) {
-			const uint8_t *fwd = entry->chunk_data + mismatch + 1;
-			fwd_snap[0] = fwd[0];
-			fwd_snap[1] = fwd[1];
-			fwd_snap[2] = fwd[2];
-			fwd_snap[3] = fwd[3];
+			const uint8_t *snap = entry->chunk_data + mismatch;
+			actual_snap = snap[0];
+			fwd_snap[0] = snap[1];
+			fwd_snap[1] = snap[2];
+			fwd_snap[2] = snap[3];
+			fwd_snap[3] = snap[4];
 			fwd_valid = 1;
 		}
 
@@ -653,7 +655,7 @@ static inline int validate_one_marker(struct host_validator_ctx *vctx,
 			classify_validation_mismatch(
 				(uint64_t)mismatch, chunk_bytes,
 				ctx->payload_size, expected,
-				retry_matched, fwd_snap, fwd_valid);
+				actual_snap, retry_matched, fwd_snap, fwd_valid);
 
 		if (mtype == VALIDATION_MISMATCH_STALE) {
 			vctx->stats.dma_stale_retries++;
