@@ -94,9 +94,11 @@ static int init_gpu(struct cuda_memory_ctx *ctx)
 	printf("[pid = %d, dev = %d] device name = [%s]\n", getpid(), ctx->cuDevice, name);
 	printf("creating CUDA Ctx\n");
 
-	error = p_cuCtxCreate(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
+	/* Create context */
+	error = p_cuCtxCreate_v2(&ctx->cuContext, CU_CTX_MAP_HOST, ctx->cuDevice);
+
 	if (error != CUDA_SUCCESS) {
-		printf("cuCtxCreate() error=%d\n", error);
+		printf("cuCtxCreate_v2() error=%d\n", error);
 		return FAILURE;
 	}
 
