@@ -77,45 +77,78 @@ int rocm_memory_init(struct memory_ctx *ctx) {
 
 #ifdef HAVE_ROCM_DMABUF
 	if (rocm_ctx->use_dmabuf) {
-		int dmabuf_supported = 0;
+		int dmabuf_supported     = 0;
 		const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
 		const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
 		int found_opt1           = 0;
 		int found_opt2           = 0;
-		FILE *fp;
+		
+		const char *config_path_fmts[] = {
+			"/boot/config-%s",
+			"/usr/src/linux-%s/.config",
+			"/usr/src/linux/.config",
+			"/usr/lib/modules/%s/config",
+			"/usr/lib/ostree-boot/config-%s",
+			"/usr/lib/kernel/config-%s",
+			"/usr/src/linux-headers-%s/.config",
+			"/lib/modules/%s/build/.config",
+		};
+		size_t num_paths = sizeof(config_path_fmts) /
+				   sizeof(config_path_fmts[0]);
 		struct utsname utsname;
-		char kernel_conf_file[128];
+		char kernel_conf_file[256];
 		char buf[256];
+		FILE *fp = NULL;
+		size_t i;
 
 		if (uname(&utsname) == -1) {
-			printf("could not get kernel name");
+			printf("could not get kernel name\n");
 			return FAILURE;
 		}
 
-		snprintf(kernel_conf_file, sizeof(kernel_conf_file),
-						"/boot/config-%s", utsname.release);
-		fp = fopen(kernel_conf_file, "r");
-		if (fp == NULL) {
-			printf("could not open kernel conf file %s error: %m",
-					kernel_conf_file);
-			return FAILURE;
-		}
-
-		while (fgets(buf, sizeof(buf), fp) != NULL) {
-			if (strstr(buf, kernel_opt1) != NULL) {
-				found_opt1 = 1;
-			}
-			if (strstr(buf, kernel_opt2) != NULL) {
-				found_opt2 = 1;
-			}
-			if (found_opt1 && found_opt2) {
-				dmabuf_supported = 1;
+		for (i = 0; i < num_paths; i++) {
+			snprintf(kernel_conf_file, sizeof(kernel_conf_file),
+				 config_path_fmts[i], utsname.release);
+			fp = fopen(kernel_conf_file, "r");
+			if (fp != NULL) {
 				break;
 			}
 		}
-		fclose(fp);
+
+        if (fp != NULL) {
+            while (fgets(buf, sizeof(buf), fp) != NULL) {
+                if (strstr(buf, kernel_opt1) != NULL) {
+                        found_opt1 = 1;
+                }
+                if (strstr(buf, kernel_opt2) != NULL) {
+                        found_opt2 = 1;
+                }
+                if (found_opt1 && found_opt2) {
+                        dmabuf_supported = 1;
+                        break;
+                }
+            }
+                fclose(fp);
+        }
+
+		// Fallback, works inside Docker containers where /boot/config-* is unavailable.
+		if (!dmabuf_supported) {
+			fp = fopen("/proc/kallsyms", "r");
+			if (fp != NULL) {
+				int o1 = 0, o2 = 0;
+				while (fgets(buf, sizeof(buf), fp) != NULL) {
+					if (!o1 && strstr(buf, " dma_buf_move_notify\n")) o1 = 1;
+					if (!o2 && strstr(buf, " pci_p2pdma"))            o2 = 1;
+					if (o1 && o2) break;
+				}
+				fclose(fp);
+				dmabuf_supported = (o1 && o2);
+			}
+		}
 
 		if (dmabuf_supported == 0) {
+                        printf("could not verify dmabuf support from kernel "
+                               "config \n");
 			return FAILURE;
 		}
 	}
