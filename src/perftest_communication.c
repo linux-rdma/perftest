@@ -2597,12 +2597,12 @@ error:
 int rdma_cm_route_handler(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct rdma_cm_id *cma_id)
 {
-	int rc, connection_index = -1;
+	int i, rc, connection_index = -1;
 	char *error_message;
 	struct rdma_conn_param conn_param;
 
 	/* find the matching QP index for the given cma_id */
-	for (int i = 0; i < user_param->num_of_qps; i++) {
+	for (i = 0; i < user_param->num_of_qps; i++) {
 		if (ctx->cma_master.nodes[i].cma_id == cma_id) {
 			connection_index = i;
 			break;
@@ -2783,7 +2783,7 @@ error_1:
 int rdma_cm_connection_established_handler(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct rdma_cm_event *event)
 {
-	int rc = SUCCESS;
+	int i, rc = SUCCESS;
 	char *error_message;
 
 	rc = rdma_cm_establish_ud_connection(ctx, user_param, event);
@@ -2795,7 +2795,7 @@ int rdma_cm_connection_established_handler(struct pingpong_context *ctx,
 	/* Only mark the cm node as connected when ESTABLISHED is reached.
 	 * Prevent semi-connected states from escaping the cleanup mechanism.
 	 */
-	for (int i = 0; i < user_param->num_of_qps; i++) {
+	for (i = 0; i < user_param->num_of_qps; i++) {
 		if (ctx->cma_master.nodes[i].cma_id == event->id) {
 			ctx->cma_master.nodes[i].connected = 1;
 			break;
