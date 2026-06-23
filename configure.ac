@@ -369,7 +369,6 @@ if test "$cuda_found" = "yes"; then
 	AC_DEFINE_UNQUOTED([CUDA_PATH], "$cuda_h_path" , [Enable CUDA feature])
 	AC_CHECK_LIB([cuda], [cuMemGetHandleForAddressRange], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_CUDA_CUMEMGETHANDLEFORADDRESSRANGE=no])
 	cuda_toolkit_version=`grep "define CUDA_VERSION" $cuda_h_path | cut -d' ' -f3`
-	AC_DEFINE_UNQUOTED([CUDA_VER], [$cuda_toolkit_version], [Define CUDA_VER])
 	AC_TRY_LINK([
 	#include <$cuda_h_path>],
 	[int x = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
