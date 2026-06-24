@@ -1602,6 +1602,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
+		if (user_param->test_type == ITERATIONS && user_param->iters < 32) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --data_validation requires iterations >= 32 (use -n)\n");
+			exit(1);
+                }
+
 		/* Require tx_depth >= 32 */
 		if (user_param->tx_depth < 32) {
 			printf(RESULT_LINE);
