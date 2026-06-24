@@ -5756,11 +5756,11 @@ int run_iter_bi(struct pingpong_context *ctx,
 	check_alive_data.g_total_iters = tot_iters;
 
 	while ((user_param->test_type == DURATION && user_param->state != END_STATE) ||
-							totccnt < tot_iters || totrcnt < tot_iters ) {
+							totscnt < tot_iters || totccnt < tot_iters || totrcnt < tot_iters ) {
 
 		for (index=0; index < num_of_qps; index++) {
 			while (before_first_rx == OFF && (ctx->scnt[index] < iters || user_param->test_type == DURATION) &&
-					((ctx->scnt[index] + scredit_for_qp[index] - ctx->ccnt[index] + user_param->post_list) <= user_param->tx_depth)) {
+					((ctx->scnt[index] + scredit_for_qp[index] + user_param->post_list) <= (user_param->tx_depth + ctx->ccnt[index]))) {
 				if (ctx->send_rcredit) {
 					uint32_t swindow = ctx->scnt[index] + user_param->post_list - ctx->credit_buf[index];
 					if (swindow >= user_param->rx_depth)
@@ -5967,8 +5967,14 @@ int run_iter_bi(struct pingpong_context *ctx,
 					scredit_for_qp[get_wr_id_qp_index(wc_tx[i].wr_id)]--;
 					tot_scredit--;
 				} else  {
-					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)get_wr_id_qp_index(wc_tx[i].wr_id)] += user_param->cq_mod;
+					qp_index = (int)get_wr_id_qp_index(wc_tx[i].wr_id);
+
+					int fill = user_param->cq_mod;
+					if (user_param->fill_count && ctx->ccnt[qp_index] + user_param->cq_mod > user_param->iters)
+						fill = user_param->iters - ctx->ccnt[qp_index];
+
+					ctx->ccnt[qp_index] += fill;
+					totccnt += fill;
 
 					if (user_param->noPeak == OFF) {
 
