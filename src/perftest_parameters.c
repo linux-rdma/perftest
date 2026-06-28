@@ -3376,7 +3376,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->connection_type == RawEth)
 					  user_param->raw_qos = 1;
 				  break;
-			case 'x': CHECK_VALUE_IN_RANGE_UNS(user_param->gid_index,uint8_t,MIN_GID_IX,MAX_GID_IX,"Gid index",not_int_ptr);
+			case 'x': CHECK_VALUE(user_param->gid_index,int,"Gid index",not_int_ptr);
 				  user_param->use_gid_user = 1; break;
 			case 'c': change_conn_type(&user_param->connection_type,user_param->verb,optarg); break;
 			case 'q':CHECK_VALUE_IN_RANGE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps",not_int_ptr);

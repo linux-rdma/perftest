@@ -168,6 +168,22 @@ int set_up_connection(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param,
 		struct pingpong_dest *my_dest);
 
+/* validate_gid_index .
+ *
+ * Description : Validates that a GID index is within the runtime GID table
+ *               length reported for a device port.
+ *
+ * Parameters :
+ *  ctx          - Pingpong context used to get the device name for error reporting.
+ *  port_num     - Port number whose GID table length was queried.
+ *  gid_index    - Requested GID index.
+ *  gid_tbl_len  - GID table length reported by ibv_query_port.
+ *
+ * Return Value : SUCCESS,FAILURE.
+ */
+int validate_gid_index(struct pingpong_context *ctx,
+		uint8_t port_num, int gid_index, int gid_tbl_len);
+
 
 /* negotiate_params .
  *

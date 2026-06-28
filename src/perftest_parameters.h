@@ -163,8 +163,6 @@
 #define MAX_TX	      (15000)
 #define MIN_SL	      (0)
 #define MAX_SL	      (15)
-#define MIN_GID_IX    (0)
-#define MAX_GID_IX    (64)
 #define MIN_QP_NUM    (1)
 #define MAX_QP_NUM    (16384)
 #define MIN_QP_MCAST  (1)

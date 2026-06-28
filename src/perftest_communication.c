@@ -710,6 +710,7 @@ static int get_best_gid_index(struct pingpong_context *ctx,
 	int best_score = -1;
 	int i;
 
+	/* The GID table length is device/port dependent. */
 	for (i = 0; i < attr->gid_tbl_len; i++) {
 		int score = compute_gid_score(ctx->context, port,
 					      i, user_param->ipv6);
@@ -720,6 +721,23 @@ static int get_best_gid_index(struct pingpong_context *ctx,
 	}
 
 	return best_index;
+}
+
+int validate_gid_index(struct pingpong_context *ctx,
+		uint8_t port_num, int gid_index, int gid_tbl_len)
+{
+	const char *dev_name = "unknown";
+
+	if (ctx && ctx->context && ctx->context->device)
+		dev_name = ibv_get_device_name(ctx->context->device);
+
+	if (gid_index < 0 || gid_tbl_len <= 0 || gid_index >= gid_tbl_len) {
+		fprintf(stderr, "GID index out of range for device %s port %u: requested gid index %d, detected gid_tbl_len %d\n",
+			dev_name, (unsigned)port_num, gid_index, gid_tbl_len);
+		return FAILURE;
+	}
+
+	return SUCCESS;
 }
 
 /******************************************************************************
@@ -911,11 +929,14 @@ int set_up_connection(struct pingpong_context *ctx,
 		num_of_qps_per_port = num_of_qps / 2;
 	}
 
-	if (user_param->gid_index != -1) {
+	if (user_param->gid_index != DEF_GID_INDEX || user_param->use_gid_user) {
 		if (ibv_query_port(ctx->context, user_param->ib_port, &attr))
 			return 0;
 
 		if (user_param->use_gid_user) {
+			if (validate_gid_index(ctx, user_param->ib_port,
+					       user_param->gid_index, attr.gid_tbl_len))
+				return -1;
 			if (ibv_query_gid(ctx->context, user_param->ib_port, user_param->gid_index, &temp_gid))
 				return -1;
 		} else {
@@ -934,7 +955,10 @@ int set_up_connection(struct pingpong_context *ctx,
 				return 0;
 
 			if (user_param->use_gid_user) {
-				if (ibv_query_gid(ctx->context, user_param->ib_port2, user_param->gid_index, &temp_gid2))
+				if (validate_gid_index(ctx, user_param->ib_port2,
+						       user_param->gid_index2, attr.gid_tbl_len))
+					return -1;
+				if (ibv_query_gid(ctx->context, user_param->ib_port2, user_param->gid_index2, &temp_gid2))
 					return -1;
 			} else {
 				user_param->gid_index2 = get_best_gid_index(ctx, user_param, &attr, user_param->ib_port2);

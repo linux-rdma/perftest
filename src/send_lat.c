@@ -59,15 +59,20 @@ static int set_mcast_group(struct pingpong_context *ctx,
 {
 	struct ibv_port_attr port_attr;
 
+	if (ibv_query_port(ctx->context,user_param->ib_port,&port_attr)) {
+		return FAILURE;
+	}
+
+	if (validate_gid_index(ctx, user_param->ib_port,
+			       user_param->gid_index, port_attr.gid_tbl_len)) {
+		return FAILURE;
+	}
+
 	if (ibv_query_gid(ctx->context,user_param->ib_port,user_param->gid_index,&mcg_params->port_gid)) {
 		return FAILURE;
 	}
 
 	if (ibv_query_pkey(ctx->context,user_param->ib_port,DEF_PKEY_IDX,&mcg_params->pkey)) {
-		return FAILURE;
-	}
-
-	if (ibv_query_port(ctx->context,user_param->ib_port,&port_attr)) {
 		return FAILURE;
 	}
 	mcg_params->sm_lid  = port_attr.sm_lid;
