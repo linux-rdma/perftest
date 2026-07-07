@@ -15,7 +15,7 @@ struct host_validation_ctx;
 
 enum host_alloc_type {
 	HOST_ALLOC_MALLOC,          /* Standard malloc/memalign */
-	HOST_ALLOC_SHMGET,          /* Legacy shmget hugepages */
+	HOST_ALLOC_MEMFD_HUGETLB,   /* memfd hugetlb pages */
 	HOST_ALLOC_MMAP_REGULAR,    /* mmap without huge pages */
 	HOST_ALLOC_MMAP_HUGE_2MB,   /* mmap with 2MB huge pages */
 	HOST_ALLOC_MMAP_HUGE_1GB    /* mmap with 1GB huge pages */
@@ -23,7 +23,7 @@ enum host_alloc_type {
 
 struct host_memory_ctx {
 	struct memory_ctx base;
-	int use_hugepages;              /* Legacy hugepages flag (--use_hugepages) */
+	int use_hugepages;              /* Hugepages flag (--use_hugepages) */
 	int use_huge_for_validation;    /* Auto huge pages for data validation */
 	int debug;                      /* Print allocation diagnostics */
 	enum host_alloc_type alloc_type; /* How buffer was allocated */
