@@ -16,6 +16,7 @@
 #include "host_memory.h"
 #include "mmap_memory.h"
 #include "cuda_memory.h"
+#include "musa_memory.h"
 #include "rocm_memory.h"
 #include "neuron_memory.h"
 #include "hl_memory.h"
@@ -766,6 +767,21 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 			}
 		}
 
+		if (musa_memory_supported()) {
+			printf("      --use_musa=<musa device id>");
+			printf(" Use MUSA specific device for GPUDirect RDMA testing\n");
+
+			printf("      --use_musa_bus_id=<musa full BUS id>");
+			printf(" Use MUSA specific device, based on its full PCIe address, for GPUDirect RDMA testing\n");
+
+			if (musa_memory_dmabuf_supported()) {
+				printf("      --use_musa_dmabuf");
+				printf(" Use MUSA DMA-BUF for GPUDirect RDMA testing\n");
+				printf("      --use_musa_pcie_mapping");
+				printf(" Use MUSA DMABUF handle mapping via PCIe BAR1\n");
+			}
+		}
+
 		if (rocm_memory_supported()) {
 			printf("      --use_rocm=<rocm device id>");
 			printf(" Use selected ROCm device for GPUDirect RDMA testing\n");
@@ -1051,6 +1067,10 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cuda_device_bus_id	= NULL;
 	user_param->use_cuda_dmabuf	= 0;
 	user_param->use_cuda_pcie_mapping = 0;
+	user_param->musa_device_id	= 0;
+	user_param->musa_device_bus_id	= NULL;
+	user_param->use_musa_dmabuf	= 0;
+	user_param->use_musa_pcie_mapping = 0;
 	user_param->use_rocm_dmabuf = 0;
 	user_param->use_data_direct	= 0;
 	user_param->cuda_mem_type       = CUDA_MEM_DEVICE;
@@ -2255,13 +2275,15 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_CUDA && user_param->tst == LAT && user_param->verb == WRITE) {
+	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA) &&
+	    user_param->tst == LAT && user_param->verb == WRITE) {
 		printf(RESULT_LINE);
-		fprintf(stderr, "Perftest doesn't support CUDA latency test with write (without immediate) verb\n");
+		fprintf(stderr, "Perftest doesn't support device memory latency test with write (without immediate) verb; use --write_with_imm\n");
 		exit(1);
 	}
 
-	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_DM) &&
+	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA ||
+	     user_param->memory_type == MEMORY_DM) &&
 	    user_param->verb == SEND && (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
 		printf(RESULT_LINE);
 		printf("Scatter2CQE (size <= 64) is not supported with device memory send tests: setting MLX5_SCATTER_TO_CQE=0\n");
@@ -2269,9 +2291,10 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_CUDA && (int)user_param->size <= user_param->inline_size) {
+	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA) &&
+	    (int)user_param->size <= user_param->inline_size) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"Perftest doesn't support CUDA tests with inline messages\n");
+		fprintf(stderr,"Perftest doesn't support device memory tests with inline messages\n");
 		exit(1);
 	}
 
@@ -2833,9 +2856,9 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 	}
 
 	if (user_param->inline_size == DEF_INLINE) {
-		if (user_param->memory_type == MEMORY_CUDA){
+		if (user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA){
 			user_param->inline_size = 0;
-			printf("Perftest doesn't supports CUDA tests with inline messages: inline size set to 0\n");
+			printf("Perftest doesn't supports device memory tests with inline messages: inline size set to 0\n");
 			return;
 		}
 
@@ -2962,6 +2985,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_cuda_pcie_mapping_flag = 0;
 	static int use_data_direct_flag = 0;
 	static int cuda_mem_type_flag = 0;
+	static int use_musa_flag = 0;
+	static int use_musa_bus_id_flag = 0;
+	static int use_musa_dmabuf_flag = 0;
+	static int use_musa_pcie_mapping_flag = 0;
 	static int use_rocm_flag = 0;
 	static int use_rocm_dmabuf_flag = 0;
 	static int use_neuron_flag = 0;
@@ -3164,6 +3191,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "use_cuda_pcie_mapping", .has_arg = 0, .flag = &use_cuda_pcie_mapping_flag, .val = 1},
 			{ .name = "use_data_direct",	.has_arg = 0, .flag = &use_data_direct_flag, .val = 1},
 			{ .name = "cuda_mem_type",	.has_arg = 1, .flag = &cuda_mem_type_flag, .val = 1},
+			{ .name = "use_musa",		.has_arg = 1, .flag = &use_musa_flag, .val = 1},
+			{ .name = "use_musa_bus_id",	.has_arg = 1, .flag = &use_musa_bus_id_flag, .val = 1},
+			{ .name = "use_musa_dmabuf",	.has_arg = 0, .flag = &use_musa_dmabuf_flag, .val = 1},
+			{ .name = "use_musa_pcie_mapping", .has_arg = 0, .flag = &use_musa_pcie_mapping_flag, .val = 1},
 			{ .name = "use_rocm",		.has_arg = 1, .flag = &use_rocm_flag, .val = 1},
 			{ .name = "use_rocm_dmabuf",	.has_arg = 0, .flag = &use_rocm_dmabuf_flag, .val = 1},
 			{ .name = "use_neuron",		.has_arg = 1, .flag = &use_neuron_flag, .val = 1},
@@ -3627,6 +3658,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				/* We statically define memory type options so check if requested option is actually supported. */
 				if (((use_cuda_flag || use_cuda_bus_id_flag) && !cuda_memory_supported()) ||
 				    (use_cuda_dmabuf_flag && !cuda_memory_dmabuf_supported()) ||
+				    ((use_musa_flag || use_musa_bus_id_flag) && !musa_memory_supported()) ||
+				    (use_musa_dmabuf_flag && !musa_memory_dmabuf_supported()) ||
 				    (use_rocm_flag && !rocm_memory_supported()) ||
 				    (use_rocm_dmabuf_flag && !rocm_memory_dmabuf_supported()) ||
 				    (use_neuron_flag && !neuron_memory_supported()) ||
@@ -3648,6 +3681,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (mmap_file_flag || use_mlu_flag || use_neuron_flag || use_hl_flag ||
 						use_ib_dm_dmabuf_flag ||
 					 (use_rocm_flag && user_param->memory_type != MEMORY_ROCM) ||
+					 ((use_musa_flag || use_musa_bus_id_flag) && user_param->memory_type != MEMORY_MUSA) ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
 					fprintf(stderr, " Can't use multiple memory types\n");
 					return FAILURE;
@@ -3702,6 +3736,32 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					cuda_mem_type_flag = 0;
+				}
+				if (use_musa_flag) {
+					CHECK_VALUE_NON_NEGATIVE(user_param->musa_device_id,int,"MUSA device",not_int_ptr);
+					user_param->memory_type = MEMORY_MUSA;
+					user_param->memory_create = musa_memory_create;
+					use_musa_flag = 0;
+				}
+				if (use_musa_bus_id_flag) {
+					user_param->musa_device_bus_id = strdup(optarg);
+					printf("Got PCIe address of: %s\n", user_param->musa_device_bus_id);
+					user_param->memory_type = MEMORY_MUSA;
+					user_param->memory_create = musa_memory_create;
+					use_musa_bus_id_flag = 0;
+				}
+				if (use_musa_dmabuf_flag) {
+					user_param->use_musa_dmabuf = 1;
+					if (user_param->memory_type != MEMORY_MUSA) {
+						fprintf(stderr, "MUSA DMA-BUF cannot be used without MUSA\n");
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					use_musa_dmabuf_flag = 0;
+				}
+				if (use_musa_pcie_mapping_flag) {
+					user_param->use_musa_pcie_mapping = 1;
+					use_musa_pcie_mapping_flag = 0;
 				}
 				if (use_rocm_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->rocm_device_id,int,"ROCm device",not_int_ptr);
@@ -4314,6 +4374,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		fprintf(stderr, " CUDA PCIe mapping requires DMA-BUF\n");
 		return FAILURE;
 	}
+	if (user_param->use_musa_pcie_mapping && !user_param->use_musa_dmabuf) {
+		fprintf(stderr, " MUSA PCIe mapping requires DMA-BUF\n");
+		return FAILURE;
+	}
 	if (optind == argc - 1) {
 		GET_STRING(user_param->servername,strdupa(argv[optind]));
 
@@ -4595,6 +4659,8 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 
 	if (rocm_memory_supported())
 		printf(" Use ROCm memory : %s\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
+	if (musa_memory_supported())
+		printf(" Use MUSA memory : %s\n", user_param->memory_type == MEMORY_MUSA ? "ON" : "OFF");
 
 	printf(" Data ex. method : %s",exchange_state[temp]);
 
@@ -4833,11 +4899,14 @@ static void write_test_info_to_file(int out_json_fds, struct perftest_parameters
 
 	if (user_param->memory_type == MEMORY_CUDA)
 		dprintf(out_json_fds, "\"cuda_device\": %d,\n",user_param->cuda_device_id);
+	if (user_param->memory_type == MEMORY_MUSA)
+		dprintf(out_json_fds, "\"musa_device\": %d,\n",user_param->musa_device_id);
 
 	if (user_param->use_rdma_cm)
 		temp = 1;
 
 	dprintf(out_json_fds, "\"Use_ROCm_memory\": \"%s\",\n", user_param->memory_type == MEMORY_ROCM ? "ON" : "OFF");
+	dprintf(out_json_fds, "\"Use_MUSA_memory\": \"%s\",\n", user_param->memory_type == MEMORY_MUSA ? "ON" : "OFF");
 
 	dprintf(out_json_fds, "\"Data_ex_method\": \"%s\"",exchange_state[temp]);
 

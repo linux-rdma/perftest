@@ -41,6 +41,7 @@ AC_SUBST(MINOR_VERSION)
 
 AC_ARG_VAR(HAVE_OPENCL, opencl support)
 AC_ARG_VAR(CUDA_H_PATH, help-string)
+AC_ARG_VAR(MUSA_H_PATH, help-string)
 AC_ARG_ENABLE([cudart],
               [AS_HELP_STRING([--enable-cudart],
                               [Enable CUDA runtime support (default: auto-detect)])
@@ -449,6 +450,66 @@ AM_CONDITIONAL([CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$CUDA_DMA_BUF_MA
 AM_CONDITIONAL([CUDA], [test "$cuda_h_path"])
 AM_CONDITIONAL([HAVE_CUDA], [test "$cuda_h_path"])
 AM_CONDITIONAL([HAVE_CUDART], [test "x$enable_cudart" = "xyes"])
+
+# Check for MUSA header file in common locations.
+AC_MSG_CHECKING([for MUSA header file])
+musa_found=no
+musa_h_path=""
+
+if test -n "$MUSA_HOME" && test -f "$MUSA_HOME/include/musa.h"; then
+	musa_h_path="$MUSA_HOME/include/musa.h"
+	musa_found=yes
+	AC_MSG_RESULT([found at $musa_h_path])
+fi
+
+if test "$musa_found" = "no" && test -f "/usr/local/musa/include/musa.h"; then
+	musa_h_path="/usr/local/musa/include/musa.h"
+	musa_found=yes
+	AC_MSG_RESULT([found at $musa_h_path])
+fi
+
+# User defined MUSA header path.
+if test -f "$MUSA_H_PATH"; then
+	musa_h_path="$MUSA_H_PATH"
+	musa_found=yes
+	AC_MSG_RESULT([found at $musa_h_path])
+fi
+
+if test "$musa_found" = "yes"; then
+	AC_DEFINE([HAVE_MUSA], [1], [Enable MUSA feature])
+	AC_DEFINE_UNQUOTED([MUSA_PATH], "$musa_h_path", [Enable MUSA feature])
+
+	AC_CHECK_DECLS([muMemGetHandleForAddressRange],
+		[HAVE_MUSA_MUMEMGETHANDLEFORADDRESSRANGE=yes],
+		[HAVE_MUSA_MUMEMGETHANDLEFORADDRESSRANGE=no],
+		[[#include "$musa_h_path"]])
+
+	AC_TRY_COMPILE([
+	#include <$musa_h_path>],
+	[int x = MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
+	[MUSA_DMA_BUF_PARAMETERS_SUPPORT=yes], [MUSA_DMA_BUF_PARAMETERS_SUPPORT=no])
+
+	if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_MUSA_MUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$MUSA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
+		HAVE_MUSA_DMABUF=yes
+		AC_DEFINE([HAVE_MUSA_DMABUF], [1], [Enable MUSA DMABUF feature])
+	fi
+
+	AC_TRY_COMPILE([
+	#include <$musa_h_path>],
+	[int x = MU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;],
+	[MUSA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=yes], [MUSA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT=no])
+
+	if [test "x$MUSA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"] && [test "x$HAVE_REG_DMABUF_MR" = "xyes"]; then
+		AC_DEFINE([HAVE_MUSA_DMABUF_MAPPING_TYPE_PCIE], [1], [Enable MUSA DMABUF handle mapping via PCIe BAR1])
+	fi
+else
+	AC_MSG_RESULT([not found])
+fi
+
+AM_CONDITIONAL([MUSA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$MUSA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
+AM_CONDITIONAL([MUSA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$MUSA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT" = "xyes"])
+AM_CONDITIONAL([MUSA], [test "$musa_h_path"])
+AM_CONDITIONAL([HAVE_MUSA], [test "$musa_h_path"])
 
 AC_ARG_ENABLE([neuron],
               [AS_HELP_STRING([--enable-neuron],

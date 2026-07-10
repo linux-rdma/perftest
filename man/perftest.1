@@ -372,6 +372,28 @@ many different options and modes.
  Not relevant for raw_ethernet_fs_rate.
  System support required.
 .TP
+.B --use_musa=<musa device id>
+ Use MUSA specific device for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_musa_bus_id=<musa full BUS id>
+ Use MUSA specific device, based on its full PCIe address, for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_musa_dmabuf
+ Use MUSA DMA-BUF for GPUDirect RDMA testing.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.TP
+.B --use_musa_pcie_mapping
+ Use MUSA DMABUF handle mapping via PCIe BAR1.
+ Not relevant for raw_ethernet_fs_rate.
+ System support required.
+.br
+ MUSA device-memory ib_write_lat tests must use --write_with_imm explicitly.
+.TP
 .B --use_hl=<hl device id>
  Use HabanaLabs specific device for HW accelerator direct RDMA testing.
  System support required.
