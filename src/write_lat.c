@@ -82,11 +82,13 @@ int main(int argc, char *argv[])
 		goto return_error;
 	}
 
-	/* In case of ib_write_lat, PCI relaxed ordering should be disabled since we're polling for data change
-	 * of last packet so in case of relaxed odering we might get the last packet in wrong order thus the test
-	 * would be incorrect
+	/* For plain RDMA_WRITE latency we poll for a data change of the last packet's last byte, so under
+	 * relaxed ordering we might observe that byte before the rest of the payload, making the test incorrect.
+	 * WRITE_IMM latency detects arrival via a receive completion (CQE), not last-byte polling, so it is
+	 * ordering-safe and must not disable relaxed ordering.
 	 */
-	user_param.disable_pcir = 1;
+	if (user_param.verb == WRITE)
+		user_param.disable_pcir = 1;
 
 	if (user_param.use_xrc || user_param.connection_type == DC) {
 		user_param.num_of_qps *= 2;
