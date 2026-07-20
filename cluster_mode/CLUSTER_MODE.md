@@ -244,7 +244,7 @@ arguments override or supplement the JSON config.
 | `gpuType` | string | Default GPU type for all hosts |
 | `gpuDeviceId` | int | Default GPU device index. Mutually exclusive with `autoDetect` |
 | `gpuDeviceBusId` | string | Default GPU PCIe bus ID. Mutually exclusive with `autoDetect` |
-| `cudaMemType` | string | CUDA memory type: `device`, `managed`, `pinned` |
+| `cudaMemType` | string | CUDA memory type: `device`, `managed`, `pinned`, `vmm`, `auto` (default `auto` = non-localized VMM, falls back to device) |
 | `cudaDmabuf` | bool | Enable CUDA DMA-BUF |
 | `dataDirectMode` | bool | Enable Data Direct mode |
 | `autoDetect` | bool | SSH-probe each host for NIC↔GPU affinity. Rejected together with an explicit `gpuDeviceId`/`gpuDeviceBusId` (global or per-node) |
@@ -492,7 +492,9 @@ PCIe bus ID takes precedence over numeric device ID when both are specified.
 - **Data Direct** (`dataDirectMode`): injects both `--use_cuda_dmabuf` and
   `--use_data_direct`
 - **Memory Type** (`cudaMemType`): injects `--cuda_mem_type=` with
-  `device` (0), `managed` (1), or `pinned` (2)
+  `device` (0), `managed` (1), `pinned` (2), or `vmm` (5). `auto` (the default
+  when unset) omits the flag so perftest uses its default: non-localized VMM
+  with fallback to device
 
 ---
 

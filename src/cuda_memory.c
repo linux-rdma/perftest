@@ -28,8 +28,13 @@ static const char *cuda_mem_type_str[] = {
 	"CUDA_MEM_HOSTALLOC",
 	"CUDA_MEM_HOSTREGISTER",
 	"CUDA_MEM_MALLOC",
+	"CUDA_MEM_VMM",
 	"CUDA_MEM_TYPES"
 };
+
+#define CUDA_ROUND_UP(x, n) (((x) + (n) - 1) & ~((n) - 1))
+
+struct cuda_vmm_buffer;
 
 struct cuda_memory_ctx {
 	struct memory_ctx base;
@@ -43,8 +48,50 @@ struct cuda_memory_ctx {
 	bool use_dmabuf;
 	bool use_pcie_mapping;
 	int driver_version;
-	int validation_active; /* 1 if plugin validation is active */
+	int validation_active;
+	int effective_mem_type;
+	struct cuda_vmm_buffer *vmm_list_head;
 };
+
+#if CUDA_VERSION >= 11000
+/*
+ * The free path only gets the buffer address, but releasing a VMM allocation
+ * also needs its handle and padded size, so track them in a small addr-keyed
+ * list owned by the memory context.
+ */
+struct cuda_vmm_buffer {
+	CUmemGenericAllocationHandle handle;
+	void *addr;
+	size_t padded_size;
+	struct cuda_vmm_buffer *next;
+};
+
+static void cuda_vmm_buffer_push(struct cuda_memory_ctx *cuda_ctx, struct cuda_vmm_buffer *obj)
+{
+	obj->next = cuda_ctx->vmm_list_head;
+	cuda_ctx->vmm_list_head = obj;
+}
+
+static struct cuda_vmm_buffer *cuda_vmm_buffer_pop_by_addr(struct cuda_memory_ctx *cuda_ctx, void *addr)
+{
+	struct cuda_vmm_buffer *prev = NULL;
+	struct cuda_vmm_buffer *cur = cuda_ctx->vmm_list_head;
+
+	while (cur != NULL) {
+		if (cur->addr == addr) {
+			if (prev)
+				prev->next = cur->next;
+			else
+				cuda_ctx->vmm_list_head = cur->next;
+			cur->next = NULL;
+			return cur;
+		}
+		prev = cur;
+		cur = cur->next;
+	}
+	return NULL;
+}
+#endif /* CUDA_VERSION >= 11000 */
 
 static int init_gpu(struct cuda_memory_ctx *ctx)
 {
@@ -210,6 +257,51 @@ int cuda_memory_destroy(struct memory_ctx *ctx) {
 	return SUCCESS;
 }
 
+#ifdef HAVE_CUDA_DMABUF
+/*
+ * Export a GPU buffer range as a DMA-BUF fd (shared by the device and VMM
+ * paths). On failure returns FAILURE without releasing the buffer
+ */
+static int cuda_export_dmabuf(struct cuda_memory_ctx *cuda_ctx, CUdeviceptr ptr,
+			      uint64_t size, int *dmabuf_fd, uint64_t *dmabuf_offset)
+{
+	const size_t host_page_size = sysconf(_SC_PAGESIZE);
+	CUdeviceptr aligned_ptr = ptr & ~(host_page_size - 1);
+	uint64_t offset = ptr - aligned_ptr;
+	size_t aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
+	int cu_flags = 0;
+	CUresult error;
+
+	*dmabuf_fd = 0;
+	if (cuda_ctx->use_pcie_mapping) {
+	#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
+		cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+		if (cuda_ctx->driver_version < 12*1000+8*10) {
+			printf("CUDA driver version %d.%d does not support CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE\n",
+				(cuda_ctx->driver_version / 1000), (cuda_ctx->driver_version % 1000) / 10);
+			return FAILURE;
+		}
+	#else
+		/* may happen with CUDA toolkit older than 12.8 */
+		printf("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
+		return FAILURE;
+	#endif
+	}
+
+	printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n",
+		ptr, aligned_ptr, aligned_size);
+	error = p_cuMemGetHandleForAddressRange((void *)dmabuf_fd, (void *)aligned_ptr, aligned_size,
+		CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, cu_flags);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemGetHandleForAddressRange error=%d\n", error);
+		return FAILURE;
+	}
+
+	*dmabuf_offset = offset;
+	return SUCCESS;
+}
+#endif /* HAVE_CUDA_DMABUF */
+
 static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, uint64_t size, int *dmabuf_fd,
 		uint64_t *dmabuf_offset, void **addr, bool *can_init) {
 	int error;
@@ -241,45 +333,11 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 		*can_init = false;
 
 #ifdef HAVE_CUDA_DMABUF
-		{
-			if (cuda_ctx->use_dmabuf) {
-				CUdeviceptr aligned_ptr;
-				const size_t host_page_size = sysconf(_SC_PAGESIZE);
-				uint64_t offset;
-				size_t aligned_size;
-				int cu_flags = 0;
-
-				/* Round down to host page size */
-				aligned_ptr = d_A & ~(host_page_size - 1);
-				offset = d_A - aligned_ptr;
-				aligned_size = (size + offset + host_page_size - 1) & ~(host_page_size - 1);
-
-				printf("using DMA-BUF for GPU buffer address at %#llx aligned at %#llx with aligned size %zu\n", d_A, aligned_ptr, aligned_size);
-				*dmabuf_fd = 0;
-				CUmemRangeHandleType cuda_handle_type = CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD;
-
-				if (cuda_ctx->use_pcie_mapping) {
-				#ifdef HAVE_DMABUF_MAPPING_TYPE_PCIE
-				    cu_flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
-					if (cuda_ctx->driver_version < 12*1000+8*10) {
-						printf("CUDA driver version %d.%d does not support CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE\n",
-							  (cuda_ctx->driver_version / 1000), (cuda_ctx->driver_version % 1000) / 10);
-						return FAILURE;
-					}
-				#else
-				/* may happen with CUDA toolkit older than 12.8 */
-					printf("support for CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE is missing\n");
-					return FAILURE;
-				#endif
-				}
-
-				error = p_cuMemGetHandleForAddressRange((void *)dmabuf_fd, (void *)aligned_ptr, aligned_size, cuda_handle_type, cu_flags);
-				if (error != CUDA_SUCCESS) {
-					printf("cuMemGetHandleForAddressRange error=%d\n", error);
-					return FAILURE;
-				}
-
-				*dmabuf_offset = offset;
+		if (cuda_ctx->use_dmabuf) {
+			if (cuda_export_dmabuf(cuda_ctx, d_A, size, dmabuf_fd, dmabuf_offset) != SUCCESS) {
+				p_cuMemFree(d_A);
+				*addr = NULL;
+				return FAILURE;
 			}
 		}
 #endif
@@ -288,20 +346,190 @@ static int cuda_allocate_device_memory_buffer(struct cuda_memory_ctx *cuda_ctx, 
 	return CUDA_SUCCESS;
 }
 
+#if CUDA_VERSION >= 11000
+/*
+ * Non-localized, GPUDirect-RDMA-capable VMM allocation: CU_MEM_LOCATION_TYPE_DEVICE
+ * with allocFlags.gpuDirectRDMACapable = 1. Must stay non-localized (no locality
+ * domain / memory node / localized mempool) so the buffer is RDMA-exportable. If
+ * the platform can't honor it, cuMemCreate fails and the caller falls back.
+ */
+static int cuda_vmm_alloc(struct cuda_memory_ctx *cuda_ctx, uint64_t size,
+			  CUdeviceptr *d_ptr, CUmemGenericAllocationHandle *handle_out,
+			  size_t *padded_size_out)
+{
+	CUmemAllocationProp prop = {0};
+	CUmemAccessDesc access_desc = {0};
+	CUmemGenericAllocationHandle handle;
+	CUdeviceptr ptr;
+	size_t granularity = 0;
+	size_t padded_size;
+	CUresult error;
+
+	prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
+	prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+	prop.location.id = cuda_ctx->cuDevice;
+	prop.allocFlags.gpuDirectRDMACapable = 1;
+
+	error = p_cuMemGetAllocationGranularity(&granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemGetAllocationGranularity error=%d\n", error);
+		return FAILURE;
+	}
+	padded_size = CUDA_ROUND_UP(size, granularity);
+
+	error = p_cuMemCreate(&handle, padded_size, &prop, 0);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemCreate error=%d\n", error);
+		return FAILURE;
+	}
+
+	error = p_cuMemAddressReserve(&ptr, padded_size, 0, 0, 0);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemAddressReserve error=%d\n", error);
+		p_cuMemRelease(handle);
+		return FAILURE;
+	}
+
+	error = p_cuMemMap(ptr, padded_size, 0, handle, 0);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemMap error=%d\n", error);
+		p_cuMemAddressFree(ptr, padded_size);
+		p_cuMemRelease(handle);
+		return FAILURE;
+	}
+
+	access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+	access_desc.location.id = cuda_ctx->cuDevice;
+	access_desc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+	error = p_cuMemSetAccess(ptr, padded_size, &access_desc, 1);
+	if (error != CUDA_SUCCESS) {
+		printf("cuMemSetAccess error=%d\n", error);
+		p_cuMemUnmap(ptr, padded_size);
+		p_cuMemAddressFree(ptr, padded_size);
+		p_cuMemRelease(handle);
+		return FAILURE;
+	}
+
+	*d_ptr = ptr;
+	*handle_out = handle;
+	*padded_size_out = padded_size;
+	return SUCCESS;
+}
+
+static int cuda_vmm_free(CUmemGenericAllocationHandle handle, CUdeviceptr d_ptr, size_t padded_size)
+{
+	p_cuMemUnmap(d_ptr, padded_size);
+	p_cuMemRelease(handle);
+	p_cuMemAddressFree(d_ptr, padded_size);
+	return SUCCESS;
+}
+#endif /* CUDA_VERSION >= 11000 */
+
+/* Whether the non-localized GDR VMM path can be used on this device/build. */
+static bool vmm_runtime_available(struct cuda_memory_ctx *cuda_ctx)
+{
+#if CUDA_VERSION >= 11000
+	int integrated = 0;
+	int gdr_vmm = 0;
+
+	p_cuDeviceGetAttribute(&integrated, CU_DEVICE_ATTRIBUTE_INTEGRATED, cuda_ctx->cuDevice);
+	if (integrated)
+		return false;
+
+	p_cuDeviceGetAttribute(&gdr_vmm, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED, cuda_ctx->cuDevice);
+	return gdr_vmm > 0;
+#else
+	(void)cuda_ctx;
+	return false;
+#endif
+}
+
+/*
+ * Resolve the effective allocation type. Explicit --cuda_mem_type is honored
+ * exactly (no fallback). The internal AUTO default prefers the non-localized
+ * VMM path and falls back to the legacy device path when VMM is unavailable.
+ */
+static int resolve_mem_type(struct cuda_memory_ctx *cuda_ctx)
+{
+	if (cuda_ctx->mem_type != CUDA_MEM_AUTO)
+		return cuda_ctx->mem_type;
+
+	return vmm_runtime_available(cuda_ctx) ? CUDA_MEM_VMM : CUDA_MEM_DEVICE;
+}
+
 int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t size, int *dmabuf_fd,
 				uint64_t *dmabuf_offset, void **addr, bool *can_init) {
 	int error;
+	int mem_type;
 	CUdeviceptr d_ptr;
 
 	struct cuda_memory_ctx *cuda_ctx = container_of(ctx, struct cuda_memory_ctx, base);
 
-	switch (cuda_ctx->mem_type) {
+	/* Resolve the effective allocation type once and cache it. */
+	if (cuda_ctx->effective_mem_type < 0)
+		cuda_ctx->effective_mem_type = resolve_mem_type(cuda_ctx);
+	mem_type = cuda_ctx->effective_mem_type;
+
+	switch (mem_type) {
 		case CUDA_MEM_DEVICE:
 			error = cuda_allocate_device_memory_buffer(cuda_ctx, size, dmabuf_fd,
 					dmabuf_offset, addr, can_init);
 			if (error != CUDA_SUCCESS)
 				return FAILURE;
 			break;
+#if CUDA_VERSION >= 11000
+		case CUDA_MEM_VMM: {
+			CUmemGenericAllocationHandle handle;
+			size_t padded_size = 0;
+			struct cuda_vmm_buffer *vmm_buf;
+
+			if (cuda_vmm_alloc(cuda_ctx, size, &d_ptr, &handle, &padded_size) != SUCCESS) {
+				/* Explicit VMM request is honored exactly: no fallback. */
+				if (cuda_ctx->mem_type != CUDA_MEM_AUTO) {
+					fprintf(stderr, "Failed to allocate CUDA VMM buffer\n");
+					return FAILURE;
+				}
+				/* AUTO default: fall back to the legacy cuMemAlloc device path. */
+				printf("CUDA VMM allocation unavailable, falling back to cuMemAlloc device path\n");
+				cuda_ctx->effective_mem_type = CUDA_MEM_DEVICE;
+				mem_type = CUDA_MEM_DEVICE;
+				error = cuda_allocate_device_memory_buffer(cuda_ctx, size, dmabuf_fd,
+						dmabuf_offset, addr, can_init);
+				if (error != CUDA_SUCCESS)
+					return FAILURE;
+				break;
+			}
+
+			*addr = (void *)d_ptr;
+			*can_init = false;
+
+#ifdef HAVE_CUDA_DMABUF
+			/* Export DMA-BUF before creating the tracking node, so any failure
+			 * here only needs to release the VMM allocation (nothing tracked). */
+			if (cuda_ctx->use_dmabuf) {
+				if (cuda_export_dmabuf(cuda_ctx, d_ptr, size, dmabuf_fd, dmabuf_offset) != SUCCESS) {
+					cuda_vmm_free(handle, d_ptr, padded_size);
+					*addr = NULL;
+					return FAILURE;
+				}
+			}
+#endif
+
+			/* Track the allocation last, once it is fully handed off. */
+			vmm_buf = calloc(1, sizeof(*vmm_buf));
+			if (!vmm_buf) {
+				printf("calloc for cuda_vmm_buffer failed\n");
+				cuda_vmm_free(handle, d_ptr, padded_size);
+				*addr = NULL;
+				return FAILURE;
+			}
+			vmm_buf->handle = handle;
+			vmm_buf->addr = (void *)d_ptr;
+			vmm_buf->padded_size = padded_size;
+			cuda_vmm_buffer_push(cuda_ctx, vmm_buf);
+			break;
+		}
+#endif /* CUDA_VERSION >= 11000 */
 		case CUDA_MEM_MANAGED:
 			error = p_cuMemAllocManaged(&d_ptr, size, CU_MEM_ATTACH_GLOBAL);
 			if (error != CUDA_SUCCESS) {
@@ -336,7 +564,7 @@ int cuda_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 			return FAILURE;
 	}
 
-	printf("allocated GPU buffer of a %lu address at %p for type %s\n", size, addr, cuda_mem_type_str[cuda_ctx->mem_type]);
+	printf("allocated GPU buffer of a %lu address at %p for type %s\n", size, addr, cuda_mem_type_str[mem_type]);
 
 	#ifdef HAVE_CUDART
 	if (cuda_ctx->gpu_touch != GPU_NO_TOUCH) {
@@ -367,7 +595,10 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 		cuda_ctx->stop_touch_gpu_kernel_flag = NULL;
 	}
 
-	switch (cuda_ctx->mem_type) {
+	/* Dispatch on the resolved type so the AUTO->device fallback frees correctly. */
+	int mem_type = (cuda_ctx->effective_mem_type >= 0) ? cuda_ctx->effective_mem_type : cuda_ctx->mem_type;
+
+	switch (mem_type) {
 		case CUDA_MEM_DEVICE:
 			if (cuda_device_integrated == 1) {
 				printf("deallocating GPU buffer %p\n", addr);
@@ -384,6 +615,18 @@ int cuda_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 		case CUDA_MEM_MALLOC:
 			free((void *) addr);
 			break;
+#if CUDA_VERSION >= 11000
+		case CUDA_MEM_VMM: {
+			struct cuda_vmm_buffer *vmm_buf = cuda_vmm_buffer_pop_by_addr(cuda_ctx, addr);
+			if (!vmm_buf) {
+				fprintf(stderr, "VMM buffer %p not tracked\n", addr);
+				return FAILURE;
+			}
+			cuda_vmm_free(vmm_buf->handle, (CUdeviceptr)vmm_buf->addr, vmm_buf->padded_size);
+			free(vmm_buf);
+			break;
+		}
+#endif
 	}
 
 	return SUCCESS;
@@ -583,6 +826,7 @@ struct memory_ctx *cuda_memory_create(struct perftest_parameters *params) {
 	ctx->stop_touch_gpu_kernel_flag = NULL;
 	ctx->mem_type = params->cuda_mem_type;
 	ctx->validation_active = 0;
+	ctx->effective_mem_type = -1;
 
 	return &ctx->base;
 }

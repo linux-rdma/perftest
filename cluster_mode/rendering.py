@@ -103,8 +103,6 @@ def build_test_config(config: Dict[str, Any],
         cfg['dmabuf'] = True
     elif config.get('cudaDmabuf'):
         cfg['dmabuf'] = True
-    if config.get('cudaMemType'):
-        cfg['gpu_memory'] = config['cudaMemType']
 
     gpu_mapping = (_build_resolved_gpu_mapping(assignments, gpu_map)
                    or _build_gpu_mapping(config))
@@ -113,6 +111,11 @@ def build_test_config(config: Dict[str, Any],
         mapped_types = {m['gpu_type'] for m in gpu_mapping if m['gpu_type']}
         if 'gpu_type' not in cfg and len(mapped_types) == 1:
             cfg['gpu_type'] = mapped_types.pop()
+
+    if cfg.get('gpu_type') == 'cuda':
+        cfg['gpu_memory'] = config.get('cudaMemType') or 'auto (vmm)'
+    elif config.get('cudaMemType'):
+        cfg['gpu_memory'] = config['cudaMemType']
 
     return cfg
 

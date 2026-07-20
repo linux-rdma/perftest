@@ -15,7 +15,7 @@ import tempfile
 from collections import Counter
 from typing import List, Dict, Any, Optional, Tuple
 from .traffic_patterns import RankAssignment
-from .config_model import TYPED_PERFTEST_FIELDS
+from .config_model import TYPED_PERFTEST_FIELDS, CUDA_MEM_TYPE_VALUES
 
 _LAUNCHER_HOSTNAME = socket.gethostname()
 
@@ -43,10 +43,6 @@ _GPU_BUS_ID_FLAG: Dict[str, str] = {
     'cuda': '--use_cuda_bus_id',
     'hl':   '--use_hl',   # Habana Labs always uses PCIe string, never numeric
 }
-
-# CUDA memory type name -> perftest --cuda_mem_type numeric value
-_CUDA_MEM_TYPE_MAP: Dict[str, int] = {'device': 0, 'managed': 1, 'pinned': 2}
-
 
 def _build_typed_perftest_flags(resolved: Dict[str, Any]) -> List[str]:
     """Render resolved typed JSON fields into perftest CLI tokens.
@@ -103,7 +99,9 @@ def _build_gpu_flags(assignment: RankAssignment, config: Dict[str, Any]) -> List
             flags.append('--use_data_direct')
         mem_type = config.get('cudaMemType', '')
         if mem_type:
-            flags.append(f'--cuda_mem_type={_CUDA_MEM_TYPE_MAP.get(mem_type, 0)}')
+            value = CUDA_MEM_TYPE_VALUES.get(mem_type)
+            if value is not None:  # 'auto' -> None -> omit, let C default (VMM) apply
+                flags.append(f'--cuda_mem_type={value}')
 
     return flags
 

@@ -21,6 +21,16 @@ CUresult (*p_cuMemFreeHost)(void *) = NULL;
 CUresult (*p_cuMemFree)(CUdeviceptr) = NULL;
 CUresult (*p_cuMemcpy)(CUdeviceptr, CUdeviceptr, size_t) = NULL;
 CUresult (*p_cuMemcpyDtoD)(CUdeviceptr, CUdeviceptr, size_t) = NULL;
+#if CUDA_VERSION >= 11000
+CUresult (*p_cuMemGetAllocationGranularity)(size_t *granularity, const CUmemAllocationProp *prop, CUmemAllocationGranularity_flags option) = NULL;
+CUresult (*p_cuMemCreate)(CUmemGenericAllocationHandle *handle, size_t size, const CUmemAllocationProp *prop, unsigned long long flags) = NULL;
+CUresult (*p_cuMemAddressReserve)(CUdeviceptr *ptr, size_t size, size_t alignment, CUdeviceptr addr, unsigned long long flags) = NULL;
+CUresult (*p_cuMemMap)(CUdeviceptr ptr, size_t size, size_t offset, CUmemGenericAllocationHandle handle, unsigned long long flags) = NULL;
+CUresult (*p_cuMemSetAccess)(CUdeviceptr ptr, size_t size, const CUmemAccessDesc *desc, size_t count) = NULL;
+CUresult (*p_cuMemUnmap)(CUdeviceptr ptr, size_t size) = NULL;
+CUresult (*p_cuMemRelease)(CUmemGenericAllocationHandle handle) = NULL;
+CUresult (*p_cuMemAddressFree)(CUdeviceptr ptr, size_t size) = NULL;
+#endif
 #ifdef HAVE_CUDA_DMABUF
 CUresult (*p_cuMemGetHandleForAddressRange)(void *, void *, size_t, CUmemRangeHandleType, unsigned int) = NULL;
 #endif
@@ -81,6 +91,16 @@ int load_cuda_library(void) {
         { (void**)&p_cuMemFree,                   "cuMemFree",                    CUDA_VER_3_2  },
         { (void**)&p_cuMemcpy,                    "cuMemcpy",                     CUDA_VER_11_3 },
         { (void**)&p_cuMemcpyDtoD,                "cuMemcpyDtoD",                 CUDA_VER_3_2  },
+#if CUDA_VERSION >= 11000
+        { (void**)&p_cuMemGetAllocationGranularity, "cuMemGetAllocationGranularity", CUDA_VER_11_0 },
+        { (void**)&p_cuMemCreate,                   "cuMemCreate",                   CUDA_VER_11_0 },
+        { (void**)&p_cuMemAddressReserve,           "cuMemAddressReserve",           CUDA_VER_11_0 },
+        { (void**)&p_cuMemMap,                      "cuMemMap",                      CUDA_VER_11_0 },
+        { (void**)&p_cuMemSetAccess,                "cuMemSetAccess",                CUDA_VER_11_0 },
+        { (void**)&p_cuMemUnmap,                    "cuMemUnmap",                    CUDA_VER_11_0 },
+        { (void**)&p_cuMemRelease,                  "cuMemRelease",                  CUDA_VER_11_0 },
+        { (void**)&p_cuMemAddressFree,              "cuMemAddressFree",              CUDA_VER_11_0 },
+#endif
 #ifdef HAVE_CUDA_DMABUF
         { (void**)&p_cuMemGetHandleForAddressRange, "cuMemGetHandleForAddressRange", CUDA_VER_11_7 },
 #endif

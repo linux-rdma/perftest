@@ -18,6 +18,12 @@ from .traffic_patterns import TrafficPattern
 
 GPU_TYPES = {'cuda', 'rocm', 'neuron', 'hl', 'mlu', 'opencl'}
 
+# CUDA memory type name -> --cuda_mem_type value; None means omit the flag
+# (perftest defaults to AUTO: non-localized VMM with fallback to device).
+CUDA_MEM_TYPE_VALUES = {
+    'device': 0, 'managed': 1, 'pinned': 2, 'vmm': 5, 'auto': None,
+}
+
 
 @dataclass(frozen=True)
 class ConfigField:
@@ -154,7 +160,8 @@ TOP_LEVEL_FIELDS = [
                 'Global GPU PCIe bus ID; takes precedence over gpuDeviceId. '
                 'Mutually exclusive with autoDetect.'),
     ConfigField('cudaMemType', 'string', '-',
-                'CUDA memory type: device, managed, pinned.'),
+                'CUDA memory type: device, managed, pinned, vmm, or auto. '
+                'Default (unset) is auto = non-localized VMM with fallback to device.'),
     ConfigField('cudaDmabuf', 'bool', 'false',
                 'Enable --use_cuda_dmabuf for CUDA ranks.'),
     ConfigField('dataDirectMode', 'bool', 'false',
@@ -551,13 +558,28 @@ class ClusterConfig:
         if not mpirun_path:
             raise ValueError("mpirunPath must not be empty")
 
-        gpu_type = self.data.get('gpuType', '')
-        if gpu_type and gpu_type not in GPU_TYPES:
-            raise ValueError(f"Unsupported GPU type: {gpu_type}")
+        gpu_type = self.data.get('gpuType')
+        if gpu_type not in (None, ''):
+            if not isinstance(gpu_type, str):
+                raise ValueError("gpuType must be a string")
+            if gpu_type not in GPU_TYPES:
+                raise ValueError(f"Unsupported GPU type: {gpu_type}")
         for node in self.data.get('testNodes', []):
-            node_gpu_type = node.get('gpuType', '')
-            if node_gpu_type and node_gpu_type not in GPU_TYPES:
-                raise ValueError(f"Unsupported GPU type: {node_gpu_type}")
+            node_gpu_type = node.get('gpuType')
+            if node_gpu_type not in (None, ''):
+                if not isinstance(node_gpu_type, str):
+                    raise ValueError("gpuType must be a string")
+                if node_gpu_type not in GPU_TYPES:
+                    raise ValueError(f"Unsupported GPU type: {node_gpu_type}")
+
+        mem_type = self.data.get('cudaMemType')
+        if mem_type not in (None, ''):
+            if not isinstance(mem_type, str):
+                raise ValueError("cudaMemType must be a string")
+            if mem_type not in CUDA_MEM_TYPE_VALUES:
+                valid = ', '.join(sorted(CUDA_MEM_TYPE_VALUES))
+                raise ValueError(
+                    f"Unsupported cudaMemType: {mem_type} (expected one of {valid})")
 
         if self.data.get('autoDetect'):
             # Reject rather than silently pick a precedence rule - checked
