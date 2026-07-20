@@ -363,7 +363,8 @@ many different options and modes.
  System support required.
 .TP
 .B --cuda_mem_type=<value>
- Set CUDA memory type <value>=0(device,default),1(managed),4(malloc)
+ Set CUDA memory type <value>=0(device),1(managed),4(malloc),5(VMM non-localized GDR)
+ Default is auto (VMM with fallback to device); 0 forces the legacy device path.
  Not relevant for raw_ethernet_fs_rate.
  System support required.
 .TP
