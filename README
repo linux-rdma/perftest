@@ -258,6 +258,17 @@ Special feature detailed explanation in tests:
      Thus --use_cuda=<gpu_index> flag will be available to add to a command line:
      ./ib_write_bw -d ib_dev --use_cuda=<gpu index> -a
 
+     MUSA (Moore Threads Support) GPUDirect support follows the same dynamic
+     loading model as CUDA. If musa.h is not installed in
+     /usr/local/musa/include, pass MUSA_H_PATH to configure:
+     ./autogen.sh && ./configure MUSA_H_PATH=/usr/local/musa/include/musa.h && make -j
+
+     Thus --use_musa=<gpu_index> flag will be available to add to a command line:
+     ./ib_write_bw -d ib_dev --use_musa=<gpu index> --use_musa_dmabuf -a
+     MUSA device-memory ib_write_lat tests must use --write_with_imm explicitly
+     because plain RDMA WRITE latency requires CPU polling of the destination
+     buffer, which is not valid for MUSA device memory.
+
      If the CUDA libraries are not installed in a standard system path,
      set the LDFLAGS environment variable before building so the linker
      can locate them. For example:
