@@ -6,23 +6,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
 #include "host_memory.h"
 #include "host_validation.h"
 #include "perftest_parameters.h"
 
 #if !defined(__FreeBSD__)
+#include <sys/syscall.h>
 #include <sys/mman.h>
+#include <sys/vfs.h>
 #endif
 
-#define SHMAT_ADDR (void *)(0x0UL)
-#define SHMAT_FLAGS (0)
-#define SHMAT_INVALID_PTR ((void *)-1)
 
 #define HUGEPAGE_SIZE_2MB  (2ULL * 1024 * 1024)
 #define HUGEPAGE_SIZE_1GB  (1ULL * 1024 * 1024 * 1024)
+
+#define ALIGN_SIZE(size, align) (((size) + (align) - 1) & ~((align) - 1))
 
 /* MAP_HUGE_* flags for specifying huge page size (Linux 3.8+) */
 #ifndef MAP_HUGE_2MB
@@ -32,29 +32,62 @@
 #define MAP_HUGE_1GB    (30 << 26)  /* 2^30 = 1GB */
 #endif
 
+#ifndef MFD_HUGETLB
+#define MFD_HUGETLB 0x0004U
+#endif
+
 #if !defined(__FreeBSD__)
-int alloc_hugepage_region(int alignment, uint64_t size, void **addr)
+static int create_hugepage_memfd(const char *name)
 {
-	int huge_shmid;
-	uint64_t buf_size = (size + HUGEPAGE_SIZE_2MB - 1) & ~(HUGEPAGE_SIZE_2MB - 1);
+#ifdef SYS_memfd_create
+	return syscall(SYS_memfd_create, name, MFD_HUGETLB);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
 
-	huge_shmid = shmget(IPC_PRIVATE, buf_size, SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-	if (huge_shmid < 0) {
-		fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages\n");
+int alloc_hugepage_region(int alignment, uint64_t size, void **addr,
+			  uint64_t *actual_size)
+{
+	struct statfs fs;
+	int huge_fd;
+	uint64_t buf_size;
+
+	(void)alignment;
+
+	huge_fd = create_hugepage_memfd("perftest-hugepage");
+	if (huge_fd < 0) {
+		fprintf(stderr, "Failed to create hugepage memfd (errno=%d: %s)\n",
+			errno, strerror(errno));
 		return FAILURE;
 	}
 
-	*addr = (void *)shmat(huge_shmid, SHMAT_ADDR, SHMAT_FLAGS);
-	if (*addr == SHMAT_INVALID_PTR) {
-		fprintf(stderr, "Failed to attach shared memory region\n");
+	if (fstatfs(huge_fd, &fs)) {
+		fprintf(stderr, "Failed to get hugepage size (errno=%d: %s)\n",
+			errno, strerror(errno));
+		close(huge_fd);
 		return FAILURE;
 	}
 
-	/* Mark for removal so shmem is freed when process detaches */
-	if (shmctl(huge_shmid, IPC_RMID, 0) != 0) {
-		fprintf(stderr, "Failed to mark shm for removal\n");
+	buf_size = ALIGN_SIZE(size, (uint64_t)fs.f_bsize);
+
+	if (ftruncate(huge_fd, buf_size)) {
+		fprintf(stderr, "Failed to allocate hugepages. Please configure hugepages (errno=%d: %s)\n",
+			errno, strerror(errno));
+		close(huge_fd);
 		return FAILURE;
 	}
+
+	*addr = mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, huge_fd, 0);
+	if (*addr == MAP_FAILED) {
+		fprintf(stderr, "Failed to mmap hugepage memfd (errno=%d: %s)\n",
+			errno, strerror(errno));
+		close(huge_fd);
+		return FAILURE;
+	}
+	close(huge_fd);
+	*actual_size = buf_size;
 
 	return SUCCESS;
 }
@@ -78,8 +111,7 @@ static int alloc_huge_pages_with_fallback(uint64_t size, void **addr,
 
 	for (i = 0; i < 3; i++) {
 		uint64_t aligned = opts[i].page_size
-			? (size + opts[i].page_size - 1) & ~(opts[i].page_size - 1)
-			: size;
+			? ALIGN_SIZE(size, opts[i].page_size) : size;
 		void *ptr = mmap(NULL, aligned, PROT_READ | PROT_WRITE,
 				 MAP_PRIVATE | MAP_ANONYMOUS | opts[i].extra_flags, -1, 0);
 		if (ptr != MAP_FAILED) {
@@ -123,7 +155,7 @@ int host_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 	host_ctx->alloc_size = size;
 #else
 	/* Priority: data_validation -> auto huge pages,
-	 * --use_hugepages -> legacy shmget, otherwise -> memalign */
+	 * --use_hugepages -> hugetlb memfd, otherwise -> memalign */
 	if (host_ctx->use_huge_for_validation) {
 		if (alloc_huge_pages_with_fallback(size, addr, &host_ctx->alloc_type,
 						    &host_ctx->alloc_size, host_ctx->debug) != SUCCESS) {
@@ -131,12 +163,12 @@ int host_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 			return FAILURE;
 		}
 	} else if (host_ctx->use_hugepages) {
-		if (alloc_hugepage_region(alignment, size, addr) != SUCCESS) {
+		if (alloc_hugepage_region(alignment, size, addr,
+					   &host_ctx->alloc_size) != SUCCESS) {
 			fprintf(stderr, "Failed to allocate hugepage region.\n");
 			return FAILURE;
 		}
-		host_ctx->alloc_type = HOST_ALLOC_SHMGET;
-		host_ctx->alloc_size = size;
+		host_ctx->alloc_type = HOST_ALLOC_MEMFD_HUGETLB;
 	} else {
 		*addr = memalign(alignment, size);
 		host_ctx->alloc_type = HOST_ALLOC_MALLOC;
@@ -157,9 +189,7 @@ int host_memory_free_buffer(struct memory_ctx *ctx, int dmabuf_fd, void *addr, u
 	struct host_memory_ctx *host_ctx = container_of(ctx, struct host_memory_ctx, base);
 
 	switch (host_ctx->alloc_type) {
-	case HOST_ALLOC_SHMGET:
-		shmdt(addr);
-		break;
+	case HOST_ALLOC_MEMFD_HUGETLB:
 	case HOST_ALLOC_MMAP_REGULAR:
 	case HOST_ALLOC_MMAP_HUGE_2MB:
 	case HOST_ALLOC_MMAP_HUGE_1GB:
