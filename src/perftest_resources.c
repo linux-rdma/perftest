@@ -4324,7 +4324,7 @@ int ctx_set_credit_wqes(struct pingpong_context *ctx,
 		ctx->ctrl_wr[i].opcode = IBV_WR_RDMA_WRITE;
 		ctx->ctrl_wr[i].sg_list = &ctx->ctrl_sge_list[i];
 		ctx->ctrl_wr[i].num_sge = 1;
-		ctx->ctrl_wr[i].wr_id = i;
+		ctx->ctrl_wr[i].wr_id = build_wr_id(i, i);
 		ctx->ctrl_wr[i].send_flags = IBV_SEND_SIGNALED;
 		ctx->ctrl_wr[i].next = NULL;
 
