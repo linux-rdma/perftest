@@ -397,16 +397,15 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 
 	#ifdef HAVE_MLX5DV
 	if (dev_attr.vendor_id == MLNX_VENDOR_ID) {
-		struct mlx5dv_context ctx_dv;
+		struct mlx5dv_context ctx_dv = {};
 		#ifdef HAVE_OOO_RECV_WRS
 		ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 		#endif
 
-		if (mlx5dv_query_device(ctx->context, &ctx_dv)) {
-			fprintf(stderr, " Failed to query device capabilities\n");
-			return FAILURE;
-		}
-		local_params.mlx5dv_comp_mask = hton_64(ctx_dv.comp_mask);
+		/* Devices that cannot report DV capabilities (mlx4) have none.
+		 * Leaving the mask at 0 is accurate, and keeps both peers in sync. */
+		if (!mlx5dv_query_device(ctx->context, &ctx_dv))
+			local_params.mlx5dv_comp_mask = hton_64(ctx_dv.comp_mask);
 	}
 	#endif
 

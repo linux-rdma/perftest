@@ -2686,15 +2686,12 @@ void check_bf_support(struct pingpong_context *ctx)
 		return;
 
 	#ifdef HAVE_MLX5DV_BF_FLAG
-	struct mlx5dv_context ctx_dv;
-	int ret;
+	struct mlx5dv_context ctx_dv = {};
 
-	ret = mlx5dv_query_device(ctx->context, &ctx_dv);
-	if (ret) {
-		fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
-		return;
-	}
-	if (!(ctx_dv.flags & MLX5DV_CONTEXT_FLAGS_BLUEFLAME)) {
+	/* Devices that cannot report DV capabilities (mlx4) say nothing about
+	 * Blueflame, so stay quiet instead of warning about it. */
+	if (!mlx5dv_query_device(ctx->context, &ctx_dv) &&
+	    !(ctx_dv.flags & MLX5DV_CONTEXT_FLAGS_BLUEFLAME)) {
 		fprintf(stderr, "Warning: Blueflame is not supported in the system\n");
 		printf(RESULT_LINE);
 	}
@@ -3303,14 +3300,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		if (!user_param->no_enhanced_reorder && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
 			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
-			int ret = mlx5dv_query_device(ctx->context, &ctx_dv);
-
-			if (ret) {
-				fprintf(stderr, "Failed to query device capabilities, ret=%d\n", ret);
-				return NULL;
-			}
-
-			if (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS) {
+			/* No DV capabilities: leave enhanced reorder off rather
+			 * than failing QP creation. */
+			if (!mlx5dv_query_device(ctx->context, &ctx_dv) &&
+			    (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS)) {
 				if ((user_param->connection_type == RC && ctx_dv.ooo_recv_wrs_caps.max_rc < user_param->rx_depth) ||
 				(user_param->connection_type == DC && ctx_dv.ooo_recv_wrs_caps.max_dct < user_param->rx_depth))
 				{
