@@ -83,6 +83,8 @@
 
 #define SYNC_SPEC_ID	 (5)
 
+#define MAX_TIMEOUT_ITER (30000) /* Max iterations to wait for client to poll cq during handshake. */
+
 #define KEY_PRINT_FMT "%04x:%04x:%06x:%06x:%08x:%016llx:%08x"
 #define KEY_PRINT_FMT_DV "%04x:%04x:%06x:%06x:%08x:%016llx:%016llx:%08x"
 
