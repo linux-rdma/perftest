@@ -4472,6 +4472,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
+	cycles_t    batch_start = 0;
 
 	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
 	if (!dyn_ctx) {
@@ -4479,6 +4480,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 		return FAILURE;
 	}
 
+	uint64_t    batch_ccnt = 0;
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
 		ctx_post_send_work_request_func_pointer(ctx, user_param);
@@ -4512,6 +4514,9 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 
 	if (user_param->test_type == ITERATIONS && user_param->noPeak == ON)
 		user_param->tposted[0] = get_cycles();
+
+	if(user_param->report_min_bw)
+		batch_start = get_cycles();
 
 	/* If using rate limiter, calculate gap time between bursts */
 	if (user_param->rate_limit_type == SW_RATE_LIMIT ) {
@@ -4684,6 +4689,16 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 						goto cleaning;
 					}
 
+		}
+		if(user_param->report_min_bw) {
+			if (totccnt >= (user_param->report_min_bw + batch_ccnt) && totscnt >= user_param->report_min_bw) {
+				cycles_t batch_duration = get_cycles() - batch_start;
+				batch_start = get_cycles();
+				batch_ccnt = totccnt;
+				if(batch_duration > user_param->report_min_bw_cycles) {
+					user_param->report_min_bw_cycles = batch_duration;
+				}
+			}
 		}
 	}
 	if (user_param->noPeak == ON && user_param->test_type == ITERATIONS)
