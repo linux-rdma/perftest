@@ -5901,8 +5901,13 @@ int run_iter_bi(struct pingpong_context *ctx,
 					scredit_for_qp[get_wr_id_qp_index(wc_tx[i].wr_id)]--;
 					tot_scredit--;
 				} else  {
-					totccnt += user_param->cq_mod;
-					ctx->ccnt[(int)get_wr_id_qp_index(wc_tx[i].wr_id)] += user_param->cq_mod;
+					int fill = user_param->cq_mod;
+					qp_index = (int)get_wr_id_qp_index(wc_tx[i].wr_id);
+					if (user_param->fill_count && ctx->ccnt[qp_index] + user_param->cq_mod > user_param->iters) {
+							fill = user_param->iters - ctx->ccnt[qp_index];
+					}
+					totccnt += fill;
+					ctx->ccnt[qp_index] += fill;
 
 					if (user_param->noPeak == OFF) {
 
