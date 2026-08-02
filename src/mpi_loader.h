@@ -26,6 +26,7 @@ typedef struct {
 	int (*MPI_Comm_rank)(mpi_comm_t, int*);
 	int (*MPI_Comm_size)(mpi_comm_t, int*);
 	int (*MPI_Barrier)(mpi_comm_t);
+	int (*MPI_Abort)(mpi_comm_t, int);
 	int (*MPI_Gather)(void*, int, mpi_datatype_t,
 			  void*, int, mpi_datatype_t,
 			  int, mpi_comm_t);
@@ -43,6 +44,9 @@ int mpi_try_init(int *argc, char ***argv);
 
 /* Barrier; no-op if MPI unavailable. */
 int mpi_barrier(void);
+
+/* Abort all ranks in MPI_COMM_WORLD; returns only if abort fails/unavailable. */
+int mpi_abort(int error_code);
 
 /* Gather elem_size bytes from each rank to root 0; no-op if unavailable. */
 int mpi_gather_to_root(const void *send, void *recv, size_t elem_size);

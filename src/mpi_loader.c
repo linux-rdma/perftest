@@ -61,6 +61,7 @@ static int resolve_mpi_functions(void)
 		{ "MPI_Comm_rank", (void **)&g_mpi.MPI_Comm_rank },
 		{ "MPI_Comm_size", (void **)&g_mpi.MPI_Comm_size },
 		{ "MPI_Barrier",   (void **)&g_mpi.MPI_Barrier   },
+		{ "MPI_Abort",     (void **)&g_mpi.MPI_Abort     },
 		{ "MPI_Gather",    (void **)&g_mpi.MPI_Gather    },
 		{ "MPI_Bcast",     (void **)&g_mpi.MPI_Bcast     },
 	};
@@ -156,6 +157,13 @@ int mpi_barrier(void)
 		return g_mpi.MPI_Barrier(g_mpi.comm_world);
 	}
 	return 0;
+}
+
+int mpi_abort(int error_code)
+{
+	if (g_mpi.available && g_mpi.MPI_Abort)
+		return g_mpi.MPI_Abort(g_mpi.comm_world, error_code);
+	return -1;
 }
 
 int mpi_gather_to_root(const void *send, void *recv, size_t elem_size)

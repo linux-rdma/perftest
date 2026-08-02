@@ -3,7 +3,6 @@
  * and the ABI/barrier-protocol contract.
  */
 
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -132,19 +131,36 @@ void cluster_capture_lat_duration(unsigned long size, uint64_t iters,
 
 void cluster_barrier(cluster_phase_t phase)
 {
-#ifndef NDEBUG
 	/* Verify the documented phase order within each test cycle. The cycle
 	 * restarts whenever phase 0 is seen, so repeated cycles are fine. */
 	static int expected = CLUSTER_PHASE_PRE_HANDSHAKE;
+	int rc;
+
+	/* Cluster phase ordering has no meaning for standalone tests. */
+	if (!g_mpi.available)
+		return;
 
 	if (phase == CLUSTER_PHASE_PRE_HANDSHAKE)
 		expected = CLUSTER_PHASE_PRE_HANDSHAKE;
-	assert(phase == expected && "cluster barrier phases issued out of order");
+
+	if (phase != expected) {
+		cluster_fatalf("Barrier phase mismatch on rank %d: expected %d, got %d",
+			       g_mpi.rank, expected, phase);
+		fflush(stderr);
+		mpi_abort(1);
+		_exit(1);
+	}
+
 	expected = (phase + 1) % CLUSTER_PHASE__COUNT;
-#else
-	(void)phase;
-#endif
-	mpi_barrier();
+
+	rc = mpi_barrier();
+	if (rc != 0) {
+		cluster_fatalf("MPI_Barrier failed on rank %d at phase %d (rc=%d)",
+			       g_mpi.rank, phase, rc);
+		fflush(stderr);
+		mpi_abort(1);
+		_exit(1);
+	}
 }
 
 void cluster_barrier_pre_handshake(const struct perftest_parameters *user_param)

@@ -244,9 +244,9 @@ int main(int argc, char *argv[])
 		goto free_devname;
 	}
 
-	if (!user_param.connectionless){
-		cluster_barrier_pre_handshake(&user_param);
+	cluster_barrier_pre_handshake(&user_param);
 
+	if (!user_param.connectionless){
 		if (user_param.output == FULL_VERBOSITY && user_param.machine == SERVER) {
 			printf("\n************************************\n");
 			printf("* Waiting for client to connect... *\n");
