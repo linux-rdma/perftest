@@ -284,8 +284,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (user_param.test_method == RUN_ALL) {
+		uint64_t max_size = user_param.size;
 
-		for (i = 1; i < 24 ; ++i) {
+		for (i = 1; i < 24 && ((uint64_t)1 << i) <= max_size ; ++i) {
 			user_param.size = (uint64_t)1 << i;
 
 			if (user_param.verb == WRITE_IMM) {

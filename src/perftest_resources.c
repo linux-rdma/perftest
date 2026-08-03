@@ -2607,6 +2607,20 @@ static int device_disables_strong_ordered_write(struct ibv_context *context)
 #endif
 }
 
+/* Last-byte polling survives relaxed ordering only while the payload stays
+ * inside one cache line, and only for a CPU poller. */
+static int write_lat_ro_cacheline_ok(struct perftest_parameters *user_param)
+{
+	if (user_param->memory_type != MEMORY_HOST)
+		return 0;
+
+	/* size is already MAX_SIZE here, the sweep is capped after this check. */
+	if (user_param->test_method == RUN_ALL)
+		return 1;
+
+	return user_param->size <= DEF_CACHE_LINE_SIZE;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2656,9 +2670,24 @@ int verify_params_with_device_context(struct ibv_context *context,
 	if (device_disables_strong_ordered_write(context)) {
 		/* Device forbids strongly-ordered writes/mkeys (relaxed ordering forced). */
 		if (user_param->verb == WRITE && user_param->tst == LAT) {
-			fprintf(stderr, RESULT_LINE);
-			fprintf(stderr, " Write latency test is not supported on this device/fabric (relaxed ordering is forced).\n");
-			return FAILURE;
+			if (!write_lat_ro_cacheline_ok(user_param)) {
+				fprintf(stderr, RESULT_LINE);
+				fprintf(stderr, "Write latency test is not supported on this device/fabric (relaxed ordering is forced).\n");
+				fprintf(stderr, "Use write with immediate (--write_with_imm) instead.\n");
+				fprintf(stderr, "Alternatively use host memory with a size of up to %d bytes, or -a to sweep up to it.\n",
+					DEF_CACHE_LINE_SIZE);
+				return FAILURE;
+			}
+
+			fprintf(stderr, "WARNING: relaxed ordering is forced, write latency assumes %d B cache line atomicity\n",
+				DEF_CACHE_LINE_SIZE);
+
+			/* Sweeps start at MAX_SIZE, cap so polling stays inside one line. */
+			if (user_param->test_method == RUN_ALL)
+				user_param->size = DEF_CACHE_LINE_SIZE;
+
+			user_param->disable_pcir = 0;
+			return SUCCESS;
 		}
 
 #ifdef HAVE_RO
