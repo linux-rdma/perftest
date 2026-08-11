@@ -36,7 +36,7 @@ Before running any test, do this on **every** host that will participate
 
 1. **Build and install perftest** — `./autogen.sh && ./configure && make -j
    && sudo make install`. Details: [Installation](#installation).
-2. **Set up the Open MPI environment** — `source set_mpi.sh` (must be
+2. **Set up the Open MPI environment** — `source set_mpi` (must be
    `source`d, not executed). Optional on the launcher (it auto-detects Open
    MPI), required on every worker host. Details:
    [OpenMPI Environment Setup](#openmpi-environment-setup).
@@ -708,12 +708,12 @@ Example configuration files are provided in `cluster_mode/examples/`:
 - **Passwordless SSH** between all participating hosts
 
 The easiest way to set the Open MPI environment up on every host (including
-non-interactive SSH sessions) is [set_mpi.sh](../set_mpi.sh) — see
+non-interactive SSH sessions) is [set_mpi](../set_mpi) — see
 ["OpenMPI Environment Setup"](#openmpi-environment-setup) below.
 
 ### OpenMPI Environment Setup
 
-[set_mpi.sh](../set_mpi.sh) detects a usable Open MPI installation and exports
+[set_mpi](../set_mpi) detects a usable Open MPI installation and exports
 `MPI_DIR`, `MPI_HOME`, `OMPI_HOME`, `PATH`, and `LD_LIBRARY_PATH` for it —
 equivalent to adding the following to `~/.bashrc` on every host, with that
 host's actual install path:
@@ -746,24 +746,24 @@ never duplicates `PATH`/`LD_LIBRARY_PATH` entries.
 > path** as the one detected on the launcher. This auto-detection never
 > overrides an explicit `mpirunPath`/`mpiPrefix`. It only covers the
 > launcher process itself — every **worker** host still needs its own
-> working Open MPI install (via `set_mpi.sh` or otherwise); auto-detection
+> working Open MPI install (via `set_mpi` or otherwise); auto-detection
 > does not set anything up remotely.
 
 **Current shell** (either form works; pick one):
 
 ```bash
 # Source it directly - applies to this shell
-source set_mpi.sh
+source set_mpi
 
 # Or emit export statements and eval them
-eval "$(set_mpi.sh --emit-exports)"
+eval "$(set_mpi --emit-exports)"
 ```
 
 **DOCA OpenMPI present** (e.g. RHEL/DOCA host with
 `/usr/mpi/gcc/openmpi-5.0.10.../`):
 
 ```bash
-$ source set_mpi.sh
+$ source set_mpi
 [set_mpi] Using OpenMPI at: /usr/mpi/gcc/openmpi-5.0.10rc2.2605050727
 ```
 
@@ -773,11 +773,11 @@ Ubuntu `openmpi-bin` package or an RHEL `openmpi` module):
 ```bash
 # Ubuntu/Debian
 sudo apt install -y openmpi-bin libopenmpi-dev
-source set_mpi.sh   # falls back to the apt-installed mpirun
+source set_mpi   # falls back to the apt-installed mpirun
 
 # RHEL/CentOS/Fedora
 sudo dnf install -y openmpi openmpi-devel
-source set_mpi.sh   # falls back to the dnf-installed mpirun
+source set_mpi   # falls back to the dnf-installed mpirun
 ```
 
 If no Open MPI installation can be found anywhere, the script fails clearly
@@ -790,7 +790,7 @@ message as a command.
 root):
 
 ```bash
-sudo set_mpi.sh --install-system-wide
+sudo set_mpi --install-system-wide
 ```
 
 This installs a copy of the script and writes `/etc/profile.d/doca-openmpi.sh`,
@@ -800,8 +800,8 @@ found (it will never break a login shell).
 **Verify `mpirun` resolves correctly:**
 
 ```bash
-set_mpi.sh --show      # what would be selected, without changing anything
-set_mpi.sh --verify    # applies the environment and actually runs
+set_mpi --show      # what would be selected, without changing anything
+set_mpi --verify    # applies the environment and actually runs
                            # `which mpirun` + `mpirun --version`
 ```
 

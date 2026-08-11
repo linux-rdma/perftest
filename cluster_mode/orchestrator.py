@@ -323,7 +323,7 @@ class Orchestrator:
         mpi_env = None
 
         # mpirun not resolvable via config/PATH: fall back to auto-detecting
-        # a usable OpenMPI install (same algorithm as set_mpi.sh) instead of
+        # a usable OpenMPI install (same algorithm as set_mpi) instead of
         # requiring the launcher to source it first. Never overrides an
         # explicit mpirunPath.
         if mpirun_path == 'mpirun' and not _mpirun_resolvable(mpirun_path):
@@ -342,7 +342,7 @@ class Orchestrator:
             print(f"\nERROR: mpirun not found or not executable: {mpirun_path}",
                   file=sys.stderr)
             print("Auto-detection also failed. Set JSON mpirunPath, add Open "
-                  "MPI bin/ to PATH, or source set_mpi.sh.", file=sys.stderr)
+                  "MPI bin/ to PATH, or source set_mpi.", file=sys.stderr)
             sys.exit(1)
 
         self.resolve_ranks()

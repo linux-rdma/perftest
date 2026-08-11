@@ -12,3 +12,4 @@ perftest_cluster usr/bin/
 perftest_nic_gpu_discover usr/bin/
 perftest_cluster_worker usr/bin/
 cluster_mode/*.py usr/libexec/perftest/cluster_mode/
+set_mpi usr/bin/

@@ -75,7 +75,7 @@ libperftest_a_SOURCES += src/dm_memory.c
 endif
 
 bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw perftest_cluster_worker
-bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices perftest_cluster perftest_nic_gpu_discover
+bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices perftest_cluster perftest_nic_gpu_discover set_mpi
 
 # Cluster mode scripts. perftest_cluster substitutes $(libexecdir) at make time;
 # perftest_nic_gpu_discover is an executable copy of nic_gpu_discovery.py for remote SSH use.
@@ -91,7 +91,7 @@ perftest_nic_gpu_discover: cluster_mode/nic_gpu_discovery.py
 
 CLEANFILES = perftest_cluster perftest_nic_gpu_discover
 
-EXTRA_DIST = scripts/perftest_cluster.in cluster_mode/nic_gpu_discovery.py
+EXTRA_DIST = scripts/perftest_cluster.in cluster_mode/nic_gpu_discovery.py set_mpi
 
 # Install cluster_mode/*.py to $(libexecdir)/perftest/cluster_mode/.
 # These are runtime-loaded by the 'perftest_cluster' wrapper via sys.path injection.

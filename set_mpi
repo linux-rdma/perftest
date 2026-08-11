@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# set_mpi.sh - Detect and expose a usable OpenMPI installation.
+# set_mpi - Detect and expose a usable OpenMPI installation.
 #
 # Finds a working `mpirun`, preferring DOCA-style installs under
 # /usr/mpi/gcc/openmpi-* (the layout DOCA's OpenMPI package uses), and
@@ -11,17 +11,17 @@
 #
 # USAGE
 #   Apply to the current shell (pick one):
-#     source set_mpi.sh
-#     eval "$(set_mpi.sh --emit-exports)"
+#     source set_mpi
+#     eval "$(set_mpi --emit-exports)"
 #
 #   Inspect what would be selected, without changing anything:
-#     set_mpi.sh --show
+#     set_mpi --show
 #
 #   Apply and verify mpirun actually runs:
-#     set_mpi.sh --verify
+#     set_mpi --verify
 #
 #   Install system-wide (persists across logins, requires root):
-#     sudo set_mpi.sh --install-system-wide
+#     sudo set_mpi --install-system-wide
 #
 # SAFETY
 #   This script is meant to be sourced, so it never calls `exit` while
@@ -242,7 +242,7 @@ cmd_show() {
 }
 
 # Prints only 'export ...' lines on stdout, so this is safe to use as
-# eval "$(set_mpi.sh --emit-exports)". Runs in a subshell: detection
+# eval "$(set_mpi --emit-exports)". Runs in a subshell: detection
 # failure prints its diagnostic to stderr and produces no stdout output
 # at all, so a failed eval is simply a no-op rather than evaluating an
 # error message as a shell command.
@@ -330,7 +330,7 @@ cmd_install_system_wide() {
     # so a missing helper or missing OpenMPI must be a silent no-op, not
     # a login error.
     cat > "${profile_path}" <<EOF
-# Installed by set_mpi.sh --install-system-wide.
+# Installed by set_mpi --install-system-wide.
 # Safe to source multiple times; does nothing if no OpenMPI is found.
 _doca_openmpi_helper="${helper_path}"
 if [ -r "\${_doca_openmpi_helper}" ]; then

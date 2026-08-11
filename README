@@ -583,10 +583,10 @@ To use cluster mode, do the following on every host that will participate
   2. Open MPI: perftest_cluster run auto-detects a usable Open MPI install
      on the launcher, so no setup is normally needed there. If you hit an
      error about mpirun/prted not found, run:
-       source set_mpi.sh
-     (must be "source"d - running "./set_mpi.sh" directly only affects that
+       source set_mpi
+     (must be "source"d - running "./set_mpi" directly only affects that
      subprocess). Every WORKER host still needs its own Open MPI install
-     (set_mpi.sh there too, or sudo set_mpi.sh --install-system-wide).
+     (set_mpi there too, or sudo set_mpi --install-system-wide).
 
   3. [Only on launcher host] Set up passwordless SSH so the launcher host can reach every other host:
        ssh-keygen -t rsa          # if no key exists on the launcher

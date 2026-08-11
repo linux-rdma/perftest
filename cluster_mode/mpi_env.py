@@ -1,4 +1,4 @@
-"""Auto-detect OpenMPI for cluster mode (same algorithm as set_mpi.sh).
+"""Auto-detect OpenMPI for cluster mode (same algorithm as set_mpi).
 
 Detection only — callers apply the result. Override: DOCA_OPENMPI_ROOT_GLOB
 (default /usr/mpi/gcc).
