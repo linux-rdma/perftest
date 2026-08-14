@@ -91,6 +91,15 @@ if test "x$HAVE_REG_DMABUF_MR" = "xyes"; then
 	AC_DEFINE([HAVE_REG_DMABUF_MR], [1], [Enable HAVE_REG_DMABUF_MR])
 fi
 
+AC_CHECK_HEADERS([linux/dma-heap.h], [HAVE_DMA_HEAP=yes], [HAVE_DMA_HEAP=no])
+if test "x$HAVE_REG_DMABUF_MR" = "xyes" && test "x$HAVE_DMA_HEAP" = "xyes"; then
+	HAVE_SYSTEM_DMABUF=yes
+	AC_DEFINE([HAVE_SYSTEM_DMABUF], [1], [Enable system DMA-BUF memory])
+else
+	HAVE_SYSTEM_DMABUF=no
+fi
+AM_CONDITIONAL([SYSTEM_DMABUF], [test "x$HAVE_SYSTEM_DMABUF" = "xyes"])
+
 AC_CHECK_LIB([ibverbs], [ibv_dm_export_dmabuf_fd], [HAVE_IB_DM_DMABUF=yes], [HAVE_IB_DM_DMABUF=no])
 AM_CONDITIONAL([IB_DM_DMABUF], [test "x$HAVE_IB_DM_DMABUF" = "xyes"])
 if test "x$HAVE_IB_DM_DMABUF" = "xyes"; then

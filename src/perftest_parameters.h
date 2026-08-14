@@ -457,7 +457,8 @@ enum memory_type {
 	MEMORY_HL,
 	MEMORY_MLU,
 	MEMORY_OPENCL,
-	MEMORY_DM
+	MEMORY_DM,
+	MEMORY_SYSTEM_DMABUF
 };
 
 enum cuda_mem_type {
@@ -628,6 +629,7 @@ struct perftest_parameters {
 	int                             gpu_touch;
 	char				*dm_ib_devname;
 	int				use_ib_dm_dmabuf;
+	int				use_system_dmabuf;
 	char				*mmap_file;
 	unsigned long			mmap_offset;
 	int				use_cc_unprotected;

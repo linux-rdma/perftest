@@ -431,6 +431,11 @@ many different options and modes.
  must fit within the device's max_dm_size.
  System support required (rdma-core with ibv_dm_export_dmabuf_fd).
 .TP
+.B --use_sys_dmabuf
+ Use system memory allocated from /dev/dma_heap/system and registered as a
+ DMA-BUF memory region with ibv_reg_dmabuf_mr.
+ System support required (Linux DMA heaps and rdma-core DMA-BUF registration).
+.TP
 .B --use_opencl=<opencl device id>
  Use OpenCl specific device for GPUDirect RDMA testing
  Not relevant for raw_ethernet_fs_rate.
