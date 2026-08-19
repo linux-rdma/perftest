@@ -41,6 +41,7 @@ AC_SUBST(MINOR_VERSION)
 
 AC_ARG_VAR(HAVE_OPENCL, opencl support)
 AC_ARG_VAR(CUDA_H_PATH, help-string)
+AC_ARG_VAR(SUPA_H_PATH, help-string)
 AC_ARG_VAR(MUSA_H_PATH, help-string)
 AC_ARG_ENABLE([cudart],
               [AS_HELP_STRING([--enable-cudart],
@@ -450,6 +451,23 @@ AM_CONDITIONAL([CUDA_DMA_BUF_MAPPING_TYPE_PCIE_SUPPORT],[test "x$CUDA_DMA_BUF_MA
 AM_CONDITIONAL([CUDA], [test "$cuda_h_path"])
 AM_CONDITIONAL([HAVE_CUDA], [test "$cuda_h_path"])
 AM_CONDITIONAL([HAVE_CUDART], [test "x$enable_cudart" = "xyes"])
+
+# Check for SUPA header file in user defined path
+if [test "$SUPA_H_PATH" ]; then
+	AC_DEFINE([HAVE_SUPA], [1], [Enable SUPA feature])
+	AC_DEFINE_UNQUOTED([SUPA_PATH], "$SUPA_H_PATH" , [Enable SUPA feature])
+	LIBS=$LIBS" -lsupa"
+	AC_CHECK_LIB([supa], [suMemGetHandleForAddressRange], [HAVE_SUPA_SUMEMGETHANDLEFORADDRESSRANGE=yes], [HAVE_SUPA_SUMEMGETHANDLEFORADDRESSRANGE=no])
+	AC_TRY_LINK([
+	#include <$SUPA_H_PATH>],
+	[int x = SU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD|SU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED;],
+	[SUPA_DMA_BUF_PARAMETERS_SUPPORT=yes], [SUPA_DMA_BUF_PARAMETERS_SUPPORT=no])
+	if [test "x$HAVE_REG_DMABUF_MR" = "xyes"] && [test "x$HAVE_SUPA_SUMEMGETHANDLEFORADDRESSRANGE" = "xyes"] && [test "x$SUPA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"]; then
+		AC_DEFINE([HAVE_SUPA_DMABUF], [1], [Enable SUPA DMABUF feature])
+	fi
+fi
+AM_CONDITIONAL([SUPA_DMA_BUF_PARAMETERS_SUPPORT],[test "x$SUPA_DMA_BUF_PARAMETERS_SUPPORT" = "xyes"])
+AM_CONDITIONAL([SUPA], [test "$SUPA_H_PATH"])
 
 # Check for MUSA header file in common locations.
 AC_MSG_CHECKING([for MUSA header file])

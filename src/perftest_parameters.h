@@ -455,6 +455,7 @@ enum memory_type {
 	MEMORY_HOST,
 	MEMORY_MMAP,
 	MEMORY_CUDA,
+	MEMORY_SUPA,
 	MEMORY_MUSA,
 	MEMORY_ROCM,
 	MEMORY_NEURON,
@@ -616,6 +617,9 @@ struct perftest_parameters {
 	int				use_cuda_dmabuf;
 	int				use_cuda_pcie_mapping;
 	int				use_data_direct;
+	int				supa_device_id;
+	char				*supa_device_bus_id;
+	int				use_supa_dmabuf;
 	int				musa_device_id;
 	char				*musa_device_bus_id;
 	int				use_musa_dmabuf;
