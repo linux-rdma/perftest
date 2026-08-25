@@ -35,7 +35,7 @@ AUTOMAKE_OPTIONS= subdir-objects
 
 noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c
-noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/musa_memory.h
+noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/musa_memory.h src/supa_memory.h
 
 AM_CFLAGS =
 
@@ -44,6 +44,10 @@ src/host_validation.$(OBJEXT): CFLAGS += @SIMD_CFLAGS@
 
 if CUDA
 libperftest_a_SOURCES += src/cuda_memory.c src/cuda_loader.h src/cuda_loader.c
+endif
+
+if SUPA
+libperftest_a_SOURCES += src/supa_memory.c
 endif
 
 if MUSA
