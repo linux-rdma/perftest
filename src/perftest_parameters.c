@@ -1,3 +1,4 @@
+#include "system_dmabuf_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -832,6 +833,11 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --use_cc_unprotected");
 		printf(" Allow unprotected memory allocation for CoCo guests\n");
 
+		if (system_dmabuf_memory_supported()) {
+			printf("      --use_sys_dmabuf");
+			printf(" Use system-memory DMA-heap dma-buf MR (ibv_reg_dmabuf_mr)\n");
+		}
+
 		printf("      --use_hugepages ");
 		printf(" Use Hugepages instead of contig, memalign allocations.\n");
 	}
@@ -1079,6 +1085,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->opencl_device_id	= 0;
 	user_param->dm_ib_devname	= NULL;
 	user_param->use_ib_dm_dmabuf	= 0;
+	user_param->use_system_dmabuf	= 0;
 	user_param->gpu_touch		= GPU_NO_TOUCH;
 	user_param->mmap_file		= NULL;
 	user_param->mmap_offset		= 0;
@@ -3037,6 +3044,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int opencl_platform_id_flag = 0;
 	static int use_ib_dm_dmabuf_flag = 0;
 	static int use_cc_unprotected_flag = 0;
+	static int use_system_dmabuf_flag = 0;
 	static int gpu_touch_flag = 0;
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
@@ -3242,6 +3250,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "opencl_platform_id", .has_arg = 1, .flag = &opencl_platform_id_flag, .val = 1},
 			{ .name = "use_ib_dm_dmabuf",	.has_arg = 1, .flag = &use_ib_dm_dmabuf_flag, .val = 1},
 			{ .name = "use_cc_unprotected", .has_arg = 0, .flag = &use_cc_unprotected_flag, .val = 1},
+			{ .name = "use_sys_dmabuf",	.has_arg = 0, .flag = &use_system_dmabuf_flag, .val = 1},
 			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
@@ -3703,7 +3712,8 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_mlu_flag && !mlu_memory_supported()) ||
 				    (use_mlu_dmabuf_flag && !mlu_memory_dmabuf_supported()) ||
 				    (use_opencl_flag && !opencl_memory_supported()) ||
-				    (use_ib_dm_dmabuf_flag && !dm_memory_dmabuf_supported())) {
+				    (use_ib_dm_dmabuf_flag && !dm_memory_dmabuf_supported()) ||
+				    (use_system_dmabuf_flag && !system_dmabuf_memory_supported())) {
 					printf(" Unsupported memory type\n");
 					return FAILURE;
 				}
@@ -3714,7 +3724,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
 				    (mmap_file_flag || use_mlu_flag || use_neuron_flag || use_hl_flag ||
-						use_ib_dm_dmabuf_flag ||
+						use_ib_dm_dmabuf_flag || use_system_dmabuf_flag ||
 					 (use_rocm_flag && user_param->memory_type != MEMORY_ROCM) ||
 					 ((use_musa_flag || use_musa_bus_id_flag) && user_param->memory_type != MEMORY_MUSA) ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
@@ -3885,6 +3895,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (use_cc_unprotected_flag) {
 					user_param->use_cc_unprotected = 1;
 					use_cc_unprotected_flag = 0;
+				}
+				if (use_system_dmabuf_flag) {
+					user_param->use_system_dmabuf = 1;
+					user_param->memory_type = MEMORY_SYSTEM_DMABUF;
+					user_param->memory_create = system_dmabuf_memory_create;
+					use_system_dmabuf_flag = 0;
 				}
 				if (gpu_touch_flag) {
 					if (!cuda_gpu_touch_supported()) {
