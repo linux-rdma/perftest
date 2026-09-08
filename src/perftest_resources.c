@@ -5256,7 +5256,10 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						recv_offset = wc[i].imm_data;
 						data_length = wc[i].byte_len;
 						expected_data_addr = (uint64_t)ctx->validation_buf[qp_index] + recv_offset;
-						actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
+						if (user_param->verb == SEND_IMM)
+							actual_data_addr = ctx->recv_sge_list[(int)get_wr_index(wc[i].wr_id)].addr;
+						else
+							actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
 
 						if (memcmp((void*)expected_data_addr, (void*)actual_data_addr, data_length)) {
 							fprintf(stderr, "Data validation comparison failed.\n");
