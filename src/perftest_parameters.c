@@ -579,9 +579,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("                         ");
 		printf(" sync: validate inline on the receive path, works on any transport and device\n");
 		printf("                         ");
-		printf("       but throttles the sender. Write BW with immediate only, and requires\n");
+		printf("       but throttles the sender. Send BW or write BW with immediate only\n");
 		printf("                         ");
-		printf("       post_list == tx_depth and recv_post_list == rx_depth\n");
+		printf("       Requires post_list == tx_depth and recv_post_list == rx_depth\n");
 		printf("      --data_validation_fill=<random|serial|pattern> ");
 		printf(" How sync data validation generates the payload. Random by default\n");
 		printf("                         ");
@@ -2517,9 +2517,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (validation_is_sync(user_param->data_validation)) {
-		if (user_param->tst != BW || user_param->verb != WRITE_IMM) {
+		if (user_param->tst != BW || (user_param->verb != SEND_IMM && user_param->verb != WRITE_IMM)) {
 			printf(RESULT_LINE);
-			fprintf(stderr, " Synchronous data validation can only be used with write with immediate BW test.\n");
+			fprintf(stderr, " Synchronous data validation can only be used with send bw or write bw with immediate tests.\n");
 			exit(1);
 		}
 
