@@ -407,6 +407,9 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 /*Types rate limit*/
 enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RATE_LIMIT};
 
+/* External declaration for the validation fill types string array */
+extern const char *validationFillStr[];
+
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
 
@@ -752,6 +755,7 @@ struct perftest_parameters {
 	int				disable_numa;
 	enum validation_fill		validation_fill;
 	uint32_t			data_start_value;
+	bool				dump_full_buffers;
 };
 
 struct report_options {
