@@ -41,7 +41,7 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
-static const char *validationFillStr[] = {"none", "random", "serial", "pattern"};
+const char *validationFillStr[] = {"none", "random", "serial", "pattern"};
 #ifdef HAVE_HNSDV
 static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
 #endif
@@ -590,6 +590,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" pattern: contents of the file given by --payload_file_path\n");
 		printf("      --data_start_value ");
 		printf(" Starting value for serial data validation. Set to 0 by default\n");
+		printf("      --dump_full_buffers ");
+		printf(" Dump the full buffers on a data validation failure, not only the\n");
+		printf("                         ");
+		printf(" mismatching DWORDs. A failure under -a can reach tens of megabytes\n");
 		printf("      --data_validation_debug ");
 		printf(" Enable verbose debug output for data validation\n");
 	}
@@ -1188,6 +1192,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	CPU_ZERO(&user_param->cpu_affinity);
 	user_param->validation_fill	= VALIDATION_FILL_NONE;
 	user_param->data_start_value	= 0;
+	user_param->dump_full_buffers	= false;
 }
 
 static int open_file_write(const char* file_path)
@@ -3159,6 +3164,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int use_send_with_imm_flag = 0;
 	static int validation_fill_flag = 0;
 	static int data_start_value_flag = 0;
+	static int dump_full_buffers_flag = 0;
 	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 	static int unsolicited_write_flag = 0;
 	#endif
@@ -3407,6 +3413,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
 			{.name = "data_validation_fill", .has_arg = 1, .flag = &validation_fill_flag, .val = 1 },
 			{.name = "data_start_value", .has_arg = 1, .flag = &data_start_value_flag, .val = 1 },
+			{.name = "dump_full_buffers", .has_arg = 0, .flag = &dump_full_buffers_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -4241,6 +4248,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (data_start_value_flag) {
 					user_param->data_start_value = (uint32_t)strtoul(optarg, NULL, 10);
 					data_start_value_flag = 0;
+				}
+				if (dump_full_buffers_flag) {
+					user_param->dump_full_buffers = true;
+					dump_full_buffers_flag = 0;
 				}
 				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 				if (unsolicited_write_flag) {

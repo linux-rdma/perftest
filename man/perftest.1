@@ -490,6 +490,11 @@ Requires --data_validation=sync.
 .B --data_start_value
 Starting value for serial data validation. Set to 0 by default.
 .TP
+.B --dump_full_buffers
+Dump the full reference and received buffers on a data validation failure,
+instead of only the mismatching DWORDs. Written as hex and both buffers, so a
+failure under -a can reach tens of megabytes. Off by default.
+.TP
 .B --data_validation_debug
 Enable verbose debug output for data validation.
 Shows per-validator thread stats, marker distribution, CPU pinning,

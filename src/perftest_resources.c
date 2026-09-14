@@ -2538,6 +2538,105 @@ static int create_payload(struct perftest_parameters *user_param)
 	return 0;
 }
 
+static void write_buffer_to_file(void *buf, FILE *dump_file, uint64_t buff_size) {
+	for (uint64_t i = 0; i < buff_size; i++) {
+		if (i % 16 == 0) fprintf(dump_file, "%06lx: ", i);
+		fprintf(dump_file, "%02x ", ((unsigned char*)buf)[i]);
+		if (i % 16 == 15) fprintf(dump_file, "\n");
+	}
+	if (buff_size % 16 != 0) fprintf(dump_file, "\n");
+}
+
+static void dump_validation_failure_debug_info(struct pingpong_context *ctx,
+				       struct perftest_parameters *user_param,
+				       uint64_t expected_data_addr,
+				       uint64_t actual_data_addr,
+				       uint32_t data_length,
+				       uint32_t recv_offset,
+				       int qp_index)
+{
+	char filename[256];
+	FILE *dump_file;
+	time_t now;
+	struct tm *tm_info;
+	char timestamp[64];
+	void *copy_buff;
+	int i;
+	void *full_actual_buf;
+
+	time(&now);
+	tm_info = localtime(&now);
+	strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", tm_info);
+
+	snprintf(filename, sizeof(filename), "/tmp/perftest_validation_failure_%s.dump",
+		 timestamp);
+
+	dump_file = fopen(filename, "w");
+	if (!dump_file) {
+		fprintf(stderr, "Failed to create debug dump file: %s\n", filename);
+		return;
+	}
+
+	fprintf(dump_file, "=== PERFTEST DATA VALIDATION FAILURE DEBUG DUMP ===\n");
+	fprintf(dump_file, "Timestamp: %s\n", ctime(&now));
+	fprintf(dump_file, "QP Index: %d\n", qp_index);
+	fprintf(dump_file, "Data Length: %u bytes\n", data_length);
+	fprintf(dump_file, "Receive Offset: %u\n", recv_offset);
+	fprintf(dump_file, "Validation Type: %s\n", validationFillStr[user_param->validation_fill]);
+	if (user_param->validation_fill == VALIDATION_FILL_SERIAL) {
+		fprintf(dump_file, "Data Start Value: %u\n", user_param->data_start_value);
+	}
+	fprintf(dump_file, "Validation Hint: %u\n", ctx->data_validation_hint);
+	fprintf(dump_file, "\n");
+
+	fprintf(dump_file, "=== DATA MISMATCHES ===\n");
+
+	copy_buff = malloc(data_length);
+	if (!copy_buff) {
+		fprintf(stderr, "Failed to allocate memory for actual data buffer\n");
+		fclose(dump_file);
+		return;
+	}
+
+	ctx->memory->copy_buffer_to_host(copy_buff, (void*)actual_data_addr, data_length);
+
+	fprintf(dump_file, "Offset   Expected    Actual\n");
+	fprintf(dump_file, "------   --------    ------\n");
+
+	for (i = 0; i < data_length; i += 4) {
+		uint32_t exp_val = *(uint32_t*)((char*)expected_data_addr + i);
+		uint32_t act_val = *(uint32_t*)((char*)copy_buff + i);
+
+		if (exp_val != act_val) {
+			fprintf(dump_file, "%06x   %08x    %08x\n",
+			       i, ntohl(exp_val), ntohl(act_val));
+		}
+	}
+
+	if (user_param->dump_full_buffers) {
+		full_actual_buf = malloc(ctx->buff_size);
+		if (!full_actual_buf) {
+			fprintf(stderr, "Failed to allocate memory for full buffer dump\n");
+			fclose(dump_file);
+			return;
+		}
+
+		ctx->memory->copy_buffer_to_host(full_actual_buf, ctx->buf[0], ctx->buff_size);
+		fprintf(dump_file, "\n=== FULL EXPECTED DATA BUFFER (%llu bytes) ===\n",
+			(unsigned long long)ctx->buff_size);
+		write_buffer_to_file(ctx->validation_buf[0], dump_file, ctx->buff_size);
+		fprintf(dump_file, "\n=== FULL ACTUAL DATA BUFFER (%llu bytes) ===\n",
+			(unsigned long long)ctx->buff_size);
+		write_buffer_to_file(full_actual_buf, dump_file, ctx->buff_size);
+		free(full_actual_buf);
+	}
+
+	free(copy_buff);
+	fclose(dump_file);
+
+	fprintf(stderr, "Debug dump created: %s\n", filename);
+}
+
 int create_data_validation_reference_buffer(struct pingpong_context *ctx, struct perftest_parameters *user_param) {
 
 	ctx->validation_buf[0] = malloc(ctx->buff_size);
@@ -5262,7 +5361,9 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
 
 						if (memcmp((void*)expected_data_addr, (void*)actual_data_addr, data_length)) {
-							fprintf(stderr, "Data validation comparison failed.\n");
+							fprintf(stderr, "Data validation comparison failed, creating dump file.\n");
+							dump_validation_failure_debug_info(ctx, user_param, expected_data_addr,
+										   actual_data_addr, data_length, recv_offset, qp_index);
 							return_value = FAILURE;
 							goto cleaning;
 						}
