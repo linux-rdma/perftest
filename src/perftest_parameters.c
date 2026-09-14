@@ -1979,6 +1979,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr," run_infinitely does not support rate limit feature yet\n");
 			exit(1);
 		}
+
+		/* Measuring the CPU clock adds overhead: do it at setup, not mid-run where it disturbs traffic. */
+		get_cpu_mhz(user_param->cpu_freq_f);
 	}
 
 	if (!user_param->use_old_post_send)
