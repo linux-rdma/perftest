@@ -848,6 +848,32 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
  */
 int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_parameters *user_param);
 
+/* run_iter_lat_write_infinitely
+ *
+ * Description :
+ *
+ *  Runs WRITE latency indefinitely, reporting every duration interval.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ */
+int run_iter_lat_write_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
+/* run_iter_lat_write_imm_infinitely
+ *
+ * Description :
+ *
+ *  Runs WRITE_IMM latency indefinitely, reporting every duration interval.
+ *
+ * Parameters :
+ *
+ *	ctx         - Test Context.
+ *	user_param  - user_parameters struct for this test.
+ */
+int run_iter_lat_write_imm_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param);
+
 /* run_iter_lat
  *
  * Description :

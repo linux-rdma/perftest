@@ -89,6 +89,12 @@ git clone <URL>, In our situation its --> git clone https://github.com/linux-rdm
   The --run_infinitely flag instructs the program to run until interrupted by
   the user, and print the measured bandwidth every 5 seconds. 
 
+- ib_write_lat accepts --run_infinitely for WRITE and WRITE_IMM. Every -D
+  seconds (5 by default), it prints interval latency and transaction rate to
+  stdout from a separate thread. There is no final report and --out_json is
+  unsupported. Ctrl-C stops only the local endpoint, so stop the peer
+  separately.
+
 - The "-H" option in latency benchmarks dumps a histogram of the results.
   See xgraph, ygraph, r-base (http://www.r-project.org/), PSPP, or other 
   statistical analysis programs.
@@ -188,6 +194,7 @@ Options for BW tests:
       --recv_post_list=<list size>	Post list of receive WQEs of <list size> size (instead of single post)
   -q, --qp=<num of qp's>		Num of QPs running in the process (default: 1)
       --run_infinitely			Run test until interrupted by user, print results every 5 seconds
+					(BW tests, and ib_write_lat with the WRITE or WRITE_IMM verb)
 
 SEND tests (ib_send_lat or ib_send_bw) flags: 
 ---------------------------------------------

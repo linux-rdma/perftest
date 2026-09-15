@@ -898,6 +898,22 @@ void print_report_lat (struct perftest_parameters *user_param);
  */
 void print_report_lat_duration (struct perftest_parameters *user_param);
 
+/* print_report_lat_interval
+ *
+ * Description :
+ *
+ *  Prints latency and transaction rate for one reporting interval.
+ *
+ * Parameters :
+ *
+ *   user_param     - Test parameters.
+ *   interval_iters - Iterations completed in the interval.
+ *   interval_time  - Interval length in cycles.
+ *
+ */
+void print_report_lat_interval (struct perftest_parameters *user_param,
+		uint64_t interval_iters, cycles_t interval_time);
+
 /* print_report_fs_rate
  *
  * Description : Prints the Flow steering rate and avarage latency to create flow

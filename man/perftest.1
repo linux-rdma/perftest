@@ -339,6 +339,10 @@ many different options and modes.
 .TP
 .B --run_infinitely
  Run test forever, print results every <duration> seconds.
+ Supported by bandwidth tests and ib_write_lat WRITE/WRITE_IMM. Latency tests
+ print interval latency and transaction rate to stdout from a separate thread,
+ with no final report and --out_json unsupported.
+ Ctrl-C stops only the local endpoint, so stop the peer separately.
 .TP
 .B --retry_count=<value>
  Set retry count value in rdma_cm mode.
