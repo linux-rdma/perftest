@@ -750,13 +750,13 @@ static int new_post_write_inl_uc(struct pingpong_context *ctx, int index,
 static int new_post_send_sge_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD, 0);
+	return _new_post_send(ctx, user_param, 0, index, IBV_QPT_DRIVER, opcode_verbs_array[user_param->verb], SRD, 0);
 }
 
 static int new_post_send_inl_srd(struct pingpong_context *ctx, int index,
 	struct perftest_parameters *user_param)
 {
-	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, IBV_WR_SEND, SRD, 0);
+	return _new_post_send(ctx, user_param, 1, index, IBV_QPT_DRIVER, opcode_verbs_array[user_param->verb], SRD, 0);
 }
 
 static int new_post_read_sge_srd(struct pingpong_context *ctx, int index,
@@ -3933,6 +3933,7 @@ static void ctx_post_send_work_request_func_pointer(struct pingpong_context *ctx
 		break;
 	case SRD:
 		switch (user_param->verb) {
+			case SEND_IMM:
 			case SEND:
 				if (use_inl) {
 					ctx->new_post_send_work_request_func_pointer = &new_post_send_inl_srd;

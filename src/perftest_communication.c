@@ -2131,7 +2131,7 @@ int check_mtu(struct ibv_context *context,struct perftest_parameters *user_param
 			user_param->size = RAWETH_MIN_MSG_SIZE;
 		}
 	} else if (user_param->connection_type == SRD) {
-		if (user_param->verb == SEND) {
+		if (user_param->verb == SEND || user_param->verb == SEND_IMM) {
 			struct ibv_port_attr port_attr;
 
 			if (ibv_query_port(context, user_param->ib_port, &port_attr)) {
