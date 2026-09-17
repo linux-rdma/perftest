@@ -5360,6 +5360,11 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						else
 							actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
 
+						if (user_param->connection_type == UD) {
+							actual_data_addr += UD_ADDITION;
+							data_length -= UD_ADDITION;
+						}
+
 						if (memcmp((void*)expected_data_addr, (void*)actual_data_addr, data_length)) {
 							fprintf(stderr, "Data validation comparison failed, creating dump file.\n");
 							dump_validation_failure_debug_info(ctx, user_param, expected_data_addr,
