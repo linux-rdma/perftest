@@ -1405,7 +1405,10 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 		if (user_param->machine == CLIENT)
 			ctx->cycle_buffer = INC(user_param->size, ctx->cache_line_size) * user_param->post_list;
 		else {
-			ctx->cycle_buffer = INC(user_param->size, ctx->cache_line_size) * user_param->recv_post_list;
+			ctx->cycle_buffer = INC(SIZE(user_param->connection_type, user_param->size, 1),
+						ctx->cache_line_size) * user_param->recv_post_list;
+			if (user_param->connection_type == UD)
+				ctx->cycle_buffer += ctx->cache_line_size;
 			ALLOC(ctx->validation_buf, void*, user_param->num_of_qps);
 		}
 	} else {
@@ -4464,7 +4467,9 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 				if (((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->size <= (ctx->cycle_buffer / 2)) ||
 						validation_is_sync(user_param->data_validation)) {
 					increase_loc_addr(&ctx->recv_sge_list[i * user_param->recv_post_list + j],
-							user_param->size,
+							validation_is_sync(user_param->data_validation) ?
+								SIZE(user_param->connection_type, user_param->size, 1) :
+								user_param->size,
 							j-1,
 							ctx->rx_buffer_addr[i],
 							user_param->connection_type,ctx->cache_line_size,ctx->cycle_buffer);
@@ -5363,6 +5368,11 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 							actual_data_addr = ctx->recv_sge_list[(int)get_wr_index(wc[i].wr_id)].addr;
 						else
 							actual_data_addr =  ctx->rx_buffer_addr[qp_index] + recv_offset;
+
+						if (user_param->connection_type == UD) {
+							actual_data_addr += UD_ADDITION;
+							data_length -= UD_ADDITION;
+						}
 
 						if (memcmp((void*)expected_data_addr, (void*)actual_data_addr, data_length)) {
 							fprintf(stderr, "Data validation comparison failed, creating dump file.\n");
