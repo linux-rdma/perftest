@@ -4668,7 +4668,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 							ctx->my_addr[index] + address_offset , 0, ctx->cache_line_size,
 							ctx->cycle_buffer);
 
-				if (user_param->verb != SEND) {
+				if (user_param->verb != SEND && user_param->verb != SEND_IMM) {
 					increase_rem_addr(&ctx->wr[index], user_param->size,
 							ctx->scnt[index], ctx->rem_addr[index], user_param->verb,
 							ctx->cache_line_size, ctx->cycle_buffer);
