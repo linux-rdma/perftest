@@ -459,11 +459,6 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 #endif
 
 	ibv_wr_start(ctx->qpx[index]);
-	struct ibv_sge curr_sge = {
-		.lkey = wr->sg_list->lkey,
-		.addr = wr->sg_list->addr,
-		.length = user_param->size
-	};
 	while (wr)
 	{
 		ctx->qpx[index]->wr_id = wr->wr_id;
@@ -503,7 +498,6 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 				wr->wr.atomic.rkey,
 				wr->wr.atomic.remote_addr,
 				wr->wr.atomic.compare_add);
-			curr_sge = *wr->sg_list;
 			break;
 		case IBV_WR_ATOMIC_CMP_AND_SWP:
 			ibv_wr_atomic_cmp_swp(
@@ -581,9 +575,9 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			#endif
 			ibv_wr_set_sge(
 				ctx->qpx[index],
-				curr_sge.lkey,
-				curr_sge.addr,
-				curr_sge.length);
+				wr->sg_list->lkey,
+				wr->sg_list->addr,
+				user_param->size);
 		}
 		wr = wr->next;
 	}
