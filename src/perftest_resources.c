@@ -476,7 +476,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			break;
 		case IBV_WR_SEND_WITH_IMM:
 			ibv_wr_send_imm(
-				ctx->qpx[index], 0);
+				ctx->qpx[index], wr->imm_data);
 			break;
 		case IBV_WR_RDMA_WRITE:
 			ibv_wr_rdma_write(
@@ -488,7 +488,8 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 			ibv_wr_rdma_write_imm(
 				ctx->qpx[index],
 				wr->wr.rdma.rkey,
-				wr->wr.rdma.remote_addr, 0);
+				wr->wr.rdma.remote_addr,
+				wr->imm_data);
 			break;
 		case IBV_WR_RDMA_READ:
 			ibv_wr_rdma_read(
@@ -4032,6 +4033,10 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->wr[i*user_param->post_list + j].num_sge = MAX_SEND_SGE;
 			ctx->wr[i*user_param->post_list + j].wr_id   = build_wr_id(i * user_param->post_list + j, i);
 
+			if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
+				ctx->wr[i*user_param->post_list + j].imm_data = htobe32(DEF_IMM);
+			}
+
 			if (j == (user_param->post_list - 1)) {
 				ctx->wr[i*user_param->post_list + j].next = NULL;
 			} else {
@@ -5084,6 +5089,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	int			recv_flows_burst = 0;
 	int			address_flows_offset =0;
 	bool		with_imm_data = false;
+	bool		verify_imm_data = false;
+	uint32_t	expected_imm_data = htobe32(DEF_IMM);
 
 	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
 	if (!dyn_ctx) {
@@ -5098,6 +5105,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 
 	if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	ALLOCATE(wc ,struct ibv_wc ,dyn_ctx->config.max);
@@ -5165,10 +5173,18 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						goto cleaning;
 					}
 
-					if (with_imm_data && !(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
-						NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, rcnt)
-						return_value = FAILURE;
-						goto cleaning;
+					if (with_imm_data) {
+						if (!(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
+							NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, rcnt);
+							return_value = FAILURE;
+							goto cleaning;
+						}
+
+						if (verify_imm_data && wc[i].imm_data != expected_imm_data) {
+							NOTIFY_COMP_IMM_MISMATCH_RECV(wc[i], expected_imm_data, rcnt_for_qp[qp_index]);
+							return_value = FAILURE;
+							goto cleaning;
+						}
 					}
 
 					rcnt_for_qp[qp_index]++;
@@ -5481,6 +5497,8 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 	int 			return_value = 0;
 	int 			qp_index;
 	bool			with_imm_data = false;
+	bool			verify_imm_data = false;
+	uint32_t		expected_imm_data = htobe32(DEF_IMM);
 	uint64_t                *posted_per_qp = NULL;
 	int			recv_flows_index = 0;
 	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
@@ -5494,6 +5512,7 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 
 	if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
@@ -5556,10 +5575,19 @@ int run_iter_bw_infinitely_server(struct pingpong_context *ctx, struct perftest_
 					goto cleaning;
 				}
 
-				if (with_imm_data && !(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
-					fprintf(stderr, "A completion with flags mismatch in run_infinitely_bw_server function");
-					return_value = FAILURE;
-					goto cleaning;
+				if (with_imm_data) {
+					if (!(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
+						fprintf(stderr, "A completion with flags mismatch in run_infinitely_bw_server function");
+						return_value = FAILURE;
+						goto cleaning;
+					}
+
+					if (verify_imm_data && wc[i].imm_data != expected_imm_data) {
+						fprintf(stderr, "A completion with immediate data 0x%x instead of 0x%x in run_infinitely_bw_server function",
+							be32toh(wc[i].imm_data), DEF_IMM);
+						return_value = FAILURE;
+						goto cleaning;
+					}
 				}
 
 				user_param->iters++;
@@ -5692,6 +5720,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	int 			return_value = 0;
 	int 			qp_index;
 	bool			with_imm_data = false;
+	bool			verify_imm_data = false;
+	uint32_t		expected_imm_data = htobe32(DEF_IMM);
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -5700,6 +5730,7 @@ int run_iter_bi(struct pingpong_context *ctx,
 
 	if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	ALLOCATE(wc_tx,struct ibv_wc,user_param->cqe_poll);
@@ -5834,10 +5865,18 @@ int run_iter_bi(struct pingpong_context *ctx,
 					goto cleaning;
 				}
 
-				if (with_imm_data && !(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
-					NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, totrcnt)
-					return_value = FAILURE;
-					goto cleaning;
+				if (with_imm_data) {
+					if (!(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
+						NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, totrcnt);
+						return_value = FAILURE;
+						goto cleaning;
+					}
+
+					if (verify_imm_data && wc[i].imm_data != expected_imm_data) {
+						NOTIFY_COMP_IMM_MISMATCH_RECV(wc[i], expected_imm_data, totrcnt);
+						return_value = FAILURE;
+						goto cleaning;
+					}
 				}
 
 				rcnt_for_qp[qp_index]++;
@@ -6150,6 +6189,8 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 					user_param->rx_depth/user_param->num_of_qps : user_param->rx_depth;
 	struct ibv_wc           wc;
 	struct ibv_recv_wr 	*bad_wr_recv = NULL;
+	bool                    verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
+	uint32_t                expected_imm_data = htobe32(DEF_IMM);
 
 
 	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
@@ -6206,6 +6247,11 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 				if (!(wc.wc_flags & IBV_WC_WITH_IMM)) {
 					//coverity[uninit_use_in_call]
 					NOTIFY_COMP_FLAGS_MISMATCH_SEND(wc, IBV_WC_WITH_IMM, scnt, rcnt);
+					return FAILURE;
+				}
+
+				if (verify_imm_data && wc.imm_data != expected_imm_data) {
+					NOTIFY_COMP_IMM_MISMATCH_RECV(wc, expected_imm_data, rcnt);
 					return FAILURE;
 				}
 
@@ -6396,6 +6442,8 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	uintptr_t		primary_recv_addr = ctx->recv_sge_list[0].addr;
 	bool			with_imm_data = false;
+	bool			verify_imm_data = false;
+	uint32_t		expected_imm_data = htobe32(DEF_IMM);
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -6404,6 +6452,7 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 
 	if (user_param->verb == SEND_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	if (user_param->connection_type != RawEth) {
@@ -6445,10 +6494,17 @@ int run_iter_lat_send(struct pingpong_context *ctx,struct perftest_parameters *u
 						return FAILURE;
 					}
 
-					if (with_imm_data && !(wc.wc_flags & IBV_WC_WITH_IMM)) {
-						//coverity[uninit_use_in_call]
-						NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc, IBV_WC_WITH_IMM, rcnt);
-						return FAILURE;
+					if (with_imm_data) {
+						if (!(wc.wc_flags & IBV_WC_WITH_IMM)) {
+							//coverity[uninit_use_in_call]
+							NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc, IBV_WC_WITH_IMM, rcnt);
+							return FAILURE;
+						}
+
+						if (verify_imm_data && wc.imm_data != expected_imm_data) {
+							NOTIFY_COMP_IMM_MISMATCH_RECV(wc, expected_imm_data, rcnt);
+							return FAILURE;
+						}
 					}
 
 					rcnt++;
@@ -6579,6 +6635,8 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
 	int qp_index;
 	bool				with_imm_data = false;
+	bool				verify_imm_data = false;
+	uint32_t			expected_imm_data = htobe32(DEF_IMM);
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -6587,6 +6645,7 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 
 	if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	ALLOCATE(wc, struct ibv_wc, user_param->burst_size);
@@ -6604,10 +6663,18 @@ int run_iter_lat_burst_server(struct pingpong_context *ctx, struct perftest_para
 					return FAILURE;
 				}
 
-				if (with_imm_data && !(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
-					NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, rcnt)
-					free(wc);
-					return FAILURE;
+				if (with_imm_data) {
+					if (!(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
+						NOTIFY_COMP_FLAGS_MISMATCH_RECV(wc[i], IBV_WC_WITH_IMM, rcnt);
+						free(wc);
+						return FAILURE;
+					}
+
+					if (verify_imm_data && wc[i].imm_data != expected_imm_data) {
+						NOTIFY_COMP_IMM_MISMATCH_RECV(wc[i], expected_imm_data, rcnt);
+						free(wc);
+						return FAILURE;
+					}
 				}
 
 				rcnt++;
@@ -6680,6 +6747,8 @@ int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters 
 	int			is_sending_burst = 0;
 	struct ibv_recv_wr      *bad_wr_recv = NULL;
 	bool		with_imm_data = false;
+	bool		verify_imm_data = false;
+	uint32_t	expected_imm_data = htobe32(DEF_IMM);
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -6688,6 +6757,7 @@ int run_iter_lat_burst(struct pingpong_context *ctx, struct perftest_parameters 
 
 	if (user_param->verb == SEND_IMM || user_param->verb == WRITE_IMM) {
 		with_imm_data = true;
+		verify_imm_data = IMM_DATA_VERIFIABLE(user_param);
 	}
 
 	ALLOCATE(wc, struct ibv_wc, user_param->burst_size);
@@ -6774,10 +6844,18 @@ polling:
 						goto cleaning;
 					}
 
-					if (with_imm_data && !(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
-						NOTIFY_COMP_FLAGS_MISMATCH_SEND(wc[i], IBV_WC_WITH_IMM, totscnt, totccnt);
-						return_value = FAILURE;
-						goto cleaning;
+					if (with_imm_data) {
+						if (!(wc[i].wc_flags & IBV_WC_WITH_IMM)) {
+							NOTIFY_COMP_FLAGS_MISMATCH_SEND(wc[i], IBV_WC_WITH_IMM, totscnt, totccnt);
+							return_value = FAILURE;
+							goto cleaning;
+						}
+
+						if (verify_imm_data && wc[i].imm_data != expected_imm_data) {
+							NOTIFY_COMP_IMM_MISMATCH_RECV(wc[i], expected_imm_data, totrcnt);
+							return_value = FAILURE;
+							goto cleaning;
+						}
 					}
 
 					if (ibv_post_recv(ctx->qp[qp_index], &ctx->rwr[qp_index], &bad_wr_recv)) {
