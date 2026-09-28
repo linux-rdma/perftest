@@ -393,6 +393,7 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 		.data_validation = hton_int(user_param->data_validation),
 		.max_qp_rd_atom = hton_int(dev_attr.max_qp_rd_atom),
 		.tx_depth = hton_int(user_param->tx_depth),
+		.duplex = hton_int(user_param->duplex),
 	};
 
 	#ifdef HAVE_MLX5DV
@@ -428,6 +429,7 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 		COMPARE(compare, size, UINT64, true, NULL),
 		COMPARE(compare, iters, UINT64, true, NULL),
 		COMPARE(compare, aes_xts, INT, true, ((char *[]){"OFF", "ON"})),
+		COMPARE(compare, duplex, INT, true, ((char *[]){"OFF", "ON"})),
 		COMPARE(compare, num_of_qps, INT, true, NULL),
 		COMPARE(compare, duration, INT, true, NULL),
 		COMPARE(compare, use_rdma_cm, INT, true, ((char *[]){"OFF", "ON"})),
