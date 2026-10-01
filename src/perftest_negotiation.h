@@ -61,6 +61,7 @@ struct perftest_parameters_negotiate {
 	int sig_offload;
 	int data_validation;
 	int max_qp_rd_atom;
+	int duplex;
 
 #ifdef HAVE_MLX5DV
 	uint64_t mlx5dv_comp_mask;
