@@ -449,12 +449,19 @@ many different options and modes.
  Set GPU touch mode to test memory accesses during the testing process.
  Relevant only for CUDA and OpenCL memory types
 .TP
-.B --data_validation
-Enable real-time data validation for RDMA transfers.
+.B --data_validation[=async|sync]
+Defaults to async when no type is given.
+.br
+async: Enable real-time data validation for RDMA transfers.
 Validates that received data matches expected byte patterns.
 Works with both host memory (SIMD-accelerated: AVX-512/AVX2/SSE4.2/NEON)
 and GPU memory (CUDA kernel plugin, auto-detected at build time).
 tx_depth (-t) must be the same on both server and client (minimum 32).
+.br
+sync: Validate inline on the receive path. Works over any transport and any
+device, and does not require ATOMIC support, at the cost of throttling the
+sender. Send BW or write BW with immediate only. See --data_validation_fill
+for how the payload is generated.
 .br
 Requirements:
 .br
@@ -472,6 +479,21 @@ Incompatible with: -a, --post_list>1, --run_infinitely, --mr_per_qp,
 .br
 Note: some bandwidth degradation is expected (mainly in READ mode).
 Using 2MB or 1GB huge pages will improve bandwidth in most cases.
+.TP
+.B --data_validation_fill=<random|serial|pattern>
+How sync data validation generates the payload. Random by default.
+ random: Data is randomized.
+ serial: Data is filled with sequential numeric series. Use --data_start_value=<N> to set starting point.
+ pattern: Data is filled using contents of file provided by --payload_file_path=<file>.
+Requires --data_validation=sync.
+.TP
+.B --data_start_value
+Starting value for serial data validation. Set to 0 by default.
+.TP
+.B --dump_full_buffers
+Dump the full reference and received buffers on a data validation failure,
+instead of only the mismatching DWORDs. Written as hex and both buffers, so a
+failure under -a can reach tens of megabytes. Off by default.
 .TP
 .B --data_validation_debug
 Enable verbose debug output for data validation.
