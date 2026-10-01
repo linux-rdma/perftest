@@ -1251,8 +1251,8 @@ static void change_conn_type(int *cptr, VerbType verb, const char *optarg)
 		#endif
 	} else if (strcmp(connStr[6], optarg) == 0) {
 		#ifdef HAVE_SRD
-		if (verb != SEND && verb != READ && verb != WRITE && verb != WRITE_IMM) {
-			fprintf(stderr, " SRD connection only possible in SEND/READ/WRITE/WRITE_IMM verbs\n");
+		if (verb != SEND && verb != SEND_IMM && verb != READ && verb != WRITE && verb != WRITE_IMM) {
+			fprintf(stderr, " SRD connection only possible in SEND/SEND_IMM/READ/WRITE/WRITE_IMM verbs\n");
 			exit(1);
 		}
 		*cptr = SRD;

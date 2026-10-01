@@ -135,6 +135,17 @@ struct ValidationContext;
 	  fprintf(stderr," Failed wr_id %d flag: 0x%x (should contain 0x%x)\n", (int)wc.wr_id, wc.wc_flags, flag);	\
 	  fprintf(stderr," rcnt=%lu\n",rcnt); }
 
+/* Peers older than this leave the immediate data value unset, so a receiver has
+ * nothing to compare against and must not verify its content. */
+#define MIN_VERSION_IMM_DATA_VERIFY (6.31)
+#define IMM_DATA_VERIFIABLE(user_param) \
+	(atof((user_param)->rem_version) >= MIN_VERSION_IMM_DATA_VERIFY)
+
+#define NOTIFY_COMP_IMM_MISMATCH_RECV(wc,expected,rcnt)                     									\
+	{ fprintf(stderr," Completion with immediate data mismatch at server\n");      								\
+	  fprintf(stderr," Failed wr_id %d immediate: 0x%x (should be 0x%x)\n", (int)wc.wr_id, be32toh(wc.imm_data), be32toh(expected));	\
+	  fprintf(stderr," rcnt=%lu\n",rcnt); }
+
 /* Macro to determine packet size in case of UD. The UD addition is for the GRH . */
 #define SIZE(type,size,valid) ((type == UD && valid) ? (size + UD_ADDITION) : (size))
 
