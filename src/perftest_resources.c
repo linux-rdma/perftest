@@ -174,6 +174,7 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 		if(index >= AES_XTS_DEK_SIZE) {
 			fprintf(stderr, "Invalid data_encryption_key file\n");
 			fclose(dek_file);
+			remove(file_path);
 			return FAILURE;
 		}
 
@@ -870,6 +871,7 @@ static int ctx_xrcd_create(struct pingpong_context *ctx,struct perftest_paramete
 	ctx->xrc_domain = ibv_open_xrcd(ctx->context,&xrcd_init_attr);
 	if (ctx->xrc_domain == NULL) {
 		fprintf(stderr,"Error opening XRC domain\n");
+		close(ctx->fd);
 		return FAILURE;
 	}
 	return 0;
@@ -1271,6 +1273,7 @@ struct ibv_context* ctx_open_device(struct ibv_device *ib_dev, struct perftest_p
 
 		if (ret) {
 			fprintf(stderr,"Couldn't login. err=%d.\n", ret);
+			ibv_close_device(context);
 			return NULL;
 		}
 
@@ -1508,7 +1511,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			free(ctx->ccnt);
 
 	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW)
-		   && user_param->verb == SEND && user_param->machine == SERVER) {
+		   && has_recv_comp(user_param->verb) && user_param->machine == SERVER) {
 		if (ctx->my_addr != NULL)
 			free(ctx->my_addr);
 	}
@@ -1796,9 +1799,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 		ctx->mkey = NULL;
 	}
 	#endif
-
+        free(user_param->tposted);
+        user_param->tposted = NULL;
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
-		free(user_param->tposted);
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
 		free(ctx->rem_addr);
@@ -1806,10 +1809,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->ccnt);
 	}
 	else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW )
-		 && (user_param->verb == SEND || user_param->verb == SEND_IMM)
+		 && has_recv_comp(user_param->verb)
 		 && user_param->machine == SERVER) {
-
-		free(user_param->tposted);
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
 	}
@@ -4362,6 +4363,7 @@ int ctx_alloc_credit(struct pingpong_context *ctx,
 	ctx->credit_mr = ibv_reg_mr(ctx->pd,ctx->ctrl_buf,buf_size,flags);
 	if (!ctx->credit_mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
+		free(ctx->ctrl_buf);
 		return FAILURE;
 	}
 	for (i = 0; i < user_param->num_of_qps; i++) {
