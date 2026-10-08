@@ -1000,7 +1000,7 @@ int set_up_connection(struct pingpong_context *ctx,
 		my_dest[i].tail_markers_vaddr = 0;  /* Default: not used */
 		if (user_param->mr_per_qp)
 			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
-		else if (user_param->data_validation == ON) {
+		else if (validation_is_async(user_param->data_validation)) {
 			if (user_param->verb == READ) {
 			/* READ: Publish Pattern Buffers address (offset 0).
 				* Peer will RDMA READ from here. */
@@ -1014,6 +1014,10 @@ int set_up_connection(struct pingpong_context *ctx,
 			my_dest[i].tail_markers_vaddr = (uintptr_t)ctx->buf[0] + ctx->tail_markers_offset;
 		} else
 			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+
+		if (validation_is_sync(user_param->data_validation) && user_param->machine == CLIENT) {
+			my_dest[i].tail_markers_vaddr = ctx->data_validation_hint;
+		}
 
 		if (user_param->dualport==ON) {
 
@@ -1201,7 +1205,7 @@ int rdma_client_connect(struct pingpong_context *ctx,struct perftest_parameters 
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation)) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -1362,7 +1366,7 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	memset(&conn_param, 0, sizeof conn_param);
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation)) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -2573,7 +2577,7 @@ int rdma_cm_route_handler(struct pingpong_context *ctx,
 
 	memset(&conn_param, 0, sizeof conn_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation)) {
 		conn_param.responder_resources = user_param->out_reads;
 		conn_param.initiator_depth = user_param->out_reads;
 	}
@@ -2648,7 +2652,7 @@ int rdma_cm_connection_request_handler(struct pingpong_context *ctx,
 
 	memset(&conn_param, 0, sizeof(conn_param));
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation) {
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation)) {
 		conn_param.responder_resources =
 			(user_param->out_reads > event->param.conn.initiator_depth)
 			? event->param.conn.initiator_depth : user_param->out_reads;

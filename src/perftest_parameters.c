@@ -41,6 +41,7 @@ static const char *portStates[] = {"Nop","Down","Init","Armed","","Active Defer"
 static const char *qp_state[] = {"OFF","ON"};
 static const char *exchange_state[] = {"Ethernet","rdma_cm"};
 static const char *atomicTypesStr[] = {"CMP_AND_SWAP","FETCH_AND_ADD"};
+const char *validationFillStr[] = {"none", "random", "serial", "pattern"};
 #ifdef HAVE_HNSDV
 static const char *congestStr[] = {"DCQCN","LDCP","HC3","DIP"};
 #endif
@@ -567,10 +568,32 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf("      --disable_dynamic_polling ");
 		printf(" Disable dynamic CQE polling adaptation (default enabled)\n");
 
-		printf("      --data_validation ");
-		printf(" Enable data validation (tx_depth must be same on both sides)\n");
+		printf("      --data_validation[=async|sync] ");
+		printf(" Enable data validation. Defaults to async when no kind is given\n");
+		printf("                         ");
+		printf(" async: validate out of band, does not throttle the sender. Requires RC and ATOMIC\n");
+		printf("                         ");
+		printf("        support, and tx_depth must be same on both sides\n");
 		printf("                         ");
 		printf(" In DURATION mode, bytes_validated = duration/(duration-2*margin) * iters * size\n");
+		printf("                         ");
+		printf(" sync: validate inline on the receive path, works on any transport and device\n");
+		printf("                         ");
+		printf("       but throttles the sender. Send BW or write BW with immediate only\n");
+		printf("                         ");
+		printf("       Requires post_list == tx_depth and recv_post_list == rx_depth\n");
+		printf("      --data_validation_fill=<random|serial|pattern> ");
+		printf(" How sync data validation generates the payload. Random by default\n");
+		printf("                         ");
+		printf(" serial: sequential numeric series, see --data_start_value\n");
+		printf("                         ");
+		printf(" pattern: contents of the file given by --payload_file_path\n");
+		printf("      --data_start_value ");
+		printf(" Starting value for serial data validation. Set to 0 by default\n");
+		printf("      --dump_full_buffers ");
+		printf(" Dump the full buffers on a data validation failure, not only the\n");
+		printf("                         ");
+		printf(" mismatching DWORDs. A failure under -a can reach tens of megabytes\n");
 		printf("      --data_validation_debug ");
 		printf(" Enable verbose debug output for data validation\n");
 	}
@@ -1162,11 +1185,14 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_id		= -1;
 	user_param->processing_hints			= -1;
 	user_param->dynamic_cqe_poll = ON;
-	user_param->data_validation = OFF;
+	user_param->data_validation = VALIDATION_NONE;
 	user_param->data_validation_debug = OFF;
 	user_param->numa_node		= -1;
 	user_param->disable_numa	= 0;
 	CPU_ZERO(&user_param->cpu_affinity);
+	user_param->validation_fill	= VALIDATION_FILL_NONE;
+	user_param->data_start_value	= 0;
+	user_param->dump_full_buffers	= false;
 }
 
 static int open_file_write(const char* file_path)
@@ -1518,7 +1544,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit (1);
 	}
 
-	if (user_param->data_validation) {
+	if (validation_is_async(user_param->data_validation)) {
 		/* Require CUDA or HOST memory */
 		if (user_param->memory_type != MEMORY_CUDA &&
 		    user_param->memory_type != MEMORY_HOST) {
@@ -2485,6 +2511,58 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		}
 	}
 
+	if (user_param->validation_fill != VALIDATION_FILL_NONE &&
+	    !validation_is_sync(user_param->data_validation)) {
+		printf(RESULT_LINE);
+		fprintf(stderr, " --data_validation_fill requires --data_validation=sync\n");
+		exit(1);
+	}
+
+	if (validation_is_sync(user_param->data_validation)) {
+		if (user_param->post_list != user_param->tx_depth || user_param->recv_post_list != user_param->rx_depth) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Invalid data validation qps configuration. Post list size should be equal to corresponding queue depth.\n");
+			exit(1);
+		}
+
+		if (user_param->tst != BW ||
+		    (user_param->verb != SEND_IMM && user_param->verb != WRITE_IMM)) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Data validation can only be used with send bw or write bw with immediate tests.\n");
+			exit(1);
+		}
+
+		if (user_param->memory_type != MEMORY_HOST) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Synchronous data validation is supported only for host memory.\n");
+			exit(1);
+		}
+
+		if (user_param->duplex) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Bidirectional mode not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->has_payload_modification && user_param->validation_fill != VALIDATION_FILL_PATTERN) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is not supported with random or serial data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->mr_per_qp) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "MR per QP is not supported in data validation.\n");
+			exit(1);
+		}
+
+		if (user_param->validation_fill == VALIDATION_FILL_PATTERN && !user_param->has_payload_modification) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Payload modification input is required for pattern data validation.\n");
+			exit(1);
+		}
+	}
+
 	return;
 }
 /******************************************************************************
@@ -3084,6 +3162,9 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int payload_flag = 0;
 	static int use_write_with_imm_flag = 0;
 	static int use_send_with_imm_flag = 0;
+	static int validation_fill_flag = 0;
+	static int data_start_value_flag = 0;
+	static int dump_full_buffers_flag = 0;
 	#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 	static int unsolicited_write_flag = 0;
 	#endif
@@ -3325,11 +3406,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			#ifdef HAVE_SIG_OFFLOAD
 			{.name = "sig_offload", .has_arg = 0, .flag = &sig_offload_flag, .val = 1 },
 			#endif
-			{.name = "data_validation", .has_arg = 0, .flag = &data_validation_flag, .val = 1 },
+			{.name = "data_validation", .has_arg = optional_argument, .flag = &data_validation_flag, .val = 1 },
 			{.name = "data_validation_debug", .has_arg = 0, .flag = &data_validation_debug_flag, .val = 1 },
 			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
 			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
 			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
+			{.name = "data_validation_fill", .has_arg = 1, .flag = &validation_fill_flag, .val = 1 },
+			{.name = "data_start_value", .has_arg = 1, .flag = &data_start_value_flag, .val = 1 },
+			{.name = "dump_full_buffers", .has_arg = 0, .flag = &dump_full_buffers_flag, .val = 1 },
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -4133,6 +4217,42 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->verb = SEND_IMM;
 					use_send_with_imm_flag = 0;
 				}
+				if (validation_fill_flag) {
+
+					int i, fill_array_size = GET_ARRAY_SIZE(validationFillStr);
+					for (i = 1; i < fill_array_size; i++) {
+						if (strcmp(validationFillStr[i],optarg) == 0) {
+							user_param->validation_fill = i;
+							break;
+						}
+					}
+
+					if (i == fill_array_size) {
+						fprintf(stderr, " Invalid data validation fill. Please use random, serial or pattern.\n");
+						return FAILURE;
+					}
+
+					validation_fill_flag = 0;
+				}
+				if (data_validation_flag) {
+					if (optarg == NULL || strcmp(optarg, "async") == 0) {
+						user_param->data_validation = VALIDATION_ASYNC;
+					} else if (strcmp(optarg, "sync") == 0) {
+						user_param->data_validation = VALIDATION_SYNC;
+					} else {
+						fprintf(stderr, " Invalid data validation kind. Please use async or sync.\n");
+						return FAILURE;
+					}
+					data_validation_flag = 0;
+				}
+				if (data_start_value_flag) {
+					user_param->data_start_value = (uint32_t)strtoul(optarg, NULL, 10);
+					data_start_value_flag = 0;
+				}
+				if (dump_full_buffers_flag) {
+					user_param->dump_full_buffers = true;
+					dump_full_buffers_flag = 0;
+				}
 				#ifdef HAVE_SRD_WITH_UNSOLICITED_WRITE_RECV
 				if (unsolicited_write_flag) {
 					user_param->use_unsolicited_write = 1;
@@ -4248,11 +4368,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	if (connectionless_flag) {
 		user_param->connectionless = 1;
-	}
-
-	if (data_validation_flag) {
-		user_param->data_validation = 1;
-		data_validation_flag = 0;
 	}
 
 	if (data_validation_debug_flag) {
@@ -4483,7 +4598,7 @@ int check_link_and_mtu(struct ibv_context *context,struct perftest_parameters *u
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation))
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;
@@ -4549,7 +4664,7 @@ int check_link(struct ibv_context *context,struct perftest_parameters *user_para
 	/* Compute Max inline size with pre found statistics values */
 	ctx_set_max_inline(context,user_param);
 
-	if (user_param->verb == READ || user_param->verb == ATOMIC || user_param->data_validation)
+	if (user_param->verb == READ || user_param->verb == ATOMIC || validation_is_async(user_param->data_validation))
 		user_param->out_reads = ctx_set_out_reads(context,user_param);
 	else
 		user_param->out_reads = 1;

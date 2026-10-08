@@ -436,7 +436,7 @@ int negotiate_params(struct pingpong_context *ctx, struct perftest_comm *comm, s
 		COMPARE(compare, use_write_with_imm, INT, true, ((char *[]){"OFF", "ON"})),
 		COMPARE(compare, no_enhanced_reorder, INT, true, ((char *[]){"OFF", "ON"})),
 		COMPARE(compare, sig_offload, INT, true, ((char *[]){"OFF", "ON"})),
-		COMPARE(compare, data_validation, INT, true, ((char *[]){"OFF", "ON"})),
+		COMPARE(compare, data_validation, INT, true, ((char *[]){"NONE", "ASYNC", "SYNC"})),
 		COMPARE(compare, tx_depth, INT, true, NULL),
 		COMPARE(compare_max_qp_rd_atom, max_qp_rd_atom, INT, user_param->connection_type != DC, NULL),
 
