@@ -871,6 +871,7 @@ static int ctx_xrcd_create(struct pingpong_context *ctx,struct perftest_paramete
 	ctx->xrc_domain = ibv_open_xrcd(ctx->context,&xrcd_init_attr);
 	if (ctx->xrc_domain == NULL) {
 		fprintf(stderr,"Error opening XRC domain\n");
+		close(ctx->fd);
 		return FAILURE;
 	}
 	return 0;
