@@ -1458,7 +1458,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 
 	if (((user_param->tst == LAT || user_param->tst == FS_RATE) && user_param->test_type == DURATION) ||
 		((user_param->tst == BW || user_param->tst == LAT_BY_BW) && (user_param->machine == CLIENT || user_param->duplex)) ||
-		((user_param->tst == BW || user_param->tst == LAT_BY_BW) && user_param->verb == SEND && user_param->machine == SERVER) ||
+		((user_param->tst == BW || user_param->tst == LAT_BY_BW) && has_recv_comp(user_param->verb) && user_param->machine == SERVER) ||
 		(user_param->tst == FS_RATE && user_param->test_type == ITERATIONS))
 		if (user_param->tcompleted != NULL)
 			free(user_param->tcompleted);
