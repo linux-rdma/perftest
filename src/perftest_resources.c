@@ -1511,7 +1511,7 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 			free(ctx->ccnt);
 
 	} else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW)
-		   && user_param->verb == SEND && user_param->machine == SERVER) {
+		   && has_recv_comp(user_param->verb) && user_param->machine == SERVER) {
 		if (ctx->my_addr != NULL)
 			free(ctx->my_addr);
 	}
