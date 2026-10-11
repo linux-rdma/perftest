@@ -174,6 +174,7 @@ int set_valid_dek(char *dst, struct perftest_parameters *user_param)
 		if(index >= AES_XTS_DEK_SIZE) {
 			fprintf(stderr, "Invalid data_encryption_key file\n");
 			fclose(dek_file);
+			remove(file_path);
 			return FAILURE;
 		}
 
