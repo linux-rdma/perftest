@@ -4363,6 +4363,7 @@ int ctx_alloc_credit(struct pingpong_context *ctx,
 	ctx->credit_mr = ibv_reg_mr(ctx->pd,ctx->ctrl_buf,buf_size,flags);
 	if (!ctx->credit_mr) {
 		fprintf(stderr, "Couldn't allocate MR\n");
+		free(ctx->ctrl_buf);
 		return FAILURE;
 	}
 	for (i = 0; i < user_param->num_of_qps; i++) {
