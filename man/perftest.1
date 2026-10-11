@@ -297,6 +297,15 @@ many different options and modes.
  Create memory region for each qp.
  Relevant only for bandwidth.
 .TP
+.B --mr_iova=<addr>
+ Register the test buffer MR at IOVA <addr> (\fBibv_reg_mr_iova\fR(3)) instead of
+ its virtual address, and use IOVA-based addresses in all work requests.
+ <addr> must have the same page offset as the buffer. Inline is disabled.
+ The IOVA alignment, together with the buffer's DMA mapping, determines the MR
+ page size chosen by the kernel, so it can be used to exercise large
+ (e.g. >= 4GB) MTT pages. Not supported with RawEth, --mac_fwd, device memory,
+ --use-null-mr, --use_cc_unprotected, --aes_xts and --sig_offload.
+.TP
 .B --odp
  Use On Demand Paging instead of Memory Registration.
  System support required.

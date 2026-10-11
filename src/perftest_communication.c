@@ -170,7 +170,7 @@ static int post_one_recv_wqe(struct pingpong_context *ctx)
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_sge list;
 
-	list.addr   = (uintptr_t)ctx->buf[0];
+	list.addr   = buf_to_mr_addr(ctx, 0, ctx->buf[0]);
 	list.length = MAX(sizeof(struct pingpong_dest), KV_BUF_SIZE);
 	list.lkey   = ctx->mr[0]->lkey;
 
@@ -196,7 +196,7 @@ static int post_recv_to_get_ah(struct pingpong_context *ctx)
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_sge list;
 
-	list.addr   = (uintptr_t)ctx->buf[0];
+	list.addr   = buf_to_mr_addr(ctx, 0, ctx->buf[0]);
 	list.length = UD_ADDITION + sizeof(uint32_t);
 	list.lkey   = ctx->mr[0]->lkey;
 
@@ -228,7 +228,7 @@ static int send_qp_num_for_ah(struct pingpong_context *ctx,
 
 	memcpy(ctx->buf[0], &ctx->qp[0]->qp_num, sizeof(uint32_t));
 
-	list.addr   = (uintptr_t)ctx->buf[0];
+	list.addr   = buf_to_mr_addr(ctx, 0, ctx->buf[0]);
 	list.length = sizeof(uint32_t);
 	list.lkey   = ctx->mr[0]->lkey;
 
@@ -1010,21 +1010,21 @@ int set_up_connection(struct pingpong_context *ctx,
 		my_dest[i].out_reads = user_param->out_reads;
 		my_dest[i].tail_markers_vaddr = 0;  /* Default: not used */
 		if (user_param->mr_per_qp)
-			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			my_dest[i].vaddr = buf_to_mr_addr(ctx, i, ctx->buf[i]) + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 		else if (user_param->data_validation == ON) {
 			if (user_param->verb == READ) {
 			/* READ: Publish Pattern Buffers address (offset 0).
 				* Peer will RDMA READ from here. */
-				my_dest[i].vaddr = (uintptr_t)ctx->buf[0];
+				my_dest[i].vaddr = buf_to_mr_addr(ctx, 0, ctx->buf[0]);
 			} else {
 				/* WRITE: Publish recv_slots address (64-byte aligned).
 					* Peer will RDMA WRITE to here. */
-				my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + ctx->recv_slots_offset + i * (user_param->validation_chunks_per_qp*user_param->validation_chunk_size*ctx->payload_size);
+				my_dest[i].vaddr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + ctx->recv_slots_offset + i * (user_param->validation_chunks_per_qp*user_param->validation_chunk_size*ctx->payload_size);
 			}
 			/* Publish tail_markers address (64-byte aligned) for both READ and WRITE */
-			my_dest[i].tail_markers_vaddr = (uintptr_t)ctx->buf[0] + ctx->tail_markers_offset;
+			my_dest[i].tail_markers_vaddr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + ctx->tail_markers_offset;
 		} else
-			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			my_dest[i].vaddr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
 
 		if (user_param->dualport==ON) {
 
@@ -2307,7 +2307,7 @@ int rdma_cm_request_ud_connection_parameters(struct pingpong_context *ctx,
 
 	sge.length = UD_ADDITION + sizeof(uint32_t);
 	sge.lkey = ctx->mr[connection_index]->lkey;
-	sge.addr = (uintptr_t)ctx->buf[connection_index];
+	sge.addr = buf_to_mr_addr(ctx, connection_index, ctx->buf[connection_index]);
 
 	rc = ibv_post_recv(cm_node->cma_id->qp, &recv_wr, &recv_failure);
 	if (rc) {
@@ -2418,7 +2418,7 @@ int rdma_cm_send_ud_connection_parameters(struct pingpong_context *ctx,
 
 	sge.length = sizeof(uint32_t);
 	sge.lkey = ctx->mr[connection_index]->lkey;
-	sge.addr = (uintptr_t)ctx->buf[connection_index];
+	sge.addr = buf_to_mr_addr(ctx, connection_index, ctx->buf[connection_index]);
 
 	rc = ibv_post_send(cm_node->cma_id->qp, &send_wr, &bad_send_wr);
 	if (rc) {

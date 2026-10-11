@@ -549,6 +549,8 @@ struct perftest_parameters {
 	int				cpu_freq_f;
 	int				connection_type;
 	int				use_null_mr;
+	int				use_mr_iova;
+	uint64_t			mr_iova;
 	int				num_of_qps;
 	int				use_event;
 	int				eq_num;

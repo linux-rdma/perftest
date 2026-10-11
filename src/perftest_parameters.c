@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <getopt.h>
 #include <limits.h>
 #include <arpa/inet.h>
@@ -849,6 +850,12 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Allocate a null memory region with ibv_alloc_null_mr.\n");
 	}
 
+	if (connection_type != RawEth) {
+		printf("      --mr_iova=<addr> ");
+		printf(" Register the test buffer MR at IOVA <addr> instead of its virtual address.\n");
+		printf("                         <addr> must have the same page offset as the buffer. Disables inline.\n");
+	}
+
 	if (tst == BW || tst == LAT_BY_BW) {
 		printf("      --wait_destroy=<seconds> ");
 		printf(" Wait <seconds> before destroying allocated resources (QP/CQ/PD/MR..)\n");
@@ -1008,6 +1015,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_freq_f		= OFF;
 	user_param->connection_type	= (user_param->connection_type == RawEth) ? RawEth : RC;
 	user_param->use_null_mr		= 0;
+	user_param->use_mr_iova		= 0;
+	user_param->mr_iova		= 0;
 	user_param->use_event		= OFF;
 	user_param->eq_num		= 0;
 	user_param->use_eq_num		= OFF;
@@ -2300,6 +2309,27 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	if (user_param->use_mr_iova) {
+		#if !defined(HAVE_REG_MR_IOVA) && !defined(HAVE_REG_MR_EX)
+		printf(RESULT_LINE);
+		fprintf(stderr, "--mr_iova requires IOVA MR registration support in libibverbs\n");
+		exit(1);
+		#endif
+		if (user_param->connection_type == RawEth || user_param->mac_fwd == ON ||
+		    user_param->memory_type == MEMORY_DM || user_param->use_null_mr ||
+		    user_param->use_cc_unprotected || user_param->aes_xts || user_param->sig_offload) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "--mr_iova isn't supported with raw ethernet, mac_fwd, device memory, null MR, "
+				"cc_unprotected, aes_xts or signature offload\n");
+			exit(1);
+		}
+		if (user_param->inline_size > 0 && user_param->inline_size != DEF_INLINE) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "--mr_iova doesn't support inline messages\n");
+			exit(1);
+		}
+	}
+
 	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA) &&
 	    user_param->tst == LAT && user_param->verb == WRITE) {
 		printf(RESULT_LINE);
@@ -2307,11 +2337,15 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
+	/* Scatter2CQE makes the provider memcpy() small receives to the SGE address,
+	 * which is not CPU accessible for device memory, or a plain IOVA with --mr_iova.
+	 */
 	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA ||
-	     user_param->memory_type == MEMORY_DM) &&
-	    user_param->verb == SEND && (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
+	     user_param->memory_type == MEMORY_DM || user_param->use_mr_iova) &&
+	    (user_param->verb == SEND || user_param->verb == SEND_IMM) &&
+	    (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
 		printf(RESULT_LINE);
-		printf("Scatter2CQE (size <= 64) is not supported with device memory send tests: setting MLX5_SCATTER_TO_CQE=0\n");
+		printf("Scatter2CQE (size <= 64) is not supported with device memory or --mr_iova send tests: setting MLX5_SCATTER_TO_CQE=0\n");
 		if (disable_mlx5_scatter_to_cqe())
 			exit(1);
 	}
@@ -2935,6 +2969,12 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 			return;
 		}
 
+		if (user_param->use_mr_iova) {
+			user_param->inline_size = 0;
+			printf("Perftest doesn't support --mr_iova with inline messages: inline size set to 0\n");
+			return;
+		}
+
 		if (user_param->tst == LAT) {
 			switch(user_param->verb) {
 				case WRITE_IMM:
@@ -3068,6 +3108,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int disable_pcir_flag = 0;
 	static int mmap_file_flag = 0;
 	static int mmap_offset_flag = 0;
+	static int mr_iova_flag = 0;
 	static int ipv6_flag = 0;
 	static int ipv6_addr_flag = 0;
 	static int raw_ipv6_flag = 0;
@@ -3273,6 +3314,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{ .name = "gpu_touch",		.has_arg = 1, .flag = &gpu_touch_flag, .val = 1},
 			{ .name = "mmap",		.has_arg = 1, .flag = &mmap_file_flag, .val = 1},
 			{ .name = "mmap-offset",	.has_arg = 1, .flag = &mmap_offset_flag, .val = 1},
+			{ .name = "mr_iova",		.has_arg = 1, .flag = &mr_iova_flag, .val = 1},
 			{ .name = "ipv6",		.has_arg = 0, .flag = &ipv6_flag, .val = 1},
 			{ .name = "ipv6-addr",		.has_arg = 0, .flag = &ipv6_addr_flag, .val = 1},
 			#ifdef HAVE_IPV6
@@ -3950,6 +3992,20 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (mmap_offset_flag) {
 					CHECK_VALUE(user_param->mmap_offset,unsigned long,"mmap offset",not_int_ptr);
 					mmap_offset_flag = 0;
+				}
+				if (mr_iova_flag) {
+					char *end;
+
+					/* strtoull() accepts leading whitespace and a sign, so "-1" would parse as UINT64_MAX */
+					errno = 0;
+					user_param->mr_iova = strtoull(optarg, &end, 0);
+					if (optarg[0] < '0' || optarg[0] > '9' || errno || *end != '\0') {
+						fprintf(stderr, " Invalid --mr_iova value: %s\n", optarg);
+						free(duplicates_checker);
+						return FAILURE;
+					}
+					user_param->use_mr_iova = 1;
+					mr_iova_flag = 0;
 				}
 				if (dlid_flag) {
 					CHECK_VALUE(user_param->dlid,uint16_t,"dlid",not_int_ptr);

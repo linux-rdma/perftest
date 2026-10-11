@@ -1334,6 +1334,10 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	#endif
 	ALLOC(ctx->mr, struct ibv_mr*, user_param->num_of_qps);
 	ALLOC(ctx->buf, void*, user_param->num_of_qps);
+	if (user_param->use_mr_iova) {
+		ALLOC(ctx->mr_addr_offset, uint64_t, user_param->num_of_qps);
+		memset(ctx->mr_addr_offset, 0, user_param->num_of_qps * sizeof(uint64_t));
+	}
 
 	#ifdef HAVE_CC_UNPROTECTED_ALLOC
 	if (user_param->use_cc_unprotected)
@@ -1499,6 +1503,8 @@ void dealloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_p
 		free(ctx->mr);
 	if (ctx->buf != NULL)
 		free(ctx->buf);
+	if (ctx->mr_addr_offset != NULL)
+		free(ctx->mr_addr_offset);
 	#ifdef HAVE_CC_UNPROTECTED_ALLOC
 	if (user_param->use_cc_unprotected && ctx->ibv_buf != NULL)
 		free(ctx->ibv_buf);
@@ -2204,6 +2210,12 @@ static int initialize_buffer_content(struct pingpong_context *ctx,
 	return 0;
 }
 
+static uint64_t get_mr_iova(struct pingpong_context *ctx,
+			    struct perftest_parameters *user_param, int qp_index)
+{
+	return user_param->use_mr_iova ? user_param->mr_iova : (uint64_t)ctx->buf[qp_index];
+}
+
 #ifdef HAVE_REG_MR_EX
 static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 				     struct perftest_parameters *user_param,
@@ -2218,7 +2230,7 @@ static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 		/* DMABUF case: use FD, IOVA and FD_OFFSET instead of ADDR */
 		in.comp_mask = IBV_REG_MR_MASK_FD | IBV_REG_MR_MASK_IOVA | IBV_REG_MR_MASK_FD_OFFSET;
 		in.fd = dmabuf_fd;
-		in.iova = (uint64_t)ctx->buf[qp_index];
+		in.iova = get_mr_iova(ctx, user_param, qp_index);
 		in.fd_offset = dmabuf_offset;
 		if (user_param->output == FULL_VERBOSITY)
 			printf("Calling ibv_reg_mr_ex with dmabuf(offset=%lu, size=%lu, addr=%p, fd=%d) for QP #%d\n",
@@ -2232,6 +2244,10 @@ static struct ibv_mr *register_mr_ex(struct pingpong_context *ctx,
 	} else {
 		in.comp_mask = IBV_REG_MR_MASK_ADDR;
 		in.addr = ctx->buf[qp_index];
+		if (user_param->use_mr_iova) {
+			in.comp_mask |= IBV_REG_MR_MASK_IOVA;
+			in.iova = user_param->mr_iova;
+		}
 	}
 
 	if (user_param->processing_hints != -1) {
@@ -2270,7 +2286,7 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 			}
 			return mlx5dv_reg_dmabuf_mr(
 				ctx->pd, dmabuf_offset,
-				ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+				ctx->buff_size, get_mr_iova(ctx, user_param, qp_index),
 				dmabuf_fd,
 				flags, MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT
 				);
@@ -2282,7 +2298,7 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 					dmabuf_offset, ctx->buff_size, ctx->buf[qp_index], dmabuf_fd, qp_index);
 			return ibv_reg_dmabuf_mr(
 				ctx->pd, dmabuf_offset,
-				ctx->buff_size, (uint64_t)ctx->buf[qp_index],
+				ctx->buff_size, get_mr_iova(ctx, user_param, qp_index),
 				dmabuf_fd,
 				flags
 				);
@@ -2293,6 +2309,15 @@ static struct ibv_mr *register_mr(struct pingpong_context *ctx,
 #endif
 	} else {
 		/* Regular memory registration using standard API */
+		if (user_param->use_mr_iova) {
+#ifdef HAVE_REG_MR_IOVA
+			return ibv_reg_mr_iova(ctx->pad, ctx->buf[qp_index], ctx->buff_size,
+					       user_param->mr_iova, flags);
+#else
+			errno = EOPNOTSUPP;
+			return NULL;
+#endif
+		}
 		return ibv_reg_mr(ctx->pad, ctx->buf[qp_index], ctx->buff_size, flags);
 	}
 }
@@ -2392,6 +2417,21 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 	/* Setup access flags */
 	int flags = setup_mr_flags(user_param);
 
+	if (user_param->use_mr_iova) {
+		/* The kernel requires the IOVA and the start address to share the page offset */
+		uint64_t page_mask = sysconf(_SC_PAGESIZE) - 1;
+		uint64_t start = dmabuf_fd ? dmabuf_offset : (uintptr_t)ctx->buf[qp_index];
+
+		if ((user_param->mr_iova ^ start) & page_mask) {
+			fprintf(stderr, "--mr_iova=%#" PRIx64 " must have the same page offset as the buffer start (%#" PRIx64 ")\n",
+				user_param->mr_iova, start);
+			return FAILURE;
+		}
+		if (user_param->output == FULL_VERBOSITY)
+			printf("Registering MR #%d of %" PRIu64 " bytes at IOVA %#" PRIx64 " (buffer %p)\n",
+			       qp_index, ctx->buff_size, user_param->mr_iova, ctx->buf[qp_index]);
+	}
+
 	/* Register memory region */
 	if (register_memory_region(ctx, user_param, qp_index, flags, dmabuf_fd, dmabuf_offset) != SUCCESS) {
 		#ifdef HAVE_CC_UNPROTECTED_ALLOC
@@ -2400,6 +2440,9 @@ int create_single_mr(struct pingpong_context *ctx, struct perftest_parameters *u
 		#endif
 		return FAILURE;
 	}
+
+	if (ctx->mr_addr_offset)
+		ctx->mr_addr_offset[qp_index] = user_param->mr_iova - (uintptr_t)ctx->buf[qp_index];
 
 	if (user_param->use_null_mr) {
 		ctx->null_mr = ibv_alloc_null_mr(ctx->pd);
@@ -2531,6 +2574,8 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 			ctx->mr[i] = ctx->mr[0];
 			// cppcheck-suppress arithOperationsOnVoidPointer
 			ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
+			if (ctx->mr_addr_offset)
+				ctx->mr_addr_offset[i] = ctx->mr_addr_offset[0];
 		}
 	}
 
@@ -4079,7 +4124,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 			ctx->r_dctn[i] = rem_dest[xrc_offset + i].qpn;
 		}
 		memset(&ctx->wr[i*user_param->post_list],0,sizeof(struct ibv_send_wr));
-		ctx->sge_list[i*user_param->post_list].addr = (uintptr_t)ctx->buf[i];
+		ctx->sge_list[i*user_param->post_list].addr = buf_to_mr_addr(ctx, i, ctx->buf[i]);
 
 		if (user_param->mac_fwd) {
 			if (user_param->mr_per_qp) {
@@ -4100,7 +4145,7 @@ void ctx_set_send_reg_wqes(struct pingpong_context *ctx,
 
 			ctx->scnt[i] = 0;
 			ctx->ccnt[i] = 0;
-			ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+			ctx->my_addr[i] = buf_to_mr_addr(ctx, i, ctx->buf[i]);
 			if (user_param->verb != SEND && user_param->verb != SEND_IMM)
 				ctx->rem_addr[i] = rem_dest[xrc_offset + i].vaddr;
 		}
@@ -4220,14 +4265,14 @@ void ctx_set_send_wqes_data_val_write(struct pingpong_context *ctx,
 	int num_of_qps = user_param->num_of_qps;
 
 	for (i = 0; i < 3; i++) {
-		ctx->sge_list[i].addr = (uintptr_t)ctx->buf[0] + i*ctx->payload_size;
+		ctx->sge_list[i].addr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + i*ctx->payload_size;
 		ctx->sge_list[i].length = ctx->payload_size;
 		ctx->sge_list[i].lkey = ctx->mr[0]->lkey;
 	}
 
 	/* Atomic returns go to a dedicated trash area (not recv_slots) */
 	for (i = 0; i < num_of_qps; i++) {
-		ctx->atomic_sge_list[i].addr = (uintptr_t)ctx->buf[0] + ctx->atomic_returns_offset + i * sizeof(uint64_t);
+		ctx->atomic_sge_list[i].addr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + ctx->atomic_returns_offset + i * sizeof(uint64_t);
 		ctx->atomic_sge_list[i].length = 8;
 		ctx->atomic_sge_list[i].lkey = ctx->mr[0]->lkey;
 	}
@@ -4240,7 +4285,7 @@ void ctx_set_send_wqes_data_val_write(struct pingpong_context *ctx,
 		ctx->wr[i+num_of_qps].wr.atomic.remote_addr = remote_tail_markers_address;
 		ctx->scnt[i] = 0;
 		ctx->ccnt[i] = 0;
-		ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+		ctx->my_addr[i] = buf_to_mr_addr(ctx, i, ctx->buf[i]);
 		ctx->rem_addr[i] = rem_dest[i].vaddr;
 
 		ctx->wr[i].sg_list = &ctx->sge_list[0];
@@ -4272,8 +4317,8 @@ void ctx_set_send_wqes_data_val_read(struct pingpong_context *ctx,
 	int num_of_qps = user_param->num_of_qps;
 	uint32_t slots_per_qp = user_param->validation_chunk_size * user_param->validation_chunks_per_qp;
 	uint64_t per_qp_recv_size = slots_per_qp * ctx->payload_size;
-	uint64_t recv_slots_base = (uintptr_t)ctx->buf[0] + ctx->recv_slots_offset;
-	uint64_t atomic_returns_base = (uintptr_t)ctx->buf[0] + ctx->atomic_returns_offset;
+	uint64_t recv_slots_base = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + ctx->recv_slots_offset;
+	uint64_t atomic_returns_base = buf_to_mr_addr(ctx, 0, ctx->buf[0]) + ctx->atomic_returns_offset;
 
 	for (qp = 0; qp < num_of_qps; qp++) {
 		uint64_t qp_recv_base = recv_slots_base + qp * per_qp_recv_size;
@@ -4300,7 +4345,7 @@ void ctx_set_send_wqes_data_val_read(struct pingpong_context *ctx,
 	for (i = 0; i < num_of_qps; i++) {
 		ctx->scnt[i] = 0;
 		ctx->ccnt[i] = 0;
-		ctx->my_addr[i] = (uintptr_t)ctx->buf[i];
+		ctx->my_addr[i] = buf_to_mr_addr(ctx, i, ctx->buf[i]);
 		ctx->rem_addr[i] = rem_dest[i].vaddr;
 
 		ctx->wr[i].opcode = IBV_WR_RDMA_READ;
@@ -4365,10 +4410,10 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 		if (!user_param->mr_per_qp) {
-			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[0] +
+			ctx->recv_sge_list[i * user_param->recv_post_list].addr = buf_to_mr_addr(ctx, 0, ctx->buf[0]) +
 				(num_of_qps + k) * ctx->send_qp_buff_size;
 		} else {
-			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[i];
+			ctx->recv_sge_list[i * user_param->recv_post_list].addr = buf_to_mr_addr(ctx, i, ctx->buf[i]);
 		}
 
 		if (user_param->connection_type == UD)
