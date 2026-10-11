@@ -1273,6 +1273,7 @@ struct ibv_context* ctx_open_device(struct ibv_device *ib_dev, struct perftest_p
 
 		if (ret) {
 			fprintf(stderr,"Couldn't login. err=%d.\n", ret);
+			ibv_close_device(context);
 			return NULL;
 		}
 
