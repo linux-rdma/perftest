@@ -1799,9 +1799,9 @@ int destroy_ctx(struct pingpong_context *ctx,
 		ctx->mkey = NULL;
 	}
 	#endif
-
+	free(user_param->tposted);
+	user_param->tposted = NULL;
 	if ((user_param->tst == BW || user_param->tst == LAT_BY_BW ) && (user_param->machine == CLIENT || user_param->duplex)) {
-		free(user_param->tposted);
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
 		free(ctx->rem_addr);
@@ -1809,10 +1809,8 @@ int destroy_ctx(struct pingpong_context *ctx,
 		free(ctx->ccnt);
 	}
 	else if ((user_param->tst == BW || user_param->tst == LAT_BY_BW )
-		 && (user_param->verb == SEND || user_param->verb == SEND_IMM)
+		 && has_recv_comp(user_param->verb)
 		 && user_param->machine == SERVER) {
-
-		free(user_param->tposted);
 		free(user_param->tcompleted);
 		free(ctx->my_addr);
 	}
