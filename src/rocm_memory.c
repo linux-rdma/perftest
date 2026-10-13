@@ -209,7 +209,7 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 	printf("allocated %lu bytes of GPU buffer at %p\n", (unsigned long)buf_size, d_A);
 	*addr = d_A;
-	*can_init = true;
+	*can_init = false;
 	return SUCCESS;
 }
 
