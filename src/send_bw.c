@@ -380,6 +380,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (user_param.machine == SERVER && validation_is_sync(user_param.data_validation)) {
+		ctx.data_validation_hint = (uint32_t)rem_dest->tail_markers_vaddr;
+		if (create_data_validation_reference_buffer(&ctx, &user_param)) {
+			fprintf(stderr,"Failed to allocate and initialize data validation buffer at server side\n");
+			goto destroy_context;
+		}
+	}
+
 	if (user_param.connection_type == DC)
 	{
 		/* Set up connection one more time to send qpn properly for DC */

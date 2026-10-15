@@ -407,6 +407,9 @@ enum rate_limiter_units {MEGA_BYTE_PS, GIGA_BIT_PS, PACKET_PS};
 /*Types rate limit*/
 enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RATE_LIMIT};
 
+/* External declaration for the validation fill types string array */
+extern const char *validationFillStr[];
+
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
 
@@ -476,6 +479,42 @@ enum gpu_touch_type {
 	GPU_TOUCH_ONCE,
 	GPU_TOUCH_INFINITE,
 	GPU_TOUCH_TYPES
+};
+
+/*
+ * Data validation type.
+ *
+ * ASYNC is the performance oriented validation: the receiver validates
+ * out of band and never backpressures the requestor, at the cost of
+ * requiring RC and ATOMIC support.
+ * SYNC validates inline on the receive path, which works over any
+ * transport and any device but does throttle the traffic.
+ */
+enum validation_type {
+	VALIDATION_NONE = 0,
+	VALIDATION_ASYNC,
+	VALIDATION_SYNC
+};
+
+static inline int validation_is_async(enum validation_type type)
+{
+	return type == VALIDATION_ASYNC;
+}
+
+static inline int validation_is_sync(enum validation_type type)
+{
+	return type == VALIDATION_SYNC;
+}
+
+/*
+ * How SYNC generates its payload. NONE means the user did not ask for a
+ * particular fill, in which case random is used.
+ */
+enum validation_fill {
+	VALIDATION_FILL_NONE = 0,
+	VALIDATION_FILL_RANDOM,
+	VALIDATION_FILL_SERIAL,
+	VALIDATION_FILL_PATTERN
 };
 
 /* Data validation mode */
@@ -706,7 +745,7 @@ struct perftest_parameters {
 	int				processing_hints;
 	int				dynamic_cqe_poll;
 	int				sig_offload;
-	int				data_validation;
+	enum validation_type		data_validation;
 	int				data_validation_debug;
 	int				validation_chunks_per_qp; /* Dynamic buffer depth */
 	uint32_t			validation_chunk_size;    /* Operations per validation chunk (may differ from tx_depth) */
@@ -714,6 +753,9 @@ struct perftest_parameters {
 	cpu_set_t			cpu_affinity;     /* CPU mask for affinity */
 	int				numa_node;
 	int				disable_numa;
+	enum validation_fill		validation_fill;
+	uint32_t			data_start_value;
+	bool				dump_full_buffers;
 };
 
 struct report_options {

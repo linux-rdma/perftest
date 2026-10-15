@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2023-2026 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #include <stdio.h>
@@ -221,7 +221,7 @@ struct memory_ctx *host_memory_create(struct perftest_parameters *params) {
 	ctx->base.validation_stop = host_validation_stop;
 	ctx->base.validation_destroy = host_validation_destroy;
 	ctx->use_hugepages = params->use_hugepages;
-	ctx->use_huge_for_validation = params->data_validation;
+	ctx->use_huge_for_validation = validation_is_async(params->data_validation);
 	ctx->debug = params->data_validation_debug;
 	ctx->alloc_type = HOST_ALLOC_MALLOC;
 	ctx->alloc_size = 0;
