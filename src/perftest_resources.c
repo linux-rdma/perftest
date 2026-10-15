@@ -577,7 +577,7 @@ static inline int _new_post_send(struct pingpong_context *ctx,
 				ctx->qpx[index],
 				wr->sg_list->lkey,
 				wr->sg_list->addr,
-				user_param->size);
+				wr->sg_list->length);
 		}
 		wr = wr->next;
 	}
