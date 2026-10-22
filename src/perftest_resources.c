@@ -3192,10 +3192,6 @@ int create_qp_main(struct pingpong_context *ctx,
 }
 
 #if defined(HAVE_IBV_WR_API) && defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
-/******************************************************************************
- * Enhanced reorder (MLX5DV_QP_CREATE_OOO_DP) is requested only on mlnx devices,
- * and never for UD, UC or RawEth: RAW_PACKET QPs reject the flag.
- ******************************************************************************/
 static int should_request_enhanced_reorder(struct ibv_context *context,
 					   struct perftest_parameters *user_param)
 {
