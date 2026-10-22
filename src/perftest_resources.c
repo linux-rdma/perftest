@@ -3192,8 +3192,8 @@ int create_qp_main(struct pingpong_context *ctx,
 }
 
 #if defined(HAVE_IBV_WR_API) && defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
-static int should_request_enhanced_reorder(struct ibv_context *context,
-					   struct perftest_parameters *user_param)
+static int enhanced_reorder_eligible(struct ibv_context *context,
+				     struct perftest_parameters *user_param)
 {
 	if (user_param->no_enhanced_reorder)
 		return 0;
@@ -3382,7 +3382,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_IBV_WR_API
 		#ifdef HAVE_MLX5DV
 		#ifdef HAVE_OOO_RECV_WRS
-		if (should_request_enhanced_reorder(ctx->context, user_param)) {
+		if (enhanced_reorder_eligible(ctx->context, user_param)) {
 			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
 			/* No DV capabilities: leave enhanced reorder off rather
