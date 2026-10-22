@@ -3191,6 +3191,26 @@ int create_qp_main(struct pingpong_context *ctx,
 	return ret;
 }
 
+#if defined(HAVE_IBV_WR_API) && defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
+/******************************************************************************
+ * Enhanced reorder (MLX5DV_QP_CREATE_OOO_DP) is requested only on mlnx devices,
+ * and never for UD, UC or RawEth: RAW_PACKET QPs reject the flag.
+ ******************************************************************************/
+static int should_request_enhanced_reorder(struct ibv_context *context,
+					   struct perftest_parameters *user_param)
+{
+	if (user_param->no_enhanced_reorder)
+		return 0;
+
+	if (user_param->connection_type == UD || user_param->connection_type == UC ||
+	    user_param->connection_type == RawEth)
+		return 0;
+
+	// OOO_RECV_WRS is not supported by non-mlnx devices
+	return get_device_vendor(context) == MLNX_VENDOR_ID;
+}
+#endif
+
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int qp_index)
 {
@@ -3211,7 +3231,6 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	memset(&attr_dv, 0, sizeof(attr_dv));
 	#ifdef HAVE_OOO_RECV_WRS
 	struct mlx5dv_context ctx_dv;
-	uint32_t is_mlnx_device;
 	memset(&ctx_dv, 0, sizeof(ctx_dv));
 	#endif
 	#endif
@@ -3367,10 +3386,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#ifdef HAVE_IBV_WR_API
 		#ifdef HAVE_MLX5DV
 		#ifdef HAVE_OOO_RECV_WRS
-		// OOO_RECV_WRS is not supported by non-mlnx devices
-		is_mlnx_device = get_device_vendor(ctx->context) == MLNX_VENDOR_ID;
-
-		if (!user_param->no_enhanced_reorder && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
+		if (should_request_enhanced_reorder(ctx->context, user_param)) {
 			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
 
 			/* No DV capabilities: leave enhanced reorder off rather
