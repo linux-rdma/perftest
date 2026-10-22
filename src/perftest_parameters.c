@@ -732,6 +732,15 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Set retry count value in rdma_cm mode\n");
 	}
 
+	printf("      --gorport0=<value> ");
+	printf(" Set the Gor Port 0 \n");
+	printf("      --gorport1=<value> ");
+	printf(" Set the Gor Port 1 \n");
+	printf("      --gorport2=<value> ");
+	printf(" Set the Gor Port 2 \n");
+	printf("      --gorport3=<value> ");
+	printf(" Set the Gor Port 3 \n");
+
 	if (tst != FS_RATE) {
 		printf("      --tclass=<value> ");
 		printf(" Set the Traffic Class in GRH (if GRH is in use)\n");
@@ -2309,9 +2318,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_MLU && user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
+	if (user_param->memory_type == MEMORY_MLU && user_param->tst == LAT && user_param->verb == WRITE) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"Perftest supports MLU latency tests with read/send verbs only\n");
+		fprintf(stderr,"Perftest doesn't support MLU latency test with write (without immediate) verb; use --write_with_imm\n");
 		exit(1);
 	}
 
@@ -3025,6 +3034,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int flow_label_flag = 0;
 	static int retry_count_flag = 0;
 	static int dont_xchg_versions_flag = 0;
+	static int gor_port0 = 0;
+	static int gor_port1 = 0;
+	static int gor_port2 = 0;
+	static int gor_port3 = 0;
 	static int use_cuda_flag = 0;
 	static int use_cuda_bus_id_flag = 0;
 	static int use_cuda_dmabuf_flag = 0;
@@ -3330,6 +3343,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "pin_cores", .has_arg = 1, .flag = &pin_cores_flag, .val = 1 },
 			{.name = "numa_node", .has_arg = 1, .flag = &numa_node_flag, .val = 1 },
 			{.name = "disable_numa", .has_arg = 0, .flag = &disable_numa_flag, .val = 1 },
+			{.name = "gorport0", .has_arg = 1, .flag = &gor_port0, .val = 1},
+			{.name = "gorport1", .has_arg = 1, .flag = &gor_port1, .val = 1},
+			{.name = "gorport2", .has_arg = 1, .flag = &gor_port2, .val = 1},
+			{.name = "gorport3", .has_arg = 1, .flag = &gor_port3, .val = 1},
 			{0}
 		};
 		if (!duplicates_checker) {
@@ -3935,6 +3952,24 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					}
 					gpu_touch_flag = 0;
 				}
+
+				if (gor_port0) {
+					CHECK_VALUE(user_param->gor_port0,int,"gor port0",not_int_ptr);
+					gor_port0 = 0;
+				}
+				if (gor_port1) {
+					CHECK_VALUE(user_param->gor_port1,int,"gor port1",not_int_ptr);
+					gor_port1 = 0;
+				}
+				if (gor_port2) {
+					CHECK_VALUE(user_param->gor_port2,int,"gor port2",not_int_ptr);
+					gor_port2 = 0;
+				}
+				if (gor_port3) {
+					CHECK_VALUE(user_param->gor_port3,int,"gor port3",not_int_ptr);
+					gor_port3 = 0;
+				}
+
 				if (flow_label_flag) {
 					if (parse_flow_label_from_str(user_param, optarg)) {
 						return FAILURE;
