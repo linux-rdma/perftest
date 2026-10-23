@@ -895,6 +895,13 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Use send-with-immediate verb instead of send\n");
 	}
 
+	if (tst == BW && verb == SEND) {
+		printf("      --send_rcredit ");
+		printf(" Use receive-credit flow control: the receiver RDMA-writes its posted receive count back to the sender,\n");
+		printf("                      ");
+		printf(" so the sender never exceeds the posted receive buffers (RC only, always on for iWARP) (SYMMETRIC)\n");
+	}
+
 	putchar('\n');
 }
 /******************************************************************************
@@ -1145,6 +1152,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->flows_burst			= 1;
 	user_param->perform_warm_up		= 0;
 	user_param->use_ooo			= 0;
+	user_param->send_rcredit		= 0;
 	user_param->disable_pcir		= 0;
 	user_param->source_ip			= NULL;
 	user_param->has_source_ip		= 0;
@@ -1677,6 +1685,21 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		printf(RESULT_LINE);
 		printf(" Using SRQ depth should be greater than number of QPs.\n");
 		exit (1);
+	}
+
+	if (user_param->send_rcredit) {
+		if (user_param->connection_type != RC) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Receive credits (--send_rcredit) supported only on RC\n");
+			exit(1);
+		}
+
+		/* Credits are sent every rx_depth/3 receives, so it must be non-zero. */
+		if (user_param->rx_depth < 3) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Receive credits (--send_rcredit) require rx_depth >= 3\n");
+			exit(1);
+		}
 	}
 
 #ifdef HAVE_AES_XTS
@@ -3078,6 +3101,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int reply_every_flag = 0;
 	static int perform_warm_up_flag = 0;
 	static int use_ooo_flag = 0;
+	static int send_rcredit_flag = 0;
 	static int vlan_en = 0;
 	static int vlan_pcp_flag = 0;
 	static int recv_post_list_flag = 0;
@@ -3308,6 +3332,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			{.name = "bind_source_ip", .has_arg = 1, .flag = &source_ip_flag, .val = 1},
 			{.name = "write_with_imm", .has_arg = 0, .flag = &use_write_with_imm_flag, .val = 1 },
 			{.name = "send_with_imm", .has_arg = 0, .flag = &use_send_with_imm_flag, .val = 1 },
+			{.name = "send_rcredit", .has_arg = 0, .flag = &send_rcredit_flag, .val = 1 },
 			#ifdef HAVE_OOO_RECV_WRS
 			{ .name = "no_enhanced_reorder",		.has_arg = 0, .flag = &no_enhanced_reorder_flag, .val = 1},
 			#endif
@@ -4401,6 +4426,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	}
 	if (use_ooo_flag)
 		user_param->use_ooo = 1;
+	if (send_rcredit_flag) {
+		if (user_param->tst != BW || user_param->verb != SEND) {
+			fprintf(stderr, " --send_rcredit is supported only in ib_send_bw\n");
+			return FAILURE;
+		}
+		user_param->send_rcredit = 1;
+	}
 	if(vlan_en) {
 		user_param->vlan_en = ON;
 		user_param->print_eth_func = &print_ethernet_vlan_header;
