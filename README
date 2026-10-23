@@ -274,7 +274,7 @@ Special feature detailed explanation in tests:
      can locate them. For example:
        export LDFLAGS="-L/path/to/your/cuda/lib $LDFLAGS"
 
-    CUDA DMA-BUF requierments:
+    CUDA DMA-BUF requirements:
         1) CUDA Toolkit 11.7 or later.
         2) NVIDIA Open-Source GPU Kernel Modules version 515 or later.
            installation instructions: http://us.download.nvidia.com/XFree86/Linux-x86_64/515.43.04/README/kernel_open.html
@@ -284,7 +284,7 @@ Special feature detailed explanation in tests:
               e.g: export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
             2- export LIBRARY_PATH.
               e.g: export LIBRARY_PATH=/usr/local/cuda/lib64:$LIBRARY_PATH
-          perform compilation as decribe in the begining of section 4 (GPUDirect usage).
+          perform compilation as described in the beginning of section 4 (GPUDirect usage).
       
      To use dma-buf, along with use_cuda , use_cuda_dmabuf flag should be used.
      e.g: ib_send_bw -d mlx5_0 --use_cuda=0 --use_cuda_dmabuf
@@ -311,7 +311,7 @@ Special feature detailed explanation in tests:
       encrypt_credentials.c file should be compiled with the following command:
       #gcc encrypt_credentials.c -o encrypt_credentials -lcrypto
 
-      You must provide the plaintext credentials and the kek in seperate files in hex format.
+      You must provide the plaintext credentials and the kek in separate files in hex format.
 
       for example:
 
@@ -363,7 +363,7 @@ Special feature detailed explanation in tests:
         Using the --payload_file_path you can pass a text file, which contains a pattern,
         as a parameter to perftest, and use the pattern as the payload of the RDMA verb.
 
-        You must provide the pattern in DWORD's seperated by comma and in hex format.
+        You must provide the pattern in DWORD's separated by comma and in hex format.
 
         for example:
         0xddccbbaa,0xff56f00d,0xffffffff,0x21ab025b, etc...
