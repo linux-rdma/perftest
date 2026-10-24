@@ -1,0 +1,91 @@
+name: Build and Test perftest on Ubuntu 24.04 with ROCm
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    # AMD's slim ROCm image. The -full and -complete tags carry the whole ML
+    # stack -- Composable Kernel alone is over 2 GB -- which a compile check
+    # never touches. This one is about 1.1 GB and still ships hipcc, the HIP
+    # and HSA headers, and device support for every target below.
+    container: rocm/dev-ubuntu-24.04:7.2.4
+
+    strategy:
+      # Report every architecture's result. A failure is far more likely to be
+      # specific to one target's code generation than common to both, and
+      # cancelling the others hides exactly the comparison that would say so.
+      fail-fast: false
+      matrix:
+        # gfx950 (CDNA, Instinct) and gfx1250 (RDNA) differ in wavefront width
+        # among other things, which the HIP sources have to get right.
+        rocm_arch: [gfx950, gfx1250]
+
+    name: ROCm (${{ matrix.rocm_arch }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The job runs as root inside the container, so no sudo here.
+      - name: Install build dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libibverbs-dev \
+            librdmacm-dev \
+            libibumad-dev \
+            libpci-dev
+
+      - name: Locate ROCm
+        run: |
+          # The image ships /opt/rocm as a symlink to a versioned prefix.
+          # configure needs the include path, so resolve it rather than
+          # assuming either spelling.
+          ROCM_PATH=$(ls -d /opt/rocm* 2>/dev/null | sort -V | tail -1)
+          if [ -z "$ROCM_PATH" ]; then
+            echo "No ROCm installation found under /opt" >&2
+            ls -la /opt || true
+            exit 1
+          fi
+          echo "Using ROCm at $ROCM_PATH"
+          "$ROCM_PATH/bin/hipcc" --version | head -2 || hipcc --version | head -2
+          echo "ROCM_PATH=$ROCM_PATH" >> $GITHUB_ENV
+          echo "$ROCM_PATH/bin" >> $GITHUB_PATH
+
+      - name: Run autogen.sh
+        run: ./autogen.sh
+
+      - name: Configure the build
+        run: |
+          # --with-rocm-arch selects the GPU the HIP kernels are compiled for.
+          # It only exists once there are HIP sources to compile, so probe for
+          # it rather than passing it blind: configure treats an unknown
+          # --with-* as a warning, which would silently do nothing here.
+          # Until such sources exist the two matrix legs build the same thing;
+          # they diverge as soon as there is device code to generate.
+          ROCM_ARCH_OPT=""
+          if ./configure --help | grep -q -- --with-rocm-arch; then
+            ROCM_ARCH_OPT="--with-rocm-arch=${{ matrix.rocm_arch }}"
+          fi
+          ./configure --enable-rocm --enable-rocm-dmabuf \
+                      --with-rocm="$ROCM_PATH" $ROCM_ARCH_OPT
+
+      - name: Build perftest
+        run: make
+
+      - name: Install perftest
+        run: make install
