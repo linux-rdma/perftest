@@ -334,9 +334,34 @@ AS_IF([test "x$enable_rocm" = xyes], [
        AC_SEARCH_LIBS([hipFree], [amdhip64], [],
                       [AC_MSG_ERROR([cannot link with -lamdhip64])])
        AC_DEFINE([HAVE_ROCM], [1], [Enable ROCm])
+       dnl HIP validation kernels are optional: without hipcc the ROCm
+       dnl validator falls back to staging the buffer through host memory,
+       dnl which is slower but needs no device compiler.
+       AC_CHECK_TOOL([HIPCC], [hipcc], [no])
+       dnl Which GPU the kernels are compiled for. hipcc's default target is
+       dnl whatever the *build* host reports, which is wrong whenever perftest
+       dnl is cross-built or built in a VM for an emulated device -- the
+       dnl symptom is "device kernel image is invalid" at launch, long after a
+       dnl clean build. Ask the runtime, and let a caller override.
+       AC_ARG_WITH([rocm-arch],
+                   [AS_HELP_STRING([--with-rocm-arch=ARCH],
+                                   [GPU arch for HIP kernels (default: ask rocm_agent_enumerator)])],
+                   [ROCM_OFFLOAD_ARCH="$withval"],
+                   [ROCM_OFFLOAD_ARCH=`rocm_agent_enumerator 2>/dev/null | grep -v '^gfx000$' | head -1`])
+       AS_IF([test "x$ROCM_OFFLOAD_ARCH" = "x"],
+             [AC_MSG_WARN([no GPU arch detected; HIP kernels will use hipcc's default])],
+             [AC_MSG_NOTICE([HIP kernels target $ROCM_OFFLOAD_ARCH])])
+       AC_SUBST([ROCM_OFFLOAD_ARCH])
+       AS_IF([test "x$HIPCC" != "xno"],
+             [AC_DEFINE([HAVE_ROCM_KERNELS], [1], [HIP validation kernels])
+              rocm_kernels=yes],
+             [AC_MSG_WARN([hipcc not found; ROCm validation will stage through host memory])
+              rocm_kernels=no])
        ])
 
 AM_CONDITIONAL([ROCM], [test x$enable_rocm = xyes])
+AM_CONDITIONAL([ROCM_KERNELS], [test x$rocm_kernels = xyes])
+AM_CONDITIONAL([ROCM_ARCH_SET], [test x$ROCM_OFFLOAD_ARCH != x])
 
 AS_IF([test "x$enable_rocm_dmabuf" = xyes], [
        AS_IF([test "x$HAVE_REG_DMABUF_MR" = "xno"],
