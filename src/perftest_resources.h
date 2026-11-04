@@ -327,7 +327,8 @@ struct pingpong_context {
 	int                                     credit_cnt;
 	int					cache_line_size;
 	int					cycle_buffer;
-	int					rposted;
+	int					rposted; /* Initial receive WRs per active QP */
+	int					active_recv_qps; /* 0: no ownership policy */
 	#ifdef HAVE_XRCD
 	struct ibv_xrcd				*xrc_domain;
 	int 					fd;

@@ -226,7 +226,7 @@ int calc_flow_rules_size(struct perftest_parameters *user_param, int is_ip_heade
  * Description: init raw_ethernet_info and ibv_flow_spec to user args
  *
  *	Parameters:
- *				flow_rules - Pointer to output, is set to header buffer and specification information
+ *				flow_rules - Optional output; NULL skips flow-rule setup
  *				ctx - Test Context.
  *				user_param - user_parameters struct for this test
  *				my_dest_info - ethernet information of me

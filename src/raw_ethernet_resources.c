@@ -117,13 +117,19 @@ static uint16_t ip_checksum(union IP_V4_header_raw *iph, size_t hdr_len)
 
 void gen_ipv6_header(void* ip_header_buffer, uint8_t* saddr, uint8_t* daddr,
 		     uint8_t protocol, int pkt_size, int hop_limit, int tos, int is_l4,
-		     int is_tcp)
+		     int is_tcp, int flow_label)
 {
 	struct IP_V6_header ip_header;
+	uint8_t traffic_class = (tos == DEF_TOS) ? 0 : tos;
+	uint32_t label = (uint32_t)flow_label & 0xfffff;
 
 	memset(&ip_header,0,sizeof(struct IP_V6_header));
 
 	ip_header.version = 6;
+	ip_header.priority = traffic_class >> 4;
+	ip_header.flow_lbl[0] = ((traffic_class & 0xf) << 4) | ((label >> 16) & 0xf);
+	ip_header.flow_lbl[1] = (label >> 8) & 0xff;
+	ip_header.flow_lbl[2] = label & 0xff;
 	ip_header.nexthdr = protocol ? protocol : DEFAULT_IPV6_NEXT_HDR;
 	ip_header.hop_limit = hop_limit;
 	ip_header.payload_len = htons(pkt_size - sizeof(struct IP_V6_header));
@@ -595,7 +601,9 @@ void build_pkt_on_buffer(struct ETH_header* eth_header,
 			gen_ipv6_header(header_buff, my_dest_info->ip6,
 					rem_dest_info->ip6, ip_next_protocol,
 					pkt_size, user_param->hop_limit, user_param->tos,
-					is_udp_or_tcp, user_param->tcp);
+					is_udp_or_tcp, user_param->tcp,
+					user_param->flow_label ?
+					user_param->flow_label[flows_offset % user_param->flow_label[0] + 2] : 0);
 		else
 			gen_ipv4_header(header_buff, &my_dest_info->ip, &rem_dest_info->ip,
 					ip_next_protocol, pkt_size, user_param->hop_limit, user_param->tos, offset);
@@ -898,7 +906,7 @@ int send_set_up_connection(
 		struct raw_ethernet_info *rem_dest_info)
 {
 
-	if (user_param->machine == SERVER || user_param->duplex) {
+	if (flow_rules && (user_param->machine == SERVER || user_param->duplex)) {
 		int flow_index;
 		for (flow_index = 0; flow_index < user_param->flows; flow_index++)
 			set_up_flow_rules(&flow_rules[flow_index], ctx,

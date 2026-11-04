@@ -114,8 +114,8 @@ clean-local:
 	-rm -f libperftest_kernels.so src/cuda_kernels.cu.o
 
 if HAVE_RAW_ETH
-libperftest_a_SOURCES += src/raw_ethernet_resources.c
-noinst_HEADERS += src/raw_ethernet_resources.h
+libperftest_a_SOURCES += src/raw_ethernet_resources.c src/raw_ethernet_steering.c
+noinst_HEADERS += src/raw_ethernet_resources.h src/raw_ethernet_steering.h
 bin_PROGRAMS += raw_ethernet_bw raw_ethernet_lat raw_ethernet_burst_lat raw_ethernet_fs_rate
 else
 libperftest_a_SOURCES +=

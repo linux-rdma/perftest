@@ -635,7 +635,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Force the link(s) to a specific type: IB or Ethernet.\n");
 	}
 
-	if (verb == SEND || verb == SEND_IMM) {
+	if ((verb == SEND || verb == SEND_IMM) && !(connection_type == RawEth && tst == BW)) {
 		printf("      --use-srq ");
 		printf(" Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ \n");
 	}
@@ -993,6 +993,14 @@ void usage_raw_ethernet(TestType tst)
 	if (tst == BW) {
 		printf("      --raw_mcast ");
 		printf(" send raw ethernet multicast traffic. No need to specify dest MAC address\n");
+
+		printf("\n  Raw Ethernet BW receive steering :\n");
+		printf("   The receiver installs each flow rule once and gives the rules to the QPs round-robin,\n");
+		printf("   so every frame completes once. -q sets the number of sending QPs; QPs that own no\n");
+		printf("   rule post no receives. --promiscuous adds one default rule, --sniffer uses one sniffer\n");
+		printf("   rule and --raw_mcast one group attachment; these modes are mutually exclusive and count\n");
+		printf("   every frame they capture, including unrelated traffic. --mac_fwd runs on a single QP\n");
+		printf("   (-q 1). --dualport and --use-srq are not supported.\n");
 	}
 
 	printf("\n");
@@ -1739,6 +1747,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit (1);
 		}
 
+		if (user_param->connection_type == RawEth) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " Dual-port mode is not supported for Raw Ethernet BW tests\n");
+			exit(1);
+		}
+
 		if (user_param->use_mcg){
 			printf(" Dual-port mode not supported in multicast feature\n");
 			exit (1);
@@ -1840,6 +1854,11 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
+		if (user_param->tst == BW && user_param->use_srq) {
+			fprintf(stderr," Shared Receive Queues aren't supported for Raw Ethernet BW tests\n");
+			exit(1);
+		}
+
 		if (user_param->memory_type == MEMORY_MMAP) {
 			fprintf(stderr," mmaped files aren't supported for Raw Ethernet tests\n");
 			exit(1);
@@ -1891,6 +1910,28 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			fprintf(stderr," CQ moderation can't be grater than rx depth.\n");
 			user_param->cq_mod = user_param->rx_depth < user_param->tx_depth ? user_param->rx_depth : user_param->tx_depth;
 			fprintf(stderr," Changing CQ moderation to min( rx depth , tx depth) = %d.\n",user_param->cq_mod);
+		}
+
+		if (user_param->tst == BW && user_param->mac_fwd == ON && user_param->num_of_qps > 1) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " MAC forwarding supports a single QP only (got %d QPs).\n", user_param->num_of_qps);
+			fprintf(stderr, " Every frame is received once, by the QP that owns its flow, and sending it\n"
+					" from the other QPs would need received buffers handed across QPs,\n"
+					" which is not implemented. Use -q 1.\n");
+			exit(1);
+		}
+
+		if (user_param->tst == BW && user_param->use_sniffer && user_param->use_promiscuous) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --sniffer and --promiscuous can't be combined: the sniffer rule already receives all traffic of the port\n");
+			exit(1);
+		}
+
+		if (user_param->tst == BW && user_param->raw_mcast &&
+		    (user_param->use_sniffer || user_param->use_promiscuous)) {
+			printf(RESULT_LINE);
+			fprintf(stderr, " --raw_mcast can't be combined with --promiscuous or --sniffer\n");
+			exit(1);
 		}
 
 		if (user_param->raw_mcast && user_param->duplex) {
