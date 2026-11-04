@@ -67,7 +67,9 @@ enum validation_mismatch_type {
  * Portable inline qualifier: works in both C (.c) and CUDA (.cu) files.
  */
 #ifndef VALIDATION_INLINE
-#ifdef __CUDACC__
+#if defined(__CUDACC__) || defined(__HIPCC__)
+/* hipcc compiles .hip like nvcc compiles .cu: the shared helpers below are
+ * called from device code on both, so both need the device annotation. */
 #define VALIDATION_INLINE __host__ __device__ static inline
 #else
 #define VALIDATION_INLINE static inline
@@ -307,6 +309,14 @@ classify_validation_mismatch(uint64_t error_offset,
  */
 struct validation_config {
 	void *buffer_base;
+	/*
+	 * Size of the whole validation buffer -- compute_validation_layout()'s
+	 * total_size. A backend that stages the buffer through host memory must
+	 * size that staging on this and not re-derive it: markers_offset is
+	 * mode-dependent and in READ mode points at atomic_returns, which sits
+	 * past recv_slots at the end of the layout.
+	 */
+	uint64_t buffer_size;
 	uint64_t markers_offset;
 	uint64_t recv_slots_offset;
 	uint64_t payload_size;
