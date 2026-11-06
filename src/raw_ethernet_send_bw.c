@@ -275,8 +275,12 @@ int main(int argc, char *argv[])
 
 	if (user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
-		if (user_param.raw_qos)
+		if (user_param.raw_qos && user_param.report_min_bw)
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS_MINBW : RESULT_FMT_G_QOS_MINBW));
+		else if (user_param.raw_qos)
 			printf((user_param.report_fmt == MBS ? RESULT_FMT_QOS : RESULT_FMT_G_QOS));
+		else if (user_param.report_min_bw)
+			printf((user_param.report_fmt == MBS ? RESULT_FMT_MINBW : RESULT_FMT_G_MINBW));
 		else
 			printf((user_param.report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
