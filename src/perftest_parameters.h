@@ -399,6 +399,7 @@ enum ctx_device {
 	PENSANDO_ALL		= 42,
 	CONNECTX10		= 43,
 	BLUEFIELD4              = 44,
+	THEAD_NIC		= 45,
 };
 
 /* Units for rate limiter */

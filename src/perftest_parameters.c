@@ -2710,6 +2710,8 @@ enum ctx_device ib_dev_name(struct ibv_context *context)
 			case 41510 : dev_fname = HNS; break;
 			case 41512 : dev_fname = HNS; break;
 			case 41519 : dev_fname = HNS; break;
+			case 8272 : dev_fname = THEAD_NIC; break;
+			case 8273 : dev_fname = THEAD_NIC; break;
 			default	   : dev_fname = UNKNOWN;
 		}
 	}
@@ -2957,7 +2959,8 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
                                         user_param->inline_size = 434;
                                 else
                                         user_param->inline_size = 465;
-			}
+			} else if (current_dev == THEAD_NIC)
+				user_param->inline_size = 256;
 
 		} else {
 			user_param->inline_size = 0;
