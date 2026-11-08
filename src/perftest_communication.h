@@ -725,12 +725,14 @@ int rdma_cm_event_error_handler(struct pingpong_context *ctx,
 * Parameters:
 *
 *    ctx - Application contexts.
+*    event - RDMA CM event.
 *
 * Return value:
 *    None.
 *
 */
-void rdma_cm_disconnect_handler(struct pingpong_context *ctx);
+void rdma_cm_disconnect_handler(struct pingpong_context *ctx,
+		struct rdma_cm_event *event);
 
 /* rdma_cm_events_dispatcher:
 *
