@@ -2309,9 +2309,9 @@ static void force_dependecies(struct perftest_parameters *user_param)
 		exit(1);
 	}
 
-	if (user_param->memory_type == MEMORY_MLU && user_param->tst == LAT && (user_param->verb == WRITE || user_param->verb == WRITE_IMM)) {
+	if (user_param->memory_type == MEMORY_MLU && user_param->tst == LAT && user_param->verb == WRITE ) {
 		printf(RESULT_LINE);
-		fprintf(stderr,"Perftest supports MLU latency tests with read/send verbs only\n");
+		fprintf(stderr,"Perftest doesn't support MLU latency test with write (without immediate) verb; use --write_with_imm\n");
 		exit(1);
 	}
 
