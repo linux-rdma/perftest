@@ -271,7 +271,8 @@ int main(int argc, char *argv[])
 	memset(rem_dest, 0, sizeof(struct pingpong_dest)*user_param.num_of_qps);
 
 	if (user_param.transport_type == IBV_TRANSPORT_IWARP)
-		ctx.send_rcredit = 1;
+		user_param.send_rcredit = 1;
+	ctx.send_rcredit = user_param.send_rcredit;
 
 	/* Allocating arrays needed for the test. */
 	if (alloc_ctx(&ctx,&user_param)){
