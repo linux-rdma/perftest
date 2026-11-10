@@ -1360,6 +1360,13 @@ int rdma_server_connect(struct pingpong_context *ctx,
 	}
 
 	ctx->cm_id = (struct rdma_cm_id*)event->id;
+	if (!ctx->cm_id->verbs) {
+		fprintf(stderr, "No verbs device for RDMA CM request on %s; check whether it has a valid GUID\n",
+			user_param->ib_devname ? user_param->ib_devname : "the selected device");
+		rdma_reject(ctx->cm_id, NULL, 0);
+		rdma_ack_cm_event(event);
+		return FAILURE;
+	}
 	ctx->context = ctx->cm_id->verbs;
 
 	if (user_param->work_rdma_cm == ON)
