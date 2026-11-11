@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Initialize data validation for receiver side */
-	if (user_param.data_validation &&
+	if (validation_is_async(user_param.data_validation) &&
 		(user_param.machine == SERVER || user_param.duplex) &&
 		data_validation_init(&ctx, &user_param)) {
 		goto destroy_context;
@@ -259,6 +259,14 @@ int main(int argc, char *argv[])
 		goto destroy_context;
 	}
 
+	if (user_param.machine == SERVER && validation_is_sync(user_param.data_validation)) {
+		ctx.data_validation_hint = (uint32_t)rem_dest->tail_markers_vaddr;
+		if (create_data_validation_reference_buffer(&ctx, &user_param)) {
+			fprintf(stderr," Failed to allocate and randomize data validation buffer at server side\n");
+			goto free_mem;
+		}
+	}
+
 	if (user_param.output == FULL_VERBOSITY) {
 		if (user_param.report_per_port) {
 			printf(RESULT_LINE_PER_PORT);
@@ -275,7 +283,7 @@ int main(int argc, char *argv[])
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
 
-		if (user_param.data_validation &&
+		if (validation_is_async(user_param.data_validation) &&
 			data_validation_start(&ctx, &user_param, NULL))
 			goto free_mem;
 
@@ -304,11 +312,11 @@ int main(int argc, char *argv[])
 				printf(RESULT_LINE);
 		}
 
-		if (user_param.data_validation)
+		if (validation_is_async(user_param.data_validation))
 			data_validation_stop_and_report(&ctx, &user_param, NULL);
 
 		if (user_param.work_rdma_cm == ON) {
-			if (user_param.data_validation)
+			if (validation_is_async(user_param.data_validation))
 				data_validation_destroy(&ctx);
 			if (destroy_ctx(&ctx,&user_param)) {
 				fprintf(stderr, "Failed to destroy resources\n");
@@ -328,7 +336,7 @@ int main(int argc, char *argv[])
 			return SUCCESS;
 		}
 
-		if (user_param.data_validation)
+		if (validation_is_async(user_param.data_validation))
 			data_validation_destroy(&ctx);
 		free(my_dest);
 		free(rem_dest);
@@ -342,7 +350,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* In unidir WRITE with data_validation, client waits for server to start validation kernel */
-	if (user_param.data_validation) {
+	if (validation_is_async(user_param.data_validation)) {
 		sleep(2);
 	}
 	if (user_param.test_method == RUN_ALL) {
@@ -389,7 +397,7 @@ int main(int argc, char *argv[])
 
 			} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
 
-				if ((user_param.data_validation ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
+				if ((validation_is_async(user_param.data_validation) ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
 					fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 					goto destroy_context;
 				}
@@ -440,7 +448,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Start validation for duplex mode */
-		if (user_param.data_validation && user_param.duplex &&
+		if (validation_is_async(user_param.data_validation) && user_param.duplex &&
 			data_validation_start(&ctx, &user_param,
 				user_param.machine == SERVER ? "SERVER" : "CLIENT"))
 			goto free_mem;
@@ -461,7 +469,7 @@ int main(int argc, char *argv[])
 
 		} else if (user_param.machine == CLIENT || user_param.verb != WRITE_IMM) {
 
-			if ((user_param.data_validation ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
+			if ((validation_is_async(user_param.data_validation) ? run_iter_bw_dv : run_iter_bw)(&ctx,&user_param)) {
 				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
 				goto destroy_context;
 			}
@@ -475,7 +483,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Sync before stopping validation for duplex mode */
-		if (user_param.data_validation && user_param.duplex) {
+		if (validation_is_async(user_param.data_validation) && user_param.duplex) {
 			if (ctx_hand_shake(&user_comm, &my_dest[0], &rem_dest[0])) {
 				fprintf(stderr, "Failed to sync before stopping validation\n");
 				goto free_mem;
@@ -545,7 +553,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Stop validation for duplex mode (after result line) */
-	if (user_param.data_validation && user_param.duplex) {
+	if (validation_is_async(user_param.data_validation) && user_param.duplex) {
 		data_validation_stop_and_report(&ctx, &user_param,
 				user_param.machine == SERVER ? "SERVER" : "CLIENT");
 	}
@@ -576,7 +584,7 @@ int main(int argc, char *argv[])
 		goto destroy_context;
 	}
 	if (user_param.work_rdma_cm == ON) {
-		if (user_param.data_validation)
+		if (validation_is_async(user_param.data_validation))
 			data_validation_destroy(&ctx);
 		if (destroy_ctx(&ctx,&user_param)) {
 			fprintf(stderr, "Failed to destroy resources\n");
@@ -597,7 +605,7 @@ int main(int argc, char *argv[])
 		return SUCCESS;
 	}
 
-	if (user_param.data_validation)
+	if (validation_is_async(user_param.data_validation))
 		data_validation_destroy(&ctx);
 	free(rem_dest);
 	free(my_dest);
@@ -610,7 +618,7 @@ int main(int argc, char *argv[])
 	return SUCCESS;
 
 destroy_context:
-	if (user_param.data_validation)
+	if (validation_is_async(user_param.data_validation))
 		data_validation_destroy(&ctx);
 	if (destroy_ctx(&ctx,&user_param))
 		fprintf(stderr, "Failed to destroy resources\n");
