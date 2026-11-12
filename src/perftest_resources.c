@@ -2332,7 +2332,13 @@ static int register_memory_region(struct pingpong_context *ctx,
 		fprintf(stderr, "Couldn't allocate MR with error=%d\n", errno);
 
 		if (dmabuf_fd && errno == EOPNOTSUPP) {
-			fprintf(stderr, "OFED stack does not support DMA-BUF\n");
+			/* EOPNOTSUPP here is the kernel RDMA driver declining the
+			 * dma_buf, not a userspace limitation: the device has no
+			 * .reg_user_mr_dmabuf, or it has one that rejected this
+			 * importer/exporter pair. */
+			fprintf(stderr,
+				"This RDMA device's kernel driver does not support "
+				"dma_buf memory regions\n");
 			close(dmabuf_fd);
 		}
 
@@ -7364,6 +7370,7 @@ int data_validation_init(struct pingpong_context *ctx,
 	{
 		struct validation_config vcfg = {
 			.buffer_base = ctx->buf[0],
+			.buffer_size = ctx->buff_size,
 			.markers_offset = markers_offset,
 			.recv_slots_offset = ctx->recv_slots_offset,
 			.payload_size = ctx->payload_size,
@@ -7414,20 +7421,64 @@ int data_validation_stop_and_report(struct pingpong_context *ctx,
 		return FAILURE;
 	}
 
-	if (!result.passed) {
+	/*
+	 * Order matters here, and each branch was reached in testing by a
+	 * different real condition.
+	 *
+	 * Errors first. A run whose chunks all mismatched has errors > 0 and
+	 * bytes_validated == 0, and testing "nothing validated" ahead of it
+	 * hides a genuine failure behind a message about missing data.
+	 *
+	 * Then nothing-validated. Backends set
+	 * passed = (errors == 0 && chunks_validated > 0), so a run that
+	 * observed no completed cycle also has passed == 0, and the !passed
+	 * branch would claim a failure with every error field still at its
+	 * initialised zero:
+	 *
+	 *   VALIDATION: FAILED - 0 error(s), first at QP 0, Chunk 0,
+	 *                        Offset 0 (expected 0x00, got 0x00)
+	 *
+	 * which contradicts itself and hides the real condition.
+	 * bytes_validated == 0 is that same condition counted differently: a
+	 * chunk that mismatches at its very first byte contributes no compared
+	 * bytes but still increments the chunk count.
+	 *
+	 * All three paths return FAILURE. Validating nothing is not a pass.
+	 */
+	if (result.errors_found > 0) {
 		fprintf(stderr, "VALIDATION: FAILED%s%s%s - %lu error(s), "
 			"first at QP %u, Chunk %u, Offset %lu "
 			"(expected 0x%02x, got 0x%02x)\n",
 			role ? " (" : "", role ? role : "", role ? ")" : "",
 			(unsigned long)result.errors_found,
-			result.error_qp_id, result.error_chunk_id, result.error_byte_offset,
+			result.error_qp_id, result.error_chunk_id,
+			result.error_byte_offset,
 			result.error_expected, result.error_actual);
 		return FAILURE;
 	}
 
-	if (result.chunks_validated == 0) {
-		fprintf(stderr, "VALIDATION: WARNING%s%s%s - no data validated\n",
-			role ? " (" : "", role ? role : "", role ? ")" : "");
+	if (result.chunks_validated == 0 || result.bytes_validated == 0) {
+		fprintf(stderr, "VALIDATION: WARNING%s%s%s - no data validated"
+			" (%lu chunks, %lu bytes)\n",
+			role ? " (" : "", role ? role : "", role ? ")" : "",
+			(unsigned long)result.chunks_validated,
+			(unsigned long)result.bytes_validated);
+		return FAILURE;
+	}
+
+	/*
+	 * Unreachable for the backends in tree, which derive passed from the
+	 * two conditions above. Kept so a backend that fails for a reason it
+	 * has not expressed as an error count still reports rather than
+	 * silently passing -- and says so, instead of printing a zeroed error
+	 * record that would read as corruption at offset 0.
+	 */
+	if (!result.passed) {
+		fprintf(stderr, "VALIDATION: FAILED%s%s%s - backend reported "
+			"failure with no error recorded (%lu chunks, %lu bytes)\n",
+			role ? " (" : "", role ? role : "", role ? ")" : "",
+			(unsigned long)result.chunks_validated,
+			(unsigned long)result.bytes_validated);
 		return FAILURE;
 	}
 

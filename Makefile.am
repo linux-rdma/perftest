@@ -35,7 +35,7 @@ AUTOMAKE_OPTIONS= subdir-objects
 
 noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_negotiation.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c src/numa_loader.c
-noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_negotiation.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/system_dmabuf_memory.h src/musa_memory.h src/numa_loader.h
+noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_negotiation.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/rocm_validation.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/system_dmabuf_memory.h src/musa_memory.h src/numa_loader.h
 
 AM_CFLAGS =
 
@@ -52,6 +52,34 @@ endif
 
 if ROCM
 libperftest_a_SOURCES += src/rocm_memory.c
+libperftest_a_SOURCES += src/rocm_validation.c
+noinst_HEADERS += src/rocm_kernels.h
+endif
+
+if ROCM_KERNELS
+
+if ROCM_ARCH_SET
+ROCM_OFFLOAD_FLAG = --offload-arch=@ROCM_OFFLOAD_ARCH@
+else
+ROCM_OFFLOAD_FLAG =
+endif
+
+ROCM_HIPCC_FLAGS = -DHAVE_CONFIG_H $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	-fPIC -std=c++17 $(ROCM_OFFLOAD_FLAG)
+
+src/rocm_kernels.hip.o: src/rocm_kernels.hip src/rocm_kernels.h \
+		src/cuda_validation.h
+	$(HIPCC) $(ROCM_HIPCC_FLAGS) -o $@ -c $<
+
+ROCM_KERNEL_OBJ = src/rocm_kernels.hip.o
+libperftest_a_LIBADD = $(ROCM_KERNEL_OBJ)
+
+clean-local-rocm-kernels:
+	-rm -f src/rocm_kernels.hip.o
+
+else
+ROCM_KERNEL_OBJ =
+clean-local-rocm-kernels:
 endif
 
 if NEURON

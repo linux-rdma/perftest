@@ -7,8 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <sys/utsname.h>
 #include "rocm_memory.h"
+#include "rocm_validation.h"
 #include <hip/hip_runtime_api.h>
 #if defined HAVE_HIP_HIP_VERSION_H
 #include <hip/hip_version.h>
@@ -75,83 +75,31 @@ int rocm_memory_init(struct memory_ctx *ctx) {
 		return FAILURE;
 	}
 
-#ifdef HAVE_ROCM_DMABUF
-	if (rocm_ctx->use_dmabuf) {
-		int dmabuf_supported     = 0;
-		const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
-		const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
-		int found_opt1           = 0;
-		int found_opt2           = 0;
-		const char *config_path_fmts[] = {
-			"/boot/config-%s",
-			"/usr/src/linux-%s/.config",
-			"/usr/src/linux/.config",
-			"/usr/lib/modules/%s/config",
-			"/usr/lib/ostree-boot/config-%s",
-			"/usr/lib/kernel/config-%s",
-			"/usr/src/linux-headers-%s/.config",
-			"/lib/modules/%s/build/.config",
-		};
-		size_t num_paths = sizeof(config_path_fmts) /
-				   sizeof(config_path_fmts[0]);
-		struct utsname utsname;
-		char kernel_conf_file[256];
-		char buf[256];
-		FILE *fp = NULL;
-		size_t i;
-
-		if (uname(&utsname) == -1) {
-			printf("could not get kernel name\n");
-			return FAILURE;
-		}
-
-		for (i = 0; i < num_paths; i++) {
-			snprintf(kernel_conf_file, sizeof(kernel_conf_file),
-				 config_path_fmts[i], utsname.release);
-			fp = fopen(kernel_conf_file, "r");
-			if (fp != NULL) {
-				break;
-			}
-		}
-
-        if (fp != NULL) {
-            while (fgets(buf, sizeof(buf), fp) != NULL) {
-                if (strstr(buf, kernel_opt1) != NULL) {
-                        found_opt1 = 1;
-                }
-                if (strstr(buf, kernel_opt2) != NULL) {
-                        found_opt2 = 1;
-                }
-                if (found_opt1 && found_opt2) {
-                        dmabuf_supported = 1;
-                        break;
-                }
-            }
-                fclose(fp);
-        }
-
-		// Fallback, works inside Docker containers where /boot/config-* is unavailable.
-		if (!dmabuf_supported) {
-			fp = fopen("/proc/kallsyms", "r");
-			if (fp != NULL) {
-				int o1 = 0, o2 = 0;
-				while (fgets(buf, sizeof(buf), fp) != NULL) {
-					if (!o1 && strstr(buf, " dma_buf_move_notify")) o1 = 1;
-					if (!o2 && strstr(buf, " pci_p2pdma"))            o2 = 1;
-					if (o1 && o2) break;
-				}
-				fclose(fp);
-				dmabuf_supported = (o1 && o2);
-			}
-		}
-
-		if (dmabuf_supported == 0) {
-            printf("could not verify dmabuf support from kernel "
-                	"config \n");
-			return FAILURE;
-		}
-	}
-#endif
+	/*
+	 * No dma_buf pre-flight check here, deliberately.
+	 *
+	 * This used to scan /boot/config-* for CONFIG_DMABUF_MOVE_NOTIFY and
+	 * CONFIG_PCI_P2PDMA and refuse to run if either was missing. Both
+	 * halves were wrong. move_notify no longer exists upstream -- dma-buf
+	 * always builds with it, and .move_notify became .invalidate_mappings
+	 * -- so the probe started failing precisely because support became
+	 * universal. And what it had gated was whether amdgpu_dma_buf_pin()
+	 * kept AMDGPU_GEM_DOMAIN_VRAM or fell back to GTT: driver policy,
+	 * versioned with the driver rather than with the running kernel, which
+	 * on a DKMS install moves independently of it. Today that placement
+	 * depends only on every attachment advertising peer2peer, which is not
+	 * observable before attach either.
+	 *
+	 * PCI_P2PDMA fares no better. It cannot see whether the NIC's driver
+	 * implements .reg_user_mr_dmabuf, so it passes on hardware that then
+	 * fails to register anyway.
+	 *
+	 * Both questions the check was trying to answer are already answered,
+	 * accurately, by the calls that do the work:
+	 * hsa_amd_portable_export_dmabuf() in rocm_memory_allocate_buffer()
+	 * reports whether ROCm can export, and ibv_reg_dmabuf_mr() reports
+	 * whether this NIC can import. Let those speak for themselves.
+	 */
 
 	return SUCCESS;
 }
@@ -163,16 +111,63 @@ int rocm_memory_destroy(struct memory_ctx *ctx) {
 	return SUCCESS;
 }
 
+static void *rocm_memory_copy_host_to_buffer(void *dest, const void *src,
+					     size_t size)
+{
+	hipError_t error = hipMemcpy(dest, src, size, hipMemcpyHostToDevice);
+
+	if (error != hipSuccess)
+		printf("hipMemcpy(HostToDevice) error=%d\n", error);
+	return dest;
+}
+
+static void *rocm_memory_copy_buffer_to_host(void *dest, const void *src,
+					     size_t size)
+{
+	hipError_t error = hipMemcpy(dest, src, size, hipMemcpyDeviceToHost);
+
+	if (error != hipSuccess)
+		printf("hipMemcpy(DeviceToHost) error=%d\n", error);
+	return dest;
+}
+
+static void *rocm_memory_copy_buffer_to_buffer(void *dest, const void *src,
+					       size_t size)
+{
+	hipError_t error = hipMemcpy(dest, src, size, hipMemcpyDeviceToDevice);
+
+	if (error != hipSuccess)
+		printf("hipMemcpy(DeviceToDevice) error=%d\n", error);
+	return dest;
+}
+
 int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t size, int *dmabuf_fd,
 				uint64_t *dmabuf_offset, void **addr, bool *can_init) {
 	void *d_A;
 	hipError_t error;
 	size_t buf_size = (size + ACCEL_PAGE_SIZE - 1) & ~(ACCEL_PAGE_SIZE - 1);
 
-	error = hipMalloc(&d_A, buf_size);
-	if (error != hipSuccess) {
-		printf("hipMalloc error=%d\n", error);
-		return FAILURE;
+	/* Some RDMA devices cannot reach the GPU's VRAM even though the MR
+	 * registers cleanly -- the failure surfaces later, as a gather error on
+	 * the first work request. A host-mapped allocation is still addressable
+	 * by the GPU but lives in system memory, which such a device can reach.
+	 * Opt in with PERFTEST_ROCM_HOST_ALLOC=1. Note this measures host memory
+	 * rather than VRAM, so it diagnoses reachability, it does not benchmark
+	 * peer-to-peer. */
+	if (getenv("PERFTEST_ROCM_HOST_ALLOC") != NULL) {
+		error = hipHostMalloc(&d_A, buf_size,
+				      hipHostMallocMapped | hipHostMallocPortable);
+		if (error != hipSuccess) {
+			printf("hipHostMalloc error=%d\n", error);
+			return FAILURE;
+		}
+		printf("PERFTEST_ROCM_HOST_ALLOC: host-mapped GPU buffer\n");
+	} else {
+		error = hipMalloc(&d_A, buf_size);
+		if (error != hipSuccess) {
+			printf("hipMalloc error=%d\n", error);
+			return FAILURE;
+		}
 	}
 
 #ifdef HAVE_ROCM_DMABUF
@@ -195,8 +190,13 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 		status = hsa_amd_portable_export_dmabuf(d_A, aligned_size, dmabuf_fd, &offset);
 		if (status != HSA_STATUS_SUCCESS) {
-			printf("failed to export dmabuf handle for addr %p / %zu", d_A,
-					aligned_size);
+			fprintf(stderr,
+				"failed to export dmabuf handle for addr %p / %zu: "
+				"hsa_status_t=%d\n", d_A, aligned_size, status);
+			fprintf(stderr,
+				"ROCm could not export this allocation as a dma_buf. "
+				"The kernel may predate AMDKFD_IOC_EXPORT_DMABUF, or "
+				"amdgpu may not be the exporter for this device.\n");
 			return FAILURE;
 		}
 
@@ -209,6 +209,10 @@ int rocm_memory_allocate_buffer(struct memory_ctx *ctx, int alignment, uint64_t 
 
 	printf("allocated %lu bytes of GPU buffer at %p\n", (unsigned long)buf_size, d_A);
 	*addr = d_A;
+	/* Device memory: initialize_buffer_content() must not fill this with
+	 * CPU stores. Where the allocation has no host mapping they fault, and
+	 * the crash lands in perftest_rand() long after the MR was created. The
+	 * buffer contents do not matter to a bandwidth test. */
 	*can_init = false;
 	return SUCCESS;
 }
@@ -239,9 +243,13 @@ struct memory_ctx *rocm_memory_create(struct perftest_parameters *params) {
 	ctx->base.destroy = rocm_memory_destroy;
 	ctx->base.allocate_buffer = rocm_memory_allocate_buffer;
 	ctx->base.free_buffer = rocm_memory_free_buffer;
-	ctx->base.copy_host_to_buffer = memcpy;
-	ctx->base.copy_buffer_to_host = memcpy;
-	ctx->base.copy_buffer_to_buffer = memcpy;
+	ctx->base.copy_host_to_buffer = rocm_memory_copy_host_to_buffer;
+	ctx->base.copy_buffer_to_host = rocm_memory_copy_buffer_to_host;
+	ctx->base.copy_buffer_to_buffer = rocm_memory_copy_buffer_to_buffer;
+	ctx->base.validation_init = rocm_validation_init;
+	ctx->base.validation_start = rocm_validation_start;
+	ctx->base.validation_stop = rocm_validation_stop;
+	ctx->base.validation_destroy = rocm_validation_destroy;
 	ctx->device_id = params->rocm_device_id;
 	ctx->use_dmabuf = params->use_rocm_dmabuf;
 
