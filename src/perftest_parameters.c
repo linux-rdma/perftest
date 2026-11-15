@@ -3446,7 +3446,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  exit(1);
 				  }
 				  break;
-			case 'l': CHECK_VALUE(user_param->post_list,int,"Send Post List size",not_int_ptr); break;
+			case 'l': CHECK_VALUE_POSITIVE(user_param->post_list,int,"Send Post List size",not_int_ptr); break;
 			case 'D': CHECK_VALUE_POSITIVE(user_param->duration,int,"Duration period",not_int_ptr);
 				  user_param->test_type = DURATION;
 				  break;
@@ -4075,7 +4075,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					vlan_pcp_flag = 0;
 				}
 				if (recv_post_list_flag) {
-					CHECK_VALUE(user_param->recv_post_list,int,"Receive Post List size",not_int_ptr);
+					CHECK_VALUE_POSITIVE(user_param->recv_post_list,int,"Receive Post List size",not_int_ptr);
 					recv_post_list_flag = 0;
 				}
 				#ifdef HAVE_AES_XTS
