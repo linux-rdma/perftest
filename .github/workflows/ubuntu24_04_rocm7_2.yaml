@@ -15,11 +15,19 @@ jobs:
 
     # AMD's slim ROCm image. The -full and -complete tags carry the whole ML
     # stack -- Composable Kernel alone is over 2 GB -- which a compile check
-    # never touches. This one is about 1.1 GB and still ships hipcc and the
-    # HIP and HSA headers needed to compile the ROCm backend.
+    # never touches. This one is about 1.1 GB and still ships hipcc, the HIP
+    # and HSA headers, and device support for gfx950 and gfx1250.
     container: rocm/dev-ubuntu-24.04:7.2.4
 
-    name: ROCm
+    strategy:
+      # Report every architecture's result. A failure in generated device code
+      # is far more likely to be specific to one target than common to both,
+      # and cancelling the other leg hides exactly the comparison that matters.
+      fail-fast: false
+      matrix:
+        rocm_arch: [gfx950, gfx1250]
+
+    name: ROCm (${{ matrix.rocm_arch }})
 
     steps:
       - name: Checkout repository
@@ -63,7 +71,8 @@ jobs:
       - name: Configure the build
         run: |
           ./configure --enable-rocm --enable-rocm-dmabuf \
-                      --with-rocm="$ROCM_PATH"
+                      --with-rocm="$ROCM_PATH" \
+                      --with-rocm-arch=${{ matrix.rocm_arch }}
 
       - name: Build perftest
         run: make

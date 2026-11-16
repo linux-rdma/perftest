@@ -1519,11 +1519,12 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	}
 
 	if (user_param->data_validation) {
-		/* Require CUDA or HOST memory */
+		/* Require CUDA, ROCm or HOST memory */
 		if (user_param->memory_type != MEMORY_CUDA &&
+		    user_param->memory_type != MEMORY_ROCM &&
 		    user_param->memory_type != MEMORY_HOST) {
 			printf(RESULT_LINE);
-			fprintf(stderr, " --data_validation requires --use_cuda or host memory\n");
+			fprintf(stderr, " --data_validation requires --use_cuda, --use_rocm or host memory\n");
 			exit(1);
 		}
 
