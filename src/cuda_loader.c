@@ -125,6 +125,8 @@ int load_cudart_library(void) {
 
     cudart_handle = dlopen("libcudart.so", RTLD_LAZY);
     if (!cudart_handle)
+        cudart_handle = dlopen("libcudart.so.13", RTLD_LAZY);
+    if (!cudart_handle)
         cudart_handle = dlopen("libcudart.so.12", RTLD_LAZY);
     if (!cudart_handle) {
         cudart_handle = dlopen("libcudart.so.11", RTLD_LAZY);
