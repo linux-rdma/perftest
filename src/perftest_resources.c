@@ -31,6 +31,7 @@
 #include "perftest_resources.h"
 #include "raw_ethernet_resources.h"
 #include "host_validation.h"
+#include "mlx5_devx.h"
 
 static enum ibv_wr_opcode opcode_verbs_array[] = {IBV_WR_SEND,IBV_WR_SEND_WITH_IMM,IBV_WR_RDMA_WRITE,IBV_WR_RDMA_WRITE_WITH_IMM,IBV_WR_RDMA_READ};
 static enum ibv_wr_opcode opcode_atomic_array[] = {IBV_WR_ATOMIC_CMP_AND_SWP,IBV_WR_ATOMIC_FETCH_AND_ADD};
@@ -2580,6 +2581,46 @@ int create_dmah(struct pingpong_context *ctx, struct perftest_parameters *user_p
 }
 #endif
 
+static int device_disables_strong_ordered_write(struct ibv_context *context)
+{
+#ifdef HAVE_MLX5_DEVX
+	uint32_t in[DEVX_ST_SZ_DW(query_hca_cap_in)]  = {};
+	uint32_t out[DEVX_ST_SZ_DW(query_hca_cap_out)] = {};
+	int ret;
+
+	if (get_device_vendor(context) != MLNX_VENDOR_ID)
+		return 0;
+
+	DEVX_SET(query_hca_cap_in, in, opcode, MLX5_CMD_OP_QUERY_HCA_CAP);
+	DEVX_SET(query_hca_cap_in, in, op_mod, HCA_CAP_OPMOD_GET_CUR);
+
+	ret = mlx5dv_devx_general_cmd(context, in, sizeof(in), out,
+				      sizeof(out));
+	if (ret || DEVX_GET(query_hca_cap_out, out, status))
+		return 0;
+
+	return DEVX_GET(query_hca_cap_out, out,
+			cmd_hca_cap.mkc_order_write_after_write_ro_only) ? 1 : 0;
+#else
+	(void)context;
+	return 0;
+#endif
+}
+
+/* Last-byte polling survives relaxed ordering only while the payload stays
+ * inside one cache line, and only for a CPU poller. */
+static int write_lat_ro_cacheline_ok(struct perftest_parameters *user_param)
+{
+	if (user_param->memory_type != MEMORY_HOST)
+		return 0;
+
+	/* size is already MAX_SIZE here, the sweep is capped after this check. */
+	if (user_param->test_method == RUN_ALL)
+		return 1;
+
+	return user_param->size <= DEF_CACHE_LINE_SIZE;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -2623,6 +2664,40 @@ int verify_params_with_device_context(struct ibv_context *context,
 		if (!user_param->use_old_post_send)
 		{
 			user_param->use_old_post_send = 1;
+		}
+	}
+
+	if (device_disables_strong_ordered_write(context)) {
+		/* Device forbids strongly-ordered writes/mkeys (relaxed ordering forced). */
+		if (user_param->verb == WRITE && user_param->tst == LAT) {
+			if (!write_lat_ro_cacheline_ok(user_param)) {
+				fprintf(stderr, RESULT_LINE);
+				fprintf(stderr, "Write latency test is not supported on this device/fabric (relaxed ordering is forced).\n");
+				fprintf(stderr, "Use write with immediate (--write_with_imm) instead.\n");
+				fprintf(stderr, "Alternatively use host memory with a size of up to %d bytes, or -a to sweep up to it.\n",
+					DEF_CACHE_LINE_SIZE);
+				return FAILURE;
+			}
+
+			fprintf(stderr, "WARNING: relaxed ordering is forced, write latency assumes %d B cache line atomicity\n",
+				DEF_CACHE_LINE_SIZE);
+
+			/* Sweeps start at MAX_SIZE, cap so polling stays inside one line. */
+			if (user_param->test_method == RUN_ALL)
+				user_param->size = DEF_CACHE_LINE_SIZE;
+
+			user_param->disable_pcir = 0;
+			return SUCCESS;
+		}
+
+#ifdef HAVE_RO
+		if (user_param->disable_pcir) {
+#else
+		{
+#endif
+			fprintf(stderr, RESULT_LINE);
+			fprintf(stderr, " Disabling PCIe relaxed ordering is not supported on this device/fabric.\n");
+			return FAILURE;
 		}
 	}
 
