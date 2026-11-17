@@ -14,6 +14,7 @@ extern "C" {
 #define CUDA_VER_3_2   3020 /* CUDA 3.2  */
 #define CUDA_VER_4_0   4000 /* CUDA 4.0  */
 #define CUDA_VER_7_0   7000 /* CUDA 7.0  */
+#define CUDA_VER_11_0  11000 /* CUDA 11.0 */
 #define CUDA_VER_11_3  11030 /* CUDA 11.3 */
 #define CUDA_VER_11_7  11070 /* CUDA 11.7 */
 
@@ -47,6 +48,18 @@ extern CUresult (*p_cuMemGetHandleForAddressRange)(void *, void *, size_t, CUmem
 extern CUresult (*p_cuDriverGetVersion)(int* driverVersion);
 extern CUresult (*p_cuCtxSynchronize) (void);
 extern CUresult (*p_cuMemAllocManaged)(CUdeviceptr* dptr, size_t bytesize, unsigned int  flags);
+/* CUDA VMM (Virtual Memory Management) driver API */
+#if CUDA_VERSION >= 11000
+extern CUresult (*p_cuMemGetAllocationGranularity)(size_t *granularity, const CUmemAllocationProp *prop, CUmemAllocationGranularity_flags option);
+extern CUresult (*p_cuMemCreate)(CUmemGenericAllocationHandle *handle, size_t size, const CUmemAllocationProp *prop, unsigned long long flags);
+extern CUresult (*p_cuMemAddressReserve)(CUdeviceptr *ptr, size_t size, size_t alignment, CUdeviceptr addr, unsigned long long flags);
+extern CUresult (*p_cuMemMap)(CUdeviceptr ptr, size_t size, size_t offset, CUmemGenericAllocationHandle handle, unsigned long long flags);
+extern CUresult (*p_cuMemSetAccess)(CUdeviceptr ptr, size_t size, const CUmemAccessDesc *desc, size_t count);
+extern CUresult (*p_cuMemUnmap)(CUdeviceptr ptr, size_t size);
+extern CUresult (*p_cuMemRelease)(CUmemGenericAllocationHandle handle);
+extern CUresult (*p_cuMemAddressFree)(CUdeviceptr ptr, size_t size);
+#endif
+
 #if CUDA_VERSION >= 12000
 extern CUresult (*p_cuGetProcAddress)(const char* symbol, void** pfn, int  cudaVersion, uint64_t flags, CUdriverProcAddressQueryResult* symbolStatus);
 #else
