@@ -322,6 +322,10 @@ int main(int argc, char *argv[])
 		}
 
 	} else {
+		/* An infinite run shares the setup below; it differs only in the
+		 * loop it enters and in having no single result to report. */
+		int run_infinitely = (user_param.test_method == RUN_INFINITELY);
+		int err;
 
 		if (user_param.verb == WRITE_IMM) {
 			/* Post recevie recv_wqes fo current message size */
@@ -339,21 +343,30 @@ int main(int argc, char *argv[])
 				goto free_mem;
 			}
 
-			if(run_iter_lat_write_imm(&ctx,&user_param)) {
-				fprintf(stderr,"Test exited with Error\n");
-				goto free_mem;
-			}
+			err = run_infinitely ?
+				run_iter_lat_write_imm_infinitely(&ctx,&user_param) :
+				run_iter_lat_write_imm(&ctx,&user_param);
 		} else {
-			if(run_iter_lat_write(&ctx,&user_param)) {
-				fprintf(stderr,"Test exited with Error\n");
-				goto free_mem;
-			}
+			err = run_infinitely ?
+				run_iter_lat_write_infinitely(&ctx,&user_param) :
+				run_iter_lat_write(&ctx,&user_param);
 		}
 
-		user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
+		if (err) {
+			if (run_infinitely)
+				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
+			else
+				fprintf(stderr,"Test exited with Error\n");
+			goto free_mem;
+		}
+
+		if (!run_infinitely)
+			user_param.test_type == ITERATIONS ? print_report_lat(&user_param) : print_report_lat_duration(&user_param);
 	}
 
-	if (user_param.output == FULL_VERBOSITY) {
+	/* An infinite run reports as it goes and has no summary footer. */
+	if (user_param.test_method != RUN_INFINITELY &&
+	    user_param.output == FULL_VERBOSITY) {
 		printf(RESULT_LINE);
 	}
 

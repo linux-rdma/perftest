@@ -1,7 +1,9 @@
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #if !defined(__FreeBSD__)
 #include <malloc.h>
@@ -6126,6 +6128,37 @@ cleaning:
 	return return_value;
 }
 
+/* One signaled WR of the test's message size, sent inline when it fits. */
+static void prepare_lat_send_wr(struct pingpong_context *ctx,
+		struct perftest_parameters *user_param)
+{
+	#ifdef HAVE_IBV_WR_API
+	if (user_param->connection_type != RawEth)
+		ctx_post_send_work_request_func_pointer(ctx, user_param);
+	#endif
+
+	ctx->wr[0].sg_list->length = user_param->size;
+	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
+
+	if (user_param->size <= user_param->inline_size)
+		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
+}
+
+/* The alarm drives the state machine that opens the sample window once the
+ * margin has passed. */
+static void init_lat_duration(struct perftest_parameters *user_param)
+{
+	duration_param = user_param;
+	duration_param->state = START_STATE;
+	signal(SIGALRM, catch_alarm);
+	user_param->iters = 0;
+
+	if (user_param->margin > 0)
+		alarm(user_param->margin);
+	else
+		catch_alarm(0);
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -6147,18 +6180,7 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 		end_cycle, start_gap;
 
-	#ifdef HAVE_IBV_WR_API
-	if (user_param->connection_type != RawEth)
-		ctx_post_send_work_request_func_pointer(ctx, user_param);
-	#endif
-
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
-
-	if (user_param->size <= user_param->inline_size) {
-		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
-	}
-
+	prepare_lat_send_wr(ctx, user_param);
 
 	if((user_param->use_xrc || user_param->connection_type == DC))
 		poll_buf_offset = 1;
@@ -6166,17 +6188,8 @@ int run_iter_lat_write(struct pingpong_context *ctx,struct perftest_parameters *
 	post_buf = (char*)ctx->buf[0] + user_param->size - 1;
 	poll_buf = (char*)ctx->buf[0] + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size, ctx->cycle_buffer) + user_param->size - 1;
 
-	/* Duration support in latency tests. */
-	if (user_param->test_type == DURATION) {
-		duration_param=user_param;
-		duration_param->state = START_STATE;
-		signal(SIGALRM, catch_alarm);
-		user_param->iters = 0;
-		if (user_param->margin > 0)
-			alarm(user_param->margin);
-		else
-			catch_alarm(0);
-	}
+	if (user_param->test_type == DURATION)
+		init_lat_duration(user_param);
 
 	/* Done with setup. Start the test. */
 	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters
@@ -6261,29 +6274,10 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 	int 			total_gap_cycles = user_param->latency_gap * cpu_mhz;
 	cycles_t 		end_cycle, start_gap;
 
-	#ifdef HAVE_IBV_WR_API
-	if (user_param->connection_type != RawEth)
-		ctx_post_send_work_request_func_pointer(ctx, user_param);
-	#endif
+	prepare_lat_send_wr(ctx, user_param);
 
-	ctx->wr[0].sg_list->length = user_param->size;
-	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
-
-	if (user_param->size <= user_param->inline_size) {
-		ctx->wr[0].send_flags |= IBV_SEND_INLINE;
-	}
-
-	/* Duration support in latency tests. */
-	if (user_param->test_type == DURATION) {
-		duration_param=user_param;
-		duration_param->state = START_STATE;
-		signal(SIGALRM, catch_alarm);
-		user_param->iters = 0;
-		if (user_param->margin > 0)
-			alarm(user_param->margin);
-		else
-			catch_alarm(0);
-	}
+	if (user_param->test_type == DURATION)
+		init_lat_duration(user_param);
 
 	/* Done with setup. Start the test. */
 	while (scnt < user_param->iters || ccnt < user_param->iters || rcnt < user_param->iters
@@ -6400,6 +6394,473 @@ int run_iter_lat_write_imm(struct pingpong_context *ctx,struct perftest_paramete
 	return 0;
 }
 
+/* Interval reporting for a latency run_infinitely run. A reporter thread owns
+ * the CPU sampling and printing, whose cost the traffic loop would otherwise
+ * charge to the next interval. The traffic thread hands over a snapshot of an
+ * interval that has already ended, between two iterations.
+ */
+struct lat_report_ctx {
+	struct perftest_parameters	*user_param;
+
+	pthread_t			thread;
+	pthread_mutex_t			lock;
+	pthread_cond_t			wake;
+
+	/* Read by the traffic thread once per iteration. */
+	atomic_int			report_requested;
+	atomic_int			snapshot_ready;
+	atomic_int			stop;
+
+	/* Published before snapshot_ready, consumed after it is acquired. */
+	uint64_t			snapshot_iters;
+	cycles_t			snapshot_time;
+
+	/* Traffic thread only, kept out of duration_param so the infinite path
+	 * shares no mutable state with the duration machinery. */
+	uint64_t			last_iters;
+	cycles_t			interval_start;
+
+	struct timespec			first_deadline;
+	int				interval_secs;
+	int				started;
+	int				running;
+};
+
+static struct lat_report_ctx lat_report;
+
+/* Closes the interval that just ended and opens the next one. Traffic thread. */
+static void publish_lat_interval(struct lat_report_ctx *rep,
+		struct perftest_parameters *user_param)
+{
+	cycles_t now = get_cycles();
+
+	rep->snapshot_iters = user_param->iters - rep->last_iters;
+	rep->snapshot_time = now - rep->interval_start;
+
+	rep->last_iters = user_param->iters;
+	rep->interval_start = now;
+
+	/* Withdraw before publishing, so the reporter's next request cannot be
+	 * mistaken for this one and dropped. */
+	atomic_store_explicit(&rep->report_requested, 0, memory_order_relaxed);
+	atomic_store_explicit(&rep->snapshot_ready, 1, memory_order_release);
+}
+
+static void *lat_report_thread(void *arg)
+{
+	struct lat_report_ctx *rep = (struct lat_report_ctx *)arg;
+	struct perftest_parameters *user_param = rep->user_param;
+	struct timespec deadline;
+
+	/* Thread creation and the initial CPU sampling are setup, not latency, so
+	 * the first interval starts from the baseline the traffic thread posts. */
+	pthread_mutex_lock(&rep->lock);
+	while (!rep->started &&
+	       !atomic_load_explicit(&rep->stop, memory_order_acquire))
+		pthread_cond_wait(&rep->wake, &rep->lock);
+	deadline = rep->first_deadline;
+	pthread_mutex_unlock(&rep->lock);
+
+	while (!atomic_load_explicit(&rep->stop, memory_order_acquire)) {
+		struct timespec now;
+		uint64_t iters;
+		cycles_t interval_time;
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (deadline.tv_sec < now.tv_sec ||
+		    (deadline.tv_sec == now.tv_sec && deadline.tv_nsec <= now.tv_nsec)) {
+			/* A peer that stopped answering can hold a report back past
+			 * its deadline. Restart the schedule rather than fire the
+			 * backlog in a burst. The nanoseconds matter: comparing
+			 * seconds alone would drop a row still ahead of us. */
+			deadline = now;
+			deadline.tv_sec += rep->interval_secs;
+		}
+
+		pthread_mutex_lock(&rep->lock);
+		while (!atomic_load_explicit(&rep->stop, memory_order_acquire)) {
+			int rc = pthread_cond_timedwait(&rep->wake, &rep->lock,
+							&deadline);
+
+			if (rc == ETIMEDOUT)
+				break;
+
+			/* A spurious wakeup returns 0 and waits again. Anything else
+			 * would spin on the same deadline, so stop reporting rather
+			 * than print rows at an unintended rate. */
+			if (rc) {
+				fprintf(stderr, "Report thread wait failed: %s\n",
+					strerror(rc));
+				atomic_store_explicit(&rep->stop, 1, memory_order_release);
+				break;
+			}
+		}
+		pthread_mutex_unlock(&rep->lock);
+
+		if (atomic_load_explicit(&rep->stop, memory_order_acquire))
+			break;
+
+		/* The traffic thread answers at its next iteration boundary, so the
+		 * counters are never read while they are being updated. */
+		atomic_store_explicit(&rep->report_requested, 1, memory_order_release);
+
+		while (!atomic_load_explicit(&rep->snapshot_ready, memory_order_acquire)) {
+			/* No row while stopping, or while a silent peer keeps the
+			 * boundary out of reach. */
+			if (atomic_load_explicit(&rep->stop, memory_order_acquire))
+				return NULL;
+
+			/* One ping-pong away in a healthy run; sleeping keeps the
+			 * reporter off the traffic thread's back. */
+			usleep(1000);
+		}
+
+		iters = rep->snapshot_iters;
+		interval_time = rep->snapshot_time;
+
+		atomic_store_explicit(&rep->snapshot_ready, 0, memory_order_relaxed);
+
+		if (user_param->cpu_util_data.enable)
+			get_cpu_stats(user_param, 2);
+
+		print_report_lat_interval(user_param, iters, interval_time);
+
+		if (user_param->cpu_util_data.enable)
+			get_cpu_stats(user_param, 1);
+
+		/* Absolute deadlines keep the cadence from drifting by the time
+		 * each report took. */
+		deadline.tv_sec += rep->interval_secs;
+	}
+
+	return NULL;
+}
+
+/* An infinite run has no margin to settle in and no end state to reach: it
+ * counts every iteration from the first, and the reporter decides when a row
+ * is printed. */
+static int init_lat_infinitely(struct perftest_parameters *user_param)
+{
+	struct lat_report_ctx *rep = &lat_report;
+	pthread_condattr_t cond_attr;
+
+	sigint_flag = 0;
+
+	/* The interval baseline lives in the report context, so
+	 * user_param->last_iters stays a BW-only field. */
+	user_param->iters = 0;
+
+	signal(SIGINT, handle_sigint);
+
+	memset(rep, 0, sizeof(*rep));
+	rep->user_param = user_param;
+	rep->interval_secs = user_param->duration;
+	atomic_init(&rep->report_requested, 0);
+	atomic_init(&rep->snapshot_ready, 0);
+	atomic_init(&rep->stop, 0);
+
+	if (pthread_mutex_init(&rep->lock, NULL)) {
+		fprintf(stderr, "Couldn't initialize the report thread mutex\n");
+		return FAILURE;
+	}
+
+	if (pthread_condattr_init(&cond_attr)) {
+		fprintf(stderr, "Couldn't initialize the report thread cond attr\n");
+		pthread_mutex_destroy(&rep->lock);
+		return FAILURE;
+	}
+
+	/* Deadlines come from CLOCK_MONOTONIC; a cond left on the realtime clock
+	 * would read them as long past and fire every report immediately. */
+	if (pthread_condattr_setclock(&cond_attr, CLOCK_MONOTONIC)) {
+		fprintf(stderr, "Couldn't set the report thread cond clock\n");
+		pthread_condattr_destroy(&cond_attr);
+		pthread_mutex_destroy(&rep->lock);
+		return FAILURE;
+	}
+
+	if (pthread_cond_init(&rep->wake, &cond_attr)) {
+		fprintf(stderr, "Couldn't initialize the report thread cond\n");
+		pthread_condattr_destroy(&cond_attr);
+		pthread_mutex_destroy(&rep->lock);
+		return FAILURE;
+	}
+
+	pthread_condattr_destroy(&cond_attr);
+
+	if (pthread_create(&rep->thread, NULL, lat_report_thread, rep)) {
+		fprintf(stderr, "Couldn't create the report thread\n");
+		pthread_cond_destroy(&rep->wake);
+		pthread_mutex_destroy(&rep->lock);
+		return FAILURE;
+	}
+
+	rep->running = 1;
+
+	if (user_param->cpu_util_data.enable)
+		get_cpu_stats(user_param, 1);
+
+	pthread_mutex_lock(&rep->lock);
+	clock_gettime(CLOCK_MONOTONIC, &rep->first_deadline);
+	rep->first_deadline.tv_sec += rep->interval_secs;
+	rep->interval_start = get_cycles();
+	rep->started = 1;
+	pthread_cond_signal(&rep->wake);
+	pthread_mutex_unlock(&rep->lock);
+
+	return SUCCESS;
+}
+
+/* Stops the reporter. The notice is for a clean stop only: an error path has
+ * already said what went wrong. */
+static void stop_lat_infinitely(int stopped_by_user)
+{
+	struct lat_report_ctx *rep = &lat_report;
+
+	if (rep->running) {
+		pthread_mutex_lock(&rep->lock);
+		atomic_store_explicit(&rep->stop, 1, memory_order_release);
+		pthread_cond_signal(&rep->wake);
+		pthread_mutex_unlock(&rep->lock);
+
+		pthread_join(rep->thread, NULL);
+
+		pthread_cond_destroy(&rep->wake);
+		pthread_mutex_destroy(&rep->lock);
+		rep->running = 0;
+	}
+
+	if (stopped_by_user)
+		printf("\n User stopped traffic\n");
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_lat_write_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	uint64_t                scnt = 0;
+	uint64_t                rcnt = 0;
+	int                     ne = 0;
+	int			err = 0;
+	int			return_value = 0;
+	int 			poll_buf_offset = 0;
+	volatile char           *poll_buf = NULL;
+	volatile char           *post_buf = NULL;
+
+	struct ibv_wc           wc;
+
+	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	cycles_t 		total_gap_cycles = (cycles_t)user_param->latency_gap * cpu_mhz;
+	cycles_t 		end_cycle;
+
+	prepare_lat_send_wr(ctx, user_param);
+
+	if((user_param->use_xrc || user_param->connection_type == DC))
+		poll_buf_offset = 1;
+
+	post_buf = (char*)ctx->buf[0] + user_param->size - 1;
+	poll_buf = (char*)ctx->buf[0] + (user_param->num_of_qps + poll_buf_offset)*BUFF_SIZE(ctx->size, ctx->cycle_buffer) + user_param->size - 1;
+
+	if (init_lat_infinitely(user_param))
+		return FAILURE;
+
+	/* Done with setup. Start the test. */
+	while (!sigint_flag) {
+
+		if (atomic_load_explicit(&lat_report.report_requested, memory_order_relaxed)) {
+			/* Pairs with the reporter's release of the request, ordering
+			 * its read of the last snapshot before this overwrite. Only
+			 * once per interval, so the loop keeps its relaxed load. */
+			atomic_thread_fence(memory_order_acquire);
+			publish_lat_interval(&lat_report, user_param);
+		}
+
+		/* The server sends first, so it has nothing to wait for on its
+		 * first pass. */
+		if (!(scnt < 1 && user_param->machine == SERVER)) {
+			rcnt++;
+
+			/* The peer may never answer, so the wait gives up on SIGINT.
+			 * This costs nothing the duration loop does not already pay:
+			 * it reads user_param->state here for the same reason. */
+			while (*poll_buf != (char)rcnt && !sigint_flag);
+			if (sigint_flag)
+				break;
+		}
+
+		if (user_param->latency_gap) {
+			end_cycle = get_cycles() + total_gap_cycles;
+			while (get_cycles() < end_cycle) {
+				continue;
+			}
+		}
+
+		/* The payload's last byte carries the sequence number the peer
+		 * polls on, so stamp it before posting the send. */
+		*post_buf = (char)++scnt;
+
+		err = post_send_method(ctx, 0, user_param);
+
+		if (err) {
+			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
+			return_value = 1;
+			break;
+		}
+
+		do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0 && !sigint_flag);
+		if (sigint_flag)
+			break;
+
+		if(ne > 0) {
+
+			if (wc.status != IBV_WC_SUCCESS) {
+				//coverity[uninit_use_in_call]
+				NOTIFY_COMP_ERROR_SEND(wc,scnt,user_param->iters);
+				return_value = 1;
+				break;
+			}
+
+			user_param->iters++;
+
+		} else if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", ne);
+			return_value = FAILURE;
+			break;
+		}
+	}
+
+	stop_lat_infinitely(return_value == 0);
+
+	return return_value;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+int run_iter_lat_write_imm_infinitely(struct pingpong_context *ctx,struct perftest_parameters *user_param)
+{
+	uint64_t                scnt = 0;
+	uint64_t                rcnt = 0;
+	int                     ne = 0;
+	int			err = 0;
+	int			return_value = 0;
+
+	struct ibv_wc           wc;
+	struct ibv_recv_wr 	*bad_wr_recv = NULL;
+
+	int 			cpu_mhz = get_cpu_mhz(user_param->cpu_freq_f);
+	cycles_t 		total_gap_cycles = (cycles_t)user_param->latency_gap * cpu_mhz;
+	cycles_t 		end_cycle;
+
+	prepare_lat_send_wr(ctx, user_param);
+
+	if (init_lat_infinitely(user_param))
+		return FAILURE;
+
+	/* Done with setup. Start the test. */
+	while (!sigint_flag) {
+
+		if (atomic_load_explicit(&lat_report.report_requested, memory_order_relaxed)) {
+			/* Pairs with the reporter's release of the request, ordering
+			 * its read of the last snapshot before this overwrite. Only
+			 * once per interval, so the loop keeps its relaxed load. */
+			atomic_thread_fence(memory_order_acquire);
+			publish_lat_interval(&lat_report, user_param);
+		}
+
+		/* The server sends first, so it has nothing to wait for on its
+		 * first pass. */
+		if (!(scnt < 1 && user_param->machine == SERVER)) {
+			rcnt++;
+
+			/* The peer may never answer, so the poll gives up on SIGINT. */
+			do { ne = ibv_poll_cq(ctx->recv_cq, 1, &wc); } while (ne == 0 && !sigint_flag);
+			if (sigint_flag)
+				break;
+
+			if (ne > 0) {
+				if (wc.status != IBV_WC_SUCCESS) {
+					//coverity[uninit_use_in_call]
+					NOTIFY_COMP_ERROR_SEND(wc,scnt,user_param->iters);
+					return_value = FAILURE;
+					break;
+				}
+
+				if (!(wc.wc_flags & IBV_WC_WITH_IMM)) {
+					//coverity[uninit_use_in_call]
+					NOTIFY_COMP_FLAGS_MISMATCH_SEND(wc, IBV_WC_WITH_IMM, scnt, rcnt);
+					return_value = FAILURE;
+					break;
+				}
+
+				/* No iteration count to run the receive depth out
+				 * against, so every consumed WQE is posted back. */
+				if (!user_param->use_unsolicited_write) {
+					if (user_param->use_srq) {
+						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[get_wr_index(wc.wr_id)], &bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv SRQ. QP = %d: counter=%lu\n",(int)wc.qp_num, rcnt);
+							return_value = 1;
+							break;
+						}
+					} else {
+						if (ibv_post_recv(ctx->qp[get_wr_id_qp_index(wc.wr_id)], &ctx->rwr[get_wr_index(wc.wr_id)], &bad_wr_recv)) {
+							fprintf(stderr, "Couldn't post recv: rcnt=%lu\n", rcnt);
+							return_value = 15;
+							break;
+						}
+					}
+				}
+			} else if (ne < 0) {
+				fprintf(stderr, "poll CQ failed %d\n", ne);
+				return_value = FAILURE;
+				break;
+			}
+		}
+
+		if (user_param->latency_gap) {
+			end_cycle = get_cycles() + total_gap_cycles;
+			while (get_cycles() < end_cycle) {
+				continue;
+			}
+		}
+
+		++scnt;
+		err = post_send_method(ctx, 0, user_param);
+
+		if (err) {
+			fprintf(stderr,"Couldn't post send: scnt=%lu\n",scnt);
+			return_value = 1;
+			break;
+		}
+
+		do { ne = ibv_poll_cq(ctx->send_cq, 1, &wc); } while (ne == 0 && !sigint_flag);
+		if (sigint_flag)
+			break;
+
+		if(ne > 0) {
+
+			if (wc.status != IBV_WC_SUCCESS) {
+				//coverity[uninit_use_in_call]
+				NOTIFY_COMP_ERROR_SEND(wc,scnt,user_param->iters);
+				return_value = 1;
+				break;
+			}
+
+			user_param->iters++;
+
+		} else if (ne < 0) {
+			fprintf(stderr, "poll CQ failed %d\n", ne);
+			return_value = FAILURE;
+			break;
+		}
+	}
+
+	stop_lat_infinitely(return_value == 0);
+
+	return return_value;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -6421,17 +6882,9 @@ int run_iter_lat(struct pingpong_context *ctx,struct perftest_parameters *user_p
 	ctx->wr[0].sg_list->length = user_param->size;
 	ctx->wr[0].send_flags = IBV_SEND_SIGNALED;
 
-	/* Duration support in latency tests. */
-	if (user_param->test_type == DURATION) {
-		duration_param=user_param;
-		duration_param->state = START_STATE;
-		signal(SIGALRM, catch_alarm);
-		user_param->iters = 0;
-		if (user_param->margin > 0)
-			alarm(user_param->margin);
-		else
-			catch_alarm(0);
-	}
+	if (user_param->test_type == DURATION)
+		init_lat_duration(user_param);
+
 	while (scnt < user_param->iters || (user_param->test_type == DURATION && user_param->state != END_STATE)) {
 		if (user_param->latency_gap) {
 			start_gap = get_cycles();

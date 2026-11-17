@@ -722,7 +722,9 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 
 		printf("      --reversed ");
 		printf(" Reverse traffic direction - Server send to client (SYMMETRIC)\n");
+	}
 
+	if (tst == BW || (tst == LAT && (verb == WRITE || verb == WRITE_IMM))) {
 		printf("      --run_infinitely ");
 		printf(" Run test forever, print results every <duration> seconds (SYMMETRIC)\n");
 	}
@@ -1961,11 +1963,20 @@ static void force_dependecies(struct perftest_parameters *user_param)
 			exit(1);
 		}
 
-		if (user_param->tst == LAT) {
+		if (user_param->tst == LAT &&
+		    user_param->verb != WRITE && user_param->verb != WRITE_IMM) {
 			printf(RESULT_LINE);
-			fprintf(stderr," run_infinitely exists only in BW tests for now.\n");
+			fprintf(stderr," run_infinitely exists only in BW and write latency tests for now.\n");
 			exit(1);
 
+		}
+
+		/* A latency run never ends, so there is no single result for the
+		 * report file to hold. */
+		if (user_param->tst == LAT && user_param->out_json) {
+			printf(RESULT_LINE);
+			fprintf(stderr," run_infinitely latency reports to stdout only, --out_json is not supported\n");
+			exit(1);
 		}
 
 		if (user_param->duplex && has_recv_comp(user_param->verb)) {
@@ -5250,20 +5261,44 @@ void write_report_lat_duration_to_file (int out_json_fd, struct perftest_paramet
 /******************************************************************************
  *
  ******************************************************************************/
-void print_report_lat_duration (struct perftest_parameters *user_param)
+static void calc_lat_duration(struct perftest_parameters *user_param, uint64_t iters,
+		cycles_t sample_time, double *latency, double *tps)
 {
 	int rtt_factor;
 	double cycles_to_units;
-	cycles_t test_sample_time;
-	double latency, tps;
 
 	rtt_factor = (user_param->verb == READ || user_param->verb == ATOMIC) ? 1 : 2;
 	cycles_to_units = get_cpu_mhz(user_param->cpu_freq_f);
 
-	test_sample_time = (user_param->tcompleted[0] - user_param->tposted[0]);
-	latency = (((test_sample_time / cycles_to_units) / rtt_factor) / user_param->iters);
-	tps = user_param->iters / (test_sample_time / (cycles_to_units * 1000000));
+	*latency = (((sample_time / cycles_to_units) / rtt_factor) / iters);
+	*tps = iters / (sample_time / (cycles_to_units * 1000000));
+}
 
+static void print_lat_duration_row(struct perftest_parameters *user_param, uint64_t iters,
+		double latency, double tps)
+{
+	if (user_param->output == OUTPUT_LAT) {
+		printf("%lf\n",latency);
+	}
+	else {
+		printf(REPORT_FMT_LAT_DUR,
+				user_param->size,
+				iters,
+				latency, tps);
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
+	}
+
+	if (user_param->counter_ctx) {
+		counters_print(user_param->counter_ctx);
+	}
+}
+
+void print_report_lat_duration (struct perftest_parameters *user_param)
+{
+	double latency, tps;
+
+	calc_lat_duration(user_param, user_param->iters,
+			user_param->tcompleted[0] - user_param->tposted[0], &latency, &tps);
 
 	if(user_param->out_json) {
 		int out_json_fd = open_file_write(user_param->out_json_file_name);
@@ -5276,20 +5311,24 @@ void print_report_lat_duration (struct perftest_parameters *user_param)
 		}
 	}
 
-	if (user_param->output == OUTPUT_LAT) {
-		printf("%lf\n",latency);
-	}
-	else {
-		printf(REPORT_FMT_LAT_DUR,
-				user_param->size,
-				user_param->iters,
-				latency, tps);
-		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
-	}
+	print_lat_duration_row(user_param, user_param->iters, latency, tps);
+}
 
-	if (user_param->counter_ctx) {
-		counters_print(user_param->counter_ctx);
-	}
+/******************************************************************************
+ *
+ ******************************************************************************/
+void print_report_lat_interval (struct perftest_parameters *user_param,
+		uint64_t interval_iters, cycles_t interval_time)
+{
+	double latency, tps;
+
+	/* Nothing completed: the peer is not answering, and a row of zeroes
+	 * would read as a measurement. */
+	if (!interval_iters || !interval_time)
+		return;
+
+	calc_lat_duration(user_param, interval_iters, interval_time, &latency, &tps);
+	print_lat_duration_row(user_param, interval_iters, latency, tps);
 }
 
 void print_report_fs_rate (struct perftest_parameters *user_param)
