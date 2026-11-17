@@ -211,7 +211,7 @@ static double proc_get_cpu_mhz(int no_cpu_freq_warn)
 }
 #endif
 
-double get_cpu_mhz(int no_cpu_freq_warn)
+static double calibrate_cpu_mhz(int no_cpu_freq_warn)
 {
 	#if defined(__s390x__) || defined(__s390__)
 	return sample_get_cpu_mhz();
@@ -237,4 +237,14 @@ double get_cpu_mhz(int no_cpu_freq_warn)
 	}
 	return proc;
 #endif
+}
+
+double get_cpu_mhz(int no_cpu_freq_warn)
+{
+	static double cached_cpu_mhz;
+
+	if (cached_cpu_mhz == 0.0)
+		cached_cpu_mhz = calibrate_cpu_mhz(no_cpu_freq_warn);
+
+	return cached_cpu_mhz;
 }
