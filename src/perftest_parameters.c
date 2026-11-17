@@ -2981,7 +2981,7 @@ static void ctx_set_max_inline(struct ibv_context *context,struct perftest_param
 	}
 
 	if (user_param->inline_size == DEF_INLINE) {
-		if (user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA){
+		if (user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA || user_param->memory_type == MEMORY_SUPA){
 			user_param->inline_size = 0;
 			printf("Perftest doesn't supports device memory tests with inline messages: inline size set to 0\n");
 			return;
