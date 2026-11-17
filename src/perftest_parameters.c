@@ -3751,11 +3751,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_cuda_dmabuf_flag) {
 					user_param->use_cuda_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_CUDA) {
-						fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_cuda_dmabuf_flag = 0;
 				}
 				if (use_data_direct_flag) {
@@ -3802,11 +3797,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_musa_dmabuf_flag) {
 					user_param->use_musa_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_MUSA) {
-						fprintf(stderr, "MUSA DMA-BUF cannot be used without MUSA\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_musa_dmabuf_flag = 0;
 				}
 				if (use_musa_pcie_mapping_flag) {
@@ -3821,11 +3811,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_rocm_dmabuf_flag) {
 					user_param->use_rocm_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_ROCM) {
-						fprintf(stderr, "ROCm DMA-BUF cannot be used without ROCm\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_rocm_dmabuf_flag = 0;
 				}
 				if (use_neuron_flag) {
@@ -3840,11 +3825,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_neuron_dmabuf_flag) {
 					user_param->use_neuron_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_NEURON) {
-						fprintf(stderr, "Neuron DMA-BUF cannot be used without Neuron device\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_neuron_dmabuf_flag = 0;
 				}
 				if (use_hl_flag) {
@@ -3862,11 +3842,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_mlu_dmabuf_flag) {
 					user_param->use_mlu_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_MLU) {
-						fprintf(stderr, "MLU DMA-BUF cannot be used without MLU device\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_mlu_dmabuf_flag = 0;
 				}
 
@@ -4408,6 +4383,27 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->vlan_en = ON;
 		user_param->print_eth_func = &print_ethernet_vlan_header;
 		vlan_en = 0;
+	}
+	/* Checked after parsing so the memory type option may come in any order. */
+	if (user_param->use_cuda_dmabuf && user_param->memory_type != MEMORY_CUDA) {
+		fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
+		return FAILURE;
+	}
+	if (user_param->use_musa_dmabuf && user_param->memory_type != MEMORY_MUSA) {
+		fprintf(stderr, "MUSA DMA-BUF cannot be used without MUSA\n");
+		return FAILURE;
+	}
+	if (user_param->use_rocm_dmabuf && user_param->memory_type != MEMORY_ROCM) {
+		fprintf(stderr, "ROCm DMA-BUF cannot be used without ROCm\n");
+		return FAILURE;
+	}
+	if (user_param->use_neuron_dmabuf && user_param->memory_type != MEMORY_NEURON) {
+		fprintf(stderr, "Neuron DMA-BUF cannot be used without Neuron device\n");
+		return FAILURE;
+	}
+	if (user_param->use_mlu_dmabuf && user_param->memory_type != MEMORY_MLU) {
+		fprintf(stderr, "MLU DMA-BUF cannot be used without MLU device\n");
+		return FAILURE;
 	}
 	if(user_param->use_data_direct && !user_param->use_cuda_dmabuf){
 		fprintf(stderr, " DMABUF must be enabled in order to use Data Direct \n");
