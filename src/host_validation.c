@@ -13,10 +13,7 @@
 #include "host_memory.h"
 
 
-/* SIMD headers based on detected support */
-#ifdef HAVE_AVX512
-#include <immintrin.h>
-#elif defined(HAVE_AVX2)
+#if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
 #endif
 
