@@ -1744,7 +1744,8 @@ static void force_dependecies(struct perftest_parameters *user_param)
 				fprintf(stderr, "Number of iterations must be a multiple of post list size\n");
 				exit(1);
 			}
-			if (user_param->post_list > user_param->tx_depth) {
+			if ((user_param->machine == CLIENT || user_param->duplex) &&
+			    user_param->post_list > user_param->tx_depth) {
 				printf(RESULT_LINE);
 				fprintf(stderr, "Post list size (%d) must not be larger than TX depth (%d)\n",
 					user_param->post_list, user_param->tx_depth);
@@ -2384,11 +2385,23 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	if (has_recv_comp(user_param->verb) && (user_param->rx_depth % 2 == 1) && user_param->test_method == RUN_REGULAR)
 		user_param->rx_depth += 1;
 
-	if (has_recv_comp(user_param->verb) && user_param->recv_post_list > user_param->rx_depth) {
-		printf(RESULT_LINE);
-		fprintf(stderr, "Receive post list size (%d) must not be larger than RX depth (%d)\n",
-			user_param->recv_post_list, user_param->rx_depth);
-		exit(1);
+	if (has_recv_comp(user_param->verb) &&
+	    (user_param->machine == SERVER || user_param->duplex || user_param->tst == LAT)) {
+		int rx_depth_per_qp = user_param->rx_depth;
+
+		if (user_param->use_srq) {
+			rx_depth_per_qp /= user_param->num_of_qps;
+			/* The test programs double the QP count after parsing for these modes. */
+			if ((user_param->use_xrc || user_param->connection_type == DC) &&
+			    (user_param->duplex || user_param->tst == LAT))
+				rx_depth_per_qp /= 2;
+		}
+		if (user_param->recv_post_list > rx_depth_per_qp) {
+			printf(RESULT_LINE);
+			fprintf(stderr, "Receive post list size (%d) must not be larger than RX depth per QP (%d)\n",
+				user_param->recv_post_list, rx_depth_per_qp);
+			exit(1);
+		}
 	}
 
 	if (user_param->test_type == ITERATIONS && user_param->iters > 20000 && user_param->noPeak == OFF && user_param->tst == BW) {
