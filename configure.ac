@@ -706,6 +706,12 @@ if [test $HAVE_REG_MR_EX = yes]; then
 	AC_DEFINE([HAVE_REG_MR_EX], [1], [Have reg mr extended API support])
 fi
 
+AC_TRY_LINK([#include <infiniband/verbs.h>],
+	[ibv_reg_mr_iova(NULL, NULL, 0, 0, 0);], [HAVE_REG_MR_IOVA=yes], [HAVE_REG_MR_IOVA=no])
+if [test $HAVE_REG_MR_IOVA = yes]; then
+	AC_DEFINE([HAVE_REG_MR_IOVA], [1], [Have ibv_reg_mr_iova API support])
+fi
+
 # Check for SIMD support (for host data validation)
 AC_MSG_CHECKING([for AVX2 compiler support])
 save_CFLAGS="$CFLAGS"

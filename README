@@ -515,6 +515,12 @@ Special feature detailed explanation in tests:
           Server: ./ib_write_bw -d mlx5_0 --use_cuda=0 --data_validation -t 128
           Client: ./ib_write_bw -d mlx5_0 --use_cuda=0 --data_validation -t 128 <server_ip>
 
+          # MR with 4GB MTT pages: a >4GB MR on 1GB huge pages, registered at an
+          # IOVA that is 4GB but not 8GB aligned (needs a translating IOMMU and a
+          # device that supports MTT pages above 2GB)
+          Server: ./ib_write_bw -d mlx5_0 --data_validation -s 500000000 -n 100 --mr_iova=0x100000000
+          Client: ./ib_write_bw -d mlx5_0 --data_validation -s 500000000 -n 100 --mr_iova=0x100000000 <server_ip>
+
           # With debug output (shows per-thread stats, marker distribution, SIMD path)
           Server: ./ib_write_bw -d mlx5_0 --data_validation --data_validation_debug -t 128
           Client: ./ib_write_bw -d mlx5_0 --data_validation --data_validation_debug -t 128 <server_ip>

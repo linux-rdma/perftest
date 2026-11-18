@@ -282,6 +282,7 @@ struct pingpong_context {
 	#endif
 	struct ibv_pd				*pad;
 	struct ibv_mr				**mr;
+	uint64_t				*mr_addr_offset;	/* Per MR: MR address minus buffer address (--mr_iova) */
 	struct ibv_mr				*null_mr;
 	struct ibv_cq				*send_cq;
 	struct ibv_cq				*recv_cq;
@@ -345,6 +346,18 @@ struct pingpong_context {
 	struct ibv_buf				**ibv_buf;
 	#endif
 };
+
+/* Translate a pointer into buffer mr_index to the address used in WRs and
+ * advertised to the peer. Differs from the pointer only with --mr_iova.
+ */
+static inline uint64_t buf_to_mr_addr(struct pingpong_context *ctx, int mr_index, const void *ptr)
+{
+	uint64_t addr = (uintptr_t)ptr;
+
+	if (ctx->mr_addr_offset)
+		addr += ctx->mr_addr_offset[mr_index];
+	return addr;
+}
 
  struct pingpong_dest {
 	int 				lid;
