@@ -3191,6 +3191,22 @@ int create_qp_main(struct pingpong_context *ctx,
 	return ret;
 }
 
+#if defined(HAVE_IBV_WR_API) && defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
+static int enhanced_reorder_eligible(struct ibv_context *context,
+				     struct perftest_parameters *user_param)
+{
+	if (user_param->no_enhanced_reorder)
+		return 0;
+
+	if (user_param->connection_type == UD || user_param->connection_type == UC ||
+	    user_param->connection_type == RawEth)
+		return 0;
+
+	// OOO_RECV_WRS is not supported by non-mlnx devices
+	return get_device_vendor(context) == MLNX_VENDOR_ID;
+}
+#endif
+
 struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, int qp_index)
 {
@@ -3211,7 +3227,6 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	memset(&attr_dv, 0, sizeof(attr_dv));
 	#ifdef HAVE_OOO_RECV_WRS
 	struct mlx5dv_context ctx_dv;
-	uint32_t is_mlnx_device;
 	memset(&ctx_dv, 0, sizeof(ctx_dv));
 	#endif
 	#endif
@@ -3365,32 +3380,31 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 		#endif
 	} else {
 		#ifdef HAVE_IBV_WR_API
+		#ifdef HAVE_MLX5DV
+		#ifdef HAVE_OOO_RECV_WRS
+		if (enhanced_reorder_eligible(ctx->context, user_param)) {
+			ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
+
+			/* No DV capabilities: leave enhanced reorder off rather
+			 * than failing QP creation. */
+			if (!mlx5dv_query_device(ctx->context, &ctx_dv) &&
+			    (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS)) {
+				if ((user_param->connection_type == RC && ctx_dv.ooo_recv_wrs_caps.max_rc < user_param->rx_depth) ||
+				(user_param->connection_type == DC && ctx_dv.ooo_recv_wrs_caps.max_dct < user_param->rx_depth))
+				{
+					fprintf(stderr, "RX Depth=%d  must not exceed the maximal OOO receive WR's\n", user_param->rx_depth);
+					return NULL;
+					}
+				user_param->use_enhanced_reorder = ON;
+				attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
+				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+			}
+		}
+		#endif
+		#endif
 		if (!user_param->use_old_post_send)
 		{
 			#ifdef HAVE_MLX5DV
-			#ifdef HAVE_OOO_RECV_WRS
-			// OOO_RECV_WRS is not supported by non-mlnx devices
-			is_mlnx_device = get_device_vendor(ctx->context) == MLNX_VENDOR_ID;
-
-			if (!user_param->no_enhanced_reorder && is_mlnx_device && user_param->connection_type != UD && user_param->connection_type != UC){
-				ctx_dv.comp_mask = MLX5DV_CONTEXT_MASK_OOO_RECV_WRS;
-
-				/* No DV capabilities: leave enhanced reorder off rather
-				 * than failing QP creation. */
-				if (!mlx5dv_query_device(ctx->context, &ctx_dv) &&
-				    (ctx_dv.comp_mask & MLX5DV_CONTEXT_MASK_OOO_RECV_WRS)) {
-					if ((user_param->connection_type == RC && ctx_dv.ooo_recv_wrs_caps.max_rc < user_param->rx_depth) ||
-					(user_param->connection_type == DC && ctx_dv.ooo_recv_wrs_caps.max_dct < user_param->rx_depth))
-					{
-						fprintf(stderr, "RX Depth=%d  must not exceed the maximal OOO receive WR's\n", user_param->rx_depth);
-						return NULL;
-						}
-					user_param->use_enhanced_reorder = ON;
-					attr_dv.create_flags |= MLX5DV_QP_CREATE_OOO_DP;
-					attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
-				}
-			}
-			#endif
 			if (user_param->connection_type == DC)
 			{
 				attr_dv.comp_mask |= MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -3455,6 +3469,15 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 			#endif //HAVE_HNSDV
 				qp = ibv_create_qp_ex(ctx->context, &attr_ex);
 		}
+		#if defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
+		/* old post-send path with OOO (enhanced reorder) requested */
+		else if (attr_dv.create_flags & MLX5DV_QP_CREATE_OOO_DP)
+		{
+			/* keep old post-send semantics: plain QP, no wr-API ops */
+			attr_ex.comp_mask &= ~IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+			qp = mlx5dv_create_qp(ctx->context, &attr_ex, &attr_dv);
+		}
+		#endif
 		else
 		#endif // HAVE_IBV_WR_API
 			qp = ibv_create_qp(ctx->pd, &attr);
@@ -3468,6 +3491,10 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	#ifdef HAVE_IBV_WR_API
 	if (!user_param->use_old_post_send)
 		qp_cap = &attr_ex.cap;
+	#if defined(HAVE_MLX5DV) && defined(HAVE_OOO_RECV_WRS)
+	else if (attr_dv.create_flags & MLX5DV_QP_CREATE_OOO_DP)
+		qp_cap = &attr_ex.cap;
+	#endif
 	#endif
 
 	if (user_param->inline_size > qp_cap->max_inline_data) {
