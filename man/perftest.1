@@ -180,7 +180,7 @@ many different options and modes.
 .TP
 .B -O, --dualport
  Run test in dual-port mode.
- Not relevant for RawEth.
+ Not supported for Raw Ethernet.
  Relevant only for bandwidth.
  System support required.
 .TP
@@ -189,6 +189,7 @@ many different options and modes.
 .TP
 .B -q, --qp=<num of qp's>
  Num of qp's(default 1).
+ In raw_ethernet_bw, the number of sending QPs and the multiplier for expected aggregate receives; both endpoints must use the same value. See raw_ethernet_bw receive steering.
  Relevant only for bandwidth.
 .TP
 .B -Q, --cq-mod
@@ -200,6 +201,7 @@ many different options and modes.
 .TP
 .B -r, --rx-depth=<dep>
  Rx queue size (default 512), if using srq, rx-depth controls max-wr size of the srq.
+ In raw_ethernet_bw, this is the receive budget per sending QP. An owner QP may be allocated a larger effective depth when several send QPs or flows steer to it. The effective depth is capped at the device QP/CQ limits with a warning; the requested -r value itself must fit.
  Relevant only for send non fsRate.
 .TP
 .B -R, --rdma_cm
@@ -267,6 +269,7 @@ many different options and modes.
 .B --use-srq
  Use a Shared Receive Queue. --rx-depth controls max-wr size of the SRQ.
  Relevant only for Send.
+ Not supported for raw_ethernet_bw.
 .TP
 .B --ipv6
  Use IPv6 GID. Default is IPv4.
@@ -611,10 +614,12 @@ SIMD path selection, and mismatch classification details.
 .TP
 .B -v, --mac_fwd
  Run mac forwarding test.
+ raw_ethernet_bw forwards on a single QP only (-q 1).
  Not relevant for raw_ethernet_fs_rate.
 .TP
 .B --flows
  Set number of TCP/UDP flows, starting from <src_port, dst_port>.
+ In raw_ethernet_bw, distinct flows spread receive traffic across owner QPs; increasing -q alone does not create receive rules.
  Not relevant for raw_ethernet_fs_rate.
 .TP
 .B --flows_burst
@@ -623,6 +628,7 @@ SIMD path selection, and mismatch classification details.
 .TP
 .B --promiscuous
  Run promiscuous mode.
+ In raw_ethernet_bw, adds one default rule, which receives the traffic no other rule takes. Every captured frame is counted, including unrelated traffic. Can't be combined with --sniffer or --raw_mcast.
  Not relevant for raw_ethernet_fs_rate.
 .TP
 .B --reply_every
@@ -631,6 +637,7 @@ SIMD path selection, and mismatch classification details.
 .TP
 .B --sniffer
  Run sniffer mode.
+ In raw_ethernet_bw, one sniffer rule receives all of the port's traffic, and every captured frame is counted, including unrelated traffic. Can't be combined with --promiscuous or --raw_mcast.
  Not relevant for raw_ethernet_fs_rate.
  System support required.
 .TP
@@ -646,7 +653,17 @@ SIMD path selection, and mismatch classification details.
  System support required.
 .TP
 .B --raw_mcast.
+ The receiver attaches one QP to the multicast group.
+ Can't be combined with --promiscuous or --sniffer.
  Relevant only for bandwidth.
+.SS raw_ethernet_bw receive steering
+A NIC delivers a frame once to every QP whose rule matches it. The receiver of raw_ethernet_bw therefore installs each flow rule once and gives the rules to the QPs round-robin, starting with the lowest QP, so every frame completes once. QPs that own no rule post no receive WQEs, and with --iters the receiver counts the completions of all QPs together. Dual-port mode and shared receive queues are not supported.
+.PP
+Raw Ethernet has no parameter exchange. Both endpoints must use matching -q, --flows, and L2/L3/L4 packet fields. The receiver sizes each owner QP for the aggregate traffic steered to it.
+.PP
+L2-only rules match the destination MAC, and IP-only rules without UDP/TCP ports match the source and destination IP addresses. Finite tests with either broad rule require an isolated link or VLAN. Any unrelated matching frame is counted as test traffic and can cause strict receive accounting to fail.
+.PP
+Larger owner queues absorb bursts but cannot make one receive QP sustain an unlimited aggregate packet rate. Use distinct UDP/TCP --flows to spread packet-rate tests. Duration mode avoids waiting for an exact receive count, but dropped frames still reduce the measured receive rate.
 .SH AUTHORS
 .TP
 .B  Hassan Khadour <hkhadour@nvidia.com>

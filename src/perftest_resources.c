@@ -2013,6 +2013,10 @@ int create_reg_cqs(struct pingpong_context *ctx,
 		   struct perftest_parameters *user_param,
 		   int tx_buffer_depth, int need_recv_cq)
 {
+	int recv_cq_depth = ctx->active_recv_qps ?
+			    ctx->rposted * ctx->active_recv_qps :
+			    user_param->rx_depth * user_param->num_of_qps;
+
 #ifdef HAVE_CQ_EX
 	struct ibv_cq_init_attr_ex send_cq_attr = {
 		.cqe = tx_buffer_depth * user_param->num_of_qps,
@@ -2035,7 +2039,7 @@ int create_reg_cqs(struct pingpong_context *ctx,
 
 	if (need_recv_cq) {
 		struct ibv_cq_init_attr_ex recv_cq_attr = {
-			.cqe = user_param->rx_depth * user_param->num_of_qps,
+			.cqe = recv_cq_depth,
 			.cq_context = NULL,
 			.channel = ctx->recv_channel,
 			.comp_vector = user_param->eq_num,
@@ -2062,8 +2066,8 @@ cq_ex_not_supported:
 	}
 
 	if (need_recv_cq) {
-		ctx->recv_cq = ibv_create_cq(ctx->context,user_param->rx_depth *
-						user_param->num_of_qps, NULL, ctx->recv_channel, user_param->eq_num);
+		ctx->recv_cq = ibv_create_cq(ctx->context, recv_cq_depth, NULL,
+					    ctx->recv_channel, user_param->eq_num);
 		if (!ctx->recv_cq) {
 			fprintf(stderr, "Couldn't create a receiver CQ\n");
 			return FAILURE;
@@ -3257,6 +3261,8 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 {
 	struct ibv_qp* qp = NULL;
 	int dc_num_of_qps = user_param->num_of_qps / 2;
+	int recv_depth = ctx->active_recv_qps && qp_index < ctx->active_recv_qps ?
+			 ctx->rposted : user_param->rx_depth;
 
 	int is_dc_server_side = 0;
 	struct ibv_qp_init_attr attr;
@@ -3310,7 +3316,7 @@ struct ibv_qp* ctx_qp_create(struct pingpong_context *ctx,
 	} else {
 		attr.srq = NULL;
 		if (user_param->connection_type != DC) {
-			attr.cap.max_recv_wr  = user_param->rx_depth;
+			attr.cap.max_recv_wr  = recv_depth;
 			attr.cap.max_recv_sge = MAX_RECV_SGE;
 		}
 	}
@@ -4390,7 +4396,9 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 	int			i = 0,j,k;
 	int			num_of_qps = user_param->num_of_qps;
 	struct ibv_recv_wr	*bad_wr_recv;
-	int			size_per_qp = user_param->rx_depth / user_param->recv_post_list;
+	int			recv_depth = ctx->active_recv_qps ?
+					     ctx->rposted : user_param->rx_depth;
+	int			size_per_qp = recv_depth / user_param->recv_post_list;
 	uint64_t length = set_recv_length(ctx, user_param);
 
 	/* Write w/imm completions have zero recieve buffer length */
@@ -4456,6 +4464,9 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 			else
 				ctx->rwr[i * user_param->recv_post_list + j].next = &ctx->rwr[i * user_param->recv_post_list + j + 1];
 		}
+
+		if (ctx->active_recv_qps && i >= ctx->active_recv_qps)
+			continue;
 
 		for (j = 0; j < size_per_qp ; ++j) {
 
@@ -4679,7 +4690,6 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	int 			return_value = 0;
 	int			qp_index;
 	int			send_flows_index = 0;
-	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
 
@@ -4803,7 +4813,8 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 					if (++send_flows_index == user_param->flows)
 						send_flows_index = 0;
 					address_offset = send_flows_index * ctx->flow_buff_size;
-					ctx->sge_list[0].addr = primary_send_addr + address_offset;
+					ctx->sge_list[index * user_param->post_list].addr =
+						ctx->my_addr[index] + address_offset;
 				}
 			}
 
@@ -5202,6 +5213,20 @@ static inline void set_on_first_rx_packet(struct perftest_parameters *user_param
 	}
 }
 
+static __always_inline int recv_poll_count(struct pingpong_context *ctx,
+					   struct perftest_parameters *user_param,
+					   uint64_t total, uint64_t current, int polled)
+{
+	if (polled <= 0 || !ctx->active_recv_qps || user_param->test_type != ITERATIONS ||
+	    (uint64_t)polled <= total - current)
+		return polled;
+	if (user_param->use_promiscuous || user_param->use_sniffer)
+		return (int)(total - current);
+	fprintf(stderr, "Unexpected extra receive completions: total=%lu completed=%lu polled=%d\n",
+		total, current, polled);
+	return -1;
+}
+
 /******************************************************************************
  *
  ******************************************************************************/
@@ -5229,6 +5254,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 	bool		with_imm_data = false;
 	bool		verify_imm_data = false;
 	uint32_t	expected_imm_data = htobe32(DEF_IMM);
+	bool			unlimited_repost = user_param->test_type == DURATION ||
+						   (ctx->active_recv_qps && user_param->num_of_qps > 1);
 
 	struct dyn_poll_ctx *dyn_ctx = init_dyn_poll_ctx(user_param);
 	if (!dyn_ctx) {
@@ -5297,6 +5324,7 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 				rcnt,
 				&user_param->dynamic_cqe_poll);
 
+			ne = recv_poll_count(ctx, user_param, tot_iters, rcnt, ne);
 			if (ne > 0) {
 				if (firstRx) {
 					set_on_first_rx_packet(user_param);
@@ -5337,7 +5365,8 @@ int run_iter_bw_server(struct pingpong_context *ctx, struct perftest_parameters 
 						user_param->iters++;
 					}
 					//coverity[uninit_use]
-					if ((user_param->test_type==DURATION || posted_per_qp[qp_index] + user_param->recv_post_list <= user_param->iters) &&
+					if ((unlimited_repost ||
+					     posted_per_qp[qp_index] + user_param->recv_post_list <= user_param->iters) &&
 					    unused_recv_for_qp[qp_index] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 						if (user_param->use_srq) {
 							if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[qp_index * user_param->recv_post_list], &bad_wr_recv)) {
@@ -5476,7 +5505,6 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 	int 			num_of_qps = user_param->num_of_qps;
 	int 			return_value = 0;
 	int			send_flows_index = 0;
-	uintptr_t		primary_send_addr = ctx->sge_list[0].addr;
 	int			address_offset = 0;
 	int			flows_burst_iter = 0;
 
@@ -5549,7 +5577,8 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 					if (++send_flows_index == user_param->flows)
 						send_flows_index = 0;
 					address_offset = send_flows_index * ctx->flow_buff_size;
-					ctx->sge_list[0].addr = primary_send_addr + address_offset;
+					ctx->sge_list[index * user_param->post_list].addr =
+						ctx->my_addr[index] + address_offset;
 				}
 			}
 
@@ -5860,6 +5889,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 	bool			with_imm_data = false;
 	bool			verify_imm_data = false;
 	uint32_t		expected_imm_data = htobe32(DEF_IMM);
+	bool			unlimited_repost = user_param->test_type == DURATION ||
+						   (ctx->active_recv_qps && user_param->num_of_qps > 1);
 
 	#ifdef HAVE_IBV_WR_API
 	if (user_param->connection_type != RawEth)
@@ -5979,6 +6010,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 		}
 
 		recv_ne = ibv_poll_cq(ctx->recv_cq, user_param->rx_depth, wc);
+
+		recv_ne = recv_poll_count(ctx, user_param, tot_iters, totrcnt, recv_ne);
 		if (recv_ne > 0) {
 
 			if (user_param->machine == SERVER && before_first_rx == ON) {
@@ -6029,7 +6062,8 @@ int run_iter_bi(struct pingpong_context *ctx,
 					user_param->iters++;
 				}
 
-				if ((user_param->test_type==DURATION || posted_per_qp[qp_index] + user_param->recv_post_list <= user_param->iters) &&
+				if ((unlimited_repost ||
+				     posted_per_qp[qp_index] + user_param->recv_post_list <= user_param->iters) &&
 				    unused_recv_for_qp[qp_index] >= user_param->recv_post_list && !user_param->use_unsolicited_write) {
 					if (user_param->use_srq) {
 						if (ibv_post_srq_recv(ctx->srq, &ctx->rwr[qp_index * user_param->recv_post_list],&bad_wr_recv)) {
