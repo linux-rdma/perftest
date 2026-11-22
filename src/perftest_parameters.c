@@ -2388,7 +2388,7 @@ static void force_dependecies(struct perftest_parameters *user_param)
 	/* Scatter2CQE makes the provider memcpy() small receives to the SGE address,
 	 * which is not CPU accessible for device memory, or a plain IOVA with --mr_iova.
 	 */
-	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA ||
+	if ((user_param->memory_type == MEMORY_CUDA || user_param->memory_type == MEMORY_MUSA || user_param->memory_type == MEMORY_MLU ||
 	     user_param->memory_type == MEMORY_DM || user_param->use_mr_iova) &&
 	    (user_param->verb == SEND || user_param->verb == SEND_IMM) &&
 	    (user_param->size <= 64 || user_param->test_method == RUN_ALL)) {
