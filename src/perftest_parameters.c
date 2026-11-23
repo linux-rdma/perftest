@@ -3891,11 +3891,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				}
 				if (use_supa_dmabuf_flag) {
 					user_param->use_supa_dmabuf = 1;
-					if (user_param->memory_type != MEMORY_SUPA) {
-						fprintf(stderr, "SUPA DMA-BUF cannot be used without SUPA\n");
-						free(duplicates_checker);
-						return FAILURE;
-					}
 					use_supa_dmabuf_flag = 0;
 				}
 				if (use_musa_flag) {
@@ -4517,6 +4512,10 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	/* Checked after parsing so the memory type option may come in any order. */
 	if (user_param->use_cuda_dmabuf && user_param->memory_type != MEMORY_CUDA) {
 		fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
+		return FAILURE;
+	}
+	if (user_param->use_supa_dmabuf && user_param->memory_type != MEMORY_SUPA) {
+		fprintf(stderr, "SUPA DMA-BUF cannot be used without SUPA\n");
 		return FAILURE;
 	}
 	if (user_param->use_musa_dmabuf && user_param->memory_type != MEMORY_MUSA) {
