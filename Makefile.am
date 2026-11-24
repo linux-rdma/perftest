@@ -37,6 +37,13 @@ noinst_LIBRARIES = libperftest.a
 libperftest_a_SOURCES = src/get_clock.c src/perftest_communication.c src/perftest_negotiation.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/host_validation.c src/mmap_memory.c src/numa_loader.c
 noinst_HEADERS = src/get_clock.h src/perftest_communication.h src/perftest_negotiation.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/host_validation.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h src/mlu_memory.h src/opencl_memory.h src/cuda_validation.h src/validation_common.h src/dm_memory.h src/system_dmabuf_memory.h src/musa_memory.h src/numa_loader.h src/mlx5_devx.h
 
+libperftest_a_SOURCES += src/perftest_cpu_util.c
+noinst_HEADERS += src/perftest_cpu_util.h
+
+check_PROGRAMS = cpu_util_test
+cpu_util_test_SOURCES = src/perftest_cpu_util_test.c src/perftest_cpu_util.c
+TESTS = $(check_PROGRAMS)
+
 AM_CFLAGS =
 
 # SIMD flags for host validation only (detected by configure)

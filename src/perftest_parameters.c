@@ -591,7 +591,7 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 	printf(" Name of the report json file. (Default: %s in the working directory) \n",DEFAULT_JSON_FILE_NAME);
 
 	printf("      --cpu_util ");
-	printf(" Show CPU Utilization in report, valid only in Duration mode \n");
+	printf(" Report system-wide CPU utilization excluding idle and I/O wait (Duration mode only)\n");
 
 	printf("      --cqe_poll ");
 	printf(" Number of CQEs polled per iteration \n");
@@ -1137,7 +1137,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->cpu_util			= 0;
 	user_param->out_json			= 0;
 	user_param->out_json_file_name = strdup(DEFAULT_JSON_FILE_NAME);
-	user_param->cpu_util_data.enable	= 0;
+	user_param->cpu_util_data = (struct cpu_util_data){0};
 	user_param->retry_count			= DEF_RETRY_COUNT;
 	user_param->dont_xchg_versions		= 0;
 	user_param->ipv6			= 0;
@@ -4862,18 +4862,6 @@ void ctx_print_test_info(struct perftest_parameters *user_param)
 
 }
 
-static float calc_cpu_util (struct perftest_parameters *user_param)
-{
-	long long ustat_diff, idle_diff;
-	ustat_diff = user_param->cpu_util_data.ustat[1] - user_param->cpu_util_data.ustat[0];
-	idle_diff = user_param->cpu_util_data.idle[1] - user_param->cpu_util_data.idle[0];
-
-	if ((ustat_diff + idle_diff) != 0)
-		return ((float)ustat_diff / (ustat_diff + idle_diff)) * 100;
-	else
-		return 0;
-}
-
 /******************************************************************************
  *
  ******************************************************************************/
@@ -5113,7 +5101,7 @@ static void write_bw_report_to_file(int out_json_fd, struct perftest_parameters 
 								   size, iters, bw_peak, bw_avg, msgRate_avg);
 
 	dprintf(out_json_fd, user_param->cpu_util_data.enable ?
-							REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON, calc_cpu_util(user_param));
+							REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON, calc_cpu_util(&user_param->cpu_util_data));
 
 	dprintf(out_json_fd, "}\n");
 }
@@ -5182,7 +5170,7 @@ void print_full_bw_report (struct perftest_parameters *user_param, struct bw_rep
 		printf( inc_accuracy ? REPORT_FMT_EXT : REPORT_FMT, my_bw_rep->size, my_bw_rep->iters, bw_peak, bw_avg, msgRate_avg);
 	if (user_param->output == FULL_VERBOSITY) {
 		fflush(stdout);
-		fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
+		fprintf(stdout, user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(&user_param->cpu_util_data));
 	}
 	if (user_param->counter_ctx) {
 		counters_print(user_param->counter_ctx);
@@ -5235,7 +5223,7 @@ void write_report_lat_to_file(int out_json_fd, struct perftest_parameters *user_
 				delta[iters_99] / cycles_rtt_quotient,
 				delta[iters_99_9] / cycles_rtt_quotient);
 		dprintf(out_json_fd, user_param->cpu_util_data.enable ?
-		REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON , calc_cpu_util(user_param));
+		REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON , calc_cpu_util(&user_param->cpu_util_data));
 	}
 
 	dprintf(out_json_fd, "}\n");
@@ -5352,7 +5340,7 @@ void print_report_lat (struct perftest_parameters *user_param)
 				stdev,
 				delta[iters_99] / cycles_rtt_quotient,
 				delta[iters_99_9] / cycles_rtt_quotient);
-		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(&user_param->cpu_util_data));
 	}
 
 	if (user_param->counter_ctx) {
@@ -5376,7 +5364,7 @@ void write_report_lat_duration_to_file (int out_json_fd, struct perftest_paramet
 				latency, tps);
 		dprintf(out_json_fd,  user_param->cpu_util_data.enable ?
 		REPORT_EXT_CPU_UTIL_JSON : REPORT_EXT_JSON,
-		calc_cpu_util(user_param));
+		calc_cpu_util(&user_param->cpu_util_data));
 	}
 
 	dprintf(out_json_fd, "}\n");
@@ -5408,7 +5396,7 @@ static void print_lat_duration_row(struct perftest_parameters *user_param, uint6
 				user_param->size,
 				iters,
 				latency, tps);
-		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(user_param));
+		printf( user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT , calc_cpu_util(&user_param->cpu_util_data));
 	}
 
 	if (user_param->counter_ctx) {
@@ -5538,7 +5526,7 @@ void print_report_fs_rate (struct perftest_parameters *user_param)
 				latency,
 				fps);
 		}
-		printf(user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT, calc_cpu_util(user_param));
+		printf(user_param->cpu_util_data.enable ? REPORT_EXT_CPU_UTIL : REPORT_EXT, calc_cpu_util(&user_param->cpu_util_data));
 	}
 
 	free(delta);

@@ -275,67 +275,18 @@ static uint32_t init_perftest_rand_state() {
     return seed;
 }
 
-// cppcheck-suppress constParameter
-static int next_word_string(char* input, char* output, int from_index)
+static void get_cpu_stats(struct perftest_parameters *params, int stat_index)
 {
-	int i = from_index;
-	int j = 0;
-
-	while (input[i] != ' ') {
-		output[j] = input[i];
-		j++; i++;
-	}
-
-	output[j]=0;
-	return i+1;
-}
-
-static int get_n_word_string(char *input, char *output,int from_index, int iters)
-{
-	for (;iters > 0; iters--) {
-		from_index = next_word_string(input,output,from_index);
-	}
-
-	return from_index;
-}
-static void compress_spaces(char *str, char *dst)
-{
-	for (; *str; ++str) {
-		*dst++ = *str;
-
-		if (isspace(*str)) {
-			do ++str;
-
-			while (isspace(*str));
-
-			--str;
-		}
-	}
-
-	*dst = 0;
-}
-
-static void get_cpu_stats(struct perftest_parameters *duration_param,int stat_index)
-{
-	char* file_name = CPU_UTILITY;
+	struct cpu_util_data *data = &params->cpu_util_data;
 	FILE *fp;
-	fp = fopen(file_name, "r");
 
-	if (fp != NULL) {
-		char line[100];
-		if (fgets(line,100,fp) != NULL) {
-			char tmp[100];
-			int index=0;
-			compress_spaces(line,line);
-			index=get_n_word_string(line,tmp,index,2); /* skip first word */
-			duration_param->cpu_util_data.ustat[stat_index-1] = atoll(tmp);
+	if (!data->enable)
+		return;
 
-			get_n_word_string(line,tmp,index,3); /* skip 2 stats */
-			duration_param->cpu_util_data.idle[stat_index-1] = atoll(tmp);
-
-		}
+	fp = fopen(CPU_UTILITY, "r");
+	read_cpu_util_sample(fp, &data->samples[stat_index - 1]);
+	if (fp)
 		fclose(fp);
-	}
 }
 
 /* _new_post_send.
