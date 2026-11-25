@@ -63,6 +63,7 @@
 #endif
 #include "get_clock.h"
 #include "perftest_counters.h"
+#include "perftest_cpu_util.h"
 #include "memory.h"
 
 #ifdef HAVE_CONFIG_H
@@ -410,12 +411,6 @@ enum rate_limiter_types {HW_RATE_LIMIT, SW_RATE_LIMIT, PP_RATE_LIMIT, DISABLE_RA
 
 /* Verbosity Levels for test report */
 enum verbosity_level {FULL_VERBOSITY=-1, OUTPUT_BW=0, OUTPUT_MR, OUTPUT_LAT };
-
-struct cpu_util_data {
-	int enable;
-	long long ustat[2];
-	long long idle[2];
-};
 
 struct check_alive_data {
 	int current_totrcnt;
